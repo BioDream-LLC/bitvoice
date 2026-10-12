@@ -1,63 +1,418 @@
-# BitVoice
+<div align="center">
 
-BitVoice is an open-source real-time communications engine, written in Go and shipped as one binary.
-Voice, video, real-time text, text and fax arrive as sessions, wait in queues, and are answered by
-agents at browser-based positions. Every session is recorded and logged.
+<img src="docs/assets/bitvoice-logo.svg" alt="" width="84" height="84">
 
-Double-click the binary and a browser opens on a setup wizard; a few minutes later a phone rings.
+<h1><img src="docs/assets/wordmark.svg" alt="BitVoice" width="470"></h1>
 
-- **PBX profile:** a complete, free phone system for offices and businesses (extensions, trunks, ring
-  groups, voicemail to email, auto-attendant, parking, paging, desk-phone provisioning), with an import
-  from Asterisk and FreePBX and compatibility with their APIs.
-- **911 profile:** NG911 call-handling equipment for public safety answering points: NENA i3 ingress,
-  caller location, ALI spill and EIDO output to any CAD.
-- **Radio console** and **NG911 Core Services** profiles for dispatch centres and 911 authorities.
+### Open-source phone system, 911 call handling and radio dispatch console in one Go binary
 
-The core also serves contact centres, nurse and on-call lines, utility outage lines, and campus and
-security dispatch.
+**A complete, Apache-2.0 licensed phone system for offices and contact centres, and NG911 equipment for
+911 centres.** No Asterisk or FreeSWITCH underneath. No paid modules. No licence meter.
+Everything is set up in the web interface built into the binary.
 
-The core is built to the 911 reliability bar, whichever profile is running.
+**One 34 MB file. 47 MB of memory carrying four live calls and eight phones.** Double-click it and a
+browser opens on a setup wizard; a few minutes later a phone rings.
 
-Status: the PBX profile is working. The 911, radio console and core-services profiles are built and tested
-against stand-ins and real captures, not yet against real PSAP, radio or ESInet equipment, and are not
-certified for live 911 or public-safety use.
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go](https://img.shields.io/badge/Go-1.26%2B-00ADD8.svg?logo=go&logoColor=white)](https://go.dev) [![Release](https://img.shields.io/badge/release-v0.1.0-success.svg)](#download) [![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS-lightgrey.svg)](#download) [![Tests](https://img.shields.io/badge/tests-Go%20race%20%2B%20Chromium%20WebRTC-brightgreen.svg)](#how-it-is-tested)
 
-## What works today
+### Download v0.1.0
 
-- **Calls:** extensions, ring groups, queues (longest-idle, round-robin, ring-all) with a live wallboard,
-  auto-attendant menus, opening-hours schedules, voicemail with a message-waiting lamp, call recording,
-  busy lamps, blind and attended transfer, hold, SIP trunks over UDP, TCP or TLS, and 911 with Kari's Law
-  notification. Video calls between phones that both send video.
-- **Fax:** T.38 between fax gateways and providers, fax numbers BitVoice answers itself (each fax kept as
-  a PDF and emailed), and faxes sent from the web interface or by email.
-- **Codecs:** G.711, G.722, Opus and G.729, converted between any two, so a browser on Opus can talk to a
-  carrier on G.729.
-- **911 profile:** NENA i3 calls with PIDF-LO location and additional data, call-taker positions, ALI spill
-  and EIDO to CAD, i3 logging, answer-time reports, rebids and transfers between PSAPs.
-- **Radio dispatch console:** radio-over-IP gateway channels and P25 talkgroups over the ISSI/CSSI
-  (encrypted with AES-256, DES or triple DES), private calls to and from radios, alert tones, patches,
-  emergencies, every transmission recorded in a radio log, and radio events to CAD.
-- **NG911 Core Services:** an ESRP with policy rules, an ECRF answering LoST from your boundaries, a
-  location validation function from your address points and road centrelines, and a border control
-  function limiting and marking calls at the ESInet edge.
-- **Texts:** business texting through TextMagic, Twilio, SignalWire, Telnyx, Bandwidth, Vonage, Plivo,
-  Flowroute, VoIP.ms or your own webhook, several at once.
-- **Several servers:** servers sharing a PostgreSQL database work as one phone system: calls carry on
-  when a server stops, a shared address moves to a running server, and provider lines can be held by one
-  server at a time. A Docker lab in [deploy/lab](deploy/lab) shows it on one computer.
-- **Phones:** any SIP phone; automatic set-up for Yealink, Poly, Grandstream and Snom; and a browser phone
-  (WebRTC) for anyone without a desk phone.
-- **Security:** SRTP and SIP over TLS, fail-to-ban, toll-fraud limits, an audit log, and every change saved
-  as a revision you can restore.
-- **Moving in:** import extensions and trunks from FreePBX (Bulk Handler CSV) or Asterisk (pjsip.conf,
-  sip.conf), and people and extensions from 3CX, Cisco Unified CM, Avaya IP Office, Avaya Communication
-  Manager and Mitel MiVoice Business exports.
-- **Optional extras:** routing scripts in JavaScript or Lua; voicemail transcripts from an AI model you
-  choose; off-site copies to Amazon S3 or Azure Blob Storage.
+<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.0/bitvoice-v0.1.0-linux-amd64.tar.gz"><img src="docs/assets/buttons/download-linux.svg" alt="Download BitVoice for Linux, x86-64" width="290"></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.0/bitvoice-v0.1.0-darwin-arm64.tar.gz"><img src="docs/assets/buttons/download-macos.svg" alt="Download BitVoice for macOS, Apple Silicon" width="290"></a>&nbsp;&nbsp;&nbsp;<a href="https://biodream-llc.github.io/bitvoice/manual/"><img src="docs/assets/buttons/manual.svg" alt="Read the BitVoice manual" width="290"></a>
 
-Everything is set up in the built-in web interface. Run the binary and open the address it prints.
+<sub>One file, nothing to install. [ARM64 Linux, Intel Macs and checksums](#download)</sub>
 
-## Building
+[**Quick start**](#quick-start) · [**Everything it does**](#everything-it-does) ·
+[**What it looks like**](#what-it-looks-like) · [**Manual**](https://biodream-llc.github.io/bitvoice/manual/) ·
+[**Manual (PDF)**](docs/manual/bitvoice-manual.pdf) · [**FAQ**](#faq)
+
+</div>
+
+---
+
+## What is BitVoice?
+
+**BitVoice is an open-source real-time communications engine** written in Go: its own SIP stack, RTP and
+SRTP, media engine, WebRTC, codecs and P25 radio link, with a web interface compiled into the same binary.
+Calls arrive, wait in queues, ring phones and browsers, are recorded and logged, and reach the people who
+answer them. On top of that one engine it runs as:
+
+- **A phone system** for offices and businesses: extensions, ring groups, queues, menus, voicemail to
+  email, recording, desk-phone set-up, a browser phone, and an import from FreePBX, Asterisk, 3CX, Cisco,
+  Avaya and Mitel.
+- **A contact centre:** queues with a live wallboard, callbacks, VIP and sticky routing, supervisors
+  listening in, transcripts and summaries, caller cards from your CRM.
+- **911 call-handling equipment** for public safety answering points: NENA i3 calls from the ESInet with
+  the caller's location, ALI spill and EIDO to any CAD, the i3 log and answer-time reports.
+- **A radio dispatch console:** radio-over-IP channels and P25 talkgroups over the ISSI, encrypted
+  talkgroups, private calls to radios, alert tones, every transmission recorded.
+- **NG911 Core Services** for 911 authorities: ESRP with policy rules, an ECRF answering LoST, a location
+  validation function and a border control function.
+
+**Everything is in the web interface.** That is the first rule of the project: a feature that can only be
+reached through a file or a command line is treated as a bug. Every screen has an article in the manual and
+automated browser tests.
+
+**Built to the 911 reliability bar, whichever profile runs.** Routing scripts and integrations can never
+lose or hold up a call: each has a time limit and a fixed outcome when it fails.
+
+<img src="docs/assets/architecture.svg" alt="BitVoice sits between phone carriers, the ESInet, radio systems and phones on one side, and the people answering, CAD, records and Teams or CRMs on the other. In the middle it routes, queues, records, logs and converts codecs." width="100%">
+
+## Everything it does
+
+Fourteen areas, itemised. Where something has only been tested against stand-ins rather than real
+equipment, [it says so](#how-it-is-tested).
+
+<table width="100%">
+<thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/calls.svg" width="168" height="40" alt="Phone system"></th><th align="left" valign="middle">Everything an office phone system does</th></tr></thead>
+<tbody>
+<tr><td colspan="2"><b>Extensions</b> with voicemail, call recording, an emergency location (site, floor and room) and what happens when nobody answers</td></tr>
+<tr><td colspan="2"><b>Ring groups</b> and <b>auto-attendant menus</b>, with extensions dialled directly from the menu</td></tr>
+<tr><td colspan="2"><b>Schedules</b>: opening hours and holidays, with a different destination for open and closed</td></tr>
+<tr><td colspan="2"><b>Voicemail</b>: greetings recorded in the browser, <code>*97</code>, message-waiting lamps, the message emailed with its recording</td></tr>
+<tr><td colspan="2">Hold, <b>blind and attended transfer</b>, call parking, <b>paging</b> and overhead speakers, busy lamps (BLF)</td></tr>
+<tr><td colspan="2"><b>SIP trunks</b> over UDP, TCP or TLS, with registration, channel limits and failover between trunks</td></tr>
+<tr><td colspan="2"><b>Call routing</b> by dial pattern, with prefixes added or digits removed, and 911 always allowed from every extension</td></tr>
+<tr><td colspan="2"><b>Routing scripts in JavaScript or Lua</b>, sandboxed and time-limited, with a fixed fallback if a script fails</td></tr>
+<tr><td colspan="2">A <b>call flow diagram</b> of where calls go, and a <b>call-path simulator</b>: pick a caller, number and time and see the exact route, without ringing anything</td></tr>
+<tr><td colspan="2"><b>Video calls</b> between phones that both send video, relayed and encrypted like the sound</td></tr>
+<tr><td colspan="2"><b>Hot desking</b> (<code>*33</code>), a company directory on every phone, calendar-driven do not disturb from Outlook and Google</td></tr>
+</tbody></table>
+
+<table width="100%">
+<thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/contact.svg" width="168" height="40" alt="Contact centre"></th><th align="left" valign="middle">Queues, agents and supervisors</th></tr></thead>
+<tbody>
+<tr><td colspan="2"><b>Queues</b>: longest idle, round robin or ring all, wrap-up time, longest wait, and a <b>live wallboard</b></td></tr>
+<tr><td colspan="2">Agents log in and pause from their phones (<code>*45</code>, <code>*46</code>) or the screen</td></tr>
+<tr><td colspan="2"><b>Sticky routing</b> back to the agent a caller spoke to last, and <b>VIP callers</b> to the front of every queue</td></tr>
+<tr><td colspan="2"><b>Callbacks</b> booked by callers or by staff, alerted on every open screen</td></tr>
+<tr><td colspan="2">Supervisors <b>listen, whisper and barge</b> on live calls</td></tr>
+<tr><td colspan="2">A <b>customer timeline</b>: every call, recording, transcript, voicemail, text and note for one number</td></tr>
+<tr><td colspan="2"><b>CRM</b> caller cards and automatic call logging with any system that has a web address</td></tr>
+<tr><td colspan="2"><b>Call links</b>: a web address, QR code or website button that rings you from any browser, no app and no number</td></tr>
+</tbody></table>
+
+<table width="100%">
+<thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/ai.svg" width="168" height="40" alt="AI"></th><th align="left" valign="middle">With the AI service you choose, or one you run yourself</th></tr></thead>
+<tbody>
+<tr><td colspan="2"><b>AI receptionists</b> that say they are automated, answer from facts you approved, take messages, book callbacks and always reach a person. A set-up that would loop a caller back to an assistant is refused</td></tr>
+<tr><td colspan="2"><b>Transcripts and summaries</b> of recorded calls and voicemails, and search across what was said</td></tr>
+<tr><td colspan="2"><b>Transfer briefings</b>: a two-sentence summary for whoever a call is transferred to, so callers never repeat themselves</td></tr>
+<tr><td colspan="2"><b>Ask in plain words</b> ("forward sales to my mobile after 5 pm"), shown as a proposed change you approve</td></tr>
+<tr><td colspan="2">Any OpenAI-compatible service, OpenRouter by default; for a 911 centre, its own government cloud counts as local</td></tr>
+</tbody></table>
+
+<table width="100%">
+<thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/phones.svg" width="168" height="40" alt="Phones"></th><th align="left" valign="middle">Any SIP phone, a browser, or a mobile</th></tr></thead>
+<tbody>
+<tr><td colspan="2"><b>Automatic set-up</b> for Yealink, Poly, Grandstream (and HT adapters) and Snom over HTTPS, by MAC address or DHCP option 66</td></tr>
+<tr><td colspan="2">A <b>browser phone</b> (WebRTC) built on our own ICE, DTLS and SRTP, docked on every screen</td></tr>
+<tr><td colspan="2">A <b>staff phone</b> page for anyone without a desk phone, signed in with the extension's own password</td></tr>
+<tr><td colspan="2"><b>iPhone and Android apps</b> that ring like a desk phone even when closed, paired by QR code</td></tr>
+<tr><td colspan="2"><b>Microsoft Teams Direct Routing</b>: BitVoice as the tenant's SBC, Teams users and extensions calling each other</td></tr>
+</tbody></table>
+
+<table width="100%">
+<thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/messaging.svg" width="168" height="40" alt="Fax and texts"></th><th align="left" valign="middle">Fax, analogue lines and business texting</th></tr></thead>
+<tbody>
+<tr><td colspan="2"><b>T.38 fax relay</b> with G.711 fallback through fax gateways and providers</td></tr>
+<tr><td colspan="2"><b>Fax numbers BitVoice answers itself</b>: every fax kept as a PDF and emailed</td></tr>
+<tr><td colspan="2"><b>Faxes sent</b> from the web interface or by emailing a document</td></tr>
+<tr><td colspan="2">Analogue phones, fax machines, door phones and ISDN through SIP gateways: Grandstream HT, Patton SmartNode, AudioCodes</td></tr>
+<tr><td colspan="2"><b>Business texting</b> from your numbers through TextMagic, Twilio, SignalWire, Telnyx, Bandwidth, Vonage, Plivo, Flowroute, VoIP.ms or your own webhook, several at once, with a guided US 10DLC registration</td></tr>
+</tbody></table>
+
+<table width="100%">
+<thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/codecs.svg" width="168" height="40" alt="Codecs and media"></th><th align="left" valign="middle">Our own media engine</th></tr></thead>
+<tbody>
+<tr><td colspan="2"><b>G.711, G.722, Opus and G.729</b>, converted between any two, so a browser on Opus talks to a carrier on G.729</td></tr>
+<tr><td colspan="2"><b>SRTP</b> to every phone that encrypts, and SIP over TLS</td></tr>
+<tr><td colspan="2">Recording in stereo, a <b>pause for card numbers</b> (<code>*7</code> and <code>*8</code>, PCI DSS), retention, <b>legal holds</b>, and <b>recording consent</b> announcements by region</td></tr>
+<tr><td colspan="2">The <b>IMBE</b> P25 voice codec: decoded with code from GopherTrunk and encoded by our own encoder</td></tr>
+</tbody></table>
+
+<table width="100%">
+<thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/psap.svg" width="168" height="40" alt="911 profile"></th><th align="left" valign="middle">NG911 call handling for a PSAP</th></tr></thead>
+<tbody>
+<tr><td colspan="2"><b>NENA i3 calls</b> from the ESInet with the caller's <b>PIDF-LO location</b> and the network's additional data, shown to the call-taker as the call rings</td></tr>
+<tr><td colspan="2"><b>ALI spill</b> over TCP and <b>EIDO</b> over HTTPS to any CAD when a call is answered</td></tr>
+<tr><td colspan="2">Location <b>rebids</b> and <b>transfers between PSAPs</b> with the data kept</td></tr>
+<tr><td colspan="2">The <b>NENA i3 log</b>, and <b>answer-time reports</b> by call-taker and hour against your goal</td></tr>
+<tr><td colspan="2"><b>Office 911</b> for every profile: Kari's Law notification, RAY BAUM'S Act building, floor and room, remote workers asked to confirm where they are</td></tr>
+</tbody></table>
+
+<table width="100%">
+<thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/radio.svg" width="168" height="40" alt="Radio console"></th><th align="left" valign="middle">Radio dispatch on the same headset as the phones</th></tr></thead>
+<tbody>
+<tr><td colspan="2"><b>Radio-over-IP channels</b> through gateways (JPS, Omnitronics, Cisco, Telex and others): hold to talk, monitoring, patches</td></tr>
+<tr><td colspan="2"><b>P25 talkgroups over the ISSI</b>: the console joins a talkgroup's home RFSS, asks for the floor, shows the talking unit and its emergency flag</td></tr>
+<tr><td colspan="2"><b>Encrypted talkgroups</b> (TIA-102.AAAD): AES-256, DES-OFB and triple DES. Keys are never shown again once saved; without a key the audio is muted, never noise</td></tr>
+<tr><td colspan="2"><b>Private calls</b>: a dispatcher calls a radio by unit ID, and radios call the console</td></tr>
+<tr><td colspan="2"><b>Alert tones</b>: steady, warble, pulsed and beep</td></tr>
+<tr><td colspan="2">Every transmission <b>recorded in a radio log</b> with unit, dispatcher, tone, emergency and encryption, played back from the log</td></tr>
+<tr><td colspan="2"><b>Radio data to CAD</b>: who is talking where, emergencies and each transmission, as JSON</td></tr>
+</tbody></table>
+
+<table width="100%">
+<thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/core.svg" width="168" height="40" alt="NG911 core"></th><th align="left" valign="middle">NG911 Core Services for a 911 authority</th></tr></thead>
+<tbody>
+<tr><td colspan="2">An <b>ESRP</b> with policy rules by service, PSAP, schedule and missing or suspicious location, with overflow and a default PSAP</td></tr>
+<tr><td colspan="2">An <b>ECRF</b> answering <b>LoST</b> (RFC 5222) from your service boundaries</td></tr>
+<tr><td colspan="2">An <b>LVF</b> validating civic addresses against NENA address points and road centrelines</td></tr>
+<tr><td colspan="2">A <b>BCF</b> at the ESInet edge: calls per minute and at once per source, deny lists, suspicious calls marked for the policy rules</td></tr>
+</tbody></table>
+
+<table width="100%">
+<thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/insight.svg" width="168" height="40" alt="Insight"></th><th align="left" valign="middle">Quality, costs and evidence</th></tr></thead>
+<tbody>
+<tr><td colspan="2"><b>Call quality</b> per site and per provider (MOS, jitter, loss) with a <b>diagnosis in plain words</b></td></tr>
+<tr><td colspan="2"><b>Call insight</b> for supervisors: talk ratio, talking over, silence, measured from the sound, never an automatic score</td></tr>
+<tr><td colspan="2"><b>Costs</b> by department, person and trunk, from your provider's prices, with budgets</td></tr>
+<tr><td colspan="2"><b>Spam protection</b> from STIR/SHAKEN results, block lists and caller reputation; <b>branded calling</b> and a reputation watch on your own numbers</td></tr>
+<tr><td colspan="2"><b>Call history</b> with recordings, CSV export and search</td></tr>
+</tbody></table>
+
+<table width="100%">
+<thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/security.svg" width="168" height="40" alt="Security"></th><th align="left" valign="middle">Locked down by default</th></tr></thead>
+<tbody>
+<tr><td colspan="2"><b>Fail-to-ban</b> for addresses that keep failing, and <b>toll-fraud limits</b>: premium-rate numbers refused unless allowed</td></tr>
+<tr><td colspan="2"><b>Two-step sign-in</b> with an authenticator app, and <b>single sign-on</b> through any OpenID Connect provider</td></tr>
+<tr><td colspan="2">An <b>audit log</b> of every administrative action, and API tokens that are shown once</td></tr>
+<tr><td colspan="2">Secrets from <b>AWS Secrets Manager or Azure Key Vault</b>; cryptography only from Go's standard library, never written here</td></tr>
+</tbody></table>
+
+<table width="100%">
+<thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/operations.svg" width="168" height="40" alt="Operations"></th><th align="left" valign="middle">Running it for real</th></tr></thead>
+<tbody>
+<tr><td colspan="2"><b>Several servers as one phone system</b> over a shared PostgreSQL database: calls carry on when a server stops, and a shared address moves to a running one</td></tr>
+<tr><td colspan="2"><b>SQLite</b> on one server, <b>PostgreSQL</b> for several</td></tr>
+<tr><td colspan="2"><b>Health</b> page saying what is missing, emergency calling first; a live <b>SIP trace</b>; a <b>call generator</b> that measures what your hardware carries</td></tr>
+<tr><td colspan="2"><b>Updates</b> uploaded in the browser, installed when no calls are up, with <b>Go back</b> in one click and an automatic rollback if the new version fails to start</td></tr>
+<tr><td colspan="2"><b>Every change is a revision</b>: see what changed, restore with a preview, export and import</td></tr>
+<tr><td colspan="2"><b>Prometheus</b> and <b>OpenTelemetry</b> metrics</td></tr>
+</tbody></table>
+
+<table width="100%">
+<thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/migration.svg" width="168" height="40" alt="Moving in"></th><th align="left" valign="middle">Bring your old system with you</th></tr></thead>
+<tbody>
+<tr><td colspan="2">Import from <b>FreePBX</b> and <b>Asterisk</b> (pjsip.conf, sip.conf), <b>3CX</b>, <b>Cisco Unified CM</b>, <b>Avaya IP Office and Communication Manager</b> and <b>Mitel MiVoice Business</b></td></tr>
+<tr><td colspan="2">Every import shows exactly what would change first, and becomes a revision you can undo</td></tr>
+<tr><td colspan="2"><b>Asterisk AMI and ARI</b> compatibility, so tools written for Asterisk keep working</td></tr>
+</tbody></table>
+
+<table width="100%">
+<thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/cloud.svg" width="168" height="40" alt="Clouds and code"></th><th align="left" valign="middle">Automation and clouds</th></tr></thead>
+<tbody>
+<tr><td colspan="2">A <b>REST API</b> behind every screen, described at <code>/api/openapi.json</code></td></tr>
+<tr><td colspan="2"><b>Configuration from Git</b>, and a <b>Terraform</b> example with the generic REST provider</td></tr>
+<tr><td colspan="2"><b>AWS and Azure</b> images and templates; recordings, voicemail and backups copied to <b>S3 or Azure Blob Storage</b> (our own SigV4 and Entra code, no cloud SDKs)</td></tr>
+</tbody></table>
+
+---
+
+## What it looks like
+
+Everything below is the web interface inside the binary, showing a sample clinic with phones registered and
+calls in progress.
+
+**Dashboard**: calls now, phones online, trunks, and what needs attention, in plain words.
+
+<img src="docs/assets/screens/dashboard.png" alt="The dashboard for a sample clinic: four calls now, eight of eight phones online, two of two trunks up, a chart of calls in the last 24 hours and the calls happening now." width="100%">
+
+**Live calls**: every call in progress, with the codec, packet loss, jitter and an audio score for each side.
+
+<img src="docs/assets/screens/calls.png" alt="Live calls: four calls into the Appointments queue, each showing both sides with codec, loss, jitter and a quality score of 4.4." width="100%">
+
+**Queues**: a live wallboard with callers waiting, the longest wait and each agent's state.
+
+<img src="docs/assets/screens/queues.png" alt="The Appointments queue with one caller waiting, three answered, and three agents on calls." width="100%">
+
+**Call flow**: where calls from outside go, step by step, with a simulator that shows the route a call would take.
+
+<img src="docs/assets/screens/flow.png" alt="The call flow diagram: the main number goes to clinic hours, then the main menu, then the Appointments queue, Billing, the clinical team and the front office, each ending at voicemail." width="100%">
+
+**Radio console**: radio channels and P25 talkgroups beside the phones, with the radio log.
+
+<img src="docs/assets/screens/radio.png" alt="The radio console with EMS, Fire dispatch and Police 1 channels, hold to talk and patch buttons, and the radio log with recorded transmissions." width="100%">
+
+**Call history**: every finished call, with recordings, quality and search across what was said.
+
+<img src="docs/assets/screens/history.png" alt="Call history listing answered calls with their talk time and quality scores." width="100%">
+
+**NG911 Core Services**: the ECRF, the ESRP's PSAPs and policy rules.
+
+<img src="docs/assets/screens/core.png" alt="The core services screen with the ECRF and ESRP settings and two PSAPs, East and West." width="100%">
+
+---
+
+## Download
+
+**Version 0.1.0**: one binary, nothing to install. Each archive holds the program, the licence, the notice
+and the manual as a PDF.
+
+| Platform | Architecture | Download |
+|---|---|---|
+| **Linux** | x86-64 | [`bitvoice-v0.1.0-linux-amd64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.0/bitvoice-v0.1.0-linux-amd64.tar.gz) |
+| **Linux** | ARM64 / aarch64 | [`bitvoice-v0.1.0-linux-arm64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.0/bitvoice-v0.1.0-linux-arm64.tar.gz) |
+| **macOS** | Apple Silicon | [`bitvoice-v0.1.0-darwin-arm64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.0/bitvoice-v0.1.0-darwin-arm64.tar.gz) |
+| **macOS** | Intel | [`bitvoice-v0.1.0-darwin-amd64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.0/bitvoice-v0.1.0-darwin-amd64.tar.gz) |
+
+Windows builds are not offered yet: the program compiles for Windows, but it has not been tested there.
+
+**Verify what you downloaded** against
+[`SHA256SUMS`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.0/SHA256SUMS):
+
+```sh
+shasum -a 256 -c SHA256SUMS --ignore-missing
+```
+
+<details>
+<summary><b>Other ways to install</b></summary>
+
+```sh
+# Go 1.26 or newer
+go install github.com/biodream-llc/bitvoice/cmd/bitvoice@latest
+
+# From source
+git clone https://github.com/BioDream-LLC/bitvoice && cd bitvoice && make build
+```
+
+The binaries are pure Go with no C libraries, so they run on any Linux, including Alpine and distroless
+images. `deploy/cloud` has a systemd unit and cloud-init file; `deploy/lab` runs several servers as one
+phone system in Docker on one computer.
+
+</details>
+
+## Quick start
+
+```sh
+# 1. Start it. The web interface is inside the binary.
+./bitvoice
+
+# 2. A browser opens on the setup wizard (or open http://127.0.0.1:8280).
+#    Name your organisation, choose the administrator's password, add your first phone.
+
+# 3. Point a SIP phone at this computer, port 5060, with the extension's number and password.
+#    Or press the phone button at the bottom of any screen to use the browser as a phone. Dial *43 for the echo test.
+```
+
+Data lives in your user configuration folder (`BitVoice`), or wherever `-data` says. Other computers reach
+the web interface over HTTPS on port 8443. `./bitvoice -h` lists the options; every one of them is also a
+setting in the web interface.
+
+## How it is tested
+
+- **Go tests with the race detector** on every package, on both SQLite and PostgreSQL, with fuzzing on the
+  SIP, SDP, STUN and SRTP parsers.
+- **Browser tests in Chromium** that drive every screen the way a person would: the setup wizard, every
+  form, real **WebRTC calls** between browser phones and the call engine with sound checked in both
+  directions, a fax sent, and the radio console joined with the browser phone.
+- **P25** checked byte for byte against a real ISSI capture (from NIST's public-domain ISSI tester), and the
+  encryption against the standard's own worked examples.
+- **NG911** checked against NENA sample data and stand-ins for the ESInet, ESRP and CAD.
+
+**Status, plainly.** The phone system is working. The 911, radio console and NG911 Core Services profiles
+are built and tested against stand-ins and real captures, **not yet against a live ESInet, P25 system or
+PSAP CAD, and not certified for live 911 or public-safety use.** P25 Phase 2 half-rate voice (AMBE+2) is
+not included: it is patented until 2028. Phase 2 systems whose ISSI talkgroups carry full-rate voice work
+today.
+
+## Documentation
+
+| | |
+|---|---|
+| [**Manual**](https://biodream-llc.github.io/bitvoice/manual/) | Sixty articles, one for every screen, searchable. Also `docs/manual/index.html` in a checkout |
+| [**Manual (PDF)**](docs/manual/bitvoice-manual.pdf) | The same, for printing; also in every release archive |
+| **Help in the program** | Every screen has a Help button that opens its article; <kbd>⌘K</kbd> searches screens and articles |
+| **API** | `/api/openapi.json` on any running BitVoice describes every call the web interface makes |
+
+## FAQ
+
+<details>
+<summary><b>Is BitVoice really free? What is the licence?</b></summary>
+
+Yes. **Apache License 2.0**: commercial use, modification, distribution and private use are all permitted,
+with no fee, no paid modules, and no per-extension, per-agent or per-position pricing. See [LICENSE](LICENSE)
+and [NOTICE](NOTICE). BioDream LLC earns from hosting and support subscriptions only.
+
+</details>
+
+<details>
+<summary><b>Is it built on Asterisk or FreeSWITCH?</b></summary>
+
+No. The SIP stack, RTP, SRTP, the media engine, WebRTC (ICE, DTLS and SRTP), the P25 ISSI and the IMBE
+encoder are BitVoice's own Go code. The only outside code is six pinned, pure-Go libraries listed in
+[NOTICE](NOTICE): the JavaScript and Lua engines, the SQLite and PostgreSQL drivers, and the Opus and G.729
+codecs, plus GopherTrunk's IMBE decoder.
+
+</details>
+
+<details>
+<summary><b>Can I move from FreePBX, Asterisk, 3CX, Cisco, Avaya or Mitel?</b></summary>
+
+Yes. Upload the exported files on **Import**; BitVoice shows exactly what would change before anything is
+applied, and the import is a revision you can undo. Tools that talk to Asterisk's AMI or ARI can control
+BitVoice too.
+
+</details>
+
+<details>
+<summary><b>Can a 911 centre use it today?</b></summary>
+
+Not for live calls yet. The 911 profile is built and tested against stand-ins and NENA sample data, but it
+has not run on a real ESInet or been certified. We are looking for PSAPs and 911 authorities willing to run
+it in a lab or in shadow mode beside their current equipment.
+
+</details>
+
+<details>
+<summary><b>Does the radio console work with my P25 system?</b></summary>
+
+It joins talkgroups over the ISSI as a console subsystem, with AES-256, DES or triple DES encryption,
+private calls and alert tones. It has been tested against a real ISSI capture and stand-ins, not yet a live
+RFSS. Phase 2 systems work when their ISSI talkgroups carry full-rate (Phase 1) voice, which is common;
+native half-rate voice is not supported because its vocoder is patented until 2028. Radio-over-IP gateways
+connect any other radio system.
+
+</details>
+
+<details>
+<summary><b>Do I need a database server?</b></summary>
+
+No. One server keeps everything in a SQLite file. For several servers working as one phone system, point
+them at one PostgreSQL database.
+
+</details>
+
+<details>
+<summary><b>Does my call data go anywhere?</b></summary>
+
+No, unless you switch on a feature that sends it: an AI service you choose, a texting provider, an archive
+bucket, a CRM. Each is off until you set it up, and each says what it sends.
+
+</details>
+
+<details>
+<summary><b>Who is behind it?</b></summary>
+
+BioDream LLC, which also makes [Perfuse](https://github.com/BioDream-LLC/perfuse), the open-source healthcare
+integration engine. Hosting and support subscriptions are available for organisations that want them.
+
+</details>
+
+## Contributions are not accepted
+
+BitVoice is developed and maintained by BioDream LLC, and it stays that way. **Pull requests will not be
+reviewed or merged.** This software is held to the 911 reliability bar, and that standard is easy to state and
+slow to enforce across contributors.
+
+**Bug reports are wanted.** [Open an issue](https://github.com/BioDream-LLC/bitvoice/issues) with the output of
+`bitvoice -version` and what happened. The Apache licence still lets you take a copy, change it and publish
+the result: what is closed is the path back into this repository, not what you may do with your own copy.
+
+**Security problems:** please report them privately through this repository's Security tab ("Report a
+vulnerability"), not in a public issue.
+
+### Building it yourself
 
 ```sh
 make check build     # Go tests and the binary in bin/
@@ -65,29 +420,25 @@ make web             # rebuild the web interface (needs Node and pnpm; the built
 make e2e             # browser tests, including WebRTC calls in Chromium
 ```
 
-## Principles
-
-- One Go binary with its own web admin and setup wizard. No Asterisk, FreeSWITCH or FreePBX underneath.
-- Everything in the GUI, with JavaScript and Lua scripting for anything custom.
-- Go standard library only, with six pinned, pure-Go exceptions: the JavaScript and Lua engines, the
-  SQLite and PostgreSQL drivers, and the Opus and G.729 codecs. The SIP stack, RTP, SRTP and media engine are our own code.
-  Cryptographic primitives always come from the standard library and are never written here.
-- Data in one SQLite file by default, or in PostgreSQL for several servers and reporting tools;
-  recordings and voicemail stay as sound files.
-- Interfaces to other systems are standards only, so BitVoice works with any CAD, and any CPE can work
-  with our CAD.
-- Survivable: active-active across sites, keeps answering when cut off, reconciles when the link returns.
-
-## Hosting and support
-
-BitVoice is free and complete, with no paid modules. BioDream LLC offers hosting and support
-subscriptions for organisations that want them.
-
-## Security
-
-Please report security problems privately through this repository's Security tab ("Report a
-vulnerability"), not in a public issue.
-
 ## Licence
 
-Apache License 2.0. Copyright 2026 BioDream LLC.
+[Apache License 2.0](LICENSE). Copyright 2026 BioDream LLC. See [NOTICE](NOTICE).
+
+BitVoice is not affiliated with or endorsed by Sangoma (Asterisk, FreePBX), 3CX, Cisco, Avaya, Mitel,
+Microsoft, NENA, TIA or any radio manufacturer. Those names are used only to describe what BitVoice works
+with. Project 25 standards are published by the Telecommunications Industry Association.
+
+<div align="center">
+
+<details>
+<summary><b>Keywords</b></summary>
+
+<sub><b>Phone system:</b> open source PBX · IP PBX · VoIP PBX · SIP server · business phone system · cloud PBX · self-hosted phone system · Asterisk alternative · FreePBX alternative · 3CX alternative · FreeSWITCH alternative · Go PBX · Golang SIP · WebRTC softphone · auto attendant · IVR · voicemail to email · call recording · ring groups · hunt groups · call parking · paging · BLF · provisioning · Yealink · Poly · Grandstream · Snom</sub><br><br>
+<sub><b>Contact centre:</b> ACD · call queues · wallboard · callbacks · supervisor barge · whisper · call transcripts · call summaries · CRM integration · screen pop · click to dial · call links · website calling</sub><br><br>
+<sub><b>911:</b> NG911 · NENA i3 · PSAP · call handling equipment · CPE · ESInet · PIDF-LO · ALI · EIDO · CAD integration · i3 logging · Kari's Law · RAY BAUM'S Act · ESRP · ECRF · LoST · LVF · BCF · NG911 core services</sub><br><br>
+<sub><b>Radio:</b> radio dispatch console · P25 · Project 25 · ISSI · CSSI · RoIP · radio over IP · talkgroups · IMBE · P25 encryption · AES-256 · unit to unit · alert tones · radio logging</sub><br><br>
+<sub><b>Media and fax:</b> Opus · G.729 · G.722 · G.711 · transcoding · SRTP · SIP TLS · T.38 · fax to email · email to fax · SMS · 10DLC · Microsoft Teams Direct Routing · SBC</sub><br><br>
+<sub><b>Deployment:</b> single binary · Go · Apache 2.0 · SQLite · PostgreSQL · high availability · active-active · Prometheus · OpenTelemetry · Terraform · AWS · Azure · on-premise · air-gapped</sub>
+</details>
+
+</div>

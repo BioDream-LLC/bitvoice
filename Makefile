@@ -8,7 +8,7 @@ VERSION ?= v0.0.0
 RELEASE_KEY ?=
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.releaseKey=$(RELEASE_KEY)
 
-.PHONY: all build test vet fmt check clean web e2e
+.PHONY: all build test vet fmt check clean web e2e manual
 
 all: check build
 
@@ -38,3 +38,9 @@ web:
 # e2e runs the Playwright sweep of every screen against a fresh server.
 e2e: build
 	cd web && pnpm exec playwright test
+
+# manual writes the manual (docs/manual) from the Help articles in web/src/manual.ts, as HTML and PDF.
+manual:
+	cd web && pnpm exec tsc src/manual.ts --outDir /tmp/bitvoice-manual --module es2022 --target es2022 --moduleResolution bundler --skipLibCheck && \
+		cp /tmp/bitvoice-manual/manual.js /tmp/bitvoice-manual/manual.mjs && \
+		node scripts/manual.mjs /tmp/bitvoice-manual/manual.mjs $(CURDIR)/docs/manual/index.html $(CURDIR)/docs/manual/bitvoice-manual.pdf
