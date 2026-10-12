@@ -17,7 +17,7 @@ browser opens on a setup wizard; a few minutes later a phone rings.
 
 ### Download v0.1.0
 
-<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.0/bitvoice-v0.1.0-linux-amd64.tar.gz"><img src="docs/assets/buttons/download-linux.svg" alt="Download BitVoice for Linux, x86-64" width="290"></a>&nbsp;&nbsp;&nbsp;<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.0/bitvoice-v0.1.0-darwin-arm64.tar.gz"><img src="docs/assets/buttons/download-macos.svg" alt="Download BitVoice for macOS, Apple Silicon" width="290"></a>&nbsp;&nbsp;&nbsp;<a href="https://biodream-llc.github.io/bitvoice/manual/"><img src="docs/assets/buttons/manual.svg" alt="Read the BitVoice manual" width="290"></a>
+<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.0/bitvoice-v0.1.0-linux-amd64.tar.gz"><img src="docs/assets/buttons/download-linux.svg" alt="Download BitVoice for Linux, x86-64" width="240"></a>&nbsp;<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.0/bitvoice-v0.1.0-darwin-arm64.tar.gz"><img src="docs/assets/buttons/download-macos.svg" alt="Download BitVoice for macOS, Apple Silicon" width="240"></a>&nbsp;<a href="https://biodream-llc.github.io/bitvoice/manual/"><img src="docs/assets/buttons/manual.svg" alt="Read the BitVoice manual" width="240"></a>
 
 <sub>One file, nothing to install. [ARM64 Linux, Intel Macs and checksums](#download)</sub>
 
