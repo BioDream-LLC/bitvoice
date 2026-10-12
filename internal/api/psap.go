@@ -1,0 +1,403 @@
+package api
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net"
+	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/biodream-llc/bitvoice/internal/config"
+	"github.com/biodream-llc/bitvoice/internal/i3"
+	"github.com/biodream-llc/bitvoice/internal/pbx"
+	"github.com/biodream-llc/bitvoice/internal/store"
+)
+
+// The 911 profile's outputs: when a call-taker answers a 911 call, CAD gets the ALI spill and the
+// EIDO, and the NENA i3 log gets its events (DATA/i3log/YYYY-MM-DD.jsonl).
+
+func (s *Server) i3Dir() string { return filepath.Join(s.DataDir, "i3log") }
+
+func elementID(cfg config.Config) string {
+	if e := cfg.System.PSAP.ElementID; e != "" {
+		return e
+	}
+	h, _ := os.Hostname()
+	if h == "" {
+		h = "bitvoice"
+	}
+	return h
+}
+
+func agencyID(cfg config.Config) string {
+	if a := cfg.System.PSAP.AgencyID; a != "" {
+		return a
+	}
+	return "psap.invalid"
+}
+
+// incidentOf turns an answered call into what EIDO and the log need.
+func incidentOf(cfg config.Config, a pbx.EmergencyAnswer) i3.Incident {
+	in := i3.Incident{ID: a.Call.ID, Agency: agencyID(cfg), Element: elementID(cfg), Queue: a.Call.To, From: a.Call.From,
+		CallerName: a.Call.FromName, Agent: a.Agent, Position: a.Agent, Start: a.Call.Start, Answer: a.Call.Answer,
+		LocationRaw: a.PIDF}
+	if x := cfg.FindExtension(a.Agent); x != nil && x.Email != "" {
+		in.Agent = x.Email // an agent is named by an address in i3
+	}
+	if em := a.Call.Emergency; em != nil {
+		in.Location, in.Additional = em.Location, em.Additional
+		if len(in.LocationRaw) == 0 {
+			in.LocationRaw = em.PIDF
+		}
+	}
+	return in
+}
+
+// EmergencyAnswered is the engine's hook: CAD outputs and the log, each on its own, so a CAD that
+// is down never holds up the call-taker.
+func (s *Server) EmergencyAnswered(a pbx.EmergencyAnswer) {
+	cfg := s.config()
+	in := incidentOf(cfg, a)
+	now := time.Now()
+	ans := i3.NewEvent("CallStateChangeLogEvent", in, now)
+	ans.Extra = map[string]any{"state": "answered"}
+	s.logI3(ans)
+	ps := cfg.System.PSAP
+	if ps.ALIAddress != "" {
+		go func() {
+			err := sendALI(ps.ALIAddress, aliOf(a))
+			s.cadResult("ALI", in, err)
+		}()
+	}
+	if ps.EIDOURL != "" {
+		go func() {
+			doc, err := i3.EIDO(in, time.Now())
+			if err == nil {
+				err = postEIDO(ps.EIDOURL, ps.EIDOToken, doc)
+			}
+			ev := i3.NewEvent("EidoLogEvent", in, time.Now())
+			ev.Extra = map[string]any{"direction": "outgoing", "destination": ps.EIDOURL, "ok": err == nil}
+			s.logI3(ev)
+			s.cadResult("EIDO", in, err)
+		}()
+	}
+	if s.Bus != nil {
+		s.Bus.Publish("emergency.answered", map[string]any{"call": a.Call.ID, "agent": a.Agent, "from": a.Call.From})
+	}
+}
+
+func aliOf(a pbx.EmergencyAnswer) i3.ALI {
+	al := i3.ALI{Position: a.Agent, Callback: a.Call.From, Time: a.Call.Answer, Name: a.Call.FromName}
+	if em := a.Call.Emergency; em != nil {
+		al.Location = em.Location
+		al.Class = i3.ClassOf(em.Additional)
+		if len(em.Additional.Providers) > 0 {
+			al.Provider = em.Additional.Providers[0].Name
+		}
+		if em.Additional.Subscriber != nil && em.Additional.Subscriber.Name != "" {
+			al.Name = em.Additional.Subscriber.Name
+		}
+	}
+	return al
+}
+
+func (s *Server) cadResult(what string, in i3.Incident, err error) {
+	if err != nil {
+		s.Log.Warn("911: CAD did not take the "+what, "call", in.ID, "err", err)
+		if s.Bus != nil {
+			s.Bus.Publish("emergency.cad_failed", map[string]string{"call": in.ID, "what": what, "error": err.Error()})
+		}
+		return
+	}
+	s.Log.Info("911: "+what+" sent to CAD", "call", in.ID)
+}
+
+// sendALI writes the spill to CAD's listener.
+func sendALI(addr string, a i3.ALI) error {
+	c, err := net.DialTimeout("tcp", addr, 3*time.Second)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	_ = c.SetDeadline(time.Now().Add(3 * time.Second))
+	_, err = c.Write(a.Spill())
+	return err
+}
+
+func postEIDO(url, token string, doc []byte) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(doc))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/emergency.eido+json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return fmt.Errorf("CAD said %s", resp.Status)
+	}
+	return nil
+}
+
+// logI3 appends events to today's i3 log.
+func (s *Server) logI3(evs ...i3.LogEvent) {
+	if s.DataDir == "" {
+		return
+	}
+	s.i3Mu.Lock()
+	defer s.i3Mu.Unlock()
+	if err := os.MkdirAll(s.i3Dir(), 0o700); err != nil {
+		return
+	}
+	f, err := os.OpenFile(filepath.Join(s.i3Dir(), time.Now().UTC().Format("2006-01-02")+".jsonl"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		s.Log.Error("911: cannot write the i3 log", "err", err)
+		return
+	}
+	defer f.Close()
+	for _, ev := range evs {
+		b, _ := json.Marshal(ev)
+		f.Write(append(b, '\n'))
+	}
+}
+
+// i3Events reads the log of one UTC day, newest first.
+func (s *Server) i3Events(day string) []map[string]any {
+	f, err := os.Open(filepath.Join(s.i3Dir(), day+".jsonl"))
+	if err != nil {
+		return []map[string]any{}
+	}
+	defer f.Close()
+	var out []map[string]any
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 64<<10), 4<<20)
+	for sc.Scan() {
+		var m map[string]any
+		if json.Unmarshal(sc.Bytes(), &m) == nil {
+			out = append(out, m)
+		}
+	}
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+	if out == nil {
+		out = []map[string]any{}
+	}
+	return out
+}
+
+func (s *Server) psapRoutes() {
+	s.handle("GET /api/psap/log", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		day := r.URL.Query().Get("day")
+		if _, err := time.Parse("2006-01-02", day); err != nil {
+			day = time.Now().UTC().Format("2006-01-02")
+		}
+		files, _ := filepath.Glob(filepath.Join(s.i3Dir(), "*.jsonl"))
+		var days []string
+		for _, f := range files {
+			days = append(days, strings.TrimSuffix(filepath.Base(f), ".jsonl"))
+		}
+		sort.Sort(sort.Reverse(sort.StringSlice(days)))
+		if days == nil {
+			days = []string{}
+		}
+		writeJSON(w, 200, map[string]any{"day": day, "days": days, "items": s.i3Events(day)})
+	})
+	s.handle("POST /api/calls/{id}/rebid", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		loc, err := s.Engine.Rebid(r.Context(), r.PathValue("id"))
+		if err != nil {
+			writeError(w, 409, err.Error())
+			return
+		}
+		writeJSON(w, 200, map[string]any{"location": loc})
+	})
+	s.handle("GET /api/calls/{id}/eido", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		for _, c := range s.Engine.Calls() {
+			if c.ID == r.PathValue("id") && c.Emergency != nil {
+				cfg := s.config()
+				doc, err := i3.EIDO(incidentOf(cfg, pbx.EmergencyAnswer{Call: c}), time.Now())
+				if err != nil {
+					writeError(w, 500, err.Error())
+					return
+				}
+				w.Header().Set("Content-Type", "application/emergency.eido+json")
+				w.Write(doc)
+				return
+			}
+		}
+		writeError(w, 404, "no 911 call with that ID now")
+	})
+}
+
+// AnswerReport is how fast 911 calls were answered over a window, as state and NENA reports ask
+// (NENA-STA-020: 90% within 15 seconds, 95% within 20).
+type AnswerReport struct {
+	From, To     time.Time
+	Target       int            `json:"target"`
+	Calls        int            `json:"calls"`
+	Answered     int            `json:"answered"`
+	Abandoned    int            `json:"abandoned"`
+	WithinTarget float64        `json:"withinTarget"` // percent of answered calls
+	Within20     float64        `json:"within20"`
+	Average      float64        `json:"average"` // seconds to answer
+	Longest      float64        `json:"longest"`
+	Buckets      []int          `json:"buckets"` // answered within 0-10, 10-15, 15-20, 20-40, 40+ seconds
+	ByTaker      []TakerAnswers `json:"byTaker"`
+	ByHour       [24]int        `json:"byHour"`
+}
+
+type TakerAnswers struct {
+	Ext     string  `json:"ext"`
+	Name    string  `json:"name"`
+	Calls   int     `json:"calls"`
+	Average float64 `json:"average"`
+}
+
+func answerReport(cfg config.Config, cdrs []store.CDR, from, to time.Time) AnswerReport {
+	target := cfg.System.PSAP.AnswerTarget
+	if target == 0 {
+		target = 15
+	}
+	r := AnswerReport{From: from, To: to, Target: target, Buckets: make([]int, 5), ByTaker: []TakerAnswers{}}
+	loc := cfg.System.Location()
+	takers := map[string]*TakerAnswers{}
+	var sum float64
+	within, within20 := 0, 0
+	for _, c := range cdrs {
+		if !c.Emergency {
+			continue
+		}
+		r.Calls++
+		r.ByHour[c.Start.In(loc).Hour()]++
+		// The answer that counts is a person's: a queue that held the caller had not answered them.
+		answered := c.Taken
+		if answered.IsZero() && c.Emergency && c.AnsweredExt != "" {
+			answered = c.Answer
+		}
+		if answered.IsZero() {
+			r.Abandoned++
+			continue
+		}
+		r.Answered++
+		secs := answered.Sub(c.Start).Seconds()
+		sum += secs
+		r.Longest = max(r.Longest, secs)
+		if secs <= float64(target) {
+			within++
+		}
+		if secs <= 20 {
+			within20++
+		}
+		switch {
+		case secs <= 10:
+			r.Buckets[0]++
+		case secs <= 15:
+			r.Buckets[1]++
+		case secs <= 20:
+			r.Buckets[2]++
+		case secs <= 40:
+			r.Buckets[3]++
+		default:
+			r.Buckets[4]++
+		}
+		ext := c.AnsweredExt
+		t := takers[ext]
+		if t == nil {
+			t = &TakerAnswers{Ext: ext}
+			if x := cfg.FindExtension(ext); x != nil {
+				t.Name = x.Name
+			}
+			takers[ext] = t
+		}
+		t.Average = (t.Average*float64(t.Calls) + secs) / float64(t.Calls+1)
+		t.Calls++
+	}
+	if r.Answered > 0 {
+		r.Average = sum / float64(r.Answered)
+		r.WithinTarget = 100 * float64(within) / float64(r.Answered)
+		r.Within20 = 100 * float64(within20) / float64(r.Answered)
+	}
+	for _, t := range takers {
+		r.ByTaker = append(r.ByTaker, *t)
+	}
+	sort.Slice(r.ByTaker, func(i, j int) bool { return r.ByTaker[i].Calls > r.ByTaker[j].Calls })
+	return r
+}
+
+func (s *Server) psapReportRoutes() {
+	s.handle("GET /api/psap/report", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		cfg := s.config()
+		loc := cfg.System.Location()
+		day := func(k string, def time.Time) time.Time {
+			if t, err := time.ParseInLocation("2006-01-02", r.URL.Query().Get(k), loc); err == nil {
+				return t
+			}
+			return def
+		}
+		today := time.Now().In(loc)
+		from := day("from", time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, loc).AddDate(0, 0, -6))
+		to := day("to", time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, loc)).AddDate(0, 0, 1)
+		cdrs, err := s.Store.CDRs(store.CDRQuery{Since: from, Until: to, Limit: 100000})
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, 200, answerReport(cfg, cdrs, from, to))
+	})
+}
+
+// RunPSAPLog writes the i3 log's call start and end for every 911 call, answered or not (an
+// abandoned call is logged too).
+func (s *Server) RunPSAPLog(ctx context.Context) {
+	sub := s.Bus.Subscribe()
+	defer s.Bus.Unsubscribe(sub)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case ev := <-sub.C:
+			if r, ok := ev.Data.(pbx.Route); ok {
+				cfg := s.config()
+				le := i3.LogEvent{Type: "RouteLogEvent", Timestamp: r.At.Format(time.RFC3339Nano), ElementID: elementID(cfg), AgencyID: agencyID(cfg),
+					CallID: "urn:emergency:uid:callid:" + r.Call + ":" + elementID(cfg),
+					Extra:  map[string]any{"recipientUri": r.PSAP, "ruleId": "location", "policyOwner": agencyID(cfg), "policyType": "OriginationPolicy", "why": r.Why, "service": r.Service}}
+				s.logI3(le)
+				continue
+			}
+			c, ok := ev.Data.(pbx.CallInfo)
+			if !ok || c.Emergency == nil || (ev.Type != "call.started" && ev.Type != "call.ended") {
+				continue
+			}
+			cfg := s.config()
+			in := incidentOf(cfg, pbx.EmergencyAnswer{Call: c, Agent: c.Emergency.TakenBy})
+			if ev.Type == "call.started" {
+				s.logI3(i3.NewEvent("CallStartLogEvent", in, c.Start))
+				if in.Location != nil {
+					le := i3.NewEvent("LocationResponseLogEvent", in, time.Now())
+					le.Extra = map[string]any{"location": in.Location}
+					s.logI3(le)
+				}
+				continue
+			}
+			end := i3.NewEvent("CallEndLogEvent", in, time.Now())
+			if c.Emergency.TakenBy == "" {
+				end.Extra = map[string]any{"abandoned": true}
+			}
+			s.logI3(end)
+		}
+	}
+}

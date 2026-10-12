@@ -1,0 +1,23 @@
+# build output
+/bin/
+/dist/
+# anchored to the repo root so it does not match the cmd/bitvoice package
+/bitvoice
+
+# local state
+*.db
+*.db-wal
+*.db-shm
+/data/
+
+# recordings and captures are never committed; only synthetic fixtures under testdata
+*.wav
+*.pcap
+!**/testdata/**
+
+# front end
+/web/node_modules/
+/web/test-results/
+
+.DS_Store
+deploy/lab/bitvoice

@@ -1,0 +1,14 @@
+#cloud-config
+# Turns a plain Ubuntu or Debian virtual machine on AWS EC2 or Azure into a BitVoice server: pass this as
+# user data. Set BITVOICE_URL to the release to install. The setup wizard then runs at
+# https://<the machine's address>/ ; read its setup code with:  sudo journalctl -u bitvoice | grep "Setup code"
+write_files:
+  - path: /etc/systemd/system/bitvoice.service
+    permissions: "0644"
+    encoding: b64
+    content: BITVOICE_SERVICE_B64
+runcmd:
+  - [ sh, -c, 'useradd --system --home /var/lib/bitvoice --create-home --shell /usr/sbin/nologin bitvoice || true' ]
+  - [ sh, -c, 'curl -fsSL "${BITVOICE_URL:-https://example.invalid/bitvoice-linux-amd64}" -o /usr/local/bin/bitvoice && chmod 755 /usr/local/bin/bitvoice' ]
+  - [ systemctl, daemon-reload ]
+  - [ systemctl, enable, --now, bitvoice ]

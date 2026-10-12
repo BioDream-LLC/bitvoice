@@ -1,0 +1,28 @@
+BitVoice
+Copyright 2026 BioDream LLC
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+BitVoice includes these third-party Go modules, each under its own licence:
+
+- github.com/dop251/goja (MIT) and its dependencies github.com/dlclark/regexp2 (MIT),
+  github.com/go-sourcemap/sourcemap (BSD-2-Clause), github.com/google/pprof (Apache-2.0)
+- github.com/yuin/gopher-lua (MIT)
+- modernc.org/sqlite (BSD-3-Clause), a translation of SQLite (public domain) to Go, with
+  modernc.org/libc (BSD-3-Clause, with parts of Go (BSD-3-Clause) and musl libc (MIT) listed in its
+  LICENSE-3RD-PARTY.md), modernc.org/mathutil and modernc.org/memory (BSD-3-Clause),
+  github.com/ncruces/go-strftime (MIT), github.com/remyoudompheng/bigfft (BSD-3-Clause),
+  github.com/mattn/go-isatty (MIT), github.com/dustin/go-humanize (MIT), github.com/google/uuid (BSD-3-Clause)
+- github.com/jackc/pgx/v5, github.com/jackc/pgpassfile, github.com/jackc/pgservicefile and
+  github.com/jackc/puddle/v2 (MIT)
+- github.com/darui3018823/opus (BSD-2-Clause), Copyright (c) 2026 darui3018823: the Opus codec
+- github.com/hunydev/g729 (MIT): the G.729 Annex A codec
+- internal/p25/imbe, internal/p25/mbe and internal/p25/dsp/biquad.go: the IMBE voice decoder,
+  from GopherTrunk (github.com/MattCheramie/GopherTrunk), Apache License 2.0
+  (internal/p25/mbe/LICENSE.GopherTrunk)
+- internal/p25: the ISSI/CSSI payload layouts follow the P25 ISSI tester (DIETS) of the National
+  Institute of Standards and Technology, a work of the US government not subject to copyright;
+  internal/p25/testdata/issi.pcap is a capture that comes with it
+- golang.org/x/sync, golang.org/x/sys and golang.org/x/text (BSD-3-Clause)
+
+The web interface's licences are listed in web/package.json and the built bundle.

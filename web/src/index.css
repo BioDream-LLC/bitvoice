@@ -1,0 +1,157 @@
+@import 'tailwindcss';
+
+/* Three themes, one colour ramp (the Perfuse approach): every utility compiles to var(--color-slate-*), so
+   redefining the ramp per theme rethemes everything and no component knows which theme is active.
+   midnight  default: near-black, for dispatch floors and wall displays in low light
+   dark      neutral and slightly lifted, for a long day at a desk
+   light     the ramp re-spaced for white, with accents darkened to stay readable */
+
+@theme {
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+[data-theme='dark'] {
+  --color-slate-50: oklch(98% 0 0);
+  --color-slate-100: oklch(95% 0.002 250);
+  --color-slate-200: oklch(89% 0.003 250);
+  --color-slate-300: oklch(81% 0.004 250);
+  --color-slate-400: oklch(71% 0.006 250);
+  --color-slate-500: oklch(62% 0.007 250);
+  --color-slate-600: oklch(50% 0.007 250);
+  --color-slate-700: oklch(38% 0.007 250);
+  --color-slate-800: oklch(31% 0.006 250);
+  --color-slate-900: oklch(24% 0.005 250);
+  --color-slate-950: oklch(18% 0.004 250);
+}
+
+[data-theme='light'] {
+  --color-slate-50: oklch(20% 0.01 250);
+  --color-slate-100: oklch(24% 0.012 255);
+  --color-slate-200: oklch(30% 0.014 255);
+  --color-slate-300: oklch(38% 0.016 255);
+  --color-slate-400: oklch(46% 0.018 255);
+  --color-slate-500: oklch(52% 0.018 255);
+  --color-slate-600: oklch(72% 0.014 255);
+  --color-slate-700: oklch(85% 0.008 255);
+  --color-slate-800: oklch(92% 0.005 255);
+  --color-slate-900: oklch(97% 0.003 255);
+  --color-slate-950: oklch(100% 0 0);
+
+  --color-sky-300: oklch(48% 0.14 240);
+  --color-sky-400: oklch(45% 0.15 240);
+  --color-emerald-300: oklch(45% 0.13 160);
+  --color-emerald-400: oklch(42% 0.14 160);
+  --color-amber-300: oklch(48% 0.13 75);
+  --color-amber-400: oklch(45% 0.13 75);
+  --color-rose-300: oklch(48% 0.16 15);
+  --color-rose-400: oklch(45% 0.18 15);
+  --color-violet-300: oklch(45% 0.16 295);
+  --color-violet-400: oklch(42% 0.18 295);
+  --color-teal-300: oklch(45% 0.11 185);
+  --color-fuchsia-300: oklch(45% 0.17 325);
+  --color-orange-300: oklch(50% 0.15 50);
+
+  --color-sky-950: oklch(96% 0.02 240);
+  --color-sky-900: oklch(92% 0.03 240);
+  --color-emerald-950: oklch(96% 0.02 160);
+  --color-emerald-900: oklch(92% 0.03 160);
+  --color-amber-950: oklch(96% 0.02 75);
+  --color-amber-900: oklch(93% 0.04 75);
+  --color-rose-950: oklch(96% 0.02 15);
+  --color-rose-900: oklch(93% 0.03 15);
+  --color-violet-950: oklch(96% 0.02 295);
+  --color-violet-900: oklch(93% 0.03 295);
+  color-scheme: light;
+}
+
+[data-theme='midnight'],
+[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--color-slate-950);
+  color: var(--color-slate-200);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  scrollbar-color: var(--color-slate-700) transparent;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-sky-400);
+  outline-offset: 2px;
+}
+
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@keyframes ring {
+  0%, 100% { transform: rotate(0); }
+  10%, 30% { transform: rotate(-14deg); }
+  20%, 40% { transform: rotate(14deg); }
+  50% { transform: rotate(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+@layer components {
+  .card {
+    border-radius: 0.875rem;
+    border: 1px solid var(--color-slate-800);
+    background: color-mix(in oklch, var(--color-slate-900) 85%, transparent);
+    box-shadow: 0 1px 0 color-mix(in oklch, var(--color-slate-50) 4%, transparent) inset;
+  }
+  .rise { animation: rise-in 0.25s ease-out both; }
+  .live-dot { animation: pulse-dot 1.6s ease-in-out infinite; }
+  .ringing { animation: ring 1.2s ease-in-out infinite; transform-origin: 50% 20%; }
+  .input {
+    width: 100%;
+    border-radius: 0.5rem;
+    border: 1px solid var(--color-slate-700);
+    background: var(--color-slate-950);
+    padding: 0.5rem 0.75rem;
+    color: var(--color-slate-100);
+    font-size: 0.875rem;
+  }
+  .input:focus { border-color: var(--color-sky-400); outline: none; }
+  .input[aria-invalid='true'], .field-error .input { border-color: var(--color-rose-400); }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.875rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border: 1px solid var(--color-slate-700);
+    background: var(--color-slate-800);
+    color: var(--color-slate-100);
+    cursor: pointer;
+  }
+  .btn:hover { background: var(--color-slate-700); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary {
+    border-color: transparent;
+    background: linear-gradient(135deg, var(--color-sky-500), var(--color-violet-500));
+    color: white;
+  }
+  .btn-primary:hover { filter: brightness(1.1); background: linear-gradient(135deg, var(--color-sky-500), var(--color-violet-500)); }
+  .btn-danger { border-color: color-mix(in oklch, var(--color-rose-400) 40%, transparent); color: var(--color-rose-300); background: transparent; }
+  .btn-danger:hover { background: var(--color-rose-950); }
+  .label { display: block; font-size: 0.75rem; font-weight: 600; color: var(--color-slate-400); margin-bottom: 0.375rem; text-transform: uppercase; letter-spacing: 0.04em; }
+}

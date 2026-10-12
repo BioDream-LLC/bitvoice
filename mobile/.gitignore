@@ -1,0 +1,7 @@
+ios/build/
+ios/*.xcodeproj/xcuserdata/
+ios/*.xcodeproj/project.xcworkspace/xcuserdata/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties

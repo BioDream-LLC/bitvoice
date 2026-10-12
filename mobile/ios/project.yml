@@ -1,0 +1,23 @@
+name: BitVoice
+options:
+  bundleIdPrefix: llc.biodream
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+targets:
+  BitVoice:
+    type: application
+    platform: iOS
+    sources: [BitVoice]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: llc.biodream.bitvoice
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: BitVoice/Info.plist
+        CODE_SIGN_ENTITLEMENTS: BitVoice/BitVoice.entitlements
+        TARGETED_DEVICE_FAMILY: "1"

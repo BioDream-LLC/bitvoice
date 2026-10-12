@@ -1,0 +1,277 @@
+import { expect, test } from '@playwright/test'
+import { signIn } from './helpers'
+
+// Real Chromium against BitVoice's own ICE-lite, DTLS and SRTP: the browser's fake microphone goes to the
+// echo test and must come back decrypted. This is the interoperability check for the WebRTC stack.
+test.use({ launchOptions: { args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] } })
+
+
+test('browser audio through ICE-lite, DTLS-SRTP and back', async ({ page }) => {
+  await signIn(page)
+  const result = await page.evaluate(async () => {
+    const pc = new RTCPeerConnection()
+    const mic = await navigator.mediaDevices.getUserMedia({ audio: true })
+    mic.getTracks().forEach((t) => pc.addTrack(t, mic))
+    await pc.setLocalDescription(await pc.createOffer())
+    const r = await fetch('./api/phone/echo', { method: 'POST', headers: { 'X-BitVoice': '1', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sdp: pc.localDescription!.sdp }) })
+    const body = await r.json()
+    if (!r.ok) return { error: body.message }
+    await pc.setRemoteDescription({ type: 'answer', sdp: body.sdp })
+    const deadline = Date.now() + 10000
+    while (pc.connectionState !== 'connected' && Date.now() < deadline) {
+      if (pc.connectionState === 'failed') break
+      await new Promise((ok) => setTimeout(ok, 100))
+    }
+    const state = pc.connectionState
+    await new Promise((ok) => setTimeout(ok, 2000))
+    let received = 0, codec = ''
+    const stats = await pc.getStats()
+    stats.forEach((s) => {
+      if (s.type === 'inbound-rtp' && s.kind === 'audio') received = s.packetsReceived
+      if (s.type === 'codec' && s.mimeType?.startsWith('audio/')) codec = s.mimeType
+    })
+    pc.close()
+    return { state, received, codec, ice: pc.iceConnectionState }
+  })
+  console.log(JSON.stringify(result))
+  expect(result.error).toBeUndefined()
+  expect(result.state).toBe('connected')
+  expect(result.received).toBeGreaterThan(20)
+})
+
+// Two browser phones call each other through the call engine: each is registered to it as a device of its
+// extension, so this is a real extension-to-extension call with WebRTC on both ends.
+test('browser phone to browser phone through the engine', async ({ page }) => {
+  await signIn(page)
+  const result = await page.evaluate(async () => {
+    const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
+    const post = async (url: string, body: unknown) => {
+      const r = await fetch(url, { method: 'POST', headers: H, body: JSON.stringify(body) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(url + ': ' + j.message)
+      return j
+    }
+    const exts = (await (await fetch('./api/extensions')).json()).items as { number: string }[]
+    if (exts.length < 2) {
+      await post('./api/extensions', { number: '177', name: 'Second browser', enabled: true, outbound: true, voicemail: { enabled: false }, record: false, secureMedia: false })
+    }
+    const all = (await (await fetch('./api/extensions')).json()).items as { number: string }[]
+    const [a, b] = [all[0].number, all[1].number]
+    const pa = await post('./api/phone', { extension: a })
+    const pb = await post('./api/phone', { extension: b })
+    const events: Record<string, string[]> = { a: [], b: [] }
+    let incoming: (id: string) => void = () => {}
+    const gotIncoming = new Promise<string>((ok) => { incoming = ok })
+    const esA = new EventSource(`./api/phone/${pa.id}/events`)
+    esA.addEventListener('call', (e) => events.a.push(JSON.parse((e as MessageEvent).data).type))
+    const esB = new EventSource(`./api/phone/${pb.id}/events`)
+    esB.addEventListener('call', (e) => {
+      const ev = JSON.parse((e as MessageEvent).data)
+      events.b.push(ev.type)
+      if (ev.type === 'incoming') incoming(ev.callId)
+    })
+    await new Promise((ok) => setTimeout(ok, 300))
+    const mic = await navigator.mediaDevices.getUserMedia({ audio: true })
+    const peer = async () => {
+      const pc = new RTCPeerConnection()
+      mic.getTracks().forEach((t) => pc.addTrack(t, mic))
+      await pc.setLocalDescription(await pc.createOffer())
+      return pc
+    }
+    const pcA = await peer()
+    const call = await post(`./api/phone/${pa.id}/calls`, { to: b, sdp: pcA.localDescription!.sdp })
+    await pcA.setRemoteDescription({ type: 'answer', sdp: call.sdp })
+    const callId = await Promise.race([gotIncoming, new Promise<string>((_, no) => setTimeout(() => no(new Error('no incoming call')), 8000))])
+    const pcB = await peer()
+    const ans = await post(`./api/phone/${pb.id}/answer`, { callId, sdp: pcB.localDescription!.sdp })
+    await pcB.setRemoteDescription({ type: 'answer', sdp: ans.sdp })
+    await new Promise((ok) => setTimeout(ok, 3000))
+    const inbound = async (pc: RTCPeerConnection) => {
+      let n = 0
+      ;(await pc.getStats()).forEach((s) => { if (s.type === 'inbound-rtp') n = s.packetsReceived })
+      return n
+    }
+    const res = { stateA: pcA.connectionState, stateB: pcB.connectionState, recvA: await inbound(pcA), recvB: await inbound(pcB), events }
+    await fetch(`./api/phone/${pa.id}/calls/${call.callId}`, { method: 'DELETE', headers: H })
+    await new Promise((ok) => setTimeout(ok, 800))
+    esA.close(); esB.close(); pcA.close(); pcB.close()
+    return res
+  })
+  console.log(JSON.stringify(result))
+  expect(result.stateA).toBe('connected')
+  expect(result.stateB).toBe('connected')
+  expect(result.recvA).toBeGreaterThan(20)
+  expect(result.recvB).toBeGreaterThan(20)
+  expect(result.events.b).toContain('ended')
+})
+
+// Opus against Chromium's own libopus: phone A speaks Opus, phone B is held to G.711, so BitVoice
+// decodes A's Opus for B and encodes B's audio as Opus for A. What each browser receives is decoded
+// in the page (Opus with WebCodecs, which is Chromium's libopus; µ-law by its table) and must carry
+// the fake microphone's tone, not silence.
+test('Opus converted both ways against the browser', async ({ page }) => {
+  await signIn(page)
+  const result = await page.evaluate(async () => {
+    const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
+    const post = async (url: string, body: unknown) => {
+      const r = await fetch(url, { method: 'POST', headers: H, body: JSON.stringify(body) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(url + ': ' + j.message)
+      return j
+    }
+    const exts = (await (await fetch('./api/extensions')).json()).items as { number: string }[]
+    if (exts.length < 2) {
+      await post('./api/extensions', { number: '177', name: 'Second browser', enabled: true, outbound: true, voicemail: { enabled: false }, record: false, secureMedia: false })
+    }
+    const all = (await (await fetch('./api/extensions')).json()).items as { number: string }[]
+    const [a, b] = [all[0].number, all[1].number]
+    const pa = await post('./api/phone', { extension: a })
+    const pb = await post('./api/phone', { extension: b })
+    let incoming: (id: string) => void = () => {}
+    const gotIncoming = new Promise<string>((ok) => { incoming = ok })
+    const esB = new EventSource(`./api/phone/${pb.id}/events`)
+    esB.addEventListener('call', (e) => { const ev = JSON.parse((e as MessageEvent).data); if (ev.type === 'incoming') incoming(ev.callId) })
+    await new Promise((ok) => setTimeout(ok, 300))
+    const mic = await navigator.mediaDevices.getUserMedia({ audio: true })
+    const ulaw = (u: number) => { u = ~u & 0xff; const t = (((u & 0x0f) << 3) + 0x84) << ((u & 0x70) >> 4); return (u & 0x80 ? 0x84 - t : t - 0x84) / 32768 }
+    type Heard = { frames: number; peak: number; errors: number; loud: number; crossings: number; hz: number }
+    // The pitch of the loud parts, by counting zero crossings: a tone stays a tone, garbage is noise.
+    const measure = (h: Heard, f: ArrayLike<number>, rate: number) => {
+      const block = rate / 100 // 10 ms
+      for (let s = 0; s + block <= f.length; s += block) {
+        let e = 0, z = 0
+        for (let i = s; i < s + block; i++) {
+          e += f[i] * f[i]; h.peak = Math.max(h.peak, Math.abs(f[i]))
+          if (i > s && (f[i] < 0) !== (f[i - 1] < 0)) z++
+        }
+        if (Math.sqrt(e / block) > 0.05) { h.loud += block; h.crossings += z }
+      }
+      if (h.loud) h.hz = Math.round((h.crossings / h.loud) * rate / 2)
+    }
+    const listen = (pc: RTCPeerConnection, heard: Heard) => {
+      let dec: AudioDecoder | null = null
+      pc.ontrack = (e) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { readable, writable } = (e.receiver as any).createEncodedStreams()
+        readable.pipeThrough(new TransformStream({
+          transform(frame: { data: ArrayBuffer; timestamp: number }, ctl) {
+            heard.frames++
+            const codec = (e.receiver.getParameters().codecs[0]?.mimeType ?? '').toLowerCase()
+            if (codec === 'audio/pcmu') {
+              measure(heard, Array.from(new Uint8Array(frame.data), ulaw), 8000)
+            } else if (codec === 'audio/opus') {
+              if (!dec) {
+                dec = new AudioDecoder({ output: (d) => { const all = new Float32Array(d.numberOfFrames * d.numberOfChannels); d.copyTo(all, { planeIndex: 0, format: 'f32' }); const f = all.filter((_, i) => i % d.numberOfChannels === 0); measure(heard, f, d.sampleRate); d.close() }, error: () => { heard.errors++ } })
+                dec.configure({ codec: 'opus', sampleRate: 48000, numberOfChannels: 2 })
+              }
+              dec.decode(new EncodedAudioChunk({ type: 'key', timestamp: heard.frames * 20000, data: frame.data }))
+            }
+            ctl.enqueue(frame)
+          },
+        })).pipeTo(writable)
+      }
+    }
+    const peer = async (heard: Heard, only?: string) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pc = new RTCPeerConnection({ encodedInsertableStreams: true } as any)
+      listen(pc, heard)
+      const tr = pc.addTransceiver(mic.getTracks()[0], { direction: 'sendrecv', streams: [mic] })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const s = (tr.sender as any).createEncodedStreams(); s.readable.pipeTo(s.writable)
+      if (only) tr.setCodecPreferences(RTCRtpReceiver.getCapabilities('audio')!.codecs.filter((c) => c.mimeType === only || c.mimeType === 'audio/telephone-event'))
+      await pc.setLocalDescription(await pc.createOffer())
+      return pc
+    }
+    const blank = (): Heard => ({ frames: 0, peak: 0, errors: 0, loud: 0, crossings: 0, hz: 0 })
+    const heardA = blank(), heardB = blank()
+    const pcA = await peer(heardA)
+    const call = await post(`./api/phone/${pa.id}/calls`, { to: b, sdp: pcA.localDescription!.sdp })
+    await pcA.setRemoteDescription({ type: 'answer', sdp: call.sdp })
+    const callId = await Promise.race([gotIncoming, new Promise<string>((_, no) => setTimeout(() => no(new Error('no incoming call')), 8000))])
+    const pcB = await peer(heardB, 'audio/PCMU')
+    const ans = await post(`./api/phone/${pb.id}/answer`, { callId, sdp: pcB.localDescription!.sdp })
+    await pcB.setRemoteDescription({ type: 'answer', sdp: ans.sdp })
+    await new Promise((ok) => setTimeout(ok, 4000))
+    const codecs = [pcA, pcB].map((pc) => pc.getReceivers()[0]?.getParameters().codecs[0]?.mimeType)
+    await fetch(`./api/phone/${pa.id}/calls/${call.callId}`, { method: 'DELETE', headers: H })
+    await new Promise((ok) => setTimeout(ok, 500))
+    esB.close(); pcA.close(); pcB.close()
+    return { codecs, a: heardA, b: heardB }
+  })
+  console.log(JSON.stringify(result))
+  expect(result.codecs).toEqual(['audio/opus', 'audio/PCMU'])
+  for (const side of [result.a, result.b]) {
+    expect(side.frames).toBeGreaterThan(50)
+    expect(side.errors).toBe(0)
+    expect(side.peak).toBeGreaterThan(0.05)
+  }
+  // Both fake microphones play the same beep: both directions must hear the same pitch.
+  expect(Math.abs(result.a.hz - result.b.hz)).toBeLessThan(result.b.hz * 0.15)
+})
+
+// The docked browser phone, used the way a person would: sign in as an extension, dial the echo test.
+test('the browser phone in the GUI calls the echo test', async ({ page }) => {
+  await signIn(page)
+  await page.getByRole('button', { name: 'Browser phone' }).click()
+  await page.getByRole('button', { name: /^Sign in as/ }).click()
+  await expect(page.getByText(/^Extension/).first()).toBeVisible()
+  for (const k of ['*', '4', '3']) await page.getByRole('group', { name: 'Keypad' }).getByRole('button', { name: k, exact: true }).click()
+  await page.getByRole('button', { name: 'Call', exact: true }).click()
+  await expect(page.getByRole('region', { name: 'Browser phone' }).getByText(/^0:0[1-9]$/)).toBeVisible({ timeout: 10000 })
+  await page.getByRole('button', { name: 'Hang up' }).click()
+  await expect(page.getByText('you hung up')).toBeVisible()
+})
+
+test('a greeting recorded in the browser is saved and plays back', async ({ page }) => {
+  await signIn(page)
+  await page.goto('./#/extensions')
+  await page.getByRole('cell', { name: '100', exact: true }).click()
+  const d = page.getByRole('dialog')
+  await d.getByRole('button', { name: 'Record in the browser' }).click()
+  await expect(d.getByRole('button', { name: /Stop/ })).toBeVisible()
+  await page.waitForTimeout(1500)
+  await d.getByRole('button', { name: /Stop/ }).click()
+  await expect(page.getByText('Greeting saved')).toBeVisible()
+  const dur = await d.locator('audio').evaluate(async (a: HTMLAudioElement) => {
+    a.load()
+    await new Promise((ok) => { a.onloadedmetadata = ok; a.onerror = ok })
+    return a.duration
+  })
+  expect(dur).toBeGreaterThan(0.5)
+})
+
+// A call link: someone who is not signed in opens the link's page, gives a name and calls; BitVoice
+// answers it (voicemail here) and the call shows who it is from.
+test('a call link places a browser call without signing in', async ({ page, browser }) => {
+  await signIn(page)
+  const slug = await page.evaluate(async () => {
+    const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
+    const exts = await (await fetch('./api/extensions')).json()
+    const box = exts.items.find((x: { voicemail: { enabled: boolean } }) => x.voicemail.enabled).number
+    const s = await (await fetch('./api/settings')).json()
+    s.system.callLinks = [{ name: 'Support', enabled: true, askName: true, title: 'Call support', intro: 'We answer quickly.', destination: { type: 'voicemail', target: box } }]
+    const r = await fetch('./api/settings', { method: 'PUT', headers: H, body: JSON.stringify(s) })
+    const saved = await r.json()
+    return saved.system.callLinks[0].slug as string
+  })
+  expect(slug).toMatch(/^[a-z0-9-]{8,}$/)
+  const guest = await browser.newContext({ permissions: ['microphone'] })
+  const p = await guest.newPage()
+  await p.goto(`/call/${slug}`)
+  await expect(p.getByRole('heading', { name: 'Call support' })).toBeVisible()
+  await expect(p.getByRole('button', { name: 'Call now' })).toBeDisabled()
+  await p.getByLabel('Your name').fill('Jo Web')
+  await p.getByRole('button', { name: 'Call now' }).click()
+  await expect(p.getByRole('status')).toHaveText(/^0:0[1-9]$/, { timeout: 10000 })
+  const from = await page.evaluate(async () => (await (await fetch('./api/calls')).json()).items.map((c: { fromName: string }) => c.fromName))
+  expect(from).toContain('Web: Jo Web')
+  await p.getByRole('button', { name: 'Hang up' }).click()
+  await expect(p.getByText('Call ended. Thank you.')).toBeVisible()
+  await guest.close()
+  // An unknown address says so.
+  const q = await browser.newPage()
+  await q.goto('/call/nosuchlinkatall')
+  await expect(q.getByRole('heading', { name: 'This link does not work' })).toBeVisible()
+  await q.close()
+})

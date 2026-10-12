@@ -1,0 +1,52 @@
+{
+  "name": "bitvoice-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@codemirror/lang-javascript": "6.2.5",
+    "@codemirror/language": "6.13.1",
+    "@codemirror/legacy-modes": "6.5.5",
+    "@codemirror/state": "6.7.6",
+    "@codemirror/theme-one-dark": "6.1.3",
+    "@codemirror/view": "6.43.14",
+    "@radix-ui/react-dialog": "1.2.0",
+    "@radix-ui/react-switch": "1.3.8",
+    "@radix-ui/react-tooltip": "1.3.0",
+    "@reduxjs/toolkit": "2.5.0",
+    "@tanstack/react-table": "8.21.3",
+    "@xyflow/react": "12.12.0",
+    "clsx": "2.1.1",
+    "cmdk": "1.1.1",
+    "codemirror": "6.0.2",
+    "echarts": "5.6.0",
+    "lucide-react": "1.53.0",
+    "qrcode-generator": "2.0.4",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-redux": "9.2.0",
+    "react-router-dom": "6.30.6",
+    "sonner": "2.0.8",
+    "wavesurfer.js": "8.0.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "@tailwindcss/vite": "4.3.3",
+    "@testing-library/react": "16.3.2",
+    "@types/react": "18.3.18",
+    "@types/react-dom": "18.3.5",
+    "@vitejs/plugin-react": "4.3.4",
+    "happy-dom": "20.11.6",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.7.2",
+    "vite": "6.0.7",
+    "vitest": "2.1.8"
+  }
+}

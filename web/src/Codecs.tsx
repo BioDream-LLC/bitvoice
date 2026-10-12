@@ -1,0 +1,56 @@
+import { ArrowDown, ArrowUp, AudioLines } from 'lucide-react'
+import { clsx } from 'clsx'
+import { Toggle } from './ui'
+
+/** What each codec is, for people who do not know the names. */
+export const codecInfo: Record<string, { label: string; detail: string; color: string; converts: boolean }> = {
+  G722: { label: 'G.722', detail: 'HD voice, twice the sound range of a normal call', color: 'text-emerald-300', converts: true },
+  PCMU: { label: 'G.711 µ-law', detail: 'Standard phone quality; North America and Japan', color: 'text-sky-300', converts: true },
+  PCMA: { label: 'G.711 A-law', detail: 'Standard phone quality; the rest of the world', color: 'text-sky-300', converts: true },
+  OPUS: { label: 'Opus', detail: 'HD voice for apps and browsers; copes well with a bad network', color: 'text-violet-300', converts: true },
+  G729: { label: 'G.729', detail: 'Low bandwidth (8 kbit/s) for thin links and some carriers', color: 'text-amber-300', converts: true },
+}
+export const allCodecs = ['G722', 'PCMU', 'PCMA', 'OPUS', 'G729']
+
+/**
+ * An ordered list of codecs: switch each on or off and move it up or down (buttons, or Alt+arrow keys on
+ * the row). The first one switched on is preferred.
+ */
+export function CodecList({ value, onChange, id, error }: { value: string[]; onChange: (v: string[]) => void; id: string; error?: string }) {
+  const rows = [...value, ...allCodecs.filter((c) => !value.includes(c))]
+  const move = (i: number, by: number) => {
+    const j = i + by
+    if (j < 0 || j >= rows.length || !value.includes(rows[i]) || !value.includes(rows[j])) return
+    const next = [...value]
+    ;[next[i], next[j]] = [next[j], next[i]]
+    onChange(next)
+    requestAnimationFrame(() => document.getElementById(`${id}-${next[j]}`)?.focus())
+  }
+  return (
+    <ul id={id} className={clsx('divide-y divide-slate-800 rounded-lg border', error ? 'border-rose-700' : 'border-slate-800')} aria-label="Codecs, best first">
+      {rows.map((c, i) => {
+        const on = value.includes(c)
+        const info = codecInfo[c]
+        return (
+          <li key={c} id={`${id}-${c}`} tabIndex={-1} className="flex items-center gap-3 px-3 py-2 outline-none focus:bg-slate-900"
+            onKeyDown={(e) => { if (e.altKey && e.key === 'ArrowUp') { e.preventDefault(); move(i, -1) } if (e.altKey && e.key === 'ArrowDown') { e.preventDefault(); move(i, 1) } }}>
+            <Toggle checked={on} label={`Use ${info.label}`} onChange={(v) => onChange(v ? [...value, c] : value.filter((x) => x !== c))} />
+            <AudioLines size={15} className={on ? info.color : 'text-slate-600'} aria-hidden />
+            <div className="min-w-0 flex-1">
+              <div className={clsx('text-sm font-medium', on ? info.color : 'text-slate-500')}>
+                {on && <span className="mr-2 font-mono text-xs text-slate-500">{i + 1}.</span>}{info.label}
+              </div>
+              <div className="text-xs text-slate-500">{info.detail}</div>
+            </div>
+            {on && (
+              <div className="flex gap-1">
+                <button type="button" className="btn px-1.5 py-1" aria-label={`Prefer ${info.label} more`} disabled={i === 0} onClick={() => move(i, -1)}><ArrowUp size={14} aria-hidden /></button>
+                <button type="button" className="btn px-1.5 py-1" aria-label={`Prefer ${info.label} less`} disabled={i >= value.length - 1} onClick={() => move(i, 1)}><ArrowDown size={14} aria-hidden /></button>
+              </div>
+            )}
+          </li>
+        )
+      })}
+    </ul>
+  )
+}

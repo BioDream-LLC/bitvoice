@@ -1,0 +1,161 @@
+// Taken from GopherTrunk (github.com/MattCheramie/GopherTrunk), Apache License 2.0 (see
+// internal/p25/mbe/LICENSE.GopherTrunk); changed for BitVoice: package paths, the scanner's
+// registry and statistics hooks removed.
+
+package mbe
+
+import "math"
+
+// IMBE 4400 speech synthesis — TIA-102.BABA §6.1 cross-frame
+// log-amplitude recovery.
+//
+// Step 3b (params.go) emits Tl[1..L], the *pre-prediction* spectral
+// log-amplitude residuals. The harmonic log-amplitudes log2(Ml) the
+// synthesizer drives into voiced + unvoiced excitation are recovered
+// via a one-tap inter-frame prediction over the previous frame's
+// harmonics (eqs. 75-77 in §6.1).
+//
+// This file ships step 4a: the cross-frame log2(Ml) recovery.
+// Voiced + unvoiced excitation, spectral shaping, and 8 kHz PCM
+// synthesis (§6.2-6.4) land in step 4b on the same SynthState so
+// frame-to-frame phase + voicing memory has a home.
+//
+// Algorithmic reference: szechyjs/mbelib's mbe_spectralAmpDecode
+// (ISC-licensed; attribution preserved at the bottom of tables.go).
+
+// predictionGain returns the inter-frame log-amplitude prediction
+// coefficient ρ from §6.1, as a function of the harmonic count L. The
+// IMBE algorithm makes ρ pitch-dependent — low for high-pitch / low-L
+// frames so the previous frame's (differently-spaced) spectral envelope
+// is not over-smeared onto the current one, higher for low-pitch / high-L
+// frames where the envelope is more stationary. The breakpoints match the
+// reference decoders (OP25 imbe_vocoder sa_decode.cc and JMBE
+// IMBEFrame.java):
+//
+//	ρ = 0.4               for L ≤ 15   (high pitch, e.g. female voices)
+//	ρ = 0.03·L − 0.05     for 16 ≤ L ≤ 24
+//	ρ = 0.7               for L ≥ 25   (low pitch)
+//
+// GopherTrunk previously hardcoded 0.65 for every frame, which
+// over-predicts high-pitch frames and was the dominant cause of poor
+// female-voice intelligibility versus OP25 / Trunk Recorder.
+func predictionGain(L int) float64 {
+	switch {
+	case L <= 15:
+		return 0.4
+	case L <= 24:
+		return 0.03*float64(L) - 0.05
+	default:
+		return 0.7
+	}
+}
+
+// SynthState carries inter-frame memory needed by the synthesizer.
+// Step 4a uses PrevW0 / PrevL / PrevLog2Ml for the eq. 75-77
+// log-amplitude prediction; step 4c adds PrevMl + PrevPhase for the
+// §6.3 voiced harmonic generator (linear-amp tilt + quadratic-phase
+// continuity); step 5a adds PrevUnvoicedTail for the §6.4
+// overlap-add synthesis window.
+//
+// Zero value is the "fresh stream / no prev frame" starting state —
+// what the decoder presents to the first IMBE frame on a call.
+// Slices are 1-indexed to match TIA-102.BABA / mbelib conventions.
+type SynthState struct {
+	PrevW0           float64                      // ω₀ from the previous decoded frame (rad/sample); 0 ⇒ no prev frame
+	PrevL            int                          // L from the previous decoded frame (1-indexed slice extent)
+	PrevLog2Ml       [57]float64                  // log2(Ml) at indices [1..PrevL]; [0] + tail unused
+	PrevMl           [57]float64                  // linear Ml at end of prev frame; 0 if was unvoiced / absent
+	PrevPhase        [57]float64                  // accumulated phase per harmonic in [0, 2π)
+	PrevUnvoicedTail [UnvoicedTailSamples]float64 // §6.4 overlap-add tail from prev frame's windowed IFFT
+}
+
+// Reset clears all inter-frame memory. Callers invoke it on stream
+// re-sync (frame-loss event from the upstream P25 LDU decoder) and
+// on the silence-frame indicator b_0 ∈ [216, 219] so the next
+// non-silent frame starts from a clean state.
+func (s *SynthState) Reset() {
+	*s = SynthState{}
+}
+
+// PredictLog2Ml recovers log2(Ml)[1..L] from the current frame's Tl
+// residuals and the prev-frame state in s, per TIA-102.BABA §6.1
+// equations 75-77:
+//
+//	eq. 75 — predict at curr-frame harmonic positions:
+//	    log2(M̂)[l] = γ · interp(log2(M_prev), l · ω₀_curr / ω₀_prev)
+//	eq. 76 — average the prediction over the current L:
+//	    ave = (1/L) · Σ log2(M̂)[l]
+//	eq. 77 — combine prediction + residual, removing the prediction's
+//	         DC bias so Tl carries the only intentional offset:
+//	    log2(Ml)[l] = log2(M̂)[l] + Tl[l] − ave
+//
+// Writes log2(Ml) into dst[1..L]; dst[0] and dst[L+1..56] are left
+// untouched. Does not mutate s — callers invoke UpdateLog2Ml to
+// roll prev-frame state forward once the synthesizer has consumed
+// the prediction.
+//
+// First-frame behavior: when PrevL == 0 the prediction term is
+// zero, so log2(Ml)[l] = Tl[l].
+//
+// Silence frames: the caller should Reset() s before invoking this
+// for b_0 ∈ [216, 219] frames; this function short-circuits on
+// p.Silent || p.L == 0 so dst stays untouched.
+func PredictLog2Ml(s *SynthState, p Params, dst *[57]float64) {
+	if p.Silent || p.L == 0 {
+		return
+	}
+	L := p.L
+
+	pred := PredictionTerms(s.PrevL, &s.PrevLog2Ml, L)
+	var ave float64
+	for l := 1; l <= L; l++ {
+		ave += pred[l]
+	}
+	ave /= float64(L)
+
+	for l := 1; l <= L; l++ {
+		dst[l] = pred[l] + p.Tl[l] - ave
+	}
+}
+
+// PredictionTerms is ρ times the previous frame's log2 amplitudes interpolated at this frame's
+// harmonics, per TIA-102.BABA equations 52-57 (75-79 at the decoder): k = L(-1)/L(0) * l, with
+// M(-1)[0] = 1 (log2 0) and M(-1)[l] = M(-1)[L(-1)] beyond L(-1). With no previous frame it is 0.
+// Changed for BitVoice: the original interpolated by the ω0 ratio and clamped k to [1, L(-1)].
+func PredictionTerms(prevL int, prevLog2 *[57]float64, L int) [57]float64 {
+	var pred [57]float64
+	if prevL <= 0 || L <= 0 {
+		return pred
+	}
+	at := func(k int) float64 {
+		switch {
+		case k <= 0:
+			return 0
+		case k > prevL:
+			return prevLog2[prevL]
+		}
+		return prevLog2[k]
+	}
+	rho := predictionGain(L)
+	for l := 1; l <= L; l++ {
+		kh := float64(prevL) / float64(L) * float64(l)
+		k := int(math.Floor(kh))
+		d := kh - float64(k)
+		pred[l] = rho * ((1-d)*at(k) + d*at(k+1))
+	}
+	return pred
+}
+
+// UpdateLog2Ml rolls the prev-frame state forward: copies log2(Ml)
+// from src[1..L] into s.PrevLog2Ml (clearing the rest), and stores
+// the current ω₀ + L. Callers invoke it after the synthesizer has
+// consumed the prediction so the next frame's PredictLog2Ml has the
+// right history.
+func (s *SynthState) UpdateLog2Ml(p Params, src *[57]float64) {
+	s.PrevW0 = p.W0
+	s.PrevL = p.L
+	s.PrevLog2Ml = [57]float64{}
+	for l := 1; l <= p.L; l++ {
+		s.PrevLog2Ml[l] = src[l]
+	}
+}
