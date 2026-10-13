@@ -120,7 +120,7 @@ func TestTenantLimitsSpareEmergencyCalls(t *testing.T) {
 		t.Fatal("an emergency call was refused by the suspension")
 	}
 	acme.Suspended.Store(false)
-	acme.MaxCalls = 1
+	acme.MaxCalls.Store(1)
 	answeredCall(t, ps[0], ps[1], "101")
 	if _, code := ps[1].dial("100"); code != 503 {
 		t.Fatalf("a call over the limit: %d", code)

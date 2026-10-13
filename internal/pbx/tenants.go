@@ -214,7 +214,7 @@ func (e *Engine) overLimit(direction string) string {
 	if e.Suspended.Load() {
 		return "Service Suspended"
 	}
-	if e.MaxCalls > 0 && len(e.allCalls()) >= e.MaxCalls {
+	if max := int(e.MaxCalls.Load()); max > 0 && len(e.allCalls()) >= max {
 		return "Call Limit Reached"
 	}
 	return ""

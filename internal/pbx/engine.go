@@ -110,7 +110,7 @@ type Engine struct {
 	// AIAllow, when set, is asked before each AI request the engine makes (a tenant's daily allowance).
 	AIAllow func() error
 	// MaxCalls caps this engine's calls at once (a tenant's allowance); emergency calls always go through.
-	MaxCalls int
+	MaxCalls atomic.Int32
 	// Suspended lets only emergency calls (and calls back after one) through.
 	Suspended atomic.Bool
 	shared    bool // the SIP stack and media ports belong to another engine

@@ -24,17 +24,6 @@ BitVoice runs on Linux, macOS and Windows. On Windows, double-click \`bitvoice.e
 - **Changes** keeps every version of the configuration: you can see what changed and undo it.`,
   },
   {
-    id: 'codes', title: 'Feature codes', keys: 'star codes dial *43 *97 park echo voicemail',
-    body: `Numbers people dial from their phones. The defaults are below; change them in [Settings](#/settings).
-
-- \`*43\` the **echo test**: say something and hear it back, to check sound both ways.
-- \`*97\` **voicemail**: hear your messages. From another phone, enter the mailbox and its PIN.
-- \`70\` **park**: transfer a call to 70 and it waits in the first free slot (71 to 79), shown on the Dashboard; dial the slot from any phone to pick it up. Unclaimed, it rings back whoever parked it.
-- During a call, \`*7\` **pauses the recording** and \`*8\` resumes it (card payments).
-- During a call with a door station, the door's code (\`*1\` by default) **opens the door**.
-- The emergency numbers (911, 933 in the US) always work, from every extension.`,
-  },
-  {
     id: 'extensions', title: 'Extensions', route: '/extensions', keys: 'user person desk number sip password device door speaker analog',
     body: `An extension is a number for a person or a desk. Phones sign in with the extension number and its **SIP password**.
 
@@ -410,6 +399,94 @@ To ring back, choose your extension and press **Ring back**: your phone rings fi
   {
     id: 'holds', title: 'Legal holds', route: '/holds', keys: 'retention litigation ediscovery keep preserve',
     body: `A legal hold keeps call records, recordings and voicemail for the numbers and dates it names, or everything, and stops anyone deleting them, until it is released. Held calls show a lock in Call history. Releasing a hold makes what it kept subject to the retention settings again; released holds stay listed.`,
+  },
+  {
+    id: 'conferences', title: 'Conference rooms', route: '/conferences', keys: 'conference meeting bridge confbridge meetme dial-in pin leader moderator mute lock room record',
+    body: `A conference room is a number people dial to all talk together. Staff dial it from their desks; outside callers reach it through an incoming route or a menu option that points at the room.
+
+## Setting up a room
+1. Open [Conference rooms](#/conferences) and press **Add conference room**.
+2. Give it a **number** (any free number, 500 by default) and a **name**.
+3. Optionally set a **PIN**. Callers hear a tone, enter the PIN and press #. Three wrong PINs and the call ends.
+4. Optionally set a **leader PIN**, different from the PIN. Whoever enters it joins as a leader.
+
+## Choices
+- **Wait for the leader**: everyone else hears the hold tone until a leader joins. When the last leader leaves, the room closes and everyone is hung up. This needs a leader PIN.
+- **Members join muted**: for briefings and lectures. Leaders talk; members listen. A member presses 1 to ask to speak, and a leader unmutes them from this page.
+- **Record the room**: the whole room is kept as one recording in [Call history](#/history), unless recording is off for the whole system.
+- **Tones when people join and leave**: on by default.
+- **Most people at once**: 50 by default, up to 200.
+
+## Keys during a call
+- \`1\` mutes and unmutes yourself (in a room where members are muted, it asks to speak).
+- \`2\`, for a leader, locks the room so nobody new can join, and unlocks it.
+
+## While a room is in use
+The page shows each room in use: who is in, who is talking (the green light), who is muted, who has asked to speak, and who is still waiting for the leader. An administrator can mute or unmute anyone, remove someone, and lock or unlock the room.`,
+  },
+  {
+    id: 'codes', title: 'Feature codes, forwarding and speed dials', route: '/codes', keys: 'feature codes star codes forward call forwarding do not disturb dnd follow me find me pickup intercom speed dial',
+    body: `Feature codes are what people dial on their phones to change their own settings and reach features. They work on every phone, desk phone or softphone, with nothing set up on the phone itself. A rising tone means done; a falling tone means refused.
+
+## Forwarding
+- \`*72\` forwards every call. Dial it, hear a tone, then dial the number and #. Or dial the number straight after the code: \`*722125550199\`.
+- \`*90\` forwards calls that come while you are on a call. \`*52\` forwards calls you do not answer within your ring time.
+- \`*73\`, \`*91\` and \`*53\` cancel them.
+Forwarding to an outside number needs the extension to be allowed outside calls. Forwarding is live state, not configuration: setting it makes no revision.
+
+## Do not disturb
+\`*78\` on, \`*79\` off, \`*76\` switches. With do not disturb on, calls go to voicemail, or to the extension's no-answer destination. Emergency call-backs still ring.
+
+## Follow-me
+\`*21\` switches follow-me on and off, for extensions that have follow-me numbers set (on the extension, or in the staff portal).
+
+## Answering someone else's call
+- \`*8\` answers the oldest call ringing anyone in your **pickup group** (set on each extension).
+- \`**\` and an extension answers a call ringing that extension: \`**101\`.
+
+## Intercom
+\`*80\` and an extension calls it with auto-answer: its phone answers on the speaker, and both sides talk. An extension can refuse intercom; then the call rings as usual.
+
+## Speed dials
+\`*0\` and a code dials a saved number: \`*05\`. The company's speed dials are on this page; each person can have their own on their extension or in the staff portal, and theirs win.
+
+## Other numbers people dial
+- \`*43\` the **echo test**: say something and hear it back, to check sound both ways.
+- \`*97\` **voicemail**: hear your messages. From another phone, enter the mailbox and its PIN.
+- \`70\` **park**: transfer a call to 70 and it waits in the first free slot (71 to 79), shown on the Dashboard; dial the slot from any phone to pick it up. Unclaimed, it rings back whoever parked it.
+- \`*45\` and \`*46\`: queue agents log in or out, and pause or resume.
+- \`*33\` and \`*34\`: sign in and out at a hot desk.
+- During a call, \`*7\` **pauses the recording** and \`*8\` resumes it (card payments).
+- During a call with a door station, the door's code (\`*1\` by default) **opens the door**.
+- The emergency numbers (911, 933 in the US) always work, from every extension.
+
+## Changing the codes
+Every code can be changed here, or switched off with the word \`off\`. Two features cannot share a code. The echo, voicemail and park numbers are in [Settings](#/settings).`,
+  },
+  {
+    id: 'tenants', title: 'Hosting other organisations', route: '/tenants', keys: 'tenants organisations organizations multi-tenant hosted hosting reseller provider domain',
+    body: `One BitVoice can host several organisations. Each one is a phone system of its own: its own extensions, numbers, trunks, routes, administrators, voicemail, recordings and call history. No organisation can see another's. They share only this server's SIP port and media ports.
+
+## Adding an organisation
+1. Open [Organisations](#/tenants) and press **Add organisation**.
+2. Give its **name** and a **short name** (lowercase letters, digits and dashes). The short name is part of its web address, \`/t/acme/\`, and of its phones' sign-ins, \`acme.100\`. It cannot be changed later.
+3. Optionally give its **own domain**, such as \`pbx.acme.example\`, pointed at this server. Phones register to that domain, and its administrators open it in a browser.
+4. Set its **first administrator**: a username and a password of at least 12 characters.
+5. Optionally set **limits**.
+
+## How calls find the right organisation
+- A phone registering to the organisation's domain belongs to it.
+- Without a domain, a phone signs in with the short name in front of the extension: user \`acme.100\`.
+- A call from a provider goes to the organisation whose trunk it comes from and whose incoming route has the number dialled, so several organisations can share one provider.
+
+## Limits
+Extensions, calls at once, storage for recordings and voicemail, and AI requests a day. 0 is no limit. Emergency calls are never refused: an organisation at its call limit, or suspended, can still call 911 and be called back.
+
+## Opening an organisation
+**Open** signs you in to its web interface as the provider, without its own account. Its administrators sign in at its own address with their own accounts. They never see this server's own screens: updates, the database, the other servers, the certificate, the SIP trace or this list.
+
+## Suspending and removing
+**Suspended** stops sign-ins and every call except emergency calls; nothing is deleted. **Remove** stops the organisation and moves its folder aside (\`tenants/.removed-<name>-<time>\`), so a mistake can be undone by hand.`,
   },
   {
     id: 'paging', title: 'Paging and overhead speakers', route: '/paging', keys: 'intercom announce overhead multicast speaker',

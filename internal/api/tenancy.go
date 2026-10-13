@@ -140,7 +140,7 @@ func (ty *Tenancy) applyLimits(h *hosted) {
 		return nil
 	})
 	h.st.SetQuota(int64(l.StorageMB) << 20)
-	h.eng.MaxCalls = l.Calls
+	h.eng.MaxCalls.Store(int32(l.Calls))
 	h.eng.Suspended.Store(h.t.Suspended)
 	tt := h.t
 	h.srv.Tenant = &tt
