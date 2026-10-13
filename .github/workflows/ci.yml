@@ -1,0 +1,135 @@
+# Every push to main and every pull request: the Go tests on Linux (SQLite and PostgreSQL, race detector),
+# Windows and macOS; the web interface's type check, unit tests and build (the committed bundle must match
+# what the source builds); and the browser tests in Chromium against the real binary.
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: '1.27.1'
+
+jobs:
+  linux:
+    name: Go on Linux (SQLite and PostgreSQL, race)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: bv
+          POSTGRES_PASSWORD: bvtest
+          POSTGRES_DB: bitvoice
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U bv" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      BITVOICE_TEST_POSTGRES: postgres://bv:bvtest@127.0.0.1:5432/bitvoice
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: gofmt
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then echo "gofmt needed:"; echo "$out"; exit 1; fi
+      - name: go vet (Linux, Windows, macOS)
+        run: |
+          go vet ./...
+          GOOS=windows go vet ./...
+          GOOS=darwin go vet ./...
+      - name: go test -race
+        run: go test -race -count=1 -timeout 25m ./...
+
+  windows:
+    name: Go on Windows
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: go test
+        run: go test -count=1 -timeout 30m ./...
+      - name: the program starts and answers
+        shell: pwsh
+        run: |
+          go build -o bitvoice.exe ./cmd/bitvoice
+          $p = Start-Process -FilePath .\bitvoice.exe -ArgumentList '-data',"$env:RUNNER_TEMP\bv",'-no-browser','-http','127.0.0.1:8280' -PassThru -RedirectStandardOutput out.log -RedirectStandardError err.log
+          try {
+            for ($i = 0; $i -lt 30; $i++) {
+              try { $r = Invoke-RestMethod http://127.0.0.1:8280/api/health/live; if ($r.status -eq 'ok') { break } } catch { }
+              Start-Sleep 1
+            }
+            if ($r.status -ne 'ok') { Get-Content out.log, err.log; throw 'BitVoice did not answer' }
+            if ((Invoke-WebRequest http://127.0.0.1:8280/ -UseBasicParsing).StatusCode -ne 200) { throw 'no web interface' }
+          } finally { Stop-Process $p.Id -ErrorAction SilentlyContinue }
+
+  macos:
+    name: Go on macOS
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: go test
+        run: go test -count=1 -timeout 25m ./...
+
+  web:
+    name: Web interface and browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: install
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+      - name: type check and unit tests
+        working-directory: web
+        run: |
+          pnpm exec tsc -p tsconfig.json --noEmit
+          pnpm exec vitest run
+      - name: the committed bundle is what the source builds
+        run: |
+          cd web && pnpm build && cd ..
+          if [ -n "$(git status --porcelain internal/web/dist)" ]; then
+            echo "internal/web/dist differs from what web/src builds: run make web and commit it"
+            git status --short internal/web/dist
+            exit 1
+          fi
+      - name: browser tests (Chromium)
+        run: |
+          make build
+          cd web && pnpm exec playwright install --with-deps chromium && pnpm exec playwright test --reporter=line
+      - name: keep the failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-results
+          path: web/test-results
+          retention-days: 7
