@@ -154,3 +154,21 @@ test('hosted organisations', async ({ page, browser }) => {
   await page.getByRole('button', { name: 'Save' }).click()
   await expect(page.getByText('suspended', { exact: true })).toBeVisible()
 })
+
+// An IAX2 trunk to an Asterisk server, set up in the GUI: the protocol choice, its port and the
+// rule that a trunk the other server registers to needs a username and password.
+test('an IAX2 trunk', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/#/trunks')
+  await page.getByRole('button', { name: /Add trunk/ }).first().click()
+  await page.getByLabel('Name', { exact: true }).fill('Old Asterisk')
+  await page.getByLabel('Protocol').selectOption('iax2')
+  await expect(page.getByLabel('Port')).toHaveValue('4569')
+  await expect(page.getByLabel('Transport')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('or a username and password for it to register here with').first()).toBeVisible()
+  await page.getByLabel('Username', { exact: true }).fill('branch-office')
+  await page.getByLabel('Password', { exact: true }).fill('a shared iax2 secret')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('Old Asterisk').first()).toBeVisible()
+})

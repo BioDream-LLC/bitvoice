@@ -43,6 +43,29 @@ type TrunkStatus struct {
 	HeldBy string `json:"heldBy,omitempty"`
 }
 
+// IAXLink is the IAX2 gateway as the engine sees it.
+type IAXLink interface {
+	SIPPort(trunkID string) int // the loopback port standing for an IAX2 trunk
+	Token() string              // the secret both sides send
+	Status(trunkID string) string
+}
+
+// IAXTokenHeader carries the secret between the engine and the IAX2 gateway.
+const IAXTokenHeader = "X-BitVoice-IAX"
+
+func isIAX(t *config.Trunk) bool { return t != nil && t.Protocol == "iax2" }
+
+// SetIAX connects the IAX2 gateway (safe while calls arrive).
+func (e *Engine) SetIAX(l IAXLink) { e.iaxLink.Store(&l) }
+
+// iax is the IAX2 gateway, or nil.
+func (e *Engine) iax() IAXLink {
+	if p := e.iaxLink.Load(); p != nil {
+		return *p
+	}
+	return nil
+}
+
 // TrunkStatus returns every trunk's state.
 func (e *Engine) TrunkStatus() []TrunkStatus {
 	cfg := e.Config()
@@ -55,6 +78,17 @@ func (e *Engine) TrunkStatus() []TrunkStatus {
 			ts.State, ts.Error, ts.Expires, ts.LatencyMS, ts.Since, ts.HeldBy = st.state, st.lastError, st.expires, st.latencyMS, st.lastChange, st.owner
 			for _, a := range st.addrs {
 				ts.Addresses = append(ts.Addresses, a.String())
+			}
+		}
+		if isIAX(&t) && t.Enabled {
+			ts.State, ts.Error = "ready", ""
+			switch s := e.iaxStatus(t.ID); {
+			case s == "registered":
+				ts.State = "registered"
+			case strings.HasPrefix(s, "failed: "):
+				ts.State, ts.Error = "failed", strings.TrimPrefix(s, "failed: ")
+			case s == "not running":
+				ts.State, ts.Error = "failed", "the IAX2 port (4569) could not be opened"
 			}
 		}
 		out = append(out, ts)
@@ -128,8 +162,19 @@ func (e *Engine) setTrunk(st *trunkState, state, errText string, next time.Durat
 	}
 }
 
+func (e *Engine) iaxStatus(id string) string {
+	if e.iax() == nil {
+		return "not running"
+	}
+	return e.iax().Status(id)
+}
+
 // checkTrunk registers a trunk that needs it, or pings one that does not.
 func (e *Engine) checkTrunk(ctx context.Context, st *trunkState) {
+	if isIAX(&st.cfg) {
+		e.setTrunk(st, "ready", "", time.Minute) // the IAX2 gateway registers and keeps it alive
+		return
+	}
 	if err := e.resolveTrunk(ctx, st); err != nil {
 		e.setTrunk(st, "unreachable", err.Error(), 30*time.Second)
 		return
@@ -345,6 +390,16 @@ func (e *Engine) resolveTrunk(ctx context.Context, st *trunkState) error {
 
 // trunkPeer returns where to send a trunk's requests, preferring IPv4 addresses.
 func (e *Engine) trunkPeer(t *config.Trunk) (sip.Peer, error) {
+	if isIAX(t) {
+		port := 0
+		if e.iax() != nil {
+			port = e.iax().SIPPort(t.ID)
+		}
+		if port == 0 {
+			return sip.Peer{}, errors.New("the IAX2 gateway is not running")
+		}
+		return sip.Peer{Transport: "UDP", Addr: netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(port))}, nil
+	}
 	transport := strings.ToUpper(t.Transport)
 	if transport == "" {
 		transport = "UDP"

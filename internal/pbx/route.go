@@ -504,6 +504,10 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 			c.callerExt = x.Number // its caller ID goes out on the trunk
 		}
 	} else if trunk := e.trunkFor(cfg, in.From.Addr); trunk != nil && !e.reg.registeredFrom(in.From.Addr) {
+		if isIAX(trunk) && (e.iax() == nil || m.Get(IAXTokenHeader) != e.iax().Token()) {
+			tx.Respond(sip.NewResponse(m, 403, "Not The IAX2 Gateway"))
+			return
+		}
 		did := cleanNumber(userOf(m.Get("To")))
 		if r := userOf(m.RequestURI); r != "" && !strings.EqualFold(r, trunk.Username) {
 			did = cleanNumber(r)
@@ -791,6 +795,15 @@ func (e *Engine) emergency(cfg *config.Config, ext *config.Extension, number str
 // the provider's address (the same NAT, or a test bench) is never taken for the provider.
 func (e *Engine) trunkFor(cfg *config.Config, src netip.AddrPort) *config.Trunk {
 	ip := src.Addr()
+	if ip.IsLoopback() && e.iax() != nil {
+		// The IAX2 gateway: each IAX2 trunk is a loopback port of its own.
+		for _, t := range cfg.Trunks {
+			if t.Enabled && isIAX(&t) && int(src.Port()) == e.iax().SIPPort(t.ID) {
+				tc := t
+				return &tc
+			}
+		}
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	// First a trunk whose own address and port sent this; only then one that merely allows the

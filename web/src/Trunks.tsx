@@ -119,15 +119,27 @@ function Editor({ t: initial, status, onClose }: { t: Trunk; status?: TrunkStatu
         )}
         {note && <p className="rounded-lg border border-sky-900 bg-sky-950/40 p-3 text-xs text-sky-200">{note}</p>}
         {t.teams && <TeamsSetup t={t} set={set} p={p} />}
+        {!t.teams && !t.esinet && (
+          <Field label="Protocol" htmlFor="tproto" error={p('protocol')} hint={t.protocol === 'iax2' ? 'IAX2 is Asterisk\u2019s own protocol, on port 4569: for an Asterisk or FreePBX server, or an IAX2 provider. Leave the server empty when the other server registers here with the username and password.' : undefined}>
+            <select id="tproto" className="input" value={t.protocol ?? ''} onChange={(e) => {
+              const v = e.target.value as Trunk['protocol']
+              setT((t0) => ({ ...t0, protocol: v, port: v === 'iax2' ? (t0.port === 5060 ? 4569 : t0.port) : (t0.port === 4569 ? 5060 : t0.port) }))
+            }}>
+              <option value="">SIP</option><option value="iax2">IAX2 (Asterisk, FreePBX)</option>
+            </select>
+          </Field>
+        )}
         <Field label="Name" htmlFor="tn" error={p('name')}><input id="tn" className="input" autoFocus={isNew} value={t.name} onChange={(e) => set('name', e.target.value)} placeholder="Main line" /></Field>
         <div className="grid grid-cols-[1fr_6rem_6rem] gap-3">
           <Field label="Provider server" htmlFor="th" error={p('host')}><input id="th" className="input font-mono" value={t.host} onChange={(e) => set('host', e.target.value.trim())} placeholder="sip.provider.com" /></Field>
           <Field label="Port" htmlFor="tp"><input id="tp" type="number" className="input" value={t.port} onChange={(e) => set('port', Number(e.target.value))} /></Field>
+          {t.protocol === 'iax2' ? <div /> : (
           <Field label="Transport" htmlFor="tt">
             <select id="tt" className="input" value={t.transport} onChange={(e) => set('transport', e.target.value as Trunk['transport'])}>
               <option value="udp">UDP</option><option value="tcp">TCP</option><option value="tls">TLS (encrypted)</option>
             </select>
           </Field>
+          )}
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Username" htmlFor="tu" error={p('username')}><input id="tu" className="input" value={t.username} onChange={(e) => set('username', e.target.value.trim())} /></Field>

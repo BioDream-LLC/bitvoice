@@ -107,6 +107,8 @@ type Engine struct {
 	// UserPrefix is a hosted tenant's prefix on SIP user names (acme.), for phones without the
 	// tenant's own domain: acme.100 is extension 100.
 	UserPrefix string
+	// iaxLink joins IAX2 trunks to the engine through loopback SIP (SetIAX); unset when there are none.
+	iaxLink atomic.Pointer[IAXLink]
 	// AIAllow, when set, is asked before each AI request the engine makes (a tenant's daily allowance).
 	AIAllow func() error
 	// MaxCalls caps this engine's calls at once (a tenant's allowance); emergency calls always go through.

@@ -31,6 +31,7 @@ import (
 	"github.com/biodream-llc/bitvoice/internal/compat"
 	"github.com/biodream-llc/bitvoice/internal/config"
 	"github.com/biodream-llc/bitvoice/internal/events"
+	"github.com/biodream-llc/bitvoice/internal/iax"
 	"github.com/biodream-llc/bitvoice/internal/pbx"
 	"github.com/biodream-llc/bitvoice/internal/store"
 	"github.com/biodream-llc/bitvoice/internal/upgrade"
@@ -226,6 +227,13 @@ func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 		}
 		srv.Web = h
 	}
+	// IAX2 trunks (Asterisk's own protocol): the port opens with the first IAX2 trunk.
+	iaxSvc := iax.NewService(ctx, iaxAddr(o.sip), eng.LocalSIP, log)
+	eng.SetIAX(iaxSvc)
+	applyIAX := func(c config.Config) { iaxSvc.Apply(iaxTrunks(srv.Resolved(c))) }
+	applyIAX(cfg)
+	st.OnChange(applyIAX)
+	defer iaxSvc.Close()
 	// Other organisations hosted here, each with its own data, sharing the SIP and media ports.
 	ty := &api.Tenancy{Root: srv, Switch: sw, DataDir: o.data, DBSpec: spec, Log: log, Version: version, Web: srv.Web}
 	srv.Tenancy = ty
@@ -421,4 +429,25 @@ func pruneRecordings(ctx context.Context, st *store.Store, log *slog.Logger) {
 		case <-tick.C:
 		}
 	}
+}
+
+// iaxTrunks are the enabled IAX2 trunks of a configuration, as the IAX2 gateway needs them.
+func iaxTrunks(c config.Config) []iax.Trunk {
+	var out []iax.Trunk
+	for _, t := range c.Trunks {
+		if t.Enabled && t.Protocol == "iax2" {
+			out = append(out, iax.Trunk{ID: t.ID, Name: t.Name, Host: t.Host, Port: t.Port, Username: t.Username,
+				Secret: t.Password, Register: t.Register, Formats: t.Codecs})
+		}
+	}
+	return out
+}
+
+// iaxAddr is where IAX2 listens: port 4569 on the address SIP was given (every address by default).
+func iaxAddr(sipListen string) string {
+	host, _, err := net.SplitHostPort(sipListen)
+	if err != nil {
+		host = ""
+	}
+	return net.JoinHostPort(host, "4569")
 }

@@ -782,10 +782,14 @@ type Trunk struct {
 	Host      string `json:"host"`
 	Port      int    `json:"port"`
 	Transport string `json:"transport"` // udp or tcp
-	Username  string `json:"username"`
-	AuthUser  string `json:"authUser"`
-	Password  string `json:"password"`
-	Register  bool   `json:"register"`
+	// Protocol is sip (the default) or iax2: Asterisk's own protocol, for an Asterisk or FreePBX
+	// server or an IAX2 provider (port 4569). An IAX2 trunk with no host waits for the far server to
+	// register here with Username and Password.
+	Protocol string `json:"protocol,omitempty"`
+	Username string `json:"username"`
+	AuthUser string `json:"authUser"`
+	Password string `json:"password"`
+	Register bool   `json:"register"`
 	// FromDomain overrides the domain in From on outbound calls; empty uses Host.
 	FromDomain  string `json:"fromDomain"`
 	CallerID    string `json:"callerId"`
@@ -2093,11 +2097,31 @@ func (c *Config) Validate() error {
 			p.add(f+".name", "enter a name")
 		}
 		t.Host, t.Port = splitTrunkHost(t.Host, t.Port)
-		if _, err := netip.ParseAddr(t.Host); err != nil && !hostRe.MatchString(t.Host) {
+		t.Protocol = strings.ToLower(strings.TrimSpace(t.Protocol))
+		if t.Protocol == "sip" {
+			t.Protocol = ""
+		}
+		iax2 := t.Protocol == "iax2"
+		switch {
+		case t.Protocol != "" && !iax2:
+			p.add(f+".protocol", "choose SIP or IAX2")
+		case iax2 && t.Host == "":
+			// The far server registers here: it needs a name and a password to do it with.
+			if t.Username == "" || t.Password == "" {
+				p.add(f+".host", "enter the IAX2 server's address, or a username and password for it to register here with")
+			}
+			t.Register = false
+		case iax2 && (t.Teams || t.ESInet):
+			p.add(f+".protocol", "Teams and ESInet trunks are SIP")
+		}
+		if _, err := netip.ParseAddr(t.Host); err != nil && !hostRe.MatchString(t.Host) && !(iax2 && t.Host == "") {
 			p.add(f+".host", "enter the provider's host name or IP address, like sip.provider.com")
 		}
 		if t.Port == 0 {
 			t.Port = 5060
+			if iax2 {
+				t.Port = 4569
+			}
 		}
 		if t.MaxChannels < 0 {
 			p.add(f+".maxChannels", "use 0 for no limit, or a positive number")

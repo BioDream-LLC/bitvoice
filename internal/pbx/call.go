@@ -416,6 +416,9 @@ func (c *Call) startFork(t target, stageNo int) bool {
 		}
 		c.mu.Unlock()
 	}
+	if isIAX(t.trunk) && e.iax() != nil {
+		inv.Set(IAXTokenHeader, e.iax().Token()) // the IAX2 gateway takes calls only from the engine
+	}
 	if t.trunk == nil {
 		// Tell the phone who is calling in a way every phone displays.
 		inv.Set("Alert-Info", "<http://bitvoice/internal>;info=alert-internal")

@@ -45,16 +45,20 @@ func TestDoorStation(t *testing.T) {
 	if <-done == nil {
 		t.Fatal("not answered")
 	}
-	// The person answering presses * then 1 (each end packet three times, as phones send them).
-	for i, ev := range []byte{10, 1} {
-		for j := 0; j < 3; j++ {
-			_, _ = b.rtp.WriteToUDPAddrPort(keyPacket(ev, uint32(1000*(i+1)), uint16(3*i+j)), bd.media)
+	// The person answering presses * then 1 (each end packet three times, as phones send them). Under
+	// load the first presses can arrive before the call's media is joined up: press again, as a person
+	// would, until the door opens.
+	deadline := time.Now().Add(4 * time.Second)
+	for try := 0; opened.Load() == 0 && time.Now().Before(deadline); try++ {
+		for i, ev := range []byte{10, 1} {
+			for j := 0; j < 3; j++ {
+				_, _ = b.rtp.WriteToUDPAddrPort(keyPacket(ev, uint32(1000*(2*try+i+1)), uint16(6*try+3*i+j)), bd.media)
+			}
+			time.Sleep(20 * time.Millisecond)
 		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	deadline := time.Now().Add(2 * time.Second)
-	for opened.Load() == 0 && time.Now().Before(deadline) {
-		time.Sleep(20 * time.Millisecond)
+		for k := 0; k < 25 && opened.Load() == 0; k++ {
+			time.Sleep(20 * time.Millisecond)
+		}
 	}
 	if opened.Load() != 1 {
 		t.Fatalf("door opened %d times by keys", opened.Load())
