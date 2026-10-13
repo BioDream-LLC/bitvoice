@@ -155,6 +155,37 @@ func (s *sim) fromExtension(x *config.Extension, to string, res *SimResult) *Sim
 	return &SimStep{Kind: "outbound", Name: "Outside call to " + to, Status: status, Says: says}
 }
 
+// forwardStep is where an extension's own forwarding sends a call: inside, or out on a trunk.
+func (s *sim) forwardStep(x *config.Extension, n string, depth int, path []string, direction, from, to string) *SimStep {
+	cfg := s.cfg
+	switch {
+	case cfg.FindExtension(n) != nil:
+		return s.walk(config.Destination{Type: "extension", Target: n}, depth+1, path, direction, from, to)
+	case cfg.FindRingGroup(n) != nil:
+		return s.walk(config.Destination{Type: "ringgroup", Target: n}, depth+1, path, direction, from, to)
+	case cfg.FindQueue(n) != nil:
+		return s.walk(config.Destination{Type: "queue", Target: n}, depth+1, path, direction, from, to)
+	case cfg.FindConference(n) != nil:
+		return s.walk(config.Destination{Type: "conference", Target: n}, depth+1, path, direction, from, to)
+	}
+	if !x.Outbound {
+		return &SimStep{Kind: "refused", Name: "Forwarding refused", Status: "fail", Says: x.Name + " may not call outside numbers, so the call is not forwarded to " + n + "."}
+	}
+	p := s.e.outbound(cfg, x, n)
+	if p.reject != 0 || len(p.stages) == 0 {
+		return &SimStep{Kind: "refused", Name: "Forwarded to " + n, Status: "fail", Says: "No outgoing route takes " + n + "."}
+	}
+	var trunks []string
+	for _, st := range p.stages {
+		for _, t := range st.targets {
+			if t.trunk != nil {
+				trunks = append(trunks, t.trunk.Name)
+			}
+		}
+	}
+	return &SimStep{Kind: "outbound", Name: "Forwarded to " + n, Status: "ok", Says: "Goes out on " + strings.Join(trunks, ", then ") + "."}
+}
+
 // walk follows a destination. path holds the places already passed, to spot a loop.
 func (s *sim) walk(d config.Destination, depth int, path []string, direction, from, to string) *SimStep {
 	s.steps++
@@ -179,8 +210,40 @@ func (s *sim) walk(d config.Destination, depth int, path []string, direction, fr
 		if x == nil || !x.Enabled {
 			return missing("extension")
 		}
+		dv := s.e.DivertOf(x.Number)
+		if dv.All != "" {
+			st := &SimStep{Kind: "extension", Target: x.Number, Name: x.Number + " " + x.Name, Status: "ok",
+				Says: x.Name + " forwards every call to " + dv.All + " (set from the phone or the portal)."}
+			st.Branches = []SimBranch{{When: "Every call", Taken: true, Step: s.forwardStep(x, dv.All, depth, path, direction, from, to)}}
+			return st
+		}
+		if a, away := s.e.awayNow(x.Number); away {
+			if dest, ok := whileAway(x, a); ok {
+				st := &SimStep{Kind: "extension", Target: x.Number, Name: x.Number + " " + x.Name, Status: "ok",
+					Says: x.Name + " is away (" + a.Reason + "), so it does not ring."}
+				var step *SimStep
+				if dest.Type == "number" {
+					step = s.forwardStep(x, dest.Target, depth, path, direction, from, to)
+				} else {
+					step = next(dest)
+				}
+				st.Branches = []SimBranch{{When: "While away", Taken: true, Step: step}}
+				return st
+			}
+		}
 		phones := len(s.e.reg.contacts(x.Number))
 		st := &SimStep{Kind: "extension", Target: x.Number, Name: x.Number + " " + x.Name, Status: "ok"}
+		defer func() {
+			if s.e.followMeOn(x) {
+				st.Says += " Follow-me then rings " + strings.Join(x.FollowMe.Numbers, ", ") + " (" + x.FollowMe.Strategy + ")."
+			}
+			if dv.Busy != "" {
+				st.Says += " While " + x.Name + " is on a call, calls go to " + dv.Busy + "."
+			}
+			if dv.NoAnswer != "" {
+				st.Branches = []SimBranch{{When: "If nobody answers", Step: s.forwardStep(x, dv.NoAnswer, depth, path, direction, from, to)}}
+			}
+		}()
 		ringing := phones > 0 || s.in.AssumePhones || s.e.hasApps(x.Number)
 		if ringing {
 			st.Says = fmt.Sprintf("Rings %s for %d seconds.", x.Name, x.RingSeconds)
@@ -349,6 +412,16 @@ func (s *sim) walk(d config.Destination, depth int, path []string, direction, fr
 		}
 		st.Branches = []SimBranch{{When: "Caller presses 0, asks for a person, or the AI fails", Step: person}}
 		return st
+	case "conference":
+		r := cfg.FindConference(d.Target)
+		if r == nil {
+			return missing("conference room")
+		}
+		says := "The caller joins the conference room " + r.Name + "."
+		if r.PIN != "" || r.LeaderPIN != "" {
+			says = "The caller is asked for the PIN, then joins the conference room " + r.Name + "."
+		}
+		return &SimStep{Kind: "conference", Target: r.Number, Name: "Conference " + r.Name, Status: "ok", Says: says}
 	case "echo":
 		return &SimStep{Kind: "echo", Name: "Echo test", Status: "ok", Says: "The caller hears themselves, to test the sound."}
 	case "hangup":
@@ -382,6 +455,8 @@ func (s *sim) exists(d config.Destination) bool {
 		return c.FindSchedule(d.Target) != nil
 	case "receptionist":
 		return c.FindReceptionist(d.Target) != nil
+	case "conference":
+		return c.FindConference(d.Target) != nil
 	case "echo", "hangup":
 		return true
 	}
@@ -425,6 +500,10 @@ func (s *sim) nameOf(d config.Destination) string {
 	case "receptionist":
 		if r := c.FindReceptionist(d.Target); r != nil {
 			return "receptionist " + r.Name
+		}
+	case "conference":
+		if r := c.FindConference(d.Target); r != nil {
+			return "conference room " + r.Name
 		}
 	}
 	return strings.TrimSpace(d.Type + " " + d.Target)

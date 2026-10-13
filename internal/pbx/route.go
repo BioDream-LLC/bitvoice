@@ -45,6 +45,7 @@ type target struct {
 	binding  *Binding
 	trunk    *config.Trunk
 	number   string // what to send to a trunk
+	confirm  bool   // follow-me to an outside number: whoever answers presses 1 to take the call
 }
 
 // resolve turns a destination into a plan. depth limits no-answer chains so a loop cannot ring forever.
@@ -66,6 +67,19 @@ func (e *Engine) resolveFor(cfg *config.Config, d config.Destination, depth int,
 		return plan{local: "receptionist", box: r.ID, toName: r.Name}
 	case "echo":
 		return plan{local: "echo", toName: "Echo test", direction: "test"}
+	case "forward":
+		// An extension's own forwarding when nobody answers (set with *52), never in the configuration.
+		x := cfg.FindExtension(d.Via)
+		if x == nil {
+			return plan{reject: 404}
+		}
+		return e.forwardPlan(cfg, x, d.Target, depth, sc)
+	case "conference":
+		r := cfg.FindConference(d.Target)
+		if r == nil {
+			return plan{reject: 404}
+		}
+		return plan{local: "conference", box: r.Number, toName: r.Name}
 	case "hangup":
 		return plan{reject: 480, reason: "Temporarily Unavailable"}
 	case "script":
@@ -115,8 +129,12 @@ func (e *Engine) resolveFor(cfg *config.Config, d config.Destination, depth int,
 		if x == nil || !x.Enabled {
 			return plan{reject: 404}
 		}
-		if _, away := e.awayNow(x.Number); away && depth < 8 {
-			if to, ok := whileAway(x); ok {
+		dv := e.DivertOf(x.Number)
+		if dv.All != "" && depth < 4 {
+			return e.forwardPlan(cfg, x, dv.All, depth, sc)
+		}
+		if a, away := e.awayNow(x.Number); away && depth < 8 {
+			if to, ok := whileAway(x, a); ok {
 				if to.Type == "number" {
 					if cfg.FindExtension(to.Target) != nil {
 						return e.resolveFor(cfg, config.Destination{Type: "extension", Target: to.Target}, depth+1, sc)
@@ -133,22 +151,35 @@ func (e *Engine) resolveFor(cfg *config.Config, d config.Destination, depth int,
 				}
 			}
 		}
+		if dv.Busy != "" && depth < 4 && e.onCall(x.Number) {
+			return e.forwardPlan(cfg, x, dv.Busy, depth, sc)
+		}
 		p := plan{toName: x.Name, noAnswer: x.NoAnswer}
+		if dv.NoAnswer != "" && depth < 4 {
+			p.noAnswer = &config.Destination{Type: "forward", Target: dv.NoAnswer, Via: x.Number}
+		}
 		var ts []target
 		for _, b := range e.reg.contacts(x.Number) {
 			ts = append(ts, target{ext: x.Number, name: x.Name, binding: b})
 		}
+		var follow []stage
+		if e.followMeOn(x) && depth < 4 {
+			follow = e.followMeStages(cfg, x, depth)
+		}
 		if e.hasApps(x.Number) {
-			p.stages = []stage{{targets: ts, timeout: time.Duration(x.RingSeconds) * time.Second, wake: []waking{{x.Number, x.Name}}}}
+			p.stages = append([]stage{{targets: ts, timeout: time.Duration(x.RingSeconds) * time.Second, wake: []waking{{x.Number, x.Name}}}}, follow...)
 			return p
 		}
-		if len(ts) == 0 {
-			if x.NoAnswer != nil {
-				return e.resolveFor(cfg, *x.NoAnswer, depth+1, sc)
+		if len(ts) == 0 && len(follow) == 0 {
+			if p.noAnswer != nil {
+				return e.resolveFor(cfg, *p.noAnswer, depth+1, sc)
 			}
 			return plan{reject: 480, reason: "Not Registered", toName: x.Name}
 		}
-		p.stages = []stage{{targets: ts, timeout: time.Duration(x.RingSeconds) * time.Second}}
+		if len(ts) > 0 {
+			p.stages = []stage{{targets: ts, timeout: time.Duration(x.RingSeconds) * time.Second}}
+		}
+		p.stages = append(p.stages, follow...)
 		return p
 	case "ringgroup":
 		g := cfg.FindRingGroup(d.Target)
@@ -214,6 +245,14 @@ func (e *Engine) route(cfg *config.Config, caller *config.Extension, dialled str
 	if c := cfg.System.Radio.Console; c != "" && dialled == c {
 		return plan{local: "console", toName: "Radio console", direction: "internal"}
 	}
+	if caller != nil {
+		if p, ok := e.featureCode(cfg, caller, dialled); ok {
+			if p.direction == "" {
+				p.direction = "internal"
+			}
+			return p
+		}
+	}
 	if dialled == cfg.System.EchoNumber {
 		return plan{local: "echo", toName: "Echo test", direction: "test"}
 	}
@@ -251,6 +290,9 @@ func (e *Engine) route(cfg *config.Config, caller *config.Extension, dialled str
 		p := e.resolve(cfg, config.Destination{Type: "extension", Target: dialled}, 0)
 		p.direction = "internal"
 		return p
+	}
+	if r := cfg.FindConference(dialled); r != nil {
+		return plan{local: "conference", box: r.Number, toName: r.Name, direction: "internal"}
 	}
 	if g := cfg.FindPageGroup(dialled); g != nil {
 		return plan{local: "page", box: g.Number, toName: "Page " + g.Name, direction: "internal"}

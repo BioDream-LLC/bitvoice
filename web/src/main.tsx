@@ -37,6 +37,8 @@ import { Phones } from './Phones'
 import { Queues } from './Queues'
 import { Schedules } from './Schedules'
 import { RingGroups } from './RingGroups'
+import { Conferences } from './Conferences'
+import { FeatureCodesPage } from './FeatureCodes'
 import { Routes } from './Routes'
 import { Setup } from './Setup'
 import { Shell } from './Shell'
@@ -100,6 +102,8 @@ function Admin() {
         <Route path="/scripts" element={<Scripts />} />
         <Route path="/schedules" element={<Schedules />} />
         <Route path="/paging" element={<Paging />} />
+        <Route path="/conferences" element={<Conferences />} />
+        <Route path="/codes" element={<FeatureCodesPage />} />
         <Route path="/faxes" element={<Faxes />} />
         <Route path="/psap" element={<PSAP />} />
         <Route path="/core" element={<CoreServices />} />

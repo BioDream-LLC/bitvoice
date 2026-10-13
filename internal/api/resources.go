@@ -182,6 +182,18 @@ func (s *Server) routes() {
 		list:  func(c *config.Config) *[]config.PageGroup { return &c.PageGroups },
 		id:    func(x *config.PageGroup) *string { return &x.ID },
 		label: func(x *config.PageGroup) string { return x.Number + " " + x.Name }})
+	register(s, collection[config.Conference]{path: "conferences", noun: "conference room",
+		list:  func(c *config.Config) *[]config.Conference { return &c.Conferences },
+		id:    func(x *config.Conference) *string { return &x.ID },
+		label: func(x *config.Conference) string { return x.Number + " " + x.Name },
+		redact: func(x *config.Conference) {
+			if x.PIN != "" {
+				x.PIN = "••••"
+			}
+			if x.LeaderPIN != "" {
+				x.LeaderPIN = "••••"
+			}
+		}})
 	register(s, collection[config.Queue]{path: "queues", noun: "queue",
 		list:  func(c *config.Config) *[]config.Queue { return &c.Queues },
 		id:    func(x *config.Queue) *string { return &x.ID },
@@ -606,6 +618,8 @@ func ownerName(cfg *config.Config, field string) string {
 		return pick(len(cfg.Faxes), func(i int) string { return "fax " + cfg.Faxes[i].Name })
 	case "pageGroups":
 		return pick(len(cfg.PageGroups), func(i int) string { return "paging group " + cfg.PageGroups[i].Name })
+	case "conferences":
+		return pick(len(cfg.Conferences), func(i int) string { return "conference room " + cfg.Conferences[i].Name })
 	case "menus":
 		return pick(len(cfg.Menus), func(i int) string { return "menu " + cfg.Menus[i].Name })
 	case "schedules":

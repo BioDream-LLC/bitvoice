@@ -1,12 +1,14 @@
 import { createColumnHelper } from '@tanstack/react-table'
 import { AwayBadge, CalendarFields } from './Away'
-import { Cable, DoorOpen, Eye, EyeOff, MapPin, Megaphone, Phone, Plus, RefreshCw, Voicemail, Wifi, WifiOff } from 'lucide-react'
-import { useEffect, useId, useMemo, useState } from 'react'
+import { clsx } from 'clsx'
+import { Cable, DoorOpen, Eye, EyeOff, MapPin, Megaphone, Phone, PhoneForwarded, Plus, RefreshCw, Voicemail, Wifi, WifiOff, X } from 'lucide-react'
+import { useEffect, useId, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   useCreateExtensionMutation, useDeleteExtensionMutation, useExtensionsQuery, useFaxBoxesQuery, useLazyNextExtensionQuery,
   useMenusQuery, useQueuesQuery, useScriptsQuery, useRegistrationsQuery, useSchedulesQuery, useRingGroupsQuery, useSystemQuery, useUpdateExtensionMutation, type ApiErrorBody,
   type Destination, type Extension, useReceptionistsQuery, useSitesQuery, useRemoteAddressQuery,
+  useConferencesQuery, useDivertQuery, useSetDivertMutation, type Divert, type FollowMe, type SpeedDial,
 } from './api'
 import { MobileDevices } from './Mobile'
 import { useOpenParam } from './useOpenParam'
@@ -160,6 +162,7 @@ function ExtensionEditor({ ext, onClose }: { ext: Extension; onClose: () => void
           {(x.kind ?? '') === '' && <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={x.hotDesk ?? false} onChange={(v) => set('hotDesk', v)} label="Hot desk" /> Hot desk <span className="text-xs text-slate-500">(a shared phone that becomes whoever signs in at it; see Phones)</span></label>}
           <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={x.secureMedia} onChange={(v) => set('secureMedia', v)} label="Encrypt calls to this phone" /> Encrypt calls to this phone (SRTP) <span className="text-xs text-slate-500">(the phone must support it; use TLS so the keys stay private)</span></label>
         </div>
+        {(x.kind ?? '') === '' && <FollowSettings x={x} setX={setX} p={p} />}
         <section className="card space-y-4 border-violet-900/50 p-4">
           <label className="flex items-center gap-3 text-sm font-semibold text-slate-100">
             <Toggle checked={x.voicemail.enabled} label="Voicemail" onChange={(v) => setX({ ...x, voicemail: { ...x.voicemail, enabled: v },
@@ -185,6 +188,7 @@ function ExtensionEditor({ ext, onClose }: { ext: Extension; onClose: () => void
           {x.voicemail.enabled && !isNew && <Greeting box={ext.number} />}
         </section>
       </fieldset>
+      {!isNew && (ext.kind ?? '') === '' && <ForwardingNow ext={ext.number} />}
       {!isNew && (
         <div className="space-y-3">
           <h3 className="label">Connected devices</h3>
@@ -219,6 +223,7 @@ export function DestinationPicker({ label, value, onChange, exclude, required, n
   const { data: scripts } = useScriptsQuery()
   const { data: receptionists } = useReceptionistsQuery()
   const { data: faxes } = useFaxBoxesQuery()
+  const { data: rooms } = useConferencesQuery()
   const key = value ? `${value.type}:${value.target}` : ''
   return (
     <Field label={label} htmlFor={id} error={error}>
@@ -263,6 +268,11 @@ export function DestinationPicker({ label, value, onChange, exclude, required, n
         {(faxes?.items.length ?? 0) > 0 && (
           <optgroup label="Fax">
             {faxes!.items.map((f) => <option key={f.id} value={`fax:${f.number}`}>{f.number} {f.name} (fax to PDF)</option>)}
+          </optgroup>
+        )}
+        {(rooms?.items.length ?? 0) > 0 && (
+          <optgroup label="Conference rooms">
+            {rooms!.items.map((r) => <option key={r.id} value={`conference:${r.number}`}>{r.number} {r.name} (conference room)</option>)}
           </optgroup>
         )}
         <optgroup label="Other">
@@ -348,6 +358,7 @@ export function useDescribe() {
       case 'schedule': return `Schedule ${schedules?.items.find((x) => x.id === t)?.name ?? ''}`.trim()
       case 'script': return `Script ${scripts?.items.find((x) => x.id === t)?.name ?? ''}`.trim()
       case 'receptionist': return `AI receptionist ${receptionists?.items.find((x) => x.id === t)?.name ?? ''}`.trim()
+      case 'conference': return `Conference room ${t}`
       case 'echo': return 'Echo test'
     }
     return 'Hang up'
@@ -363,5 +374,148 @@ function DepartmentField({ value, onChange }: { value: string; onChange: (v: str
       <input id="xdep" className="input" list="xdep-list" value={value} onChange={(e) => onChange(e.target.value)} placeholder="Sales" />
       <datalist id="xdep-list">{used.map((d) => <option key={d} value={d} />)}</datalist>
     </Field>
+  )
+}
+
+/** Follow-me, the pickup group, intercom and the person's own speed dials: configuration, kept with the extension. */
+function FollowSettings({ x, setX, p }: { x: Extension; setX: Dispatch<SetStateAction<Extension>>; p: (f: string) => string | undefined }) {
+  const fm: FollowMe = { enabled: false, numbers: [], strategy: 'sequential', ringSeconds: 20, confirm: true, ...(x.followMe ?? {}) }
+  const nums = fm.numbers ?? []
+  const setFm = (v: Partial<FollowMe>) => setX((x0) => ({ ...x0, followMe: { ...fm, ...(x0.followMe ?? {}), ...v } }))
+  const sds = x.speedDials ?? []
+  const setSds = (v: SpeedDial[]) => setX((x0) => ({ ...x0, speedDials: v }))
+  return (
+    <section className="card space-y-4 border-teal-900/50 p-4" aria-labelledby="follow-h">
+      <h3 id="follow-h" className="flex items-center gap-2 text-sm font-semibold text-teal-300"><PhoneForwarded size={15} aria-hidden /> Follow-me, pickup and intercom</h3>
+      <label className="flex items-center gap-3 text-sm text-slate-300">
+        <Toggle checked={fm.enabled} onChange={(v) => setFm({ enabled: v, numbers: v && !nums.length ? [''] : nums })} label="Follow-me" />
+        Follow-me <span className="text-xs text-slate-500">(when the phones here are not answered, ring these numbers before {x.noAnswer ? 'the no-answer destination' : 'giving up'})</span>
+      </label>
+      {fm.enabled && (
+        <div className="space-y-3 pl-1">
+          <ol className="space-y-2">
+            {nums.map((n, i) => (
+              <li key={i} className="flex items-center gap-2">
+                <span className="w-5 text-right font-mono text-xs text-slate-500">{i + 1}.</span>
+                <input aria-label={`Follow-me number ${i + 1}`} className="input max-w-xs font-mono text-teal-300" placeholder="+1 212 555 0199 or 105" value={n}
+                  onChange={(e) => { const v = [...nums]; v[i] = e.target.value; setFm({ numbers: v }) }} />
+                <button type="button" className="btn btn-ghost px-2" aria-label={`Remove number ${i + 1}`} onClick={() => setFm({ numbers: nums.filter((_, j) => j !== i) })}><X size={14} aria-hidden /></button>
+                {p(`followMe.numbers[${i}]`) && <span className="text-xs text-rose-300">{p(`followMe.numbers[${i}]`)}</span>}
+              </li>
+            ))}
+          </ol>
+          {p('followMe.numbers') && <p className="text-xs text-rose-300">{p('followMe.numbers')}</p>}
+          {nums.length < 10 && <button type="button" className="btn btn-ghost text-sm" onClick={() => setFm({ numbers: [...nums, ''] })}><Plus size={14} aria-hidden /> Add a number</button>}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="How they ring" htmlFor="fms">
+              <select id="fms" className="input" value={fm.strategy || 'sequential'} onChange={(e) => setFm({ strategy: e.target.value as FollowMe['strategy'] })}>
+                <option value="sequential">One after another</option>
+                <option value="together">All together</option>
+              </select>
+            </Field>
+            <Field label="Ring each for (seconds)" htmlFor="fmr" error={p('followMe.ringSeconds')}>
+              <input id="fmr" type="number" min={5} max={120} className="input" value={fm.ringSeconds} onChange={(e) => setFm({ ringSeconds: Number(e.target.value) })} />
+            </Field>
+          </div>
+          <label className="flex items-center gap-3 text-sm text-slate-300">
+            <Toggle checked={fm.confirm} onChange={(v) => setFm({ confirm: v })} label="Press 1 to take the call" />
+            Outside numbers press 1 to take the call <span className="text-xs text-slate-500">(so a mobile's own voicemail never takes it)</span>
+          </label>
+        </div>
+      )}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Pickup group" htmlFor="xpg" error={p('pickupGroup')} hint="Anyone in the same group answers this extension's ringing calls with the pickup code (*8).">
+          <PickupGroupInput value={x.pickupGroup ?? ''} onChange={(v) => setX((x0) => ({ ...x0, pickupGroup: v }))} />
+        </Field>
+        <label className="flex items-center gap-3 self-center text-sm text-slate-300">
+          <Toggle checked={!(x.noIntercom ?? false)} onChange={(v) => setX((x0) => ({ ...x0, noIntercom: !v }))} label="Allow intercom" />
+          Allow intercom <span className="text-xs text-slate-500">(*80 then this number answers on the speaker)</span>
+        </label>
+      </div>
+      <SpeedDialList label="Own speed dials" hint="Dialled after the speed dial code (*0). They win over the company's with the same code." field="speedDials" list={sds} onChange={setSds} p={p} />
+    </section>
+  )
+}
+
+function PickupGroupInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { data } = useExtensionsQuery()
+  const used = [...new Set((data?.items ?? []).map((e) => e.pickupGroup ?? '').filter(Boolean))].sort()
+  return (
+    <>
+      <input id="xpg" className="input" list="xpg-list" value={value} onChange={(e) => onChange(e.target.value)} placeholder="Front office" />
+      <datalist id="xpg-list">{used.map((d) => <option key={d} value={d} />)}</datalist>
+    </>
+  )
+}
+
+/** A list of speed dials, editable in place. */
+export function SpeedDialList({ label, hint, field, list, onChange, p }: {
+  label: string; hint: string; field: string; list: SpeedDial[]; onChange: (v: SpeedDial[]) => void; p: (f: string) => string | undefined
+}) {
+  const set = (i: number, v: Partial<SpeedDial>) => onChange(list.map((s, j) => (j === i ? { ...s, ...v } : s)))
+  return (
+    <div className="space-y-2">
+      <div className="label">{label}</div>
+      <p className="text-xs text-slate-500">{hint}</p>
+      {list.length > 0 && (
+        <table className="w-full text-sm">
+          <thead><tr className="text-left text-xs text-slate-500"><th className="w-24 pb-1 font-normal">Code</th><th className="pb-1 font-normal">Number</th><th className="pb-1 font-normal">Name</th><th className="w-8" /></tr></thead>
+          <tbody>
+            {list.map((s, i) => (
+              <tr key={i}>
+                <td className="py-1 pr-2"><input aria-label={`Speed dial ${i + 1} code`} className="input font-mono text-amber-300" inputMode="numeric" maxLength={3} value={s.code} onChange={(e) => set(i, { code: e.target.value.replace(/\D/g, '') })} /></td>
+                <td className="py-1 pr-2"><input aria-label={`Speed dial ${i + 1} number`} className="input font-mono text-teal-300" value={s.number} onChange={(e) => set(i, { number: e.target.value })} /></td>
+                <td className="py-1 pr-2"><input aria-label={`Speed dial ${i + 1} name`} className="input" value={s.name} onChange={(e) => set(i, { name: e.target.value })} /></td>
+                <td><button type="button" className="btn btn-ghost px-2" aria-label={`Remove speed dial ${i + 1}`} onClick={() => onChange(list.filter((_, j) => j !== i))}><X size={14} aria-hidden /></button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {list.map((_, i) => ['code', 'number'].map((f) => p(`${field}[${i}].${f}`) && <p key={`${i}${f}`} className="text-xs text-rose-300">Speed dial {i + 1}: {p(`${field}[${i}].${f}`)}</p>))}
+      <button type="button" className="btn btn-ghost text-sm" onClick={() => {
+        const used = new Set(list.map((s) => s.code))
+        let n = 1
+        while (used.has(String(n))) n++
+        onChange([...list, { code: String(n), number: '', name: '' }])
+      }}><Plus size={14} aria-hidden /> Add a speed dial</button>
+    </div>
+  )
+}
+
+/** Where this extension's calls go right now: forwarding and do not disturb, set from the phone, the portal or here. */
+export function ForwardingNow({ ext }: { ext: string }) {
+  const admin = useIsAdmin()
+  const { data } = useDivertQuery(ext)
+  const [save] = useSetDivertMutation()
+  const [draft, setDraft] = useState<{ all: string; busy: string; noAnswer: string } | null>(null)
+  const [err, setErr] = useState<ApiErrorBody | null>(null)
+  if (!data) return null
+  const d = draft ?? { all: data.all ?? '', busy: data.busy ?? '', noAnswer: data.noAnswer ?? '' }
+  const dirty = draft !== null
+  const apply = async (body: Partial<Divert>, msg: string) => {
+    const e = await attempt(() => save({ ext, ...body }).unwrap(), msg)
+    setErr(e)
+    if (!e) setDraft(null)
+  }
+  return (
+    <section className="card space-y-3 border-sky-900/50 p-4" aria-labelledby="fwd-h">
+      <h3 id="fwd-h" className="flex items-center gap-2 text-sm font-semibold text-sky-300"><PhoneForwarded size={15} aria-hidden /> Forwarding right now</h3>
+      <p className="text-xs text-slate-500">Set from the phone with *72, *90 and *52 (cancel with *73, *91, *53), from the staff portal, or here. Not part of the configuration: changing it makes no revision.</p>
+      <label className="flex items-center gap-3 text-sm text-slate-300">
+        <Toggle checked={data.dnd} disabled={!admin} onChange={(v) => apply({ dnd: v }, v ? 'Do not disturb on' : 'Do not disturb off')} label="Do not disturb" />
+        Do not disturb {data.dnd ? <span className="text-rose-300">on</span> : <span className="text-slate-500">off</span>} <span className="text-xs text-slate-500">(*78 on, *79 off, *76 switches)</span>
+      </label>
+      <fieldset disabled={!admin} className="grid gap-3 sm:grid-cols-3">
+        {([['all', 'Forward every call to'], ['busy', 'When on a call, forward to'], ['noAnswer', 'When not answered, forward to']] as const).map(([k, l]) => (
+          <Field key={k} label={l} htmlFor={`fw-${k}`}>
+            <input id={`fw-${k}`} className={clsx('input font-mono', d[k] ? 'text-sky-300' : '')} placeholder="Not forwarded" value={d[k]} onChange={(e) => setDraft({ ...d, [k]: e.target.value })} />
+          </Field>
+        ))}
+      </fieldset>
+      {err && <p className="text-sm text-rose-300">{err.message}</p>}
+      {admin && dirty && <div className="flex gap-2"><button type="button" className="btn btn-primary" onClick={() => apply(d, 'Forwarding saved')}>Save forwarding</button><button type="button" className="btn btn-ghost" onClick={() => { setDraft(null); setErr(null) }}>Cancel</button></div>}
+      {data.followMe != null && <p className="text-xs text-teal-300">Follow-me is switched {data.followMeOn ? 'on' : 'off'} by the person (*21).</p>}
+    </section>
   )
 }

@@ -303,7 +303,7 @@ func (c *Call) startFork(t target, stageNo int) bool {
 	callID := sip.NewCallID()
 	tag := sip.NewTag()
 	leg := &Leg{e: e, call: c, Number: t.ext, Name: t.name, Ext: t.ext, callID: callID, localTag: tag, ep: ep,
-		localSeq: 1, stage: stageNo}
+		localSeq: 1, stage: stageNo, confirm: t.confirm}
 	c.mu.Lock()
 	fromNum, fromName := c.from, c.fromName
 	c.mu.Unlock()
@@ -488,7 +488,10 @@ func (c *Call) startFork(t target, stageNo int) bool {
 	c.mu.Unlock()
 	e.addLeg(leg)
 	ep.Start()
-	leg.clientTx = e.stack.Request(inv, peer)
+	tx := e.stack.Request(inv, peer)
+	leg.mu.Lock()
+	leg.clientTx = tx
+	leg.mu.Unlock()
 	go c.watchFork(leg, t.trunk)
 	return true
 }
@@ -515,7 +518,9 @@ func display(name string) string {
 // watchFork follows the responses to one INVITE.
 func (c *Call) watchFork(l *Leg, trunk *config.Trunk) {
 	triedAuth := false
+	l.mu.Lock()
 	tx := l.clientTx
+	l.mu.Unlock()
 	for {
 		var final *sip.Message
 		for r := range tx.Responses {
@@ -733,6 +738,27 @@ func (c *Call) forkAnswered(l *Leg, tx *sip.ClientTx, r *sip.Message) {
 	}
 	l.setRemoteSDP(answer)
 	l.answeredCrypto(answer)
+	if l.confirm {
+		// Follow-me to an outside number: the answerer must press 1 first; until then the others ring on.
+		l.confirm = false
+		c.mu.Unlock()
+		l.sendCodec(answer)
+		go c.confirmFork(l, func() { c.acceptFork(l, answer) })
+		return
+	}
+	c.mu.Unlock()
+	c.acceptFork(l, answer)
+}
+
+// acceptFork makes a party who answered the one the caller talks to.
+func (c *Call) acceptFork(l *Leg, answer *sdp.Session) {
+	c.mu.Lock()
+	if c.ended || c.callee != nil {
+		c.mu.Unlock()
+		l.bye()
+		l.close()
+		return
+	}
 	c.callee = l
 	c.answer = time.Now()
 	c.answeredBy = l.party()
@@ -953,6 +979,18 @@ func (c *Call) answerLocal(p plan) {
 		}
 	case "pickup":
 		c.pickup(p.box)
+	case "grouppickup":
+		c.groupPickup()
+	case "directedpickup":
+		c.directedPickup(p.box)
+	case "divert":
+		if c.answerHere(p.toName) {
+			go c.divertCode(p.box)
+		}
+	case "conference":
+		if c.answerHere(p.toName) {
+			go c.joinConference(p.box)
+		}
 	case "page":
 		if c.answerHere(p.toName) {
 			if g := c.e.Config().FindPageGroup(p.box); g != nil {

@@ -95,6 +95,8 @@ func (s *Server) liveRoutes() {
 	s.costRoutes()
 	s.directoryRoutes()
 	s.hotDeskRoutes()
+	s.conferenceRoutes()
+	s.divertRoutes()
 	s.briefRoutes()
 	s.textRoutes()
 	s.timelineRoutes()

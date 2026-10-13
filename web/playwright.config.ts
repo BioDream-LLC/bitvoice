@@ -9,7 +9,7 @@ export default defineConfig({
   // Files run in name order on one server: the sweep must meet the setup wizard, so it comes before
   // anything that signs in, and the profiles run in a project of their own after everything else.
   projects: [
-    { name: 'main', testMatch: ['shots.spec.ts', 'sweep.spec.ts', 'two-step.spec.ts', 'webrtc.spec.ts'] },
+    { name: 'main', testMatch: ['shots.spec.ts', 'sweep.spec.ts', 'two-step.spec.ts', 'webrtc.spec.ts', 'calls.spec.ts'] },
     { name: 'profiles', testMatch: ['profiles.spec.ts'], dependencies: ['main'] },
   ],
   use: { baseURL: `http://127.0.0.1:${port}` },

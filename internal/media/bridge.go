@@ -16,6 +16,11 @@ type Bridge struct {
 	hears func(listener, speaker string) bool
 	stop  chan struct{}
 	once  sync.Once
+	// inject is audio everyone hears (join and leave tones); onMix sees the whole room each 20 ms.
+	inject []int16
+	onMix  func(frame []int16)
+	// speaking is who was talking in the last few frames, for the live view.
+	speaking map[string]int
 }
 
 type part struct {
@@ -79,6 +84,30 @@ func (b *Bridge) Remove(id string) {
 	}
 }
 
+// Inject plays audio (8 kHz) to every party, mixed with whoever is talking.
+func (b *Bridge) Inject(pcm []int16) {
+	b.mu.Lock()
+	b.inject = append(b.inject, pcm...)
+	if len(b.inject) > 8000*10 {
+		b.inject = b.inject[len(b.inject)-8000*10:]
+	}
+	b.mu.Unlock()
+}
+
+// OnMix sets a function given everything said in the room, every 20 ms (a recording); nil stops it.
+func (b *Bridge) OnMix(f func(frame []int16)) {
+	b.mu.Lock()
+	b.onMix = f
+	b.mu.Unlock()
+}
+
+// Speaking says whether a party talked in the last half second.
+func (b *Bridge) Speaking(id string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.speaking[id] > 0
+}
+
 // Len is how many parties are in.
 func (b *Bridge) Len() int {
 	b.mu.Lock()
@@ -134,11 +163,50 @@ func (b *Bridge) run() {
 func (b *Bridge) mix() {
 	b.mu.Lock()
 	frames := map[string][]int16{}
+	if b.speaking == nil {
+		b.speaking = map[string]int{}
+	}
 	for id, p := range b.parts {
 		f := make([]int16, 160)
 		n := copy(f, p.buf)
 		p.buf = p.buf[n:]
 		frames[id] = f
+		wide := make([]int32, 160)
+		for i, v := range f {
+			wide[i] = int32(v)
+		}
+		if voiced(wide) {
+			b.speaking[id] = 25 // half a second of frames
+		} else if b.speaking[id] > 0 {
+			b.speaking[id]--
+		}
+	}
+	for id := range b.speaking {
+		if b.parts[id] == nil {
+			delete(b.speaking, id)
+		}
+	}
+	var injected []int16
+	if len(b.inject) > 0 {
+		injected = make([]int16, 160)
+		n := copy(injected, b.inject)
+		b.inject = b.inject[n:]
+	}
+	if b.onMix != nil {
+		all := make([]int32, 160)
+		for _, f := range frames {
+			for i, v := range f {
+				all[i] += int32(v)
+			}
+		}
+		for i, v := range injected {
+			all[i] += int32(v)
+		}
+		frame := make([]int16, 160)
+		for i, v := range all {
+			frame[i] = int16(max(-32768, min(32767, v)))
+		}
+		b.onMix(frame)
 	}
 	type out struct {
 		ep  *Endpoint
@@ -154,6 +222,12 @@ func (b *Bridge) mix() {
 			}
 			any = true
 			for i, v := range f {
+				mixed[i] += int32(v)
+			}
+		}
+		if injected != nil {
+			any = true
+			for i, v := range injected {
 				mixed[i] += int32(v)
 			}
 		}

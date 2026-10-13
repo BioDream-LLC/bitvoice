@@ -1,4 +1,5 @@
-import { useExtensionsQuery, useFaxBoxesQuery, useMenusQuery, usePageGroupsQuery, useQueuesQuery, useRingGroupsQuery, useSettingsQuery } from './api'
+import {
+  useConferencesQuery, useExtensionsQuery, useFaxBoxesQuery, useMenusQuery, usePageGroupsQuery, useQueuesQuery, useRingGroupsQuery, useSettingsQuery } from './api'
 
 /** Every number something already answers on: extensions, groups, queues, menus and the system's own
  * (echo test, voicemail, park slots, emergency numbers). */
@@ -9,9 +10,10 @@ export function useTakenNumbers(): Set<string> {
   const { data: pg } = usePageGroupsQuery()
   const { data: m } = useMenusQuery()
   const { data: fx } = useFaxBoxesQuery()
+  const { data: cf } = useConferencesQuery()
   const { data: s } = useSettingsQuery()
   const taken = new Set<string>()
-  for (const list of [x?.items, g?.items, q?.items, pg?.items, m?.items, fx?.items]) list?.forEach((i: { number?: string }) => i.number && taken.add(i.number))
+  for (const list of [x?.items, g?.items, q?.items, pg?.items, m?.items, fx?.items, cf?.items]) list?.forEach((i: { number?: string }) => i.number && taken.add(i.number))
   const sys = s?.system
   if (sys) {
     ;[sys.echoNumber, sys.voicemailNumber, ...(sys.emergencyNumbers ?? [])].forEach((n) => n && taken.add(n))

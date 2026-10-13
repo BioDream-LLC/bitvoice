@@ -4,7 +4,7 @@ import {
   Activity, BookOpen, BookOpenText, Braces, CloudUpload, Megaphone, Workflow, CalendarClock, FileUp, Grid3x3, ListOrdered, Smartphone, Voicemail, ChevronRight, History, LayoutDashboard, LogOut, Monitor, Moon, Phone, PhoneCall, PhoneForwarded, Signal, Coins, BookUser, MessageSquare, ScrollText, Link2, BadgeCheck, Server as ServerIcon,
   Gauge, MapPin, PackageCheck, Route, Scale, Search, Server, Settings, Shield, Stethoscope, Sun, Users, UserCog, Waypoints,
   Bot, Printer,
-  Siren, Network, RadioTower,
+  Siren, Network, RadioTower, Users2, Asterisk
 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
@@ -36,6 +36,8 @@ export const nav = [
   { to: '/extensions', label: 'Extensions', icon: Phone, color: 'text-sky-300', keys: 'users phones people', group: 'Calls' },
   { to: '/ring-groups', label: 'Ring groups', icon: Users, color: 'text-violet-300', keys: 'hunt group', group: 'Calls' },
   { to: '/paging', label: 'Paging', icon: Megaphone, color: 'text-amber-300', keys: 'intercom announce overhead speaker', group: 'Calls' },
+  { to: '/conferences', label: 'Conference rooms', icon: Users2, color: 'text-teal-300', keys: 'conference meeting bridge confbridge meetme dial-in pin leader moderator mute room', group: 'Calls' },
+  { to: '/codes', label: 'Feature codes', icon: Asterisk, color: 'text-sky-300', keys: 'feature codes star codes forward call forwarding do not disturb dnd follow me find me pickup call pickup intercom speed dial *72 *8', group: 'Calls' },
   { to: '/menus', label: 'Menus', icon: Grid3x3, color: 'text-sky-300', keys: 'ivr auto attendant press 1 prompt', group: 'Calls' },
   { to: '/receptionists', label: 'AI receptionists', icon: Bot, color: 'text-violet-300', keys: 'ai assistant virtual receptionist answer questions', group: 'Calls' },
   { to: '/schedules', label: 'Schedules', icon: CalendarClock, color: 'text-amber-300', keys: 'opening hours holidays time night closed', group: 'Calls' },

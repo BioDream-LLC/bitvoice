@@ -31,6 +31,7 @@ type Config struct {
 	Queues         []Queue         `json:"queues"`
 	Faxes          []FaxBox        `json:"faxes"`
 	PageGroups     []PageGroup     `json:"pageGroups"`
+	Conferences    []Conference    `json:"conferences"`
 	Devices        []Device        `json:"devices"`
 	Schedules      []Schedule      `json:"schedules"`
 	Menus          []Menu          `json:"menus"`
@@ -81,6 +82,10 @@ type System struct {
 	HotDesk HotDeskCodes `json:"hotDesk"`
 	// VoicemailNumber is dialled to hear your messages.
 	VoicemailNumber string `json:"voicemailNumber"`
+	// Codes are the feature codes for forwarding, do not disturb, follow-me, pickup, intercom and speed dials.
+	Codes FeatureCodes `json:"codes"`
+	// SpeedDials are the company's short codes, dialled after the speed dial code (*0).
+	SpeedDials []SpeedDial `json:"speedDials"`
 	// ParkNumber parks a call when it is transferred there; the nine numbers after it are the slots.
 	ParkNumber string `json:"parkNumber"`
 	// ParkSeconds before a parked call rings whoever parked it.
@@ -639,6 +644,101 @@ type Extension struct {
 	Kind string `json:"kind"`
 	// Door is how a door station's door is opened; only for kind door.
 	Door Door `json:"door"`
+	// FollowMe rings more numbers (a mobile, another desk) when the extension's own phones are not
+	// answered, before its no-answer destination.
+	FollowMe FollowMe `json:"followMe"`
+	// PickupGroup: anyone in the same group can answer this extension's ringing calls with the pickup
+	// code (*8). Empty for none.
+	PickupGroup string `json:"pickupGroup,omitempty"`
+	// NoIntercom refuses intercom calls to this extension (they ring as ordinary calls instead).
+	NoIntercom bool `json:"noIntercom,omitempty"`
+	// SpeedDials are this person's own short codes, dialled after the speed dial code (*0). They win
+	// over the company's speed dials with the same code.
+	SpeedDials []SpeedDial `json:"speedDials,omitempty"`
+}
+
+// FollowMe is where else an extension's calls ring when its phones are not answered.
+type FollowMe struct {
+	Enabled bool `json:"enabled"`
+	// Numbers are rung after the extension's own phones: extensions or outside numbers (outside ones
+	// need the extension to be allowed outbound calls).
+	Numbers []string `json:"numbers"`
+	// Strategy: sequential (each number in turn, the default) or together (all of them at once).
+	Strategy string `json:"strategy"`
+	// RingSeconds each number (or all together) rings.
+	RingSeconds int `json:"ringSeconds"`
+	// Confirm makes whoever answers on an outside number press 1 to take the call, so a mobile's own
+	// voicemail never takes it.
+	Confirm bool `json:"confirm"`
+}
+
+// SpeedDial is a short code for a number: dial the speed dial code and then Code.
+type SpeedDial struct {
+	Code   string `json:"code"` // 1 to 3 digits
+	Number string `json:"number"`
+	Name   string `json:"name"`
+}
+
+// Conference is a room people dial into and all talk together.
+type Conference struct {
+	ID     string `json:"id"`
+	Number string `json:"number"`
+	Name   string `json:"name"`
+	// PIN is asked before joining; empty lets anyone who dials the number in.
+	PIN string `json:"pin"`
+	// LeaderPIN joins as a leader. With WaitForLeader the others wait, hearing music, until a leader
+	// is in; when the last leader leaves, the room closes.
+	LeaderPIN     string `json:"leaderPin"`
+	WaitForLeader bool   `json:"waitForLeader"`
+	// MuteMembers joins everyone but leaders muted (a briefing or a lecture); a member presses * to
+	// ask to speak, and a leader unmutes them from the web interface.
+	MuteMembers bool `json:"muteMembers"`
+	// MaxMembers in the room at once (default 50).
+	MaxMembers int `json:"maxMembers"`
+	// Record records the room as one recording.
+	Record bool `json:"record"`
+	// Quiet leaves out the tones played when someone joins or leaves.
+	Quiet bool `json:"quiet"`
+}
+
+// cleanDial drops the spaces, dashes, dots and brackets people write numbers with.
+func cleanDial(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch r {
+		case ' ', '-', '.', '(', ')', '\u00a0':
+			return -1
+		}
+		return r
+	}, strings.TrimSpace(s))
+}
+
+// FindConference returns the conference room with a number, or nil.
+func (c *Config) FindConference(number string) *Conference {
+	for i := range c.Conferences {
+		if c.Conferences[i].Number == number {
+			return &c.Conferences[i]
+		}
+	}
+	return nil
+}
+
+// FeatureCodes are what people dial on their phones to change their own settings and reach features
+// ("off" turns one off). Codes followed by a number (directed pickup, intercom, speed dial) are prefixes.
+type FeatureCodes struct {
+	ForwardAll         string `json:"forwardAll"`         // *72, then the number and #
+	ForwardAllOff      string `json:"forwardAllOff"`      // *73
+	ForwardBusy        string `json:"forwardBusy"`        // *90
+	ForwardBusyOff     string `json:"forwardBusyOff"`     // *91
+	ForwardNoAnswer    string `json:"forwardNoAnswer"`    // *52
+	ForwardNoAnswerOff string `json:"forwardNoAnswerOff"` // *53
+	DNDOn              string `json:"dndOn"`              // *78
+	DNDOff             string `json:"dndOff"`             // *79
+	DNDToggle          string `json:"dndToggle"`          // *76
+	FollowMe           string `json:"followMe"`           // *21 switches follow-me on and off
+	Pickup             string `json:"pickup"`             // *8 answers a call ringing in your pickup group
+	DirectedPickup     string `json:"directedPickup"`     // ** then the extension
+	Intercom           string `json:"intercom"`           // *80 then the extension
+	SpeedDial          string `json:"speedDial"`          // *0 then the code
 }
 
 // Door opens a door from a call with a door station: the person answering presses Code, or the button on
@@ -1020,8 +1120,10 @@ func (s *System) Location() *time.Location {
 
 // Destination is where a call goes.
 type Destination struct {
-	Type   string `json:"type"`   // extension, ringgroup, queue, menu, schedule, script, voicemail, echo, hangup, fax, esrp
+	Type   string `json:"type"`   // extension, ringgroup, queue, menu, schedule, script, voicemail, echo, hangup, fax, esrp, conference
 	Target string `json:"target"` // a number for extension and ringgroup
+	// Via is set only inside the engine: the extension whose own forwarding a "forward" destination is.
+	Via string `json:"via,omitempty"`
 }
 
 // Security holds abuse protection.
@@ -1100,6 +1202,11 @@ func NewSecret() string {
 var (
 	numberRe  = regexp.MustCompile(`^[0-9]{2,8}$`)
 	featureRe = regexp.MustCompile(`^\*[0-9]{1,6}$`)
+	// prefixRe is a code dialled before a number: ** or *80.
+	prefixRe  = regexp.MustCompile(`^\*[0-9*]{1,4}$`)
+	pinRe     = regexp.MustCompile(`^[0-9]{4,10}$`)
+	speedRe   = regexp.MustCompile(`^[0-9]{1,3}$`)
+	dialRe    = regexp.MustCompile(`^\+?[0-9]{2,20}$`)
 	didRe     = regexp.MustCompile(`^\+?[0-9]{2,20}$`)
 	patternRe = regexp.MustCompile(`^\+?([0-9XNZ*#]|\[[0-9-]+\])+\.?$`)
 	hostRe    = regexp.MustCompile(`^[A-Za-z0-9.-]{1,253}$`)
@@ -1376,6 +1483,138 @@ func (c *Config) Validate() error {
 		}
 		if len(g.Members) == 0 && strings.TrimSpace(g.Multicast) == "" {
 			p.add(f+".members", "add at least one phone, or a multicast group")
+		}
+	}
+	for i := range c.Conferences {
+		r := &c.Conferences[i]
+		f := fmt.Sprintf("conferences[%d]", i)
+		checkID(f+".id", &r.ID)
+		if !numberRe.MatchString(r.Number) {
+			p.add(f+".number", "conference numbers are 2 to 8 digits")
+		} else {
+			claim(f+".number", r.Number, "conference room "+r.Name)
+		}
+		r.Name = strings.TrimSpace(r.Name)
+		if r.Name == "" {
+			p.add(f+".name", "enter a name")
+		}
+		for _, pin := range []struct{ field, v string }{{".pin", r.PIN}, {".leaderPin", r.LeaderPIN}} {
+			if pin.v != "" && !pinRe.MatchString(pin.v) {
+				p.add(f+pin.field, "a PIN is 4 to 10 digits")
+			}
+		}
+		if r.PIN != "" && r.PIN == r.LeaderPIN {
+			p.add(f+".leaderPin", "the leader PIN must differ from the PIN everyone else uses")
+		}
+		if r.WaitForLeader && r.LeaderPIN == "" {
+			p.add(f+".leaderPin", "set a leader PIN, or the room would wait for a leader who can never join")
+		}
+		if r.MaxMembers == 0 {
+			r.MaxMembers = 50
+		}
+		if r.MaxMembers < 2 || r.MaxMembers > 200 {
+			p.add(f+".maxMembers", "a room holds 2 to 200 people")
+		}
+	}
+	checkSpeedDials := func(field string, list []SpeedDial) {
+		seen := map[string]bool{}
+		for j := range list {
+			sd := &list[j]
+			g := fmt.Sprintf("%s[%d]", field, j)
+			sd.Code, sd.Number, sd.Name = strings.TrimSpace(sd.Code), cleanDial(sd.Number), strings.TrimSpace(sd.Name)
+			switch {
+			case !speedRe.MatchString(sd.Code):
+				p.add(g+".code", "a speed dial code is 1 to 3 digits")
+			case seen[sd.Code]:
+				p.add(g+".code", "code %s is used twice", sd.Code)
+			}
+			seen[sd.Code] = true
+			if !dialRe.MatchString(sd.Number) {
+				p.add(g+".number", "enter the number to call: digits, optionally starting with +")
+			}
+		}
+	}
+	checkSpeedDials("system.speedDials", c.System.SpeedDials)
+	for i := range c.Extensions {
+		x := &c.Extensions[i]
+		f := fmt.Sprintf("extensions[%d]", i)
+		checkSpeedDials(f+".speedDials", x.SpeedDials)
+		x.PickupGroup = strings.TrimSpace(x.PickupGroup)
+		if len(x.PickupGroup) > 40 {
+			p.add(f+".pickupGroup", "keep the pickup group name under 40 characters")
+		}
+		fm := &x.FollowMe
+		if fm.Strategy == "" {
+			fm.Strategy = "sequential"
+		}
+		if fm.Strategy != "sequential" && fm.Strategy != "together" {
+			p.add(f+".followMe.strategy", "choose sequential or together")
+		}
+		if fm.RingSeconds == 0 {
+			fm.RingSeconds = 20
+		}
+		if fm.RingSeconds < 5 || fm.RingSeconds > 120 {
+			p.add(f+".followMe.ringSeconds", "each number rings 5 to 120 seconds")
+		}
+		for j := range fm.Numbers {
+			fm.Numbers[j] = cleanDial(fm.Numbers[j])
+			n := fm.Numbers[j]
+			switch {
+			case !dialRe.MatchString(n):
+				p.add(fmt.Sprintf("%s.followMe.numbers[%d]", f, j), "enter a number: digits, optionally starting with +")
+			case n == x.Number:
+				p.add(fmt.Sprintf("%s.followMe.numbers[%d]", f, j), "follow-me already rings this extension first")
+			case c.FindExtension(n) == nil && !x.Outbound:
+				p.add(fmt.Sprintf("%s.followMe.numbers[%d]", f, j), "%s is an outside number, and this extension may not call outside numbers", n)
+			}
+		}
+		if fm.Enabled && len(fm.Numbers) == 0 {
+			p.add(f+".followMe.numbers", "add a number to follow you to, or switch follow-me off")
+		}
+		if len(fm.Numbers) > 10 {
+			p.add(f+".followMe.numbers", "follow-me rings at most 10 numbers")
+		}
+	}
+	codes := &c.System.Codes
+	for _, fc := range []struct {
+		field  string
+		v      *string
+		def    string
+		what   string
+		prefix bool
+	}{
+		{"system.codes.forwardAll", &codes.ForwardAll, "*72", "the forward-all-calls code", false},
+		{"system.codes.forwardAllOff", &codes.ForwardAllOff, "*73", "the cancel-forwarding code", false},
+		{"system.codes.forwardBusy", &codes.ForwardBusy, "*90", "the forward-when-busy code", false},
+		{"system.codes.forwardBusyOff", &codes.ForwardBusyOff, "*91", "the cancel-forward-when-busy code", false},
+		{"system.codes.forwardNoAnswer", &codes.ForwardNoAnswer, "*52", "the forward-when-not-answered code", false},
+		{"system.codes.forwardNoAnswerOff", &codes.ForwardNoAnswerOff, "*53", "the cancel-forward-when-not-answered code", false},
+		{"system.codes.dndOn", &codes.DNDOn, "*78", "the do-not-disturb code", false},
+		{"system.codes.dndOff", &codes.DNDOff, "*79", "the do-not-disturb-off code", false},
+		{"system.codes.dndToggle", &codes.DNDToggle, "*76", "the do-not-disturb switch", false},
+		{"system.codes.followMe", &codes.FollowMe, "*21", "the follow-me switch", false},
+		{"system.codes.pickup", &codes.Pickup, "*8", "the call pickup code", false},
+		{"system.codes.directedPickup", &codes.DirectedPickup, "**", "the directed pickup code", true},
+		{"system.codes.intercom", &codes.Intercom, "*80", "the intercom code", true},
+		{"system.codes.speedDial", &codes.SpeedDial, "*0", "the speed dial code", true},
+	} {
+		*fc.v = strings.TrimSpace(*fc.v)
+		if *fc.v == "" {
+			*fc.v = fc.def
+		}
+		if *fc.v == "off" {
+			continue
+		}
+		if fc.prefix {
+			if !prefixRe.MatchString(*fc.v) {
+				p.add(fc.field, "use a code such as %s, or off", fc.def)
+			}
+			continue
+		}
+		if !featureRe.MatchString(*fc.v) {
+			p.add(fc.field, "use a feature code such as %s, or off", fc.def)
+		} else {
+			claim(fc.field, *fc.v, fc.what)
 		}
 	}
 	for i := range c.Faxes {
@@ -1981,6 +2220,10 @@ func (c *Config) Validate() error {
 		case "fax":
 			if c.FindFax(d.Target) == nil {
 				p.add(field, "no fax %s", d.Target)
+			}
+		case "conference":
+			if c.FindConference(d.Target) == nil {
+				p.add(field, "no conference room %s", d.Target)
 			}
 		case "esrp":
 			if len(c.System.Core.PSAPs) == 0 {

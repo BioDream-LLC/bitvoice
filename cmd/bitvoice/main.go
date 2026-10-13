@@ -228,6 +228,12 @@ func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 	}
 	eng.LoadHotDesks(desks)
 	eng.SaveHotDesks = func(h []pbx.HotDesk) error { return st.SaveState("hotdesk", h) }
+	var div pbx.DivertState
+	if err := st.LoadState("divert", &div); err != nil {
+		log.Warn("could not read call forwarding", "err", err)
+	}
+	eng.LoadDiverts(div)
+	eng.SaveDiverts = func(s pbx.DivertState) error { return st.SaveState("divert", s) }
 	srv.ARI = &compat.ARI{PBX: eng, Bus: bus, Audit: srv.AuditSystem, Started: time.Now()}
 	eng.Mobile = srv // wakes the BitVoice apps for incoming calls
 	// The engine runs on the configuration with vault references resolved.

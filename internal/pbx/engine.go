@@ -83,6 +83,8 @@ type Engine struct {
 	NameFor func(number string) string
 	// SaveHotDesks keeps hot desk sign-ins across restarts.
 	SaveHotDesks func([]HotDesk) error
+	// SaveDiverts keeps call forwarding and hand-set do not disturb across restarts.
+	SaveDiverts func(DivertState) error
 	// LastAgent is the extension that last answered this caller since a time, for sticky queues; "" if none.
 	LastAgent func(number string, since time.Time) string
 	// Brief makes a briefing for the person a call is passed to (an AI summary), when briefings are on.
@@ -93,7 +95,9 @@ type Engine struct {
 	away          aways
 	lastEmergency atomic.Int64 // unix seconds of the last emergency call, so a call back is never blocked
 
-	hot hotDesks
+	hot  hotDesks
+	div  diverts
+	conf conferences
 	// Recordings stores call recordings; nil switches recording off.
 	Recordings Recordings
 	// Trace sees every SIP message (the SIP trace screen).
@@ -262,6 +266,7 @@ func (e *Engine) Apply(cfg config.Config) {
 	}
 	e.reg.prune(cfg)
 	e.pruneHotDesks()
+	e.pruneDiverts()
 	e.applyScreening(cfg)
 	e.syncTrunks(cfg)
 	if e.ctx != nil {

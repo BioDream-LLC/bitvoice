@@ -39,6 +39,9 @@ func (e *Engine) SetAway(a Away) {
 	e.away.mu.Unlock()
 	if changed {
 		e.publish("presence.changed", map[string]string{"extension": a.Ext})
+		if a.Source == "manual" {
+			e.saveDiverts()
+		}
 	}
 }
 
@@ -52,6 +55,9 @@ func (e *Engine) ClearAway(ext, source string) {
 	e.away.mu.Unlock()
 	if had && (source == "" || cur.Source == source) {
 		e.publish("presence.changed", map[string]string{"extension": ext})
+		if cur.Source == "manual" {
+			e.saveDiverts()
+		}
 	}
 }
 
@@ -86,9 +92,13 @@ func (e *Engine) awayNow(ext string) (Away, bool) {
 
 // whileAway is where a call to an away extension goes: forwarded, or to its voicemail (else its
 // no-answer destination). ok is false when it should ring as usual (calendar set to off).
-func whileAway(x *config.Extension) (config.Destination, bool) {
+func whileAway(x *config.Extension, a Away) (config.Destination, bool) {
 	c := x.Calendar
-	switch c.WhenBusy {
+	when := c.WhenBusy
+	if a.Source == "manual" && when == "ring" {
+		when = "" // do not disturb set by hand never rings: voicemail, or the no-answer destination
+	}
+	switch when {
 	case "forward":
 		if c.ForwardTo != "" {
 			if c.ForwardTo == x.Number {

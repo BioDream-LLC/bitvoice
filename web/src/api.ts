@@ -5,7 +5,7 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 export type Role = 'admin' | 'viewer'
 export interface Me { username: string; name: string; role: Role; setupComplete: boolean; mfa?: boolean }
 
-export interface Destination { type: 'extension' | 'ringgroup' | 'queue' | 'menu' | 'schedule' | 'script' | 'receptionist' | 'voicemail' | 'fax' | 'esrp' | 'echo' | 'hangup'; target: string }
+export interface Destination { type: 'extension' | 'ringgroup' | 'queue' | 'menu' | 'schedule' | 'script' | 'receptionist' | 'voicemail' | 'fax' | 'esrp' | 'conference' | 'echo' | 'hangup'; target: string }
 export interface Receptionist { id: string; name: string; greeting: string; knowledge: string; person: Destination; messageBox: string }
 
 export interface Extension {
@@ -16,7 +16,21 @@ export interface Extension {
   site: string; floor: string; room: string; department?: string; hotDesk?: boolean
   calendar?: { secret: string; whenBusy: 'voicemail' | 'forward' | 'ring' | ''; forwardTo: string; ignoreMeetings?: boolean }
   door: { code: string; url: string; method: string; username: string; password: string }
+  followMe?: FollowMe; pickupGroup?: string; noIntercom?: boolean; speedDials?: SpeedDial[] | null
 }
+export interface FollowMe { enabled: boolean; numbers: string[] | null; strategy: 'sequential' | 'together' | ''; ringSeconds: number; confirm: boolean }
+export interface SpeedDial { code: string; number: string; name: string }
+export interface FeatureCodes {
+  forwardAll: string; forwardAllOff: string; forwardBusy: string; forwardBusyOff: string; forwardNoAnswer: string; forwardNoAnswerOff: string
+  dndOn: string; dndOff: string; dndToggle: string; followMe: string; pickup: string; directedPickup: string; intercom: string; speedDial: string
+}
+export interface Conference {
+  id: string; number: string; name: string; pin: string; leaderPin: string; waitForLeader: boolean; muteMembers: boolean
+  maxMembers: number; record: boolean; quiet: boolean
+}
+export interface ConferenceMember { id: string; number: string; name: string; leader: boolean; muted: boolean; hand: boolean; speaking: boolean; waiting: boolean; joined: string }
+export interface ConferenceRoom { number: string; name: string; started: string; locked: boolean; members: ConferenceMember[] | null; waiting: number; records: boolean }
+export interface Divert { ext: string; all?: string; busy?: string; noAnswer?: string; followMe?: boolean | null; dnd: boolean; followMeOn: boolean }
 export interface Voicemail { id: string; box: string; from: string; fromName: string; at: string; seconds: number; heard: boolean; transcript?: string; summary?: string; aiError?: string; urgency?: 'urgent' | 'normal' | 'low'; category?: string }
 export interface RingGroup {
   id: string; number: string; name: string; strategy: 'all' | 'sequential'; members: string[]
@@ -133,6 +147,7 @@ export interface DnsCheck {
 export interface SystemSettings {
   name: string; purpose: 'office' | 'contact-centre' | '911'; country: string; timezone: string; language: string
   publicAddress: string; cluster?: ClusterSettings; sipPort: number; rtpMin: number; rtpMax: number; codecs: string[]; echoNumber: string; voicemailNumber: string; parkNumber: string; parkSeconds: number
+  codes?: FeatureCodes; speedDials?: SpeedDial[] | null
   callLinks?: CallLink[] | null; brands?: Brand[] | null; texting: Texting; screening: Screening; vips?: VIP[] | null; agentLogin: string; agentPause: string; hotDesk: { login: string; logout: string; signOutAt: string }
   emergencyNumbers: string[]; emergencyNotify: string[]
   recording: { mode: 'off' | 'all' | 'selected'; keepDays: number; pauseCode: string; resumeCode: string; notice?: 'off' | 'announce' | 'beep'; rules?: ConsentRule[] | null }
@@ -282,7 +297,7 @@ const baseQuery = fetchBaseQuery({
 })
 
 const tags = ['Me', 'Extensions', 'RingGroups', 'Trunks', 'Inbound', 'Outbound', 'Settings', 'Users', 'Calls',
-  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes'] as const
+  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts'] as const
 
 export const api = createApi({
   reducerPath: 'api',
@@ -354,6 +369,24 @@ export const api = createApi({
       radioLog: b.query<{ items: Transmission[] }, { channel?: string; q?: string }>({ query: (a) => ({ url: 'radio/log', params: { channel: a.channel || undefined, q: a.q || undefined, limit: 200 } }), providesTags: ['Calls'] }),
       testFaxMail: b.mutation<{ result: string }, FaxMail>({ query: (body) => ({ url: 'faxes/mail/test', method: 'POST', body }) }),
       pageGroups: b.query<List<PageGroup>, void>({ query: () => 'page-groups', providesTags: ['PageGroups'] }),
+      conferences: b.query<List<Conference>, void>({ query: () => 'conferences', providesTags: ['Conferences'] }),
+      createConference: b.mutation<Item<Conference>, Partial<Conference>>({
+        query: (body) => ({ url: 'conferences', method: 'POST', body }), invalidatesTags: ['Conferences', 'History'] }),
+      updateConference: b.mutation<Item<Conference>, Conference>({
+        query: (body) => ({ url: `conferences/${body.id}`, method: 'PUT', body }), invalidatesTags: ['Conferences', 'History'] }),
+      deleteConference: b.mutation<void, string>({
+        query: (id) => ({ url: `conferences/${id}`, method: 'DELETE' }), invalidatesTags: ['Conferences', 'History'] }),
+      conferenceLive: b.query<{ items: ConferenceRoom[] }, void>({ query: () => 'conferences/live', providesTags: ['ConferenceLive'] }),
+      lockConference: b.mutation<void, { number: string; locked: boolean }>({
+        query: ({ number, locked }) => ({ url: `conferences/live/${number}`, method: 'PUT', body: { locked } }), invalidatesTags: ['ConferenceLive'] }),
+      muteConferenceMember: b.mutation<void, { number: string; id: string; muted: boolean }>({
+        query: ({ number, id, muted }) => ({ url: `conferences/live/${number}/members/${id}`, method: 'PUT', body: { muted } }), invalidatesTags: ['ConferenceLive'] }),
+      removeConferenceMember: b.mutation<void, { number: string; id: string }>({
+        query: ({ number, id }) => ({ url: `conferences/live/${number}/members/${id}`, method: 'DELETE' }), invalidatesTags: ['ConferenceLive'] }),
+      diverts: b.query<{ items: Divert[] }, void>({ query: () => 'diverts', providesTags: ['Diverts'] }),
+      divert: b.query<Divert, string>({ query: (ext) => `diverts/${ext}`, providesTags: ['Diverts'] }),
+      setDivert: b.mutation<void, Partial<Divert> & { ext: string }>({
+        query: ({ ext, ...body }) => ({ url: `diverts/${ext}`, method: 'PUT', body }), invalidatesTags: ['Diverts', 'Away'] }),
       createPageGroup: b.mutation<Item<PageGroup>, Partial<PageGroup>>({
         query: (body) => ({ url: 'page-groups', method: 'POST', body }), invalidatesTags: ['PageGroups', 'History'] }),
       updatePageGroup: b.mutation<Item<PageGroup>, PageGroup>({
@@ -572,6 +605,9 @@ export const {
   useSchedulesQuery, useCreateScheduleMutation, useUpdateScheduleMutation, useDeleteScheduleMutation,
   useDevicesQuery, useCreateDeviceMutation, useUpdateDeviceMutation, useDeleteDeviceMutation,
   usePageGroupsQuery, useCreatePageGroupMutation, useUpdatePageGroupMutation, useDeletePageGroupMutation,
+  useConferencesQuery, useCreateConferenceMutation, useUpdateConferenceMutation, useDeleteConferenceMutation,
+  useConferenceLiveQuery, useLockConferenceMutation, useMuteConferenceMemberMutation, useRemoveConferenceMemberMutation,
+  useDivertsQuery, useDivertQuery, useSetDivertMutation,
   useQueuesQuery, useCreateQueueMutation, useUpdateQueueMutation, useDeleteQueueMutation, useQueueStatusQuery,
   useVoicemailQuery, useMarkHeardMutation, useDeleteVoicemailMutation, useSaveGreetingMutation, useResetGreetingMutation,
 } = api

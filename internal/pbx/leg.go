@@ -47,6 +47,7 @@ type Leg struct {
 	clientTx  *sip.ClientTx // outbound: the initial INVITE
 	inviteReq *sip.Message  // outbound: the INVITE as sent, for re-sending with credentials
 	stage     int
+	confirm   bool // follow-me to an outside number: press 1 before the call is put through
 
 	// SRTP: whether to offer it to this party, our master key and suite, and the party's key.
 	wantSRTP  bool
