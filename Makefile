@@ -41,6 +41,6 @@ e2e: build
 
 # manual writes the manual (docs/manual) from the Help articles in web/src/manual.ts, as HTML and PDF.
 manual:
-	cd web && pnpm exec tsc src/manual.ts --outDir /tmp/bitvoice-manual --module es2022 --target es2022 --moduleResolution bundler --skipLibCheck && \
-		cp /tmp/bitvoice-manual/manual.js /tmp/bitvoice-manual/manual.mjs && \
+	cd web && pnpm exec tsc src/manual.ts src/figures.ts --outDir /tmp/bitvoice-manual --module es2022 --target es2022 --moduleResolution bundler --skipLibCheck && \
+		cp /tmp/bitvoice-manual/manual.js /tmp/bitvoice-manual/manual.mjs && cp /tmp/bitvoice-manual/figures.js /tmp/bitvoice-manual/figures.mjs && \
 		node scripts/manual.mjs /tmp/bitvoice-manual/manual.mjs $(CURDIR)/docs/manual/index.html $(CURDIR)/docs/manual/bitvoice-manual.pdf

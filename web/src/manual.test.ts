@@ -25,3 +25,20 @@ describe('manual and menu follow the pages', () => {
     for (const a of manual) if (a.route) expect(pages.includes(a.route) || a.route === '/help', `${a.id} points at ${a.route}`).toBe(true)
   })
 })
+
+describe('the manual is complete', () => {
+  it('every article is in exactly one part', async () => {
+    const { parts } = await import('./manual')
+    const seen = parts.flatMap((p) => p.ids)
+    expect(new Set(seen).size, 'an article is in two parts').toBe(seen.length)
+    for (const a of manual) expect(seen.includes(a.id), `${a.id} is in no part`).toBe(true)
+    for (const id of seen) expect(manual.some((a) => a.id === id), `part lists ${id}, which is no article`).toBe(true)
+  })
+  it('figures and links point at things that exist', async () => {
+    const { figures } = await import('./figures')
+    for (const a of manual) {
+      for (const m of a.body.matchAll(/^::figure (\S+)/gm)) expect(figures[m[1]], `${a.id} shows figure ${m[1]}`).toBeTruthy()
+      for (const m of a.body.matchAll(/\]\(#([a-z0-9-]+)\)/g)) expect(manual.some((x) => x.id === m[1]), `${a.id} links to chapter ${m[1]}`).toBe(true)
+    }
+  })
+})

@@ -1,7 +1,8 @@
 import { BookOpenText, Search } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { manual, type Article } from './manual'
+import { figures } from './figures'
+import { manual, parts, type Article } from './manual'
 import { Page } from './ui'
 
 /** Inline markdown: `code`, **bold** and [text](#/route) links. Everything else is plain text. */
@@ -16,9 +17,12 @@ function inline(s: string, key = 0): ReactNode[] {
     else if (t.startsWith('**')) out.push(<strong key={key++} className="font-semibold text-slate-100">{t.slice(2, -2)}</strong>)
     else {
       const [, text, href] = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(t)!
+      // [text](#/route) opens a screen; [text](#article) another chapter of this manual.
       out.push(href.startsWith('#/')
         ? <Link key={key++} to={href.slice(1)} className="text-sky-300 underline underline-offset-2">{text}</Link>
-        : <a key={key++} href={href} target="_blank" rel="noreferrer" className="text-sky-300 underline underline-offset-2">{text}</a>)
+        : href.startsWith('#')
+          ? <Link key={key++} to={`/help?a=${href.slice(1)}`} className="text-violet-300 underline underline-offset-2">{text}</Link>
+          : <a key={key++} href={href} target="_blank" rel="noreferrer" className="text-sky-300 underline underline-offset-2">{text}</a>)
     }
     last = m.index! + t.length
   }
@@ -26,10 +30,12 @@ function inline(s: string, key = 0): ReactNode[] {
   return out
 }
 
-/** Block markdown: ## headings, paragraphs, - and 1. lists, ``` code blocks. */
+/** Block markdown: ## and ### headings, paragraphs, - and 1. lists, ``` code blocks, > notes, | tables, and
+ * ::figure lines that show one of the manual's illustrations. */
 export function Markdown({ text }: { text: string }) {
   const blocks: ReactNode[] = []
   const lines = text.split('\n')
+  const special = (l: string) => l.startsWith('## ') || l.startsWith('### ') || l.startsWith('```') || l.startsWith('> ') || l.startsWith('|') || l.startsWith('::figure ')
   for (let i = 0; i < lines.length;) {
     const l = lines[i]
     if (!l.trim()) { i++; continue }
@@ -40,6 +46,34 @@ export function Markdown({ text }: { text: string }) {
       blocks.push(<pre key={i} className="overflow-x-auto rounded-lg bg-slate-950 p-3 font-mono text-xs text-emerald-200">{code.join('\n')}</pre>)
       continue
     }
+    if (l.startsWith('::figure ')) {
+      const f = figures[l.slice(9).trim()]
+      // Figures are BitVoice's own fixed drawings, not anything a user typed.
+      if (f) blocks.push(<figure key={i} className="space-y-2"><div className="[&>svg]:h-auto [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: f.svg }} /><figcaption className="text-center text-xs text-slate-500">{f.title}</figcaption></figure>)
+      i++
+      continue
+    }
+    if (l.startsWith('> ')) {
+      const note: string[] = []
+      for (; i < lines.length && lines[i].startsWith('> '); i++) note.push(lines[i].slice(2))
+      blocks.push(<aside key={i} className="rounded-lg border-l-4 border-amber-400 bg-amber-950/30 px-4 py-2 text-amber-100">{inline(note.join(' '))}</aside>)
+      continue
+    }
+    if (l.startsWith('|')) {
+      const rows: string[][] = []
+      for (; i < lines.length && lines[i].startsWith('|'); i++) {
+        const cells = lines[i].replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim())
+        if (!cells.every((c) => /^:?-+:?$/.test(c))) rows.push(cells)
+      }
+      const [head, ...body] = rows
+      blocks.push(
+        <div key={i} className="overflow-x-auto"><table className="w-full text-left text-sm">
+          <thead><tr className="border-b border-slate-700 text-xs text-slate-400">{head.map((c, j) => <th key={j} className="py-1.5 pr-4 font-medium">{inline(c)}</th>)}</tr></thead>
+          <tbody className="divide-y divide-slate-800">{body.map((r, k) => <tr key={k}>{r.map((c, j) => <td key={j} className="py-1.5 pr-4 align-top">{inline(c)}</td>)}</tr>)}</tbody>
+        </table></div>)
+      continue
+    }
+    if (l.startsWith('### ')) { blocks.push(<h4 key={i} className="pt-1 text-sm font-semibold text-sky-300">{inline(l.slice(4))}</h4>); i++; continue }
     if (l.startsWith('## ')) { blocks.push(<h3 key={i} className="pt-2 text-sm font-semibold text-violet-300">{inline(l.slice(3))}</h3>); i++; continue }
     const bullet = /^(- |\d+\. )/
     if (bullet.test(l)) {
@@ -51,7 +85,7 @@ export function Markdown({ text }: { text: string }) {
       continue
     }
     const para: string[] = []
-    for (; i < lines.length && lines[i].trim() && !bullet.test(lines[i]) && !lines[i].startsWith('## ') && !lines[i].startsWith('```'); i++) para.push(lines[i])
+    for (; i < lines.length && lines[i].trim() && !bullet.test(lines[i]) && !special(lines[i]); i++) para.push(lines[i])
     blocks.push(<p key={i}>{inline(para.join(' '))}</p>)
   }
   return <div className="space-y-3 text-sm leading-relaxed text-slate-300">{blocks.map((b, i) => <Fragment key={i}>{b}</Fragment>)}</div>
@@ -83,12 +117,13 @@ export function Help() {
           </label>
           {found.length === 0 ? <p className="px-2 text-sm text-slate-500">Nothing matches “{q}”.</p> : (
             <ul className="space-y-0.5">
-              {found.map((a) => (
+              {(q ? found : parts.flatMap((p) => p.ids.map((id) => manual.find((a) => a.id === id)!))).map((a, i) => (<Fragment key={a.id}>
+                {!q && parts.some((p) => p.ids[0] === a.id) && <li className={`px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-violet-300 ${i ? 'pt-3' : ''}`}>{parts.find((p) => p.ids[0] === a.id)!.title}</li>}
                 <li key={a.id}>
                   <button className={`w-full rounded-lg px-3 py-1.5 text-left text-sm ${a.id === current.id ? 'bg-slate-800 text-sky-200' : 'text-slate-300 hover:bg-slate-900'}`}
                     aria-current={a.id === current.id ? 'page' : undefined} onClick={() => setParams({ a: a.id })}>{a.title}</button>
                 </li>
-              ))}
+              </Fragment>))}
             </ul>
           )}
         </nav>

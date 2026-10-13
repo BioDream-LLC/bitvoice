@@ -3,54 +3,159 @@
 
 export interface Article { id: string; title: string; route?: string; keys: string; body: string }
 
+/** The manual's parts, in reading order: Help groups the chapters by them, and the printed manual numbers
+ * its chapters through them. Every article is in exactly one part. */
+export const parts: { title: string; intro: string; ids: string[] }[] = [
+  { title: 'Getting started', intro: 'From a new install to a working phone system: extensions, phones, a phone company, where calls go, and how to tell everything is ready.',
+    ids: ['start', 'extensions', 'phones', 'trunks', 'routes', 'health', 'settings'] },
+  { title: 'Where calls go', intro: 'The building blocks callers move through: groups and queues, menus and schedules, scripts and the AI receptionist, voicemail, and the diagram that shows it all.',
+    ids: ['flow', 'ringgroups', 'queues', 'menus', 'schedules', 'scripts', 'ai', 'voicemail', 'callbacks', 'calllinks'] },
+  { title: 'Everyday calling', intro: 'What people do on their phones every day, and what they set for themselves: forwarding, follow-me, pickup, conference rooms, paging, hot desks, faxes and texts.',
+    ids: ['codes', 'portal', 'conferences', 'paging', 'hotdesk', 'contacts', 'calendar', 'mobile', 'video', 'fax', 'texts', 'briefing'] },
+  { title: 'Customers and insight', intro: 'Knowing who called and how it went: the live calls and history, the customer timeline, CRMs, recordings and consent, quality, costs and caller ID reputation.',
+    ids: ['calls', 'history', 'timeline', 'crm', 'insight', 'recording', 'consent', 'quality', 'costs', 'reputation', 'spam'] },
+  { title: 'Running BitVoice', intro: 'Keeping it safe and running: administrators and sign-in, security, changes and updates, several servers, hosted organisations, codecs, Teams, importing, automation and the tools for finding faults.',
+    ids: ['users', 'sso', 'security', 'changes', 'updates', 'servers', 'database', 'tenants', 'codecs', 'teams', 'import', 'automation', 'compat', 'archive', 'holds', 'metrics', 'loadtest', 'trace'] },
+  { title: 'Emergency, radio and core services', intro: 'The 911 side of BitVoice: emergency calls from offices, the answering point profile, the radio dispatch console and NG911 Core Services.',
+    ids: ['emergency', 'sites', 'psap', 'radio', 'core'] },
+]
+
 export const manual: Article[] = [
   {
     id: 'start', title: 'Getting started', route: '/', keys: 'setup first steps overview begin dashboard home',
-    body: `BitVoice is a complete phone system in one program. Everything is set up here, in the browser.
+    body: `BitVoice is a complete phone system in one program: the exchange that phones sign in to, the menus and queues callers move through, voicemail, recording, conference rooms, faxes, and the connections to phone companies. Everything is set up in the browser, on the screens this manual describes. There is no configuration file to edit and nothing else to install.
+
+::figure overview
+
+## What you need
+- **A computer to run it on**: a small office server, a virtual machine, a cloud instance, or for a first look your own laptop. Linux, macOS and Windows all work. A Raspberry Pi 4 runs a small office.
+- **Phones**: desk phones from Yealink, Poly, Grandstream or Snom are set up automatically; any other SIP phone or softphone works with its own settings; and every browser is a phone too.
+- **A trunk** (an account with a phone company) to call outside numbers and be called. You can start without one: extensions call each other and the echo test.
+
+## The first start
+Start BitVoice and open the address it prints (on a desktop it opens the browser itself). The **setup wizard** asks four things: the organisation's name and country, the first administrator's password, the first extensions, and your phone company if you have one. The country sets the emergency numbers, the tones callers hear and the way phone numbers are written.
+
+> Choose the country carefully. It decides which numbers are emergency numbers (911 and 933 in the US, 112 and 999 elsewhere), and emergency numbers always work from every extension.
 
 ## The first hour
+::figure first-hour
+
 1. **Extensions**: one per person or desk. Each has a number and a SIP password. [Open Extensions](#/extensions)
 2. **Phones**: connect a desk phone, softphone or the browser phone to each extension. [Open Phones](#/phones)
 3. **Trunk**: your phone company account, so you can call outside numbers and be called. [Open Trunks](#/trunks)
 4. **Call routing**: where calls from outside go (a person, a ring group, a menu), and which trunk outside calls use. [Open Call routing](#/routes)
 5. **Health** tells you what is still missing, emergency calling first. [Open Health](#/health)
 
+Then make a test call: from any phone dial \`*43\`, the echo test. You hear yourself back, which proves sound works both ways.
+
 ## Where it runs
-BitVoice runs on Linux, macOS and Windows. On Windows, double-click \`bitvoice.exe\`: keep the window it opens while you use BitVoice (closing it stops BitVoice), and when Windows asks whether it may use the network, allow private networks so phones can connect. Its data is in \`%APPDATA%\\BitVoice\`, on macOS in \`~/Library/Application Support/BitVoice\`, on Linux in \`~/.config/BitVoice\`, or wherever \`-data\` says.
+BitVoice runs on Linux, macOS and Windows.
+
+| System | How to start it | Where its data is |
+|---|---|---|
+| Linux | \`./bitvoice\` (or the systemd service in the release) | \`~/.config/BitVoice\` |
+| macOS | \`./bitvoice\` | \`~/Library/Application Support/BitVoice\` |
+| Windows | double-click \`bitvoice.exe\` | \`%APPDATA%\\BitVoice\` |
+
+On Windows, keep the window it opens while you use BitVoice (closing it stops BitVoice), and when Windows asks whether it may use the network, allow private networks so phones can connect. \`-data\` puts the data anywhere else; \`-http\`, \`-https\` and \`-sip\` choose the addresses and ports.
+
+## The ports it uses
+| Port | What for |
+|---|---|
+| 5060 UDP and TCP | SIP: phones and trunks |
+| 5061 TCP | SIP over TLS (encrypted signalling) |
+| 4569 UDP | IAX2 trunks, only once one is set up |
+| 10000–20000 UDP | the sound of calls (RTP), set in Settings |
+| 8280 TCP (this computer only), 8443 TCP | this web interface: plain on this computer, HTTPS from others |
+
+If another phone system already has 5060, BitVoice takes the next free port and Health says so.
 
 ## Finding your way
 - Press **⌘K** (Ctrl+K) anywhere to jump to a screen, or type an extension's name or number to open it.
-- Every screen has a **Help** link at the top right that opens its page of this manual.
-- **Changes** keeps every version of the configuration: you can see what changed and undo it.`,
+- Every screen has a **Help** link at the top right that opens its chapter of this manual.
+- **Changes** keeps every version of the configuration: you can see what changed and undo it.
+- Three themes (Midnight, Dark and Light) are at the foot of the menu.`,
   },
   {
     id: 'extensions', title: 'Extensions', route: '/extensions', keys: 'user person desk number sip password device door speaker analog',
-    body: `An extension is a number for a person or a desk. Phones sign in with the extension number and its **SIP password**.
+    body: `An extension is a number for a person or a desk. Phones sign in with the extension number and its **SIP password**; calls to the number ring every phone signed in as it, at once.
 
-## Fields worth knowing
-- **911 location**: building, floor and room. It is sent with emergency calls, so fill it in for every desk.
-- **Ring for**: how long phones ring before **If nobody answers** happens (voicemail by default).
-- **Can call outside numbers**: off keeps the phone to internal calls and emergency numbers.
-- **Encrypt calls to this phone**: media encryption (SRTP). Use it with TLS so the keys stay private.
+::figure internal-call
 
-## Connected device
+## Adding an extension
+1. Open [Extensions](#/extensions) and press **Add extension**. The next free number and a strong SIP password are filled in.
+2. Enter the person's **name** (shown on other phones when they call) and **email** (for voicemail by email).
+3. Fill in the **911 location**: the site, floor and room. It is sent with emergency calls.
+4. Choose what happens **If nobody answers**: voicemail by default, or another extension, a group or a menu.
+5. Save. The extension can sign in at once.
+
+## The fields
+| Field | What it does |
+|---|---|
+| Number | 2 to 8 digits; no other extension, group, queue, room or feature code may have it |
+| SIP password | what the phone signs in with; at least 12 characters; **Generate** makes a new one |
+| Ring for | seconds before **If nobody answers** happens (25 by default) |
+| Outside caller ID | the number shown on calls out; empty uses the trunk's |
+| Can call outside numbers | off keeps the phone to internal calls and emergency numbers |
+| Record calls | when Settings records only selected extensions |
+| Hot desk | a shared phone that becomes whoever signs in at it |
+| Encrypt calls to this phone | media encryption (SRTP); use it with TLS so the keys stay private |
+| Department | groups this extension's call costs |
+
+> Fill in the 911 location for every desk. An emergency call carries it to the answering point, and the RAY BAUM'S Act requires a dispatchable location for calls from offices in the US.
+
+## Follow-me, pickup and intercom
+Each person's own call handling is in its own box on the extension:
+
+- **Follow-me** rings more numbers when the phones here are not answered: a mobile, another desk. They ring one after another, or all together, for their own ring time. With **Outside numbers press 1 to take the call** on, whoever answers on a mobile presses 1 first, so the mobile's own voicemail never takes the call. See [Feature codes](#codes).
+- **Pickup group**: anyone in the same group answers this extension's ringing calls by dialling \`*8\`.
+- **Allow intercom**: \`*80\` and this number answers on the speaker by itself. Switch it off for people who never want that.
+- **Own speed dials**: short codes for this person only, dialled after \`*0\`.
+
+## Forwarding right now
+Below the settings, **Forwarding right now** shows and changes what the person set from their phone or the staff portal: do not disturb, and forwarding of every call, of calls while busy, and of calls not answered. These are live state, not configuration: changing them makes no revision.
+
+## What is connected
 - **Phone**: a desk phone, softphone or app.
-- **Door station**: an intercom. Whoever answers presses the key code, or **Open door** on Live calls. With a door controller address, BitVoice calls that address (2N, Axis, Akuvox, relay boards); without one, the code is sent to the station, which opens the door itself.
+- **Door station**: an intercom at a door. Whoever answers presses the key code, or **Open door** on Live calls. With a door controller address, BitVoice calls that address (2N, Axis, Akuvox, relay boards); without one, the code is sent to the station, which opens the door itself.
 - **Overhead speaker**: calls to it are answered at once and heard over the speaker.
-- **Analog adapter port**: an old phone, fax or alarm panel on an adapter. Calls use G.711 only, which faxes need.`,
+- **Analog adapter port**: an old phone, fax or alarm panel on an adapter. Calls use G.711 only, which faxes need.
+
+## Connected devices
+An extension that is open shows every device signed in as it: the phone's make and model, how it connects (UDP, TCP, TLS or the browser) and since when. The address and port to give a phone are shown there too.`,
   },
   {
     id: 'phones', title: 'Connecting phones', route: '/phones', keys: 'provisioning yealink polycom poly grandstream snom mac auto configure softphone',
-    body: `Any SIP phone or app works: point it at this server's address and port 5060, with the extension number as user and its SIP password.
+    body: `Any SIP phone or app works: point it at this server's address and port 5060, with the extension number as user and its SIP password. Desk phones from the four big makers are set up automatically instead, so nobody types a password into a phone's keypad.
+
+::figure provisioning
 
 ## Automatic set-up (provisioning)
-Add the phone's MAC address on **Phones** and choose its extension. Yealink, Poly, Grandstream (including HT analog adapters) and Snom phones then fetch their settings from BitVoice over HTTPS: set the provisioning address shown on the screen in the phone, or in your DHCP server (option 66).
+1. On [Phones](#/phones) press **Add phone** and enter the phone's **MAC address** (on a sticker underneath) and the **extension** it belongs to.
+2. Choose the make: Yealink, Poly, Grandstream (including the HT analog adapters) or Snom.
+3. Tell the phone where BitVoice is: in your DHCP server, set **option 66** to the provisioning address shown on the screen, so every phone on the network finds it by itself; or type the same address in the phone's own web page, under auto provisioning.
+4. Restart the phone. It fetches its file over HTTPS, signs in, and its line keys show who is on the phone.
+
+The file carries the extension, its password, the time zone, the codecs, busy lamp keys and the address of this server. Provisioning is protected by a user name and password the phones are given once.
+
+| Make | Models tested | What it gets |
+|---|---|---|
+| Yealink | T3x, T4x, T5x | account, BLF keys, time, codecs |
+| Poly | VVX, Edge E | the same, in Poly's own format |
+| Grandstream | GRP, GXP, HT802/814 | account per port on adapters |
+| Snom | D7xx | account, keys, time |
+
+## Phones without provisioning
+Softphones and other makes take the same three things: server (this computer's address, port 5060, or 5061 with TLS), user (the extension number) and password (its SIP password). Health lists phones that tried a wrong password; after a few tries the address is banned for a while (see [Security](#security)).
 
 ## The browser phone
-The phone icon at the bottom of the screen makes this browser a phone for an extension, with a microphone.
+The phone icon at the bottom of every screen makes this browser a phone for an extension, with your microphone and speakers. It uses WebRTC: the sound is encrypted end to end, and it works through most firewalls without any setting.
 
-## Staff phone
-Open \`#/phone\` on any computer or mobile browser: people sign in with their extension and SIP password, without an administrator account.`,
+## The staff phone
+Open \`#/phone\` on any computer or mobile browser: people sign in with their extension and SIP password, without an administrator account. It is a full phone: dial, answer, hold, transfer and the keypad. For their own forwarding and voicemail they use the staff portal at \`#/me\` (see [The staff portal](#portal)).
+
+## The mobile apps
+The BitVoice apps for iPhone and Android are paired from the extension's page with a QR code. Calls wake the app through Apple's and Google's push services, so it rings even when it is closed.`,
   },
   {
     id: 'mobile', title: 'Mobile apps', keys: 'iphone android app push pair qr ios callkit',
@@ -63,45 +168,156 @@ When a call comes in, BitVoice wakes the app; it connects, rings on the phone's 
   },
   {
     id: 'trunks', title: 'Trunks', route: '/trunks', keys: 'carrier provider sip trunk line register channels codecs',
-    body: `A trunk is your account with a phone company (a SIP provider). It carries calls to and from outside numbers.
+    body: `A trunk is your account with a phone company. It carries calls to and from outside numbers. Most are SIP trunks; an Asterisk or FreePBX server, or an IAX2 provider, can be reached with IAX2 instead.
 
-- **Register**: most providers need it; BitVoice signs in every few minutes and Health shows whether it worked.
-- **Also accept calls from**: extra provider addresses or networks that send calls in.
-- **Calls at once**: the limit your plan allows. Calls beyond it go to the next trunk in the route.
-- **Codecs**: leave it on *same as Settings*, or choose what this provider supports, best first.
+::figure trunk
 
-Calls from outside arrive through **Call routing**, by the number dialled.`,
+## Adding a SIP trunk
+1. On [Trunks](#/trunks) press **Add trunk**.
+2. Enter the **provider server** your phone company gave you (\`sip.provider.com\`), and the port if it is not 5060.
+3. Enter the **username** and **password**, and switch on **Register** if the provider says to (most do).
+4. Save. Within a few seconds the trunk shows **registered**; if not, the reason is shown beside it.
+5. Add an **incoming route** for your number and an **outgoing route** that uses this trunk ([Call routing](#routes)).
+
+| Field | What it does |
+|---|---|
+| Transport | UDP (usual), TCP, or TLS for encrypted signalling |
+| Register | sign in every few minutes, so the provider knows where to send calls |
+| Authentication username | only when the provider gives a separate one |
+| From domain | the domain in the caller's address, when the provider asks for one |
+| Caller ID | the number shown on calls out; an extension's own caller ID wins |
+| Also accept calls from | the provider's other addresses or networks that send calls in |
+| Calls at once | the limit your plan allows; calls beyond it go to the next trunk in the route |
+| Encrypt media | SRTP, for providers that support it |
+| Codecs | leave it on *same as Settings*, or choose what this provider supports, best first |
+| Rates | what calls cost by number prefix, for [Costs](#costs) |
+
+> A trunk that accepts calls by address alone should list only the provider's own addresses. Networks wider than a /16 are refused: they would let anyone on the internet pass as your provider.
+
+## Cloud providers
+**Start from** fills in Microsoft Teams Direct Routing, Amazon Chime SDK Voice Connector or Azure Communication Services, with a note on what to set on their side. Teams is described in its own chapter ([Microsoft Teams](#teams)).
+
+## IAX2 trunks to Asterisk and FreePBX
+Choose **IAX2** as the protocol to join another Asterisk or FreePBX server, or an IAX2 provider. IAX2 carries signalling and sound on one UDP port, 4569, which makes it easy through firewalls.
+
+::figure iax2
+
+- **Server address**: the other server. Leave it empty when the other server registers to BitVoice instead (a branch office behind a changing address); then the username and password are what it registers with.
+- **Username and password**: the same on both sides. BitVoice answers and sends MD5 challenges, and handles call tokens.
+- **Register**: sign in to the other server, so it can send calls here.
+
+On the Asterisk side, a peer like this is all it takes:
+
+\`\`\`
+[bitvoice]
+type=friend
+host=dynamic
+secret=the shared password
+context=from-bitvoice
+\`\`\`
+
+IAX2 port 4569 opens only when the first IAX2 trunk is added, so an Asterisk running on the same computer keeps it until then.
+
+## What the status means
+| Status | Meaning |
+|---|---|
+| registered | signed in; calls can come in |
+| ready | does not register, or IAX2 waiting for calls |
+| unreachable | the server's name is not in DNS, or nothing answers |
+| failed | the provider refused the sign-in; the reason is shown |
+| standby | servers share this trunk one at a time and another holds it |`,
   },
   {
     id: 'routes', title: 'Call routing', route: '/routes', keys: 'inbound outbound did number pattern dial plan route prepend emergency',
-    body: `## Incoming
-Each incoming route matches the number that was called (or any number) and sends the call to a destination: an extension, ring group, queue, menu, schedule, script or voicemail. Numbers match in any form: +1 212 555 0100, 2125550100 and 12125550100 are the same.
+    body: `Call routing decides two things: where calls from outside go, by the number they dialled, and which trunk calls to outside numbers use.
 
-## Outgoing
+::figure call-path
+
+## Incoming routes
+Each incoming route matches the number that was called (or any number) and sends the call to a destination: an extension, ring group, queue, menu, schedule, script, conference room, AI receptionist or voicemail. Numbers match in any form: +1 212 555 0100, 2125550100 and 12125550100 are the same.
+
+- A route for one **number** wins over a route for any number.
+- A route can be limited to one **trunk**, for numbers that two providers both send.
+- With **emergency mode** on (Settings), every incoming call goes to one place instead, whatever the routes say: an evacuation, a closure, an incident.
+
+## Outgoing routes
 Outgoing routes match what people dial, by pattern, and send it to trunks in order: if the first is down or full, the next is tried.
 
-- \`X\` is any digit, \`Z\` 1 to 9, \`N\` 2 to 9, \`[1-5]\` one of a set, and a final \`.\` one or more further digits. \`NXXNXXXXXX\` is a ten-digit North American number.
-- **Remove** takes digits off the front; **Then add in front** puts some on (a country code).
+::figure outbound-routes
+
+| Pattern | Matches |
+|---|---|
+| \`X\` | any digit |
+| \`Z\` | 1 to 9 |
+| \`N\` | 2 to 9 |
+| \`[1-5]\` | one of a set |
+| \`.\` at the end | one or more further digits |
+| \`NXXNXXXXXX\` | a ten-digit North American number |
+| \`1NXXNXXXXXX\` | the same with 1 in front |
+| \`011.\` | an international call from the US |
+
+- **Remove** takes digits off the front (a 9 dialled for an outside line); **Then add in front** puts some on (a country code).
+- The order matters: the first route whose pattern matches is used. Drag routes to change it.
+- Premium numbers (900 and the like) are refused unless a route names them.
 
 ## Emergency numbers
-The emergency numbers always work. A route that names the number exactly is used first; with none, every working trunk is tried. Health warns when no trunk can carry them.`,
+The emergency numbers always work. A route that names the number exactly is used first; with none, every working trunk is tried in turn. A call to them is never refused for an extension's limits, a hosted organisation's limits or a missing route. Health warns when no trunk can carry them.
+
+> Test emergency routing with your provider's test number (933 in the US) rather than 911. 933 reads back the address the call carries.`,
   },
   {
     id: 'ringgroups', title: 'Ring groups', route: '/ring-groups', keys: 'hunt group ring all one after another sales team',
-    body: `A ring group is one number that rings several extensions: **all at once**, or **one after another** in the order listed (move members with the arrows, or Alt+↑ and Alt+↓). Calls nobody answers go to **If nobody answers**.`,
+    body: `A ring group is one number that rings several extensions: a sales team, the front desk and its back-up, everyone in the workshop.
+
+::figure ring-strategies
+
+## Ringing strategies
+- **All at once**: every member's phones ring together, and the first to answer takes the call. The others stop ringing.
+- **One after another**: each member rings for the group's ring time, in the order listed. Move members with the arrows, or Alt+↑ and Alt+↓.
+
+Members who are away (in a meeting on their calendar, or with do not disturb on) are skipped; the group rings the others. Members with the mobile app are woken by a push and rung too.
+
+## If nobody answers
+When nobody answers within the ring time, the call goes to **If nobody answers**: a member's voicemail, a queue, a menu, another group. With nothing set, it rings until the caller gives up.
+
+## Groups, queues or pickup?
+| Use | When |
+|---|---|
+| A ring group | a few people, any of whom can take the call, and the call should ring now |
+| A queue | callers may have to wait for someone free, and should hear their place |
+| A pickup group | each person has their own calls, but colleagues may answer for them |`,
   },
   {
     id: 'queues', title: 'Queues', route: '/queues', keys: 'sticky vip priority returning caller acd contact centre agents waiting longest idle wallboard',
-    body: `A queue holds callers in order, with music, and rings the next free agent.
+    body: `A queue holds callers in order, with music, and rings the next free agent. It is the heart of a contact centre, and useful in any office where calls come faster than people can take them.
 
-- **Longest idle** sends the call to the agent who has waited longest; **round robin** takes turns; **ring all** rings every free agent.
+::figure queue
+
+## How calls are offered
+| Strategy | Who is rung |
+|---|---|
+| Longest idle | the free agent who has waited longest since their last call |
+| Round robin | each free agent in turn |
+| Ring all | every free agent at once |
+
 - **Wrap-up** gives an agent time after a call before the next.
 - **Longest wait**: callers who wait longer go to the queue's timeout destination. 0 waits for ever.
+- Callers hear music, and their place in line.
 
 The **Queues** screen is a live wallboard: who is waiting, for how long, and each agent's state.
 
 ## Agents
 Agents dial \`*45\` to log in or out of every queue, and \`*46\` to pause (a break) and resume; paused and logged-out agents are not offered calls. The wallboard has the same buttons, and shows why an agent paused.
+
+| State | Meaning |
+|---|---|
+| available | free; will be offered the next caller |
+| ringing | being offered a call |
+| busy | on a call |
+| wrap-up | just finished; the wrap-up time is running |
+| paused | on a break, with the reason given |
+| away | in a meeting or on time off, from their calendar |
+| logged out | not taking queue calls at all |
 
 ## Supervisors
 On [Live calls](#/calls), **Supervise** rings a supervisor's phone; when they answer they **listen** (heard by nobody), **whisper** (heard by the agent only) or **barge** (heard by both), and can switch between them during the call.
@@ -111,15 +327,49 @@ Switch on **Sticky** in a queue and a returning caller (one answered in the last
   },
   {
     id: 'menus', title: 'Menus (auto attendant)', route: '/menus', keys: 'ivr press 1 prompt greeting keypad auto attendant',
-    body: `A menu answers, plays a prompt and sends the caller where they press: 1 for sales, 2 for support. Record the prompt in the browser, or upload one. Callers can also type an extension number if you allow it. The prompt repeats a few times; callers who press nothing then go to the menu's no-key destination, or hear goodbye.`,
+    body: `A menu (an auto attendant) answers, plays a prompt and sends the caller where they press: 1 for sales, 2 for support, 0 for reception.
+
+::figure menu
+
+## Setting up a menu
+1. On [Menus](#/menus) press **Add menu** and give it a name (and a number, if staff should be able to dial it).
+2. Add **options**: a key, a label, and where the key goes.
+3. Record the **prompt** in the browser, or upload a recording in any format (it is converted to telephone sound). Say every option: "For sales press 1, for support press 2."
+4. Choose what happens when the caller presses nothing: the **timeout destination**, after the prompt has played the number of **repeats** you set.
+5. Point an incoming route (or a schedule) at the menu.
+
+## Choices
+- **Callers may dial an extension**: callers who know the number type it during the prompt.
+- **Wait for a key**: seconds after the prompt before it repeats.
+- A key can go to another menu, for a second level ("for billing questions press 1").
+
+> Keep menus short: four options at most, the most common first, and always a way to a person. Callers who are lost hang up.
+
+## Prompts in other voices
+With AI switched on (Settings), a prompt can be written as text and read by the AI voice instead of recorded.`,
   },
   {
     id: 'schedules', title: 'Schedules', route: '/schedules', keys: 'opening hours holiday closed night service time zone',
-    body: `A schedule sends calls one way when you are open and another when you are closed. Hours may cross midnight (22:00 to 06:00). **Holidays** count as closed all day. The time zone is the one in Settings.`,
+    body: `A schedule sends calls one way when you are open and another when you are closed. Point an incoming route at a schedule, and the schedule at the menu (open) and voicemail (closed).
+
+::figure schedule
+
+## Open hours
+Each line of hours is a set of days and a time from and to. Several lines are allowed: Monday to Friday 9:00 to 17:00, and Saturday 10:00 to 13:00. Hours may cross midnight (22:00 to 06:00) for night shifts.
+
+## Holidays
+**Holidays** count as closed all day, whatever the hours say. Add each date with a name; the name is shown on [Call flow](#flow) when you try a call on that day.
+
+## Time zone
+The time zone is the one in Settings. When the clocks change, schedules follow the local time.
+
+> Try a call on [Call flow](#flow) with a time and date (a holiday, a Saturday night) to see which side of the schedule it takes, before it matters.`,
   },
   {
     id: 'scripts', title: 'Scripts (JavaScript and Lua)', route: '/scripts', keys: 'code javascript lua route logic api program',
     body: `A script decides where a call goes when the choices above are not enough. It runs for at most 200 ms; if it fails or takes too long, the call goes to the script's **fallback**, so a mistake never loses a call.
+
+::figure scripts
 
 ## What a script sees
 \`call\` has: \`from\`, \`fromName\`, \`to\`, \`direction\` (inbound or internal), \`trunk\`, \`weekday\` (0 is Sunday), \`hour\`, \`minute\`, \`date\` (YYYY-MM-DD).
@@ -136,11 +386,38 @@ if (call.weekday === 0) return { type: "voicemail", target: "100" }
   },
   {
     id: 'voicemail', title: 'Voicemail', route: '/voicemail', keys: 'messages mailbox greeting pin email transcript',
-    body: `Each extension can have a mailbox. Callers hear its greeting (record one in the browser or from the phone), then leave a message. Messages show here and on the phone's message light, and can be emailed. With AI switched on (Settings), messages are written out and summarised. **Sound clean-up** (Settings) removes background noise as messages are saved.`,
+    body: `Each extension can have a mailbox. Callers who are not answered hear its greeting and leave a message; the person hears it on their phone, reads it on the screen, or gets it by email.
+
+::figure voicemail
+
+## Switching it on
+On the extension, switch on **Voicemail**. **If nobody answers** is then set to the mailbox. Give it a **PIN** (4 to 10 digits): it opens the mailbox from another phone, and signs the person in to the staff portal and at hot desks.
+
+| Setting | What it does |
+|---|---|
+| Longest message | 10 to 900 seconds (180 by default) |
+| Email new messages | to the extension's email address, with the message attached |
+| Greeting | recorded in the browser, uploaded, or recorded from the phone; without one, callers hear a beep |
+
+## Listening
+- From the extension's own phone, dial \`*97\`: messages play newest first; keys replay, delete or keep each one.
+- From any other phone, dial \`*97\`, enter the mailbox number and its PIN.
+- On [Voicemail](#/voicemail) (administrators) or in the staff portal (the person): play, mark heard, delete.
+- The phone's message light is on while there are new messages.
+
+## With AI
+With **Transcribe and summarise voicemail** on (Settings, AI), each message is written out, summarised in a line, and marked urgent, normal or low priority with its kind (sales, support, billing). Urgent messages raise an alert on every administrator's screen. See [AI](#ai).
+
+## Sound clean-up
+**Sound clean-up** (Settings) removes steady background noise and evens out levels as messages are saved, so a message from a car or a busy street is easier to hear.
+
+> Messages under a [legal hold](#holds) cannot be deleted, by anyone, until the hold is released.`,
   },
   {
     id: 'recording', title: 'Call recording and card payments', keys: 'record pci pause resume card payment compliance retention',
     body: `Recording is set in [Settings](#/settings): off, every call, or calls of extensions marked **Record calls**. Recordings play from **Call history**.
+
+::figure recording
 
 ## Card payments (PCI DSS)
 Before a caller reads out a card number, the person on the extension presses \`*7\`; \`*8\` resumes. **Pause recording** on Live calls does the same. The paused stretch is silent in the recording and listed in the call history.
@@ -181,6 +458,9 @@ Set **Call log address** and **Signing secret**, and every call is sent there as
   {
     id: 'servers', title: 'Several servers as one phone system', route: '/servers', keys: 'servers cluster failover high availability redundancy second server backup shared database several servers shared address virtual ip vip floating ip dns srv takeover handover standby one at a time',
     body: `Two or more BitVoice servers that share one PostgreSQL database work as one phone system:
+
+::figure cluster
+
 - A call reaches a phone **whichever server it is registered with**: ring groups, queues, transfers to an extension and calls from provider lines all ring phones on every server.
 - **Settings** changed on one server apply on all within five seconds; users, contacts, call history, recordings' transcripts and texts are shared.
 - **Busy lamps** (BLF) show phones on every server ringing and busy; **parking** slots are shared, so a call parked on one server is picked up from a phone on another; **paging** reaches phones on every server; **texts** reach desk phones wherever they are registered.
@@ -229,6 +509,8 @@ The database can also be named when BitVoice starts, with \`-database postgres:/
   {
     id: 'teams', title: 'Microsoft Teams (Direct Routing)', route: '/trunks', keys: 'teams microsoft direct routing sbc session border controller office 365 pstn gateway powershell New-CsOnlinePSTNGateway certificate',
     body: `BitVoice can be the session border controller (SBC) for a Microsoft Teams tenant, so Teams users call BitVoice extensions and your phone lines, and BitVoice rings Teams users.
+
+::figure teams
 
 **What you need**: a public name for this server in a domain your Microsoft 365 tenant has verified (sbc.example.com), port 5061 open both ways to Microsoft's networks 52.112.0.0/14 and 52.120.0.0/14, and a certificate for that name from a public authority. Teams users need a Phone System licence.
 
@@ -292,11 +574,15 @@ Switch **Open** off to close the line (the page says so). **Calls at once** limi
     id: 'timeline', title: 'Customer timeline', route: '/timeline', keys: 'timeline customer history notes everything one view contact calls texts voicemail',
     body: `**Timeline** shows everything with one phone number over the last year, newest first: calls (who took them, how long, and the summary when the call was transcribed, with the recording and transcript), voicemails with their summaries, texts both ways, callbacks asked for, and the team's **notes**. A number matches however it is written.
 
+::figure timeline
+
 Open it from a caller card (**Timeline**), from Contacts, from an incoming call in Call history, from a text conversation, or type a number at the top. Administrators can add a note (it shows on the timeline for everyone) and remove one.`,
   },
   {
     id: 'texts', title: 'Business texting (SMS)', route: '/texts', keys: 'sms text message texting textmagic 10dlc stop opt out reply provider',
     body: `Send and receive text messages from your business numbers on **Texts**. Texts go through a texting provider. Built in: TextMagic, Twilio, SignalWire, Telnyx, Bandwidth, Vonage, Plivo, Flowroute and VoIP.ms, plus **Your own webhook** for any other service or a gateway of your own. Any number of provider accounts can be used at once: each number says which one carries it.
+
+::figure texts
 
 ## Setting up
 1. In the provider's portal, find the account's API details. The form asks for exactly what that provider calls them (Twilio: Account SID and auth token; Telnyx: an API key; Bandwidth: API user, password, account ID and messaging application ID; SignalWire: also your space address) and says where to find them.
@@ -340,13 +626,19 @@ Recording can also be paused during a call with the pause code (card payments). 
   },
   {
     id: 'hotdesk', title: 'Hot desking', route: '/phones', keys: 'hot desk hot desking shared desk phone sign in sign out hoteling hotelling flexible',
-    body: `A hot desk is a shared phone that becomes whoever signs in at it. Make one by switching on **Hot desk** in the extension the phone is set up as (the desk's own extension, such as 900 Desk 3).
+    body: `A hot desk is a shared phone that becomes whoever signs in at it: for offices where people do not have fixed desks. Make one by switching on **Hot desk** in the extension the phone is set up as (the desk's own extension, such as 900 Desk 3).
 
-At the phone, dial **\*33**, wait for the tone, enter your extension and **#**, wait for the tone, then your voicemail PIN and **#**. A rising tone means you are signed in; a falling tone means it was refused (five wrong tries lock the desk for ten minutes). From then on, calls to your extension ring this desk as well as your other phones, and calls you make from it show your number and name and count as yours on Costs. Signing in at another desk moves you there. **\*34** signs you out.
+## Signing in and out
+1. At the phone, dial \`*33\` and wait for the tone.
+2. Enter your extension and #, and wait for the tone.
+3. Enter your voicemail PIN and #. A rising tone means you are signed in; a falling tone means it was refused.
 
-Emergency calls from a hot desk always carry the desk's own site, floor and room, not your usual ones.
+From then on, calls to your extension ring this desk as well as your other phones, and calls you make from it show your number and name and count as yours on Costs. Signing in at another desk moves you there. \`*34\` signs you out. Five wrong tries lock the desk for ten minutes.
 
-On [Phones](#/phones), **Hot desks** shows who is signed in where; administrators can sign someone in (without their PIN) or out. The codes, and a time each day when everyone is signed out, are in Settings.`,
+> Emergency calls from a hot desk always carry the desk's own site, floor and room, not your usual ones: responders go to where the phone is.
+
+## Managing hot desks
+On [Phones](#/phones), **Hot desks** shows who is signed in where; administrators can sign someone in (without their PIN) or out. The codes, and a time each day when everyone is signed out, are in Settings. Sign-ins are kept across restarts.`,
   },
   {
     id: 'contacts', title: 'Contacts on every phone', route: '/contacts', keys: 'contacts directory phonebook address book csv import export yealink polycom grandstream snom caller name',
@@ -369,6 +661,8 @@ Phones set up by [Phones](#/phones) (provisioning) get the directory with no mor
     id: 'costs', title: 'Costs and budgets', route: '/costs', keys: 'cost costs spend money budget rates prices toll fraud billing department alarm',
     body: `BitVoice prices each call from what your provider charges, and shows the month's spend by department, person and trunk, with the most expensive calls.
 
+::figure costs
+
 ## Prices
 On [Trunks](#/trunks), open a trunk and its **Call prices**. Each price covers numbers that start with some digits, as the number is sent to the provider (digits only, so 44 for the UK, 1900 for US premium rate); the longest match wins, and a price with no digits covers every other number. Give the price per minute, any charge per answered call, the billing step (60 seconds for whole minutes, 6 or 1 for finer) and any minimum. **Calls in, per minute** is for toll-free numbers you pay to receive. **What would it cost** checks a number before anyone dials it. The currency is set on Costs.
 
@@ -383,6 +677,8 @@ Give extensions a **Department** (in the extension). On Costs, add a budget for 
   {
     id: 'quality', title: 'Call quality', route: '/quality', keys: 'mos jitter packet loss choppy robotic sound quality diagnosis site provider network',
     body: `How calls sounded over the last day, week, month or 90 days, from the sound BitVoice itself received on each side of each call. Phones are grouped by their [site](#/sites) (or "no site"), and calls from outside by the provider's line they came in on.
+
+::figure quality
 
 Each place shows its calls, its average score (MOS, out of 5: above 4 is good, under 3.6 sounds poor), the share of sound packets that never arrived, and jitter (uneven delay). Below that, BitVoice says what is wrong in plain words, for example "Packet loss on Head office's network: 3.2% of the sound never arrived, mostly between 14:00 and 16:00", with what to check. The bar chart shows the sound lost by hour of the day.
 
@@ -401,112 +697,250 @@ To ring back, choose your extension and press **Ring back**: your phone rings fi
     body: `A legal hold keeps call records, recordings and voicemail for the numbers and dates it names, or everything, and stops anyone deleting them, until it is released. Held calls show a lock in Call history. Releasing a hold makes what it kept subject to the retention settings again; released holds stay listed.`,
   },
   {
+    id: 'portal', title: 'The staff portal', keys: 'staff portal self service my phone forwarding do not disturb follow me voicemail greeting pin ucp user control panel',
+    body: `The staff portal lets everyone look after their own calls without an administrator: do not disturb, forwarding, follow-me, speed dials, voicemail and its greeting, their PIN, and a list of their own calls. It is at \`#/me\` on this server's address, and linked from the sign-in page.
+
+::figure portal
+
+## Signing in
+People sign in with their **extension number** and their **voicemail PIN**: the same PIN that opens their voicemail from a phone and signs them in at hot desks. An extension without a PIN cannot sign in; an administrator sets one on the extension.
+
+Repeated wrong tries from one address lock it out for ten minutes. A portal session reaches only the person's own settings: never another extension, the configuration or anyone's recordings.
+
+## What people can do
+| Tab | What is there |
+|---|---|
+| Where calls go | do not disturb; forwarding of every call, when busy and when not answered; follow-me numbers; own speed dials |
+| Voicemail | messages to play and delete, with transcripts and summaries when AI is on; record or upload the greeting |
+| Your calls | the person's own calls, newest first, without recordings |
+| PIN | change the PIN, giving the current one |
+
+Forwarding and do not disturb set here are the same as those set from the phone with feature codes ([Feature codes](#codes)): whichever was set last is in force. Follow-me numbers and speed dials are part of the extension's configuration, so changing them makes a revision on [Changes](#/changes), recorded as the person's own.
+
+> Forwarding to an outside number works only for extensions allowed to call outside numbers. The portal says so rather than saving a forward that could never ring.`,
+  },
+  {
     id: 'conferences', title: 'Conference rooms', route: '/conferences', keys: 'conference meeting bridge confbridge meetme dial-in pin leader moderator mute lock room record',
     body: `A conference room is a number people dial to all talk together. Staff dial it from their desks; outside callers reach it through an incoming route or a menu option that points at the room.
+
+::figure conference
 
 ## Setting up a room
 1. Open [Conference rooms](#/conferences) and press **Add conference room**.
 2. Give it a **number** (any free number, 500 by default) and a **name**.
 3. Optionally set a **PIN**. Callers hear a tone, enter the PIN and press #. Three wrong PINs and the call ends.
 4. Optionally set a **leader PIN**, different from the PIN. Whoever enters it joins as a leader.
+5. To let outside callers in, point an incoming route (or a menu key) at the room.
 
 ## Choices
-- **Wait for the leader**: everyone else hears the hold tone until a leader joins. When the last leader leaves, the room closes and everyone is hung up. This needs a leader PIN.
-- **Members join muted**: for briefings and lectures. Leaders talk; members listen. A member presses 1 to ask to speak, and a leader unmutes them from this page.
-- **Record the room**: the whole room is kept as one recording in [Call history](#/history), unless recording is off for the whole system.
-- **Tones when people join and leave**: on by default.
-- **Most people at once**: 50 by default, up to 200.
+| Choice | What it does |
+|---|---|
+| Wait for the leader | everyone else hears the hold tone until a leader joins; when the last leader leaves, the room closes and everyone is hung up. Needs a leader PIN. |
+| Members join muted | for briefings and lectures: leaders talk, members listen. A member presses 1 to ask to speak, and a leader unmutes them. |
+| Record the room | the whole room is kept as one recording in [Call history](#/history), unless recording is off for the whole system |
+| Tones when people join and leave | on by default |
+| Most people at once | 50 by default, up to 200 |
 
 ## Keys during a call
 - \`1\` mutes and unmutes yourself (in a room where members are muted, it asks to speak).
 - \`2\`, for a leader, locks the room so nobody new can join, and unlocks it.
 
 ## While a room is in use
-The page shows each room in use: who is in, who is talking (the green light), who is muted, who has asked to speak, and who is still waiting for the leader. An administrator can mute or unmute anyone, remove someone, and lock or unlock the room.`,
+The page shows each room in use: who is in, who is talking (the green light), who is muted, who has asked to speak, and who is still waiting for the leader. An administrator can mute or unmute anyone, remove someone, and lock or unlock the room.
+
+Everyone in a room hears everyone else who is not muted, mixed by BitVoice; each person's phone can use its own codec. A call record is kept for each person's call, and one for the room itself with its length and recording.
+
+> Conference sound is mixed at telephone quality (8 kHz), whatever codecs the phones use: it is what every phone can hear, and it keeps a room of fifty cheap to run.`,
   },
   {
     id: 'codes', title: 'Feature codes, forwarding and speed dials', route: '/codes', keys: 'feature codes star codes forward call forwarding do not disturb dnd follow me find me pickup intercom speed dial',
     body: `Feature codes are what people dial on their phones to change their own settings and reach features. They work on every phone, desk phone or softphone, with nothing set up on the phone itself. A rising tone means done; a falling tone means refused.
 
+## The codes at a glance
+| Code | What it does |
+|---|---|
+| \`*72\` | forward every call (then the number and #, or the number straight after: \`*722125550199\`) |
+| \`*73\` | stop forwarding every call |
+| \`*90\` / \`*91\` | forward when on a call / stop |
+| \`*52\` / \`*53\` | forward when not answered / stop |
+| \`*78\` / \`*79\` | do not disturb on / off |
+| \`*76\` | switch do not disturb (rising tone: now on) |
+| \`*21\` | switch follow-me on and off |
+| \`*8\` | answer a call ringing in your pickup group |
+| \`**\` and an extension | answer the call ringing that extension |
+| \`*80\` and an extension | intercom: that phone answers on its speaker |
+| \`*0\` and a code | a speed dial |
+| \`*43\` | the echo test |
+| \`*97\` | your voicemail |
+| \`70\` | park a call (transfer it here); 71 to 79 pick it up |
+| \`*45\` / \`*46\` | queue agents: log in or out / pause or resume |
+| \`*33\` / \`*34\` | sign in / out at a hot desk |
+| \`*7\` / \`*8\` during a call | pause and resume the recording (card payments) |
+
 ## Forwarding
-- \`*72\` forwards every call. Dial it, hear a tone, then dial the number and #. Or dial the number straight after the code: \`*722125550199\`.
+::figure forwarding
+
+- \`*72\` forwards every call. Dial it, hear a tone, then dial the number and #. Or dial the number straight after the code.
 - \`*90\` forwards calls that come while you are on a call. \`*52\` forwards calls you do not answer within your ring time.
 - \`*73\`, \`*91\` and \`*53\` cancel them.
-Forwarding to an outside number needs the extension to be allowed outside calls. Forwarding is live state, not configuration: setting it makes no revision.
+
+Forwarding to another extension uses that extension's own settings (its voicemail, its follow-me), up to four hops so two people forwarding to each other cannot loop. Forwarding to an outside number goes through the outgoing routes, as if the person dialled it, and needs the extension to be allowed outside calls.
+
+Forwarding is live state, not configuration: setting it makes no revision, and it is kept across restarts. [Extensions](#/extensions) and the staff portal show and change it too.
 
 ## Do not disturb
-\`*78\` on, \`*79\` off, \`*76\` switches. With do not disturb on, calls go to voicemail, or to the extension's no-answer destination. Emergency call-backs still ring.
+\`*78\` on, \`*79\` off, \`*76\` switches. With do not disturb on, calls go to voicemail, or to the extension's no-answer destination. Do not disturb set by hand wins over the calendar ([Calendars](#calendar)). Emergency call-backs still ring.
 
 ## Follow-me
-\`*21\` switches follow-me on and off, for extensions that have follow-me numbers set (on the extension, or in the staff portal).
+::figure followme
+
+\`*21\` switches follow-me on and off, for extensions that have follow-me numbers set (on the extension, or in the staff portal). The desk rings first for its ring time, then the follow-me numbers, one after another or all together. On an outside number with **press 1** on, the person hears a tone and presses 1 to take the call; a voicemail or a silence never does, and after 15 seconds the call moves on.
 
 ## Answering someone else's call
-- \`*8\` answers the oldest call ringing anyone in your **pickup group** (set on each extension).
+::figure pickup
+
+- \`*8\` answers the oldest call ringing anyone in your **pickup group** (set on each extension; names are compared without regard to capitals).
 - \`**\` and an extension answers a call ringing that extension: \`**101\`.
 
 ## Intercom
-\`*80\` and an extension calls it with auto-answer: its phone answers on the speaker, and both sides talk. An extension can refuse intercom; then the call rings as usual.
+::figure intercom
+
+\`*80\` and an extension calls it with auto-answer: its phone answers on the speaker, and both sides talk. Yealink, Grandstream and Snom read BitVoice's Call-Info header, Poly reads Alert-Info; some phones need intercom allowed in their own settings. An extension can refuse intercom; then the call rings as usual. Door stations never take intercom.
 
 ## Speed dials
-\`*0\` and a code dials a saved number: \`*05\`. The company's speed dials are on this page; each person can have their own on their extension or in the staff portal, and theirs win.
-
-## Other numbers people dial
-- \`*43\` the **echo test**: say something and hear it back, to check sound both ways.
-- \`*97\` **voicemail**: hear your messages. From another phone, enter the mailbox and its PIN.
-- \`70\` **park**: transfer a call to 70 and it waits in the first free slot (71 to 79), shown on the Dashboard; dial the slot from any phone to pick it up. Unclaimed, it rings back whoever parked it.
-- \`*45\` and \`*46\`: queue agents log in or out, and pause or resume.
-- \`*33\` and \`*34\`: sign in and out at a hot desk.
-- During a call, \`*7\` **pauses the recording** and \`*8\` resumes it (card payments).
-- During a call with a door station, the door's code (\`*1\` by default) **opens the door**.
-- The emergency numbers (911, 933 in the US) always work, from every extension.
+\`*0\` and a code dials a saved number: \`*05\`. The company's speed dials are on this page; each person can have their own on their extension or in the staff portal, and theirs win over the company's with the same code. Codes are 1 to 3 digits.
 
 ## Changing the codes
-Every code can be changed here, or switched off with the word \`off\`. Two features cannot share a code. The echo, voicemail and park numbers are in [Settings](#/settings).`,
+Every code can be changed on [Feature codes](#/codes), or switched off with the word \`off\`. Two features cannot share a code, and no code may be an extension's or a group's number: BitVoice says which one clashes. The echo, voicemail and park numbers are in [Settings](#/settings).`,
   },
   {
     id: 'tenants', title: 'Hosting other organisations', route: '/tenants', keys: 'tenants organisations organizations multi-tenant hosted hosting reseller provider domain',
-    body: `One BitVoice can host several organisations. Each one is a phone system of its own: its own extensions, numbers, trunks, routes, administrators, voicemail, recordings and call history. No organisation can see another's. They share only this server's SIP port and media ports.
+    body: `One BitVoice can host several organisations. Each one is a phone system of its own: its own extensions, numbers, trunks, routes, administrators, voicemail, recordings and call history. No organisation can see another's. They share only this server's SIP port, IAX2 port and media ports.
+
+::figure tenants
+
+## When to use it
+- A provider, or an IT company, running phone systems for many small customers on one server.
+- A group of offices or clinics that want separate systems, administered separately, on shared hardware.
+- Several answering points sharing one system, each keeping its own call-takers and records.
+
+The main system is an organisation too: the one this server was set up as. Its administrators manage the others.
 
 ## Adding an organisation
 1. Open [Organisations](#/tenants) and press **Add organisation**.
 2. Give its **name** and a **short name** (lowercase letters, digits and dashes). The short name is part of its web address, \`/t/acme/\`, and of its phones' sign-ins, \`acme.100\`. It cannot be changed later.
 3. Optionally give its **own domain**, such as \`pbx.acme.example\`, pointed at this server. Phones register to that domain, and its administrators open it in a browser.
-4. Set its **first administrator**: a username and a password of at least 12 characters.
+4. Set its **first administrator**: a username and a password of at least 12 characters, and its country.
 5. Optionally set **limits**.
 
+The organisation starts at once with an empty phone system, ready for its administrator to set up as described in [Getting started](#start).
+
 ## How calls find the right organisation
-- A phone registering to the organisation's domain belongs to it.
-- Without a domain, a phone signs in with the short name in front of the extension: user \`acme.100\`.
-- A call from a provider goes to the organisation whose trunk it comes from and whose incoming route has the number dialled, so several organisations can share one provider.
+| A request | goes to |
+|---|---|
+| from a phone registering to \`pbx.acme.example\` | the organisation with that domain |
+| from a phone signing in as \`acme.100\` | Acme, extension 100 |
+| from a provider, for a number | the organisation whose trunk it comes from and whose incoming route has that number |
+| anything else | the main system |
+
+So two organisations can both have extension 100, and several can share one provider account with different numbers.
+
+## Where its data is
+On SQLite, each organisation has its own folder under \`tenants/\` in the data folder, with its own database file. On PostgreSQL, each has its own schema in the same database (\`tenant_acme\`). Backups, archives and exports are per organisation.
 
 ## Limits
-Extensions, calls at once, storage for recordings and voicemail, and AI requests a day. 0 is no limit. Emergency calls are never refused: an organisation at its call limit, or suspended, can still call 911 and be called back.
+| Limit | What happens at it |
+|---|---|
+| Extensions | adding one more is refused with a message |
+| Calls at once | new calls are refused (503) until one ends |
+| Storage | new recordings and voicemail are not kept |
+| AI requests a day | transcripts, summaries and the AI receptionist stop until midnight UTC |
+
+0 is no limit. Emergency calls are never refused: an organisation at its call limit, or suspended, can still call 911 and be called back.
 
 ## Opening an organisation
-**Open** signs you in to its web interface as the provider, without its own account. Its administrators sign in at its own address with their own accounts. They never see this server's own screens: updates, the database, the other servers, the certificate, the SIP trace or this list.
+**Open** signs you in to its web interface as the provider, without its own account; it shows in its audit log as the provider. Its administrators sign in at its own address with their own accounts. Each organisation has its own sign-in cookie, so being signed in to one never signs anyone in to another.
+
+Organisations never see this server's own screens: updates, the database, the other servers, the certificate, the SIP trace (which shows every organisation's messages), the call generator or this list.
 
 ## Suspending and removing
 **Suspended** stops sign-ins and every call except emergency calls; nothing is deleted. **Remove** stops the organisation and moves its folder aside (\`tenants/.removed-<name>-<time>\`), so a mistake can be undone by hand.`,
   },
   {
     id: 'paging', title: 'Paging and overhead speakers', route: '/paging', keys: 'intercom announce overhead multicast speaker',
-    body: `Dial a paging number to speak through every phone in the group at once: phones answer on their speakers by themselves (some need auto-answer allowed in their settings).
+    body: `Paging speaks through many phones at once: dial a paging number, and every phone in the group answers on its speaker by itself. Use it for announcements to a warehouse, a school, a shop floor.
 
-**Multicast** also sends the page to a multicast address and port, as G.711 µ-law, which overhead speakers and many desk phones can listen to without a call each. A group may have only a multicast address.`,
+## Setting up a paging group
+1. On [Paging](#/paging) press **Add paging group** and give it a number (800 by default) and a name.
+2. Choose the phones. Overhead speakers set up as extensions (kind **Overhead speaker**) can be members too.
+3. Optionally, a **multicast** address and port.
+
+## Multicast
+**Multicast** also sends the page to a multicast address and port (\`239.0.1.10:5000\`), as G.711 µ-law, which overhead speakers and many desk phones can listen to without a call each. A group may have only a multicast address. It works on one network: routers do not pass multicast on unless they are set up to.
+
+## Paging and intercom
+| | Paging | Intercom |
+|---|---|---|
+| Who hears | everyone in the group | one extension |
+| Talk back | no, one way | yes, both ways |
+| How | dial the group's number | \`*80\` and the extension |
+
+Phones that do not answer a page by themselves within a few seconds are left out, so one phone without auto-answer never holds a page up. Some phones need auto-answer (intercom) allowed in their own settings.`,
   },
   {
     id: 'emergency', title: 'Emergency calls', keys: '911 933 112 999 karis law ray baums location notify',
-    body: `Emergency numbers (Settings, set by country) always go out, from every extension, even ones that cannot call outside numbers. Add your buildings under [Sites](#/sites) with their street address, and give every extension its site, floor and room, so responders know where to go. With **Send the caller's address** on (Settings), emergency calls carry it to the provider as PIDF-LO. A phone registering from outside its site's networks is a remote worker: their phone page asks where they are, and that address is used instead (alerts say when it was not confirmed). **Notify** lists extensions that are told when anyone dials an emergency number (Kari's Law in the US); every open BitVoice screen shows an alert too, and the addresses under **Also email** get an email. Dial \`933\` in the US to test the address your provider has.
+    body: `Emergency numbers always go out, from every extension, even ones that cannot call outside numbers. This chapter is about emergency calls made from the phones BitVoice runs: an office calling 911. Answering 911 calls is the [911 profile](#psap).
+
+::figure office-911
+
+## What BitVoice does on every emergency call
+1. **Routes it**, always: a route that names the number first; with none, every working trunk in turn. Limits never stop it: an extension not allowed outside calls, a hosted organisation at its call limit or suspended, a trunk at its channel limit.
+2. **Sends where the caller is**: with **Send the caller's address** on (Settings), the call carries the site's civic address, floor and room to the provider as PIDF-LO.
+3. **Tells people on site** (Kari's Law in the US): the extensions under **Notify** get a message on their phones, every open BitVoice screen shows an alert, and the addresses under **Also email** get an email with the caller's name, extension, site, floor and room, so someone can meet the responders at the door.
+4. **Lets the call back through**: for an hour after an emergency call, calls coming in are never refused, so the answering point can always ring back.
+
+## Setting it up
+1. Check the emergency numbers in [Settings](#/settings) (set by country: 911 and 933 in the US).
+2. Add every building under [Sites](#/sites), with its street address and the networks its phones use.
+3. Give every extension its site, floor and room.
+4. Make sure an outgoing route and trunk carry emergency calls; [Health](#/health) warns when none can.
+5. Fill in **Notify** and **Also email**.
+6. Dial \`933\` (in the US) to hear the address your provider has.
+
+## Remote workers
+A phone registering from outside its site's networks is a remote worker: their phone page asks where they are, and that address is used instead. Alerts say when it was not confirmed.
 
 ## Emergency mode
 A different thing: one switch that sends every incoming call to one place (an evacuation, a closure, an incident). Set where calls go, an optional code such as \`*55\` and the extensions allowed to dial it in [Settings](#/settings); switch it on the [Dashboard](#/), or by dialling the code (rising tones for on, a low tone for off). A red bar shows on every screen while it is on.`,
   },
   {
     id: 'security', title: 'Security', route: '/security', keys: 'ban fraud audit password two-step totp tls',
-    body: `- Addresses that keep failing to sign in are blocked for a while (Settings, Protection). Blocked addresses are listed here and can be unblocked.
-- The **audit log** records every administrative action and who did it.
-- Turn on **two-step sign-in** for your account (Administrators): a code from an authenticator app.
-- Premium-rate numbers are refused unless allowed.`,
+    body: `A phone system on the internet is attacked within hours: scanners try passwords on every SIP port, and a broken-into system runs up calls to premium numbers. BitVoice is built to stand up to that by default, in layers.
+
+::figure security
+
+## Against password guessing
+- Addresses that keep failing to sign in are banned for a while (Settings, Protection): by default ten failures in a minute ban the address for an hour. Banned addresses are listed on [Security](#/security) and can be unbanned.
+- **Trusted networks** are never banned: your office network.
+- SIP passwords are generated, at least 12 characters, one per extension. A phone signing in as one extension can never register another.
+- A scanner that is banned gets no answer at all, so it learns nothing.
+
+## Against fraud
+- Extensions can call outside numbers only when allowed.
+- Premium-rate numbers are refused unless a route names them.
+- [Costs](#/costs) alerts on budgets and on runaway spend: many calls to one country in an hour.
+- Each extension may have at most four calls at once (Settings, Protection).
+
+## Encryption
+- **TLS** encrypts signalling (port 5061), so passwords and numbers are not readable on the network.
+- **SRTP** encrypts the sound of calls; the browser phone and apps always use it.
+- The web interface has HTTPS on port 8443 with its own certificate, or one you install.
+
+## Who can do what
+- Administrators change everything; viewers see everything but change nothing; staff use the portal for their own calls only.
+- Turn on **two-step sign-in** for every administrator ([Administrators](#/users)): a code from an authenticator app.
+- [Single sign-on](#sso) signs people in through your identity provider.
+- The **audit log** records every administrative action and who did it, and cannot be edited.`,
   },
   {
     id: 'sso', title: 'Single sign-on', keys: 'oidc entra azure google okta keycloak login provider groups',
@@ -532,9 +966,31 @@ Logins are **read only** unless marked **Can change calls**.`,
   },
   {
     id: 'codecs', title: 'Codecs and sound', keys: 'g722 hd voice g711 pcmu pcma opus g729 codec noise clean',
-    body: `Settings lists the codecs phones may use, best first. **G.722** is HD voice; **G.711** (µ-law in North America and Japan, A-law elsewhere) is standard quality. **Opus** is HD voice for apps and browsers and copes well with lost packets; **G.729** uses a fifth of G.711's bandwidth, for thin links and carriers that ask for it. BitVoice converts between any two of these when two parties differ, so everyone can talk to everyone; when both use the same codec the audio passes untouched. Converting costs processor time: per call, about 0.3 ms of one core every 20 ms for Opus and 0.12 ms for G.729 (some 60 and 170 converted calls per core), against almost nothing for G.711 and G.722. G.729 is sent without Annex B (no silence frames).
+    body: `A codec is how sound is turned into data on a call. Phones, browsers and carriers each support some; BitVoice converts between any two of its codecs when two parties differ, so everyone can talk to everyone. When both use the same codec the sound passes through untouched.
 
-**Sound clean-up** turns down steady background noise and evens out levels, for voicemail and, if you like, during calls.`,
+::figure codecs
+
+## The codecs
+| Codec | Sound | Bandwidth | Used by |
+|---|---|---|---|
+| G.722 | HD (wideband) | 64 kbit/s | most desk phones: the best choice between them |
+| G.711 µ-law | telephone | 64 kbit/s | North America and Japan; every carrier |
+| G.711 A-law | telephone | 64 kbit/s | the rest of the world |
+| Opus | HD, copes with loss | 24 kbit/s | browsers and the mobile apps |
+| G.729 | telephone, a little rougher | 8 kbit/s | thin links, some carriers |
+| G.726 (32 kbit/s) | near telephone | 32 kbit/s | DECT bases, older gateways |
+| G.726 (16 kbit/s) | rough | 16 kbit/s | very thin links |
+| GSM | rougher | 13 kbit/s | older softphones and gateways |
+
+Settings lists the codecs phones may use, best first; each trunk may have its own list. Analog adapter ports always use G.711, which faxes, modems and alarm panels need.
+
+> G.726 comes in two packings: RFC 3551's (G726-32) and the older AAL2 order. Most equipment uses the first; choose **G.726 (AAL2 order)** only for equipment that sounds garbled with it.
+
+## What converting costs
+Converting takes processor time, only on calls where the two sides differ. Per call, about 0.3 ms of one core every 20 ms for Opus and 0.12 ms for G.729 (some 60 and 170 converted calls per core); G.726 and GSM cost less than G.729; G.711 and G.722 almost nothing. G.729 is sent without Annex B (no silence frames).
+
+## Sound clean-up
+**Sound clean-up** (Settings) turns down steady background noise and evens out levels, for voicemail and, if you like, during calls.`,
   },
   {
     id: 'automation', title: 'Configuration as code', keys: 'api token terraform opentofu openapi git gitops automation script ci',
@@ -546,7 +1002,19 @@ Logins are **read only** unless marked **Can change calls**.`,
   },
   {
     id: 'updates', title: 'Updates', route: '/updates', keys: 'upgrade version install rollback release signed',
-    body: `Upload the new BitVoice program (and its \`.sig\` file) and press **Install**. BitVoice restarts on the new version; by default it waits until no calls are in progress. The version you left is kept: **Go back** returns to it in one click. A new version that fails to start twice is replaced by the previous one by itself. Release builds install only versions signed by BioDream.`,
+    body: `Updating BitVoice is one click, and safe: it checks the new version, installs it beside the old one, and goes back on its own if the new one does not stay up.
+
+::figure updates
+
+## Installing an update
+1. On [Updates](#/updates), upload the new BitVoice program and its \`.sig\` file.
+2. Press **Install**. By default BitVoice waits until no calls are in progress; you can also install at once.
+3. BitVoice restarts on the new version. With several servers, calls in progress are handed to another server and carry on.
+
+## Going back
+The version you left is kept: **Go back** returns to it in one click. A new version that fails to start twice, or does not stay up for a minute, is replaced by the previous one by itself.
+
+> Release builds install only versions signed by BioDream, so a forged program cannot be installed through this page.`,
   },
   {
     id: 'loadtest', title: 'Call generator', route: '/loadtest', keys: 'load test stress regression capacity',
@@ -554,11 +1022,28 @@ Logins are **read only** unless marked **Can change calls**.`,
   },
   {
     id: 'changes', title: 'Changes, backups and import', route: '/changes', keys: 'revision undo restore export import backup freepbx asterisk',
-    body: `Every saved change is a revision. **What changed** shows the difference; **Restore** shows what restoring would change and asks first. **Export** downloads the whole configuration; **Import** previews a file's changes before applying them. [Import](#/import) also reads FreePBX and Asterisk configurations. [Archive](#/archive) copies backups, recordings and voicemail to Amazon S3 or Azure.`,
+    body: `Every saved change is a revision: numbered, with who made it, when, and a one-line summary. Nothing in the configuration is ever lost.
+
+::figure changes
+
+## Comparing and restoring
+- **What changed** shows the difference between a revision and the one before, field by field.
+- **Restore** shows what restoring would change and asks first. Restoring is itself a new revision, so it can be undone too.
+
+## Export and import
+- **Export** downloads the whole configuration as one file (secrets left out unless you ask for them).
+- **Import** previews a file's changes before applying them.
+- [Import](#/import) also reads FreePBX and Asterisk configurations, 3CX user lists, and the CSV exports of Cisco Unified CM, Avaya and Mitel.
+- [Archive](#/archive) copies backups, recordings and voicemail to Amazon S3 or Azure.
+
+## Changes made at the same time
+Two administrators editing the same thing at once cannot overwrite each other: the second save is refused with a message to reload, and nothing is lost.`,
   },
   {
     id: 'ai', title: 'AI receptionist, voicemail triage and asking', route: '/receptionists', keys: 'ai assistant receptionist triage urgent ask plain words model speech',
     body: `AI features use the AI service set in [Settings](#/settings): an OpenAI-compatible service (OpenRouter by default) or one you run yourself. What they need is sent there, so choose a service you trust with calls; for a 911 centre, its own government cloud counts as local.
+
+::figure receptionist
 
 ## AI receptionist
 Choose a receptionist as where calls go: a route, a menu option or an extension's **If nobody answers**. It says it is automated, answers only from **Approved information**, takes a message, books a callback (see [Callbacks](#/callbacks)), or transfers to **A person is**. Pressing **0** or asking for a person always reaches someone, and so does any problem with the AI service or the speech model: callers are never stuck with it.
@@ -574,7 +1059,9 @@ On [Changes](#/changes), describe a change ("send sales calls to voicemail after
   },
   {
     id: 'flow', title: 'Call flow', route: '/flow', keys: 'diagram flow chart routing map edit drag where calls go simulate simulator try a call test path',
-    body: `## Try a call
+    body: `::figure call-path
+
+## Try a call
 Enter who calls (an extension, or an outside number), what they dial and when, and press **Try it**. BitVoice follows the call exactly as it would for real, without ringing anything: the incoming route, schedules at that time, routing scripts (they run, in their sandbox), menus, groups and queues, and what happens if nobody answers. The path this call takes is marked; other ways on (a menu's keys, a schedule's other side) can be opened. Green means it works, amber means look at it (a phone not connected, a script falling back), red means the call fails there. Tick **Assume every phone is connected** to see the plan as designed rather than as it is right now; **Arrives on** picks the trunk for routes that only take one.
 
 ## The diagram
@@ -586,6 +1073,8 @@ Click a box (or Tab to it and press Enter) to change where calls go from it: a r
     id: 'sites', title: 'Sites and office 911', route: '/sites', keys: 'site building address 911 emergency location remote worker floor room network e911 karis ray baum',
     body: `A site is a building with its street address and the networks its phones use. Give every extension its site, floor and room (on the extension), and emergency calls carry that location to the 911 centre.
 
+::figure sites
+
 ## Remote workers
 A phone that registers from outside every site's networks is a remote worker. On its first emergency-capable registration from a new place, its user is asked to confirm their address on their phone page; emergency calls then carry that address instead.
 
@@ -594,11 +1083,15 @@ With **Email when someone calls 911** set in Settings, the people named there ge
   },
   {
     id: 'calls', title: 'Live calls', route: '/calls', keys: 'live active current calls hang up transfer listen whisper barge supervise door pause recording',
-    body: `Calls in progress, updated as they happen. Administrators can hang up a call, open a door station's door, pause and resume a call's recording for card numbers (the pause is marked in the recording), and supervise an agent: **Listen** (silent), **Whisper** (only the agent hears you) or **Barge** (everyone hears you).`,
+    body: `Calls in progress, updated as they happen. Administrators can hang up a call, open a door station's door, pause and resume a call's recording for card numbers (the pause is marked in the recording), and supervise an agent: **Listen** (silent), **Whisper** (only the agent hears you) or **Barge** (everyone hears you).
+
+::figure history`,
   },
   {
     id: 'history', title: 'Call history', route: '/history', keys: 'cdr call records history log export csv recording transcript search said summary action items',
     body: `Every finished call: who called whom, when, for how long and how it ended. Sort the columns, play recordings (a pause for card numbers is marked), and download the list as CSV. How long records are kept is set in Settings, Call recording; a [legal hold](#/holds) keeps them longer.
+
+::figure history
 
 ## Transcripts and search
 With AI on and **Transcribe recorded calls** switched on (Settings, AI), every recorded call is written out, with a short summary and its action items: what someone agreed or was asked to do. Each side of the call is written out separately from the recording, so the transcript shows who said what, and when. The transcript button next to a recording opens it; administrators can also transcribe a single call, or transcribe one again.
@@ -607,7 +1100,26 @@ With AI on and **Transcribe recorded calls** switched on (Settings, AI), every r
   },
   {
     id: 'health', title: 'Health', route: '/health', keys: 'health status problems warnings disk certificate trunk registration vault',
-    body: `Whether the system is ready for calls: the phone service, phones that are not connected, trunks, whether emergency calls can get out, extensions without an emergency location, menus without a recorded prompt, the time zone, how long recordings are kept, and secrets a key vault cannot read. Each line says what is wrong and links to where to fix it.`,
+    body: `Health says whether the system is ready for calls, and if not, what to do. Each line says what is wrong in plain words and links to the screen where it is fixed. Check it after every change of any size.
+
+## What it checks
+| Check | Why it matters |
+|---|---|
+| Emergency calls can get out | a route and a working trunk carry the emergency numbers |
+| Extensions without an emergency location | their 911 calls would carry no floor or room |
+| The phone service | SIP is listening, and on which port |
+| Phones not connected | extensions nobody has signed in as |
+| Trunks | registered, or the reason they are not |
+| Menus without a recorded prompt | callers would hear silence |
+| The time zone | schedules follow it |
+| Recordings and their keeping | disk space, and how long recordings are kept |
+| Certificates | when the TLS certificate runs out |
+| Key vaults | secrets a vault cannot read |
+| Other servers | when several share a database, whether each is running |
+
+Problems are coloured: red stops calls (no emergency route), amber should be looked at (a phone not connected), and grey is for information.
+
+> The emergency checks are always first. A phone system that cannot call 911 is not ready, whatever else works.`,
   },
   {
     id: 'trace', title: 'SIP trace', route: '/trace', keys: 'sip trace debug messages ladder invite register packet capture',
@@ -655,6 +1167,8 @@ These exports hold no SIP passwords, so each extension gets a new one; voicemail
     id: 'psap', title: '911 calls (the 911 profile)', route: '/psap', keys: '911 psap ng911 i3 esinet location pidf-lo held rebid ali spill eido cad nena log answer time call-taker',
     body: `BitVoice answers 911 calls as a PSAP's call-handling system: calls from the emergency services network (the ESInet, NENA i3) arrive with the caller's location and the network's data, the call-taker sees them at once, and CAD is told when the call is answered.
 
+::figure psap
+
 **Setting up.**
 1. On [Trunks](#/trunks), add the trunk from your ESInet provider (or the NG911 core's ESRP) and switch on **From the ESInet**.
 2. In [Call routing](#/routes), send its calls to your call-takers: a queue, or a ring group.
@@ -680,6 +1194,8 @@ What is not here yet: text to 911 (RTT and SMS), TTY, and transfer to another PS
     id: 'core', title: 'NG911 Core Services (ECRF, ESRP, LVF, BCF)', route: '/core', keys: 'ng911 core services ecrf lost esrp routing boundaries gis geojson psap overflow default policy rules bcf border control denial of service lvf address validation centerline address points',
     body: `For a state or regional 911 authority that runs its own NG911 core: BitVoice answers LoST as the ECRF, and routes each 911 call as the ESRP to the PSAP that serves the caller.
 
+::figure core-services
+
 **Service areas.** Export your boundaries from GIS as GeoJSON polygons (PSAP boundaries for \`urn:service:sos\`; police, fire or EMS areas for \`urn:service:sos.police\` and the others) and upload them on **Core services**. A polygon's \`name\`, \`uri\` and \`number\` properties are read; give a default PSAP URI for those without one. **Edit** an area to add the cities or counties it serves, for callers whose location is a civic address only. **Try a place** shows which area answers a position or a city, as a LoST query would.
 
 **The ECRF.** Switch on **Answer LoST queries** and list the addresses that may ask (your ESInet): other elements send findService to \`/lost\` (RFC 5222) and get the PSAP's URI. A specific service (sos.police) is answered from its own areas first, then from sos.
@@ -698,6 +1214,8 @@ Not here yet: the BCF's media checks (it limits and denies by address; it does n
   {
     id: 'radio', title: 'Radio dispatch console', route: '/radio', keys: 'radio console dispatch roip ptt push to talk channel talkgroup patch lmr gateway p25 issi cssi rfss imbe wacn unit encryption aes des key private call unit to unit alert tone warble emergency recording radio log cad',
     body: `Dispatchers talk on radio channels from the same headset as their phone calls. BitVoice reaches the radios through radio-over-IP (RoIP) gateways; the radio network itself stays with whoever runs it.
+
+::figure radio
 
 **Setting up.** Under **Console setup**, choose a console number (800, say) and add each channel: its name, the port on this server the gateway sends the channel's audio to, and the gateway's address and port for the audio going out. On the gateway: RTP, G.711 µ-law, to this server's address and that port; key the radio on voice (VOX). Each channel uses its port and the next one, outside the range phone calls use.
 
@@ -728,6 +1246,8 @@ Not here yet: P25 Phase 2 (TDMA) voice in its own half-rate vocoder. A Phase 2 s
     id: 'fax', title: 'Fax: sending and receiving, fax machines and analogue phones', route: '/faxes', keys: 'fax t38 t.38 fax to email email to fax send fax outbox imap poppler libreoffice pdf fax number receive analogue analog ata gateway fxs fxo isdn pri bri patton audiocodes grandstream ht802 modem',
     body: `Fax machines, analogue phones, door phones and old lines connect through a SIP gateway: an ATA (Grandstream HT series, for one or two analogue phones or a fax), or a bigger gateway (Patton SmartNode, AudioCodes MediaPack and Mediant) for many analogue ports, an ISDN line (BRI/PRI) or old analogue lines (FXO). Each port registers to BitVoice as an extension, like a phone.
 
+::figure fax
+
 **Receiving faxes without a fax machine.** On **Faxes**, add a fax number (300, say), with the email addresses each fax goes to. Then in [Call routing](#/routes) send a phone number's calls to it. BitVoice answers as a fax machine, switches the call to T.38 and takes the fax; each fax becomes a PDF, kept on Faxes (**View**, **PDF**) and emailed. A fax that breaks off part way keeps the pages that arrived and says so. This needs a provider that supports T.38 (most do); a fax sent as sound cannot be received this way.
 
 **Sending a fax.** On **Faxes**, **Send a fax**: choose the fax number it goes from, type the number to send to, write a note if you like (it becomes the first page) and add documents. Text files and pictures (PNG, JPEG, GIF) work everywhere. PDF needs poppler on the server (\`apt install poppler-utils\`, \`apk add poppler-utils\`, \`brew install poppler\`); Word, Excel, OpenDocument and RTF need LibreOffice as well. The page says which the server can do. Every page gets a header line, as fax machines print it: the time, the fax number's name, its identity and the page count. Pages are US letter in North America and A4 elsewhere, from the country in Settings.
@@ -747,11 +1267,52 @@ For reliable faxes:
   },
   {
     id: 'users', title: 'Administrators', route: '/users', keys: 'users administrators accounts viewer admin password two step sso',
-    body: `People who sign in to this screen. Administrators change anything; viewers look without changing. Each person can turn on two-step sign-in with an authenticator app. With single sign-on (Settings) people sign in with the organisation's account, and an account is made for them the first time.`,
+    body: `Administrators are the people who sign in to this web interface. Staff who only look after their own calls use the staff portal instead and need no account here ([The staff portal](#portal)).
+
+## Roles
+| Role | Can |
+|---|---|
+| Administrator | change anything, play recordings, see every secret field's existence (never its value) |
+| Viewer | see everything, change nothing; secrets are hidden |
+
+A change of role, or of password, signs the person out everywhere at once.
+
+## Two-step sign-in
+Each person turns on two-step sign-in for themselves: **Set up** shows a key for an authenticator app; entering the code it shows turns it on. From then on, sign-in asks for a code as well as the password. Turning it off needs the password.
+
+> Turn on two-step sign-in for every administrator of a system reachable from the internet.
+
+## Single sign-on
+With single sign-on (Settings), people sign in with the organisation's account (Microsoft Entra, Google, Okta, any OpenID Connect provider), and an account is made for them the first time. See [Single sign-on](#sso).
+
+## API tokens
+Programs (Terraform, scripts) use API tokens instead of a password: made on this page, shown once, and revoked at any time. Each token is an administrator or a viewer.`,
   },
   {
     id: 'settings', title: 'Settings', route: '/settings', keys: 'settings system codecs sso ai recording retention mobile push vault gitops sound',
-    body: `Everything about the system as a whole: name, country and time zone, codecs, call recording and how long things are kept, sound clean-up, single sign-on, AMI and ARI for other programs, AI, the mobile apps' push service, key vaults, configuration from Git, and the emergency email. Passwords and keys are never shown again once saved; leave them empty to keep them.`,
+    body: `Settings holds everything about the system as a whole. Each section saves on its own, and every save is a revision on [Changes](#/changes).
+
+| Section | What is there |
+|---|---|
+| System | name, country, time zone, language, the public address phones and providers see |
+| Numbers | the echo test, voicemail and park numbers, and the emergency numbers |
+| Codecs | the codecs phones may use, best first ([Codecs](#codecs)) |
+| Call recording | off, every call, or selected extensions; consent rules; how long recordings are kept |
+| Sound | clean-up for voicemail and during calls |
+| Protection | bans after failed sign-ins, trusted networks, calls per extension, premium numbers |
+| Emergency | send the caller's address, who is notified, who is emailed, emergency mode |
+| AI | the AI service, models, and which AI features are on ([AI](#ai)) |
+| Single sign-on | the identity provider ([Single sign-on](#sso)) |
+| Asterisk compatibility | AMI and ARI for programs written for Asterisk ([Asterisk compatibility](#compat)) |
+| Mobile apps | the push service that wakes the apps |
+| Email | the mail server voicemail, faxes and alerts go through |
+| Key vaults | secrets kept in AWS Secrets Manager or Azure Key Vault |
+| Configuration from Git | keep the configuration in step with a file in a repository |
+| Database | SQLite or PostgreSQL ([Database](#database)) |
+
+Passwords and keys are never shown again once saved; leave them empty to keep them. Viewers see Settings with every secret removed.
+
+> The public address matters when BitVoice is behind a router: phones and providers outside send sound to the address it advertises. Leave it empty to work it out per phone.`,
   },
 ]
 
