@@ -309,6 +309,9 @@ func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 	if !st.State().SetupComplete {
 		fmt.Fprintf(stdout, "  Setup code for another computer: %s\n", srv.SetupCode)
 	}
+	if runtime.GOOS == "windows" {
+		fmt.Fprintln(stdout, "  Keep this window open: closing it stops BitVoice.")
+	}
 	if !o.noBrowser && hasDisplay() {
 		openBrowser(localURL)
 	}
