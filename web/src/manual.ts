@@ -1164,7 +1164,7 @@ In [Settings](#/settings), **Configuration from Git**, BitVoice reads the config
 ::figure updates
 
 ## Installing an update
-1. Download the new release and unpack it. Beside the program is \`bitvoice.sig\`, BioDream's signature for it.
+1. Download the new release and unpack it. Beside the program is its signature from BioDream: \`bitvoice.sig\`, or \`bitvoice.exe.sig\` on Windows.
 2. On [Updates](#/updates), upload the program and its \`.sig\` file.
 3. Press **Install**. By default BitVoice waits until no calls are in progress; you can also install at once.
 4. BitVoice restarts on the new version. With several servers, calls in progress are handed to another server and carry on.

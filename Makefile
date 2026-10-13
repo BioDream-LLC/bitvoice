@@ -48,7 +48,7 @@ manual:
 		node scripts/manual.mjs /tmp/bitvoice-manual/manual.mjs $(CURDIR)/docs/manual/index.html $(CURDIR)/docs/manual/bitvoice-manual.pdf
 
 # release builds the six downloads into dist/: each program carries BioDream's release key and is signed
-# (bitvoice.sig beside it, for the Updates page), packed with LICENSE, NOTICE and the manual, with
+# (bitvoice.sig or bitvoice.exe.sig beside it, for the Updates page), packed with LICENSE, NOTICE and the manual, with
 # SHA256SUMS. Archives name no person: files are owned by root, and zips keep no owner at all.
 #   make release VERSION=v0.1.3 SIGNING_KEY=path/to/release.key
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
