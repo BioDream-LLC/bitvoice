@@ -57,8 +57,8 @@ type System struct {
 	SIPPort       int    `json:"sipPort"`
 	RTPMin        int    `json:"rtpMin"`
 	RTPMax        int    `json:"rtpMax"`
-	// Codecs phones may use, best first (PCMU, PCMA, G722, OPUS, G729). BitVoice converts between PCMU,
-	// PCMA and G722; OPUS and G729 are carried untouched when both parties choose them.
+	// Codecs phones may use, best first (PCMU, PCMA, G722, OPUS, G729, G726-32, AAL2-G726-32, G726-16,
+	// GSM). BitVoice converts between any two of them.
 	Codecs []string `json:"codecs"`
 	// EchoNumber reaches the echo test; ToneNumber plays a test tone.
 	EchoNumber string `json:"echoNumber"`
@@ -2690,7 +2690,7 @@ func reservedBy(s *System, park map[string]bool, number string) (field, what str
 }
 
 // Codecs BitVoice knows, by the names SDP uses.
-var KnownCodecs = []string{"PCMU", "PCMA", "G722", "OPUS", "G729"}
+var KnownCodecs = []string{"PCMU", "PCMA", "G722", "OPUS", "G729", "G726-32", "G726-16", "AAL2-G726-32", "GSM"}
 
 // DefaultCodecs is the list a new system starts with: wideband first between phones that have it, G.711
 // for everything else. Opus and G.729 are opt-in: BitVoice converts them, at some processor cost.

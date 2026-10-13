@@ -51,7 +51,7 @@ func shapeOffer(m *sdp.Media, allowed []string) {
 		if c, ok := byName[name]; ok {
 			keep = append(keep, c)
 		} else if pt := media.CodecPT(name); convertible && pt >= 0 {
-			if name == "OPUS" && used[pt] {
+			if media.Dynamic(pt) && used[pt] {
 				pt = freeDynamic(used)
 			}
 			if pt >= 0 && !used[pt] {
@@ -156,10 +156,11 @@ func applyCodec(ep *media.Endpoint, cs []sdp.Codec) {
 			pt := media.CodecPT(c.Name)
 			ep.SetPayloadType(pt)
 			ep.SetEventPT(eventFor(cs, c.ClockRate))
-			if pt == media.PTOpus {
-				// Opus has a dynamic number: this party's comes in as PTOpus and goes back out as its own.
-				ep.MapIncoming(c.PT, media.PTOpus)
-				ep.MapPayloadType(media.PTOpus, c.PT)
+			if media.Dynamic(pt) {
+				// Opus and G.726 have dynamic numbers: this party's comes in as BitVoice's own and goes
+				// back out as its own.
+				ep.MapIncoming(c.PT, pt)
+				ep.MapPayloadType(pt, c.PT)
 			}
 			return
 		}

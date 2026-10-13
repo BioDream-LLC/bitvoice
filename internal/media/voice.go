@@ -13,7 +13,21 @@ import (
 const (
 	PTG729 = 18
 	PTOpus = 111
+	// G.726 has dynamic numbers too (G726-32 and G726-16, RFC 3551; AAL2-G726-32 packs the other way):
+	// BitVoice's own inside the engine, mapped like Opus's.
+	PTG726_32     = 112
+	PTG726_16     = 113
+	PTAAL2G726_32 = 114
 )
+
+// Dynamic says whether a codec BitVoice speaks has a dynamic payload number, mapped per party.
+func Dynamic(pt int) bool {
+	switch pt {
+	case PTOpus, PTG726_32, PTG726_16, PTAAL2G726_32:
+		return true
+	}
+	return false
+}
 
 // voice is one codec's encoder or decoder, holding the state that carries from packet to packet.
 type voice interface {
@@ -40,9 +54,28 @@ func newVoice(pt int) voice {
 		return &g729v{}
 	case PTOpus:
 		return &opusv{}
+	case PTG726_32:
+		return &g726v{enc: NewG726Encoder(32), dec: NewG726Decoder(32)}
+	case PTG726_16:
+		return &g726v{enc: NewG726Encoder(16), dec: NewG726Decoder(16)}
+	case PTAAL2G726_32:
+		return &g726v{enc: NewG726Encoder(32).MSBFirst(), dec: NewG726Decoder(32).MSBFirst()}
+	case PTGSM:
+		return &gsmv{enc: NewGSMEncoder(), dec: NewGSMDecoder()}
 	}
 	return nil
 }
+
+type g726v struct {
+	enc *G726Encoder
+	dec *G726Decoder
+}
+
+func (*g726v) rate() int                   { return 8000 }
+func (*g726v) clock() int                  { return 8000 }
+func (*g726v) take(n int) int              { return n - n%8 } // whole bytes at every rate
+func (g *g726v) decode(p []byte) []int16   { return g.dec.Decode(p) }
+func (g *g726v) encode(pcm []int16) []byte { return g.enc.Encode(pcm) }
 
 type g711 struct{ pt int }
 

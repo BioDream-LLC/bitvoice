@@ -12,12 +12,13 @@ const (
 	PTPCMU = 0
 	PTPCMA = 8
 	PTG722 = 9
+	PTGSM  = 3 // GSM 06.10 full rate, 33 bytes per 20 ms
 )
 
 // Transcodable reports whether BitVoice can convert audio of this payload type.
 func Transcodable(pt int) bool {
 	switch pt {
-	case PTPCMU, PTPCMA, PTG722, PTG729, PTOpus:
+	case PTPCMU, PTPCMA, PTG722, PTG729, PTOpus, PTG726_32, PTG726_16, PTAAL2G726_32, PTGSM:
 		return true
 	}
 	return false
@@ -36,6 +37,14 @@ func CodecPT(name string) int {
 		return PTG729
 	case "OPUS":
 		return PTOpus
+	case "G726-32":
+		return PTG726_32
+	case "G726-16":
+		return PTG726_16
+	case "AAL2-G726-32":
+		return PTAAL2G726_32
+	case "GSM":
+		return PTGSM
 	}
 	return -1
 }
