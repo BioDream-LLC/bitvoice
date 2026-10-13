@@ -203,7 +203,8 @@ var handedOut = struct {
 	ports map[int]bool
 }{ports: map[int]bool{}}
 
-// freeUDP returns an even port, free together with the odd one above it, that no earlier call returned.
+// freeUDP returns an even port, free together with the odd one above it (for UDP and TCP), that no earlier
+// call returned.
 func freeUDP(t *testing.T) int {
 	handedOut.Lock()
 	defer handedOut.Unlock()
@@ -228,6 +229,13 @@ func freeUDP(t *testing.T) int {
 					break
 				}
 				c2.Close()
+				// TCP too: a port used for SIP (the ISSI's) is opened for both.
+				l, err := net.ListenTCP("tcp", &net.TCPAddr{IP: ip, Port: q})
+				if err != nil {
+					ok = false
+					break
+				}
+				l.Close()
 			}
 		}
 		if ok {
