@@ -206,8 +206,12 @@ test('Opus converted both ways against the browser', async ({ page }) => {
     expect(side.errors).toBe(0)
     expect(side.peak).toBeGreaterThan(0.05)
   }
-  // Both fake microphones play the same beep: both directions must hear the same pitch.
-  expect(Math.abs(result.a.hz - result.b.hz)).toBeLessThan(result.b.hz * 0.15)
+  // Both fake microphones play the same beep, so both directions must hear about the same pitch. Counting
+  // zero crossings in 10 ms blocks is a rough measure (blocks at the start and end of each beep count too):
+  // it has read 334 to 408 Hz for the same beep on different machines, so it allows 30%. Garbage or noise
+  // reads far above 1 kHz.
+  for (const side of [result.a, result.b]) expect(side.hz).toBeLessThan(1000)
+  expect(Math.abs(result.a.hz - result.b.hz)).toBeLessThan(result.b.hz * 0.3)
 })
 
 // The docked browser phone, used the way a person would: sign in as an extension, dial the echo test.
