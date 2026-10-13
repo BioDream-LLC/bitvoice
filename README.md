@@ -39,8 +39,10 @@ Calls arrive, wait in queues, ring phones and browsers, are recorded and logged,
 answer them. On top of that one engine it runs as:
 
 - **A phone system** for offices and businesses: extensions, ring groups, queues, menus, voicemail to
-  email, recording, desk-phone set-up, a browser phone, and an import from FreePBX, Asterisk, 3CX, Cisco,
-  Avaya and Mitel.
+  email, recording, conference rooms, forwarding and follow-me, a staff portal, desk-phone set-up, a
+  browser phone, SIP and IAX2 trunks, and an import from FreePBX, Asterisk, 3CX, Cisco, Avaya and Mitel.
+- **A hosted phone service:** many organisations on one server, each with its own extensions, numbers,
+  administrators and web address, and limits on what each may use.
 - **A contact centre:** queues with a live wallboard, callbacks, VIP and sticky routing, supervisors
   listening in, transcripts and summaries, caller cards from your CRM.
 - **911 call-handling equipment** for public safety answering points: NENA i3 calls from the ESInet with
@@ -73,11 +75,16 @@ equipment, [it says so](#how-it-is-tested).
 <tr><td colspan="2"><b>Voicemail</b>: greetings recorded in the browser, <code>*97</code>, message-waiting lamps, the message emailed with its recording</td></tr>
 <tr><td colspan="2">Hold, <b>blind and attended transfer</b>, call parking, <b>paging</b> and overhead speakers, busy lamps (BLF)</td></tr>
 <tr><td colspan="2"><b>SIP trunks</b> over UDP, TCP or TLS, with registration, channel limits and failover between trunks</td></tr>
+<tr><td colspan="2"><b>IAX2 trunks</b> (RFC 5456) to Asterisk and FreePBX servers and IAX2 providers, registering either way, with call tokens; tested against Asterisk 23</td></tr>
 <tr><td colspan="2"><b>Call routing</b> by dial pattern, with prefixes added or digits removed, and 911 always allowed from every extension</td></tr>
 <tr><td colspan="2"><b>Routing scripts in JavaScript or Lua</b>, sandboxed and time-limited, with a fixed fallback if a script fails</td></tr>
 <tr><td colspan="2">A <b>call flow diagram</b> of where calls go, and a <b>call-path simulator</b>: pick a caller, number and time and see the exact route, without ringing anything</td></tr>
 <tr><td colspan="2"><b>Video calls</b> between phones that both send video, relayed and encrypted like the sound</td></tr>
 <tr><td colspan="2"><b>Hot desking</b> (<code>*33</code>), a company directory on every phone, calendar-driven do not disturb from Outlook and Google</td></tr>
+<tr><td colspan="2"><b>Conference rooms</b> with a PIN and a leader PIN, wait for the leader, members joining muted (press 1 to ask to speak), lock, recording, and a live view to mute or remove people</td></tr>
+<tr><td colspan="2"><b>Forwarding</b> always, when busy and when not answered (<code>*72</code>, <code>*90</code>, <code>*52</code>), <b>do not disturb</b> (<code>*78</code>, <code>*79</code>, <code>*76</code>) and <b>follow-me</b> (<code>*21</code>) with press 1 to take the call, so a mobile's voicemail never answers it</td></tr>
+<tr><td colspan="2"><b>Call pickup</b> for a group (<code>*8</code>) or one phone (<code>**</code>), <b>intercom</b> with auto-answer (<code>*80</code>), company and personal <b>speed dials</b> (<code>*0</code>); every code can be changed on one page</td></tr>
+<tr><td colspan="2">A <b>staff portal</b>: people sign in with their extension and voicemail PIN to set do not disturb, forwarding, follow-me and speed dials, hear their voicemail, record their greeting and see their calls</td></tr>
 </tbody></table>
 
 <table width="100%">
@@ -126,7 +133,7 @@ equipment, [it says so](#how-it-is-tested).
 <table width="100%">
 <thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/codecs.svg" width="168" height="40" alt="Codecs and media"></th><th align="left" valign="middle">Our own media engine</th></tr></thead>
 <tbody>
-<tr><td colspan="2"><b>G.711, G.722, Opus and G.729</b>, converted between any two, so a browser on Opus talks to a carrier on G.729</td></tr>
+<tr><td colspan="2"><b>G.711, G.722, Opus, G.729, G.726 (32 and 16 kbit/s) and GSM</b>, converted between any two, so a browser on Opus talks to a carrier on G.729 or an old gateway on G.726</td></tr>
 <tr><td colspan="2"><b>SRTP</b> to every phone that encrypts, and SIP over TLS</td></tr>
 <tr><td colspan="2">Recording in stereo, a <b>pause for card numbers</b> (<code>*7</code> and <code>*8</code>, PCI DSS), retention, <b>legal holds</b>, and <b>recording consent</b> announcements by region</td></tr>
 <tr><td colspan="2">The <b>IMBE</b> P25 voice codec: decoded with code from GopherTrunk and encoded by our own encoder</td></tr>
@@ -186,6 +193,7 @@ equipment, [it says so](#how-it-is-tested).
 <thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/operations.svg" width="168" height="40" alt="Operations"></th><th align="left" valign="middle">Running it for real</th></tr></thead>
 <tbody>
 <tr><td colspan="2"><b>Several servers as one phone system</b> over a shared PostgreSQL database: calls carry on when a server stops, and a shared address moves to a running one</td></tr>
+<tr><td colspan="2"><b>Hosted organisations</b>: many phone systems on one server, each with its own data (its own folder on SQLite, its own schema on PostgreSQL), web address or domain and administrators; limits on extensions, calls at once, storage and AI use; suspend without deleting. Emergency calls are never refused</td></tr>
 <tr><td colspan="2"><b>SQLite</b> on one server, <b>PostgreSQL</b> for several</td></tr>
 <tr><td colspan="2"><b>Health</b> page saying what is missing, emergency calling first; a live <b>SIP trace</b>; a <b>call generator</b> that measures what your hardware carries</td></tr>
 <tr><td colspan="2"><b>Updates</b> uploaded in the browser, installed when no calls are up, with <b>Go back</b> in one click and an automatic rollback if the new version fails to start</td></tr>
@@ -319,6 +327,8 @@ setting in the web interface.
 - **P25** checked byte for byte against a real ISSI capture (from NIST's public-domain ISSI tester), and the
   encryption against the standard's own worked examples.
 - **NG911** checked against NENA sample data and stand-ins for the ESInet, ESRP and CAD.
+- **IAX2** checked against a real Asterisk 23: registration, calls both ways with sound, busy; **GSM** decoded
+  sample for sample as ffmpeg does, and **G.726** streams exchanged with ffmpeg.
 
 **Status, plainly.** The phone system is working. The 911, radio console and NG911 Core Services profiles
 are built and tested against stand-ins and real captures, **not yet against a live ESInet, P25 system or
@@ -330,8 +340,8 @@ today.
 
 | | |
 |---|---|
-| [**Manual**](https://biodream-llc.github.io/bitvoice/manual/) | Sixty articles, one for every screen, searchable. Also `docs/manual/index.html` in a checkout |
-| [**Manual (PDF)**](docs/manual/bitvoice-manual.pdf) | The same, for printing; also in every release archive |
+| [**Manual**](https://biodream-llc.github.io/bitvoice/manual/) | 63 chapters in six parts, with 63 diagrams, step-by-step set-up and reference tables. Also `docs/manual/index.html` in a checkout |
+| [**Manual (PDF)**](docs/manual/bitvoice-manual.pdf) | The same, about 90 pages with a contents page, for printing; also in every release archive |
 | **Help in the program** | Every screen has a Help button that opens its article; <kbd>⌘K</kbd> searches screens and articles |
 | **API** | `/api/openapi.json` on any running BitVoice describes every call the web interface makes |
 
@@ -362,6 +372,28 @@ codecs, plus GopherTrunk's IMBE decoder.
 Yes. Upload the exported files on **Import**; BitVoice shows exactly what would change before anything is
 applied, and the import is a revision you can undo. Tools that talk to Asterisk's AMI or ARI can control
 BitVoice too.
+
+</details>
+
+<details>
+<summary><b>Does it do what FreePBX does?</b></summary>
+
+The everyday features, yes: extensions, ring groups, queues, menus, schedules, voicemail, recording, paging,
+parking, conference rooms, forwarding, do not disturb, follow-me, call pickup, intercom, speed dials, a staff
+portal, SIP and IAX2 trunks, and hosting several organisations on one server. Feature codes match the usual
+FreePBX ones (<code>*72</code>, <code>*78</code>, <code>*8</code> and so on) and can be changed. Not offered:
+telephony cards (DAHDI); analogue lines and ISDN connect through SIP gateways instead. Codecs not offered yet:
+iLBC, Speex and AMR.
+
+</details>
+
+<details>
+<summary><b>Can I host phone systems for several customers on one server?</b></summary>
+
+Yes. **Organisations** adds one: it gets its own empty phone system, web address (<code>/t/name/</code> or
+its own domain) and administrators, and cannot see any other. Phones register to its domain or as
+<code>name.100</code>; calls from a shared provider account reach the organisation whose numbers they are for.
+Each can be limited (extensions, calls at once, storage, AI use) or suspended.
 
 </details>
 

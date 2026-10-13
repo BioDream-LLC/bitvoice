@@ -27,6 +27,13 @@ function box(x: number, y: number, w: number, h: number, title: string, sub = ''
     (sub ? `<text x="${x + w / 2}" y="${cy + 17}" text-anchor="middle" class="s">${esc(sub)}</text>` : '')
 }
 
+/** A tall box with its title at the top, for lines of text under it. */
+function card(x: number, y: number, w: number, h: number, title: string, tone: Tone = 'slate') {
+  const c = tones[tone]
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="${c.fill}" stroke="${c.stroke}" stroke-width="1.5"/>` +
+    `<text x="${x + w / 2}" y="${y + 24}" text-anchor="middle" class="t" fill="${c.text}">${esc(title)}</text>`
+}
+
 /** A small round badge (a step number, a key). */
 function badge(x: number, y: number, label: string, tone: Tone = 'sky') {
   const t = tones[tone]
@@ -160,11 +167,11 @@ export const figures: Record<string, Figure> = {
   },
   menu: {
     title: 'A menu (auto attendant): each key goes somewhere',
-    svg: frame(820, 230, 'A menu plays a prompt; key 1 goes to sales, 2 to support, 0 to reception, and an extension number dials it directly; no key repeats then times out.',
+    svg: frame(820, 250, 'A menu plays a prompt; key 1 goes to sales, 2 to support, 0 to reception, and an extension number dials it directly; no key repeats then times out.',
       box(40, 90, 150, 56, 'Menu', '"Press 1 for sales"', 'sky') +
       [['1', 'Sales ring group', 'emerald'], ['2', 'Support queue', 'violet'], ['0', 'Reception', 'amber'], ['101', 'dial an extension', 'teal']].map(([k, s, tone], i) =>
         arrow(`M190 118 L330 ${44 + i * 46}`, tone as Tone) + badge(352, 44 + i * 46, k, tone as Tone) + box(376, 26 + i * 46, 200, 36, s, '', tone as Tone)).join('') +
-      arrow('M115 146 V196 H376', 'rose', true) + box(376, 178, 200, 36, 'No key: timeout destination', '', 'rose') +
+      arrow('M115 146 V228 H376', 'rose', true) + box(376, 210, 200, 36, 'No key: timeout destination', '', 'rose') +
       label(700, 110, 'Prompts: record in the', 'middle') + label(700, 128, 'browser, upload, or', 'middle') + label(700, 146, 'let the AI voice read it', 'middle')),
   },
   schedule: {
@@ -311,7 +318,7 @@ export const figures: Record<string, Figure> = {
       `<rect x="30" y="30" width="520" height="190" rx="16" fill="none" stroke="#a78bfa" stroke-width="2"/>` + label(290, 54, 'ONE BITVOICE SERVER', 'middle', 'h') +
       [['Main system', '/', 'violet'], ['Acme Dental', '/t/acme/', 'emerald'], ['Riverside Clinic', 'pbx.riverside.example', 'sky']].map(([n, u, tone], i) =>
         box(50 + i * 168, 72, 150, 80, n, u, tone as Tone) + label(125 + i * 168, 172, ['own data', 'own users', 'own numbers'][i])).join('') +
-      box(170, 182, 240, 26, 'shared: SIP 5060, IAX2 4569, media ports', '', 'slate') +
+      box(130, 182, 320, 26, 'shared: SIP 5060, IAX2 4569, media ports', '', 'slate') +
       box(580, 40, 210, 50, 'By domain', 'pbx.riverside.example', 'sky') +
       box(580, 100, 210, 50, 'By user name', 'acme.100', 'emerald') +
       box(580, 160, 210, 50, 'By trunk and number', 'a shared provider', 'teal')),
@@ -352,7 +359,7 @@ export const figures: Record<string, Figure> = {
       cloud(20, 80, 150, 'ESInet') + arrow('M160 118 H200', 'rose') +
       box(202, 90, 110, 56, 'BCF', 'checks the source', 'amber') + arrow('M312 118 H350') +
       box(352, 90, 120, 56, '911 queue', 'by priority', 'violet') + arrow('M472 118 H510') +
-      box(512, 70, 270, 96, 'Call-taker position', '', 'emerald') +
+      card(512, 70, 270, 96, 'Call-taker position', 'emerald') +
       label(647, 112, 'location on the map, callback number,', 'middle') + label(647, 130, 'additional data, rebid, transfer', 'middle') +
       arrow('M647 166 V200 H470', 'sky') + box(270, 182, 200, 40, 'CAD: ALI spill, EIDO', '', 'sky') + box(40, 182, 200, 40, 'NENA i3 log', 'every event', 'fuchsia')),
   },
@@ -483,8 +490,190 @@ export const figures: Record<string, Figure> = {
   history: {
     title: 'Live calls and history: every call, while it happens and after',
     svg: frame(820, 190, 'Live calls show each call as it happens with its legs, codecs and quality; when it ends it becomes a call record with its recording, transcript, cost and quality.',
-      box(30, 50, 300, 100, 'Live call', '', 'emerald') + label(180, 96, '100 Front desk → +1 212 555 0199') + label(180, 116, 'G.722 / G.711 · MOS 4.3 · 02:14') +
+      card(30, 50, 300, 100, 'Live call', 'emerald') + label(180, 96, '100 Front desk → +1 212 555 0199') + label(180, 116, 'G.722 / G.711 · MOS 4.3 · 02:14') +
       arrow('M330 100 H410', 'slate') + label(370, 92, 'ends') +
-      box(412, 40, 380, 120, 'Call record', '', 'violet') + ['who and when, how long, answered by', 'recording and transcript', 'cost, quality per leg, why it ended'].map((s, i) => label(602, 86 + i * 20, s)).join('')),
+      card(412, 40, 380, 120, 'Call record', 'violet') + ['who and when, how long, answered by', 'recording and transcript', 'cost, quality per leg, why it ended'].map((s, i) => label(602, 86 + i * 20, s)).join('')),
+  },
+  trace: {
+    title: 'A SIP trace: the messages of one call, in order',
+    svg: frame(820, 250, 'A ladder diagram: the phone sends INVITE, BitVoice answers 100 Trying, rings the other side, 180 Ringing and 200 OK come back, ACK, then BYE and 200 OK.',
+      label(130, 34, 'Phone 100', 'middle', 't') + label(410, 34, 'BitVoice', 'middle', 't') + label(690, 34, 'Provider', 'middle', 't') +
+      `<path d="M130 44 V236 M410 44 V236 M690 44 V236" stroke="#334155" stroke-width="1.5"/>` +
+      arrow('M132 64 H406', 'sky') + label(270, 58, 'INVITE 2125550199') +
+      arrow('M408 84 H134', 'slate') + label(270, 80, '100 Trying') +
+      arrow('M412 96 H686', 'sky') + label(550, 90, 'INVITE +12125550199') +
+      arrow('M688 120 H414', 'amber') + label(550, 114, '180 Ringing') + arrow('M408 130 H134', 'amber') + label(270, 126, '180 Ringing') +
+      arrow('M688 158 H414', 'emerald') + label(550, 152, '200 OK') + arrow('M408 168 H134', 'emerald') + label(270, 164, '200 OK') +
+      arrow('M132 190 H406', 'slate') + label(270, 186, 'ACK') + arrow('M132 216 H406', 'rose') + label(270, 212, 'BYE') +
+      arrow('M412 226 H686', 'rose') + label(550, 222, 'BYE')),
+  },
+  archive: {
+    title: 'The archive: copies kept somewhere else',
+    svg: frame(820, 190, 'Every ten minutes BitVoice copies new recordings and voicemail, and once a day the configuration, to an S3 bucket or an Azure container.',
+      server(60, 72) + label(82, 140, 'BitVoice') + arrow('M120 94 H230', 'sky') + label(175, 86, 'every 10 min') +
+      box(232, 34, 200, 36, 'Call recordings', '', 'fuchsia') + box(232, 76, 200, 36, 'Voicemail', '', 'violet') + box(232, 118, 200, 36, 'Configuration', 'once a day', 'slate') +
+      arrow('M432 94 H520', 'sky') + cloud(522, 60, 260, 'S3 bucket or Azure container', 'sky') +
+      label(410, 178, 'Only what is new or changed is copied; nothing is deleted from the archive.')),
+  },
+  holds: {
+    title: 'A legal hold: kept, whatever the retention says',
+    svg: frame(820, 180, 'Retention deletes old records, except those a legal hold names, which stay until the hold is released.',
+      box(30, 60, 180, 60, 'Call records', 'recordings, voicemail', 'sky') + arrow('M210 90 H270') +
+      box(272, 50, 200, 80, 'Under a hold?', 'numbers and dates it names', 'amber') +
+      arrow('M472 68 H560', 'emerald') + box(562, 46, 220, 40, 'Kept, cannot be deleted', '', 'emerald') +
+      arrow('M472 114 H560', 'slate', true) + box(562, 96, 220, 40, 'Retention as set', '', 'slate') +
+      label(410, 168, 'Releasing a hold returns what it kept to the retention settings.')),
+  },
+  mobile: {
+    title: 'The mobile apps: woken by a push, rung like a desk phone',
+    svg: frame(820, 200, 'A call comes in; BitVoice asks the push relay to wake the app; the app connects back to BitVoice and rings on the phone\u2019s call screen.',
+      box(30, 70, 140, 50, 'A call to 101', '', 'sky') + arrow('M170 95 H220') + server(222, 74) + label(244, 140, 'BitVoice') +
+      arrow('M270 82 L360 46', 'amber') + box(362, 26, 170, 40, 'Push relay', 'Apple and Google', 'amber') +
+      arrow('M532 46 L620 80', 'amber') + `<g transform="translate(624,62)"><rect width="40" height="72" rx="8" fill="${tones.emerald.fill}" stroke="${tones.emerald.stroke}" stroke-width="1.5"/></g>` +
+      label(644, 154, 'rings like a call') + arrow('M620 112 H272', 'emerald', true) + label(446, 128, 'the app connects back') +
+      label(410, 188, 'Paired once by QR code; the code works once, for ten minutes.')),
+  },
+  sso: {
+    title: 'Single sign-on: the work account decides who gets in',
+    svg: frame(820, 180, 'A person signs in at the identity provider; BitVoice reads the groups from the answer and gives the administrator or viewer role, or refuses.',
+      phone(40, 66, 'sky') + label(57, 128, 'browser') + arrow('M80 88 H170', 'sky') +
+      cloud(172, 54, 200, 'Identity provider', 'violet') + label(272, 150, 'Entra, Google, Okta, Keycloak') + arrow('M372 88 H450', 'violet') +
+      box(452, 60, 150, 56, 'BitVoice', 'reads the groups', 'violet') +
+      arrow('M602 74 H660', 'emerald') + box(662, 54, 130, 36, 'Administrator', '', 'emerald') +
+      arrow('M602 102 H660', 'sky') + box(662, 94, 130, 36, 'Viewer', '', 'sky') +
+      label(410, 168, 'Not in an allowed group: refused, and noted in the audit log.')),
+  },
+  compat: {
+    title: 'Asterisk compatibility: tools written for Asterisk drive BitVoice',
+    svg: frame(820, 180, 'CRMs, wallboards and click-to-dial tools speak AMI on TCP 5038 or ARI over HTTP and WebSocket; BitVoice answers as Asterisk would, with calls as PJSIP channels.',
+      box(30, 40, 200, 40, 'Click to dial', 'Originate', 'sky') + box(30, 92, 200, 40, 'Wallboard', 'QueueStatus, events', 'amber') +
+      arrow('M230 60 H320', 'sky') + arrow('M230 112 H320', 'amber') +
+      box(322, 50, 170, 72, 'AMI · TCP 5038', 'ARI · /ari/', 'teal') + arrow('M492 86 H560', 'teal') +
+      server(566, 64) + label(588, 130, 'BitVoice') + label(700, 82, 'PJSIP/100-…', 'middle', 'm') + label(700, 102, 'PJSIP/102-…', 'middle', 'm') +
+      label(410, 168, 'Logins are read only unless marked Can change calls.')),
+  },
+  loadtest: {
+    title: 'The call generator: real calls, real audio, measured',
+    svg: frame(820, 200, 'The generator places calls at a set rate and number at once to a number inside BitVoice, and measures answers, failures, answer times, audio lost and the audio score.',
+      box(30, 64, 170, 64, 'Call generator', 'so many a second', 'orange') + arrow('M200 84 H280', 'orange') + arrow('M200 96 H280', 'orange') + arrow('M200 108 H280', 'orange') +
+      server(284, 74) + label(306, 140, 'BitVoice') + arrow('M334 96 H420', 'slate') + box(422, 70, 140, 52, 'A number inside', 'never a trunk', 'sky') +
+      box(610, 30, 180, 32, 'Answered / failed', '', 'emerald') + box(610, 68, 180, 32, 'Answer time', '', 'sky') + box(610, 106, 180, 32, 'Audio lost, score', '', 'amber') +
+      arrow('M562 96 H606', 'slate') + label(410, 186, 'It never calls trunks or emergency numbers.')),
+  },
+  calendar: {
+    title: 'Following a calendar: no ringing in meetings',
+    svg: frame(820, 190, 'BitVoice reads the person\u2019s calendar every five minutes; in a meeting or on time off, calls go to voicemail or a forward instead of ringing.',
+      `<rect x="30" y="40" width="250" height="120" rx="12" fill="#0b1220" stroke="#64748b"/>` +
+      box(46, 56, 218, 26, '9:00 Team meeting', '', 'amber') + box(46, 90, 218, 26, '12:00 Free', '', 'slate') + box(46, 124, 218, 26, 'Friday: out of office', '', 'rose') +
+      arrow('M280 100 H360', 'slate') + label(320, 92, 'every 5 min') +
+      box(362, 70, 160, 60, 'A call to 101', 'during the meeting', 'sky') +
+      arrow('M522 86 H600', 'violet') + box(602, 64, 190, 36, 'Voicemail', '', 'violet') +
+      arrow('M522 114 H600', 'emerald', true) + box(602, 104, 190, 36, 'or forwarded', '', 'emerald') +
+      label(410, 180, 'Do not disturb now wins over the calendar.')),
+  },
+  calllinks: {
+    title: 'Call links: a web address that rings the business',
+    svg: frame(820, 190, 'A call link or its QR code opens a page in any browser; the caller presses Call now and reaches the destination the link names.',
+      `<g transform="translate(40,50)"><rect width="80" height="80" rx="6" fill="#e2e8f0"/>${[0,1,2,3,4].map((r)=>[0,1,2,3,4].map((c)=>((r*5+c)*7%3===0)?`<rect x="${8+c*13}" y="${8+r*13}" width="11" height="11" fill="#0b1220"/>`:'').join('')).join('')}</g>` +
+      label(80, 150, 'QR code or link') + arrow('M130 90 H210', 'sky') +
+      box(212, 56, 190, 68, 'A browser page', 'name, then Call now', 'sky') + arrow('M402 90 H480', 'sky') +
+      server(484, 68) + label(506, 134, 'BitVoice') + arrow('M532 90 H600', 'emerald') +
+      box(602, 64, 190, 52, 'Where it goes', 'a person, queue, menu…', 'emerald') +
+      label(410, 178, 'No app, no phone number: the microphone needs HTTPS.')),
+  },
+  metrics: {
+    title: 'Metrics: Prometheus pulls, OpenTelemetry is pushed',
+    svg: frame(820, 180, 'Prometheus scrapes /metrics with an API token; BitVoice can also push the same measurements to an OpenTelemetry collector; Grafana shows them.',
+      server(60, 64) + label(82, 130, 'BitVoice') +
+      arrow('M210 70 H120', 'amber') + box(212, 46, 190, 44, 'Prometheus', 'scrapes /metrics', 'amber') +
+      arrow('M120 106 H210', 'sky') + box(212, 96, 190, 44, 'OpenTelemetry', 'pushed each minute', 'sky') +
+      arrow('M402 68 H500', 'amber') + arrow('M402 118 H500', 'sky') +
+      box(502, 60, 280, 60, 'Grafana', 'the ready-made dashboard', 'emerald') +
+      label(410, 168, 'Calls, phones, trunks, queues, packets lost, quality scores, callbacks.')),
+  },
+  insight: {
+    title: 'Call insight: evidence for a supervisor, never a score',
+    svg: frame(820, 200, 'From a recording: how much each side talked, talking over, quiet; from the transcript: moments that went well, to look at, not answered and promised.',
+      `<rect x="30" y="40" width="360" height="130" rx="12" fill="#0b1220" stroke="#64748b"/>` + label(210, 62, 'How it went', 'middle', 't') +
+      `<rect x="50" y="80" width="200" height="14" rx="4" fill="#38bdf8"/><rect x="250" y="80" width="120" height="14" rx="4" fill="#fbbf24"/>` +
+      label(150, 112, 'agent 62%') + label(310, 112, 'caller 38%') + label(210, 140, 'talked over: 3 · longest: 48 s · quiet: 22 s') +
+      box(430, 34, 360, 30, '02:14  Went well', '', 'emerald') + box(430, 70, 360, 30, '05:40  Look at: a long hold', '', 'amber') +
+      box(430, 106, 360, 30, '07:02  Not answered', '', 'rose') + box(430, 142, 360, 30, '09:15  Promised: a refund by Friday', '', 'violet') +
+      label(410, 190, 'To choose calls to listen to, not to rank people.')),
+  },
+  database: {
+    title: 'Where the data is: one file, or PostgreSQL',
+    svg: frame(820, 190, 'By default everything is in one SQLite file in the data folder; moving to PostgreSQL copies it all in one go and lets several servers share it.',
+      server(50, 70) + label(72, 136, 'one server') + arrow('M100 92 H170', 'slate') + box(172, 66, 170, 52, 'bitvoice.db', 'SQLite, the default', 'slate') +
+      arrow('M342 92 H440', 'sky') + label(391, 84, 'move, all or none') +
+      box(442, 60, 170, 64, 'PostgreSQL', 'one database', 'sky') +
+      server(690, 30) + server(690, 80) + server(690, 130) + arrow('M686 46 H616', 'violet') + arrow('M686 96 H616', 'violet') + arrow('M686 146 H616', 'violet') +
+      label(410, 180, 'Recordings and voicemail stay as sound files in the data folder.')),
+  },
+  import: {
+    title: 'Import: another system\u2019s export, previewed before anything changes',
+    svg: frame(820, 190, 'Exports from FreePBX, Asterisk, 3CX, Cisco, Avaya and Mitel are uploaded; BitVoice shows exactly what would change; applying it is one revision that can be undone.',
+      box(30, 30, 150, 30, 'FreePBX, Asterisk', '', 'slate') + box(30, 68, 150, 30, '3CX', '', 'slate') + box(30, 106, 150, 30, 'Cisco, Avaya, Mitel', '', 'slate') +
+      arrow('M180 84 H250') + box(252, 56, 170, 56, 'Preview', 'what would change', 'amber') + arrow('M422 84 H490') +
+      box(492, 56, 140, 56, 'Apply', 'one revision', 'emerald') + arrow('M632 84 H690', 'slate', true) + box(692, 62, 100, 44, 'Undo', '', 'slate') +
+      label(410, 176, 'Several files at once, or a .zip or .tar of them.')),
+  },
+  crm: {
+    title: 'CRM: a card while it rings, a log after it ends',
+    svg: frame(820, 190, 'While a call rings BitVoice asks the CRM who the number is and shows a caller card; after the call it sends the call record to the CRM.',
+      phone(40, 70, 'sky') + label(57, 132, '+1 212 555 0100') + arrow('M90 92 H190', 'sky') +
+      box(192, 60, 180, 64, 'Caller card', 'Lee · Acme Corp', 'sky') + arrow('M372 80 H470', 'amber') + label(421, 72, 'GET {number}') +
+      box(472, 50, 180, 50, 'Your CRM', 'any web address', 'amber') +
+      arrow('M652 76 H720 V130 H372', 'emerald', true) + label(560, 146, 'after the call: who, how long, summary') +
+      label(410, 178, 'Answers are kept for five minutes.')),
+  },
+  contacts: {
+    title: 'Contacts: one directory on every phone',
+    svg: frame(820, 180, 'Contacts are added one by one or imported from CSV; every phone lists them, and an incoming number shows the contact\u2019s name.',
+      box(30, 40, 160, 36, 'Add contact', '', 'sky') + box(30, 96, 160, 36, 'Import CSV', '', 'amber') +
+      arrow('M190 58 H260') + arrow('M190 114 H260') + box(262, 56, 200, 64, 'Contacts', 'names and numbers', 'violet') +
+      arrow('M462 76 H540') + arrow('M462 100 H540') + phone(548, 50) + phone(596, 50) + phone(644, 50) +
+      label(620, 124, 'the phone directory') + label(410, 164, '+1 212 555 0100 and 2125550100 are the same line.')),
+  },
+  video: {
+    title: 'Video calls: relayed as they are',
+    svg: frame(820, 170, 'BitVoice relays video between two phones on a port of its own for each, renumbering the codec if needed; it never converts video.',
+      box(30, 56, 170, 56, 'Video phone', 'H.264', 'sky') + arrow('M200 84 H320', 'sky') + label(260, 76, 'SRTP') +
+      server(326, 62) + label(348, 128, 'BitVoice relays') + arrow('M376 84 H600', 'sky') + label(488, 76, 'renumbered if needed') +
+      box(602, 56, 190, 56, 'Softphone', 'H.264', 'sky') + label(410, 156, 'The phones never learn each other\u2019s addresses.')),
+  },
+  spam: {
+    title: 'Spam protection: the caller ID is checked before it rings',
+    svg: frame(820, 190, 'A call\u2019s caller ID verdict (STIR/SHAKEN) decides: verified rings, failed can ring labelled or be refused; blocked numbers are refused.',
+      box(30, 66, 160, 56, 'A call in', 'Identity, verstat', 'sky') + arrow('M190 94 H250') +
+      box(252, 56, 170, 76, 'Checked', 'signature, age, numbers', 'amber') +
+      arrow('M422 74 H520', 'emerald') + box(522, 54, 270, 36, 'Verified: rings', '', 'emerald') +
+      arrow('M422 96 H520', 'amber') + box(522, 96, 270, 36, 'Not verified: rings as "Spam?"', '', 'amber') +
+      arrow('M422 118 L520 152', 'rose') + box(522, 138, 270, 36, 'Failed or blocked: refused', '', 'rose') +
+      label(150, 160, 'what happens to each is set in Settings')),
+  },
+  briefing: {
+    title: 'Transfer briefings: the next person knows already',
+    svg: frame(820, 180, 'When a call is transferred, BitVoice writes a two-sentence summary of the call so far and shows it to the person it goes to.',
+      phone(40, 66, 'sky') + label(57, 126, 'agent 101') + arrow('M90 88 H190', 'sky') + label(140, 80, 'transfers') +
+      box(192, 56, 210, 64, 'Two sentences', 'who, what, what was promised', 'violet') + arrow('M402 88 H500', 'violet') +
+      phone(510, 66, 'emerald') + label(527, 126, '102 rings') + box(580, 56, 210, 64, 'Shown with the call', 'browser, Live calls, desk', 'emerald') +
+      label(410, 166, 'The caller never has to say it all again.')),
+  },
+  callbacks: {
+    title: 'Callbacks: booked by the receptionist, rung back by a person',
+    svg: frame(820, 180, 'A caller asks to be rung back; the receptionist books it with name, number, time and reason; a person presses Ring back, their phone rings, then the caller is called.',
+      box(30, 60, 170, 56, 'AI receptionist', 'or by hand', 'violet') + arrow('M200 88 H260', 'violet') +
+      box(262, 50, 200, 76, 'Callback', 'name, number, time, why', 'amber') + arrow('M462 88 H530') +
+      box(532, 60, 120, 56, 'Ring back', 'your phone first', 'sky') + arrow('M652 88 H700') + phone(708, 66, 'emerald') +
+      label(410, 166, 'It never promises an exact time.')),
+  },
+  automation: {
+    title: 'Configuration as code: the API, Terraform and Git',
+    svg: frame(820, 180, 'Everything the screens do goes through the REST API; Terraform and scripts use API tokens; BitVoice can also follow a configuration file in a Git repository.',
+      box(30, 30, 180, 36, 'Terraform, OpenTofu', '', 'violet') + box(30, 76, 180, 36, 'Scripts, CI', '', 'sky') + box(30, 122, 180, 36, 'A Git repository', '', 'emerald') +
+      arrow('M210 48 H320', 'violet') + arrow('M210 94 H320', 'sky') + arrow('M210 140 H320', 'emerald', true) +
+      box(322, 56, 200, 64, 'REST API', 'Bearer bv_…', 'amber') + arrow('M522 88 H600') + server(606, 66) + label(628, 132, 'BitVoice') +
+      label(628, 152, 'the same calls as the screens')),
   },
 }

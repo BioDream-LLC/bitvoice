@@ -159,12 +159,27 @@ The BitVoice apps for iPhone and Android are paired from the extension's page wi
   },
   {
     id: 'mobile', title: 'Mobile apps', keys: 'iphone android app push pair qr ios callkit',
-    body: `The BitVoice apps for iPhone and Android make a phone an extension's phone, ringing like a desk phone even when the app is closed.
+    body: `The BitVoice apps for iPhone and Android make a mobile phone one of an extension's phones. It rings like a desk phone, on the phone's own call screen, even when the app is closed.
 
-1. In [Settings](#/settings), **Mobile apps**: choose **Push relay** (BioDream's, with hosting or support, or your own \`bvpush\`) and enter its address, key ID and secret, or **Own apps** with your Apple and Google credentials. Set **Address the apps use** to this server's https address from anywhere.
-2. Open the extension, press **Add a phone**, and scan the QR code in the app. The code works once, for ten minutes.
+::figure mobile
 
-When a call comes in, BitVoice wakes the app; it connects, rings on the phone's own call screen, and is answered like any other phone of the extension. The extension's page lists its paired phones, when each was last seen and woken, and any push problem; **Unpair** stops a phone ringing.`,
+## Setting up push
+A closed app is woken for calls by a push message. In [Settings](#/settings), **Mobile apps**, choose one:
+| Push | What you need |
+|---|---|
+| **Push relay** | BioDream's relay (with hosting or support) or your own \`bvpush\`: its **Relay address**, **Key ID** and **Secret** |
+| **Own apps** | your own builds: for Apple, the **Team ID**, **Bundle ID**, **Key ID** and **Key (.p8)**; for Google, the **Firebase service account (JSON)** |
+
+Set **Address the apps use** to this server's https address as it is reached from anywhere, not only the office.
+
+> With push off, the app rings only while it is open.
+
+## Pairing a phone
+1. Open the extension and press **Add a phone**.
+2. Scan the QR code in the app. The code works once, for ten minutes.
+
+## When a call comes in
+BitVoice wakes the app; it connects, rings on the phone's own call screen, and is answered like any other phone of the extension: ring groups and queues ring it with the extension's other phones. The extension's page lists its paired phones, whether each **Can be woken for calls**, when it was last seen and last woken, and any push problem. **Unpair** stops a phone ringing at once, for a lost phone.`,
   },
   {
     id: 'trunks', title: 'Trunks', route: '/trunks', keys: 'carrier provider sip trunk line register channels codecs',
@@ -367,22 +382,51 @@ The time zone is the one in Settings. When the clocks change, schedules follow t
   },
   {
     id: 'scripts', title: 'Scripts (JavaScript and Lua)', route: '/scripts', keys: 'code javascript lua route logic api program',
-    body: `A script decides where a call goes when the choices above are not enough. It runs for at most 200 ms; if it fails or takes too long, the call goes to the script's **fallback**, so a mistake never loses a call.
+    body: `A script decides where a call goes when menus, schedules and groups are not enough: callers from one area to one office, VIP numbers straight to a person, a decision from your own data. Scripts are written in JavaScript or Lua on [Scripts](#/scripts).
 
 ::figure scripts
 
+## Safe by design
+- A script runs for at most 200 ms. If it fails or takes too long, the call goes to the script's **fallback**, so a mistake never loses a call.
+- It runs in a sandbox: it cannot place calls, reach the network or the disk. It only chooses.
+- Emergency calls never run scripts.
+
 ## What a script sees
-\`call\` has: \`from\`, \`fromName\`, \`to\`, \`direction\` (inbound or internal), \`trunk\`, \`weekday\` (0 is Sunday), \`hour\`, \`minute\`, \`date\` (YYYY-MM-DD).
+\`call\` has:
+| Field | What it is |
+|---|---|
+| \`from\`, \`fromName\` | the caller's number and name |
+| \`to\` | the number dialled |
+| \`direction\` | \`inbound\` or \`internal\` |
+| \`trunk\` | the trunk it came in on |
+| \`weekday\`, \`hour\`, \`minute\` | the time now (0 is Sunday) |
+| \`date\` | YYYY-MM-DD |
 
 ## What it returns
-A destination: \`{type, target}\` where type is \`extension\`, \`ringgroup\`, \`queue\`, \`menu\`, \`schedule\`, \`voicemail\` or \`hangup\`, and target is its number. Returning nothing uses the fallback. \`log("text")\` writes to the script's run list.
+A destination, \`{type, target}\`: type is \`extension\`, \`ringgroup\`, \`queue\`, \`menu\`, \`schedule\`, \`voicemail\` or \`hangup\`, and target is its number. Returning nothing uses the fallback. \`log("text")\` writes to the script's run list.
 
+### JavaScript
 \`\`\`
-if (call.from.startsWith("212")) return { type: "ringgroup", target: "600" }
-if (call.weekday === 0) return { type: "voicemail", target: "100" }
+if (call.from.startsWith("212")) {
+  log("New York caller")
+  return { type: "ringgroup", target: "600" }
+}
+if (call.weekday === 0 || call.weekday === 6) return { type: "voicemail", target: "100" }
 \`\`\`
 
-**Test** runs the script with a call you describe, without placing one.`,
+### Lua
+\`\`\`
+if string.sub(call.from, 1, 3) == "212" then
+  log("New York caller")
+  return { type = "ringgroup", target = "600" }
+end
+if call.weekday == 0 or call.weekday == 6 then
+  return { type = "voicemail", target = "100" }
+end
+\`\`\`
+
+## Using a script
+Point an incoming route, a menu key or a schedule at the script, as at any destination. **Test** runs it with a call you describe, without placing one; the run list shows each real run with its decision, time taken and any error. The [call flow](#flow) runs scripts too when you try a call.`,
   },
   {
     id: 'voicemail', title: 'Voicemail', route: '/voicemail', keys: 'messages mailbox greeting pin email transcript',
@@ -415,19 +459,31 @@ With **Transcribe and summarise voicemail** on (Settings, AI), each message is w
   },
   {
     id: 'recording', title: 'Call recording and card payments', keys: 'record pci pause resume card payment compliance retention',
-    body: `Recording is set in [Settings](#/settings): off, every call, or calls of extensions marked **Record calls**. Recordings play from **Call history**.
+    body: `Recording is set in [Settings](#/settings), **Call recording**: off, every call, or only the calls of extensions marked **Record calls**. Recordings play from [Call history](#/history), and with AI on they are written out and summarised.
 
 ::figure recording
 
+## Telling people
+Some places need everyone on a call to be told it is recorded: **Announce**, **Beep** and rules by region are in [Recording consent](#consent).
+
 ## Card payments (PCI DSS)
-Before a caller reads out a card number, the person on the extension presses \`*7\`; \`*8\` resumes. **Pause recording** on Live calls does the same. The paused stretch is silent in the recording and listed in the call history.
+Card numbers must not be kept in recordings. Before a caller reads one out, the person on the extension presses \`*7\`; \`*8\` resumes. **Pause recording** on [Live calls](#/calls) does the same. The paused stretch is silent in the recording and listed in the call history, so an auditor can see where and for how long.
+
+## Conference rooms
+A room with **Record the room** on is kept as one recording of the whole room ([Conference rooms](#conferences)).
 
 ## How long things are kept
-Settings sets how many days recordings, call history and voicemail are kept. Anything under a [legal hold](#/holds) is kept whatever its age. Recording laws differ: some places need everyone on the call to agree.`,
+Settings sets how many days recordings, call history and voicemail are kept; older ones are deleted within the hour. Anything under a [legal hold](#holds) is kept whatever its age. The [archive](#archive) can keep copies elsewhere.
+
+Administrators and viewers can play recordings and read transcripts; only administrators can transcribe a call, or transcribe it again. Playing a recording or reading its transcript is noted in the audit log.
+
+> None of this is legal advice: recording laws differ by country and state. Check the laws where you and your callers are.`,
   },
   {
     id: 'metrics', title: 'Metrics: Prometheus, OpenTelemetry and Grafana', route: '/settings', keys: 'metrics prometheus grafana opentelemetry otel otlp monitoring dashboard scrape observability',
     body: `**Prometheus** scrapes \`/metrics\` on the web address. Make an API token under Administrators (a viewer token is enough) and give it to Prometheus as its bearer token:
+
+::figure metrics
 
 \`\`\`
 scrape_configs:
@@ -446,6 +502,8 @@ It reads calls in progress (by state), calls ended (by direction and outcome), t
   {
     id: 'crm', title: 'CRM: caller cards and call logging', route: '/settings', keys: 'crm salesforce hubspot zoho pipedrive webhook screen pop caller card lookup log calls integration',
     body: `Connect a customer system in [Settings](#/settings), CRM. It works with any system that has a web address, without code written for each product.
+
+::figure crm
 
 ## Caller cards
 While a call from outside rings, Live calls shows a card: who it is (from your CRM, or the extension's name), how often they have called in 90 days, any [callback](#/callbacks) they are waiting for, and the summary of their last transcribed call. The browser phone shows a shorter card to the person answering: who it is, past calls and waiting callbacks, but not other people's call summaries.
@@ -496,6 +554,8 @@ Set **Call log address** and **Signing secret**, and every call is sent there as
     id: 'database', title: 'Where the data is kept (SQLite or PostgreSQL)', route: '/settings', keys: 'database sqlite postgresql postgres backup data storage failover several servers reporting power bi grafana move',
     body: `BitVoice keeps its settings and their saved versions, users, contacts, call records, the audit log, texts, notes and transcripts in a database. Recordings and voicemail stay as sound files in the data folder.
 
+::figure database
+
 **This server's own file** (SQLite, the default): a single file, \`bitvoice.db\` in the data folder, with nothing to install. Back up the data folder and you have everything.
 
 **PostgreSQL**: for several BitVoice servers sharing one set of data, or for reports in tools such as Power BI, Grafana or Metabase. In Settings, **Database**, **Move the data into PostgreSQL**: make an empty database and a user who owns it, enter its address (postgres://user:password@host:5432/database), press **Test**, then **Copy the data and restart on PostgreSQL**. Everything is copied in one go (all of it or none of it) and BitVoice restarts on it; the old file stays where it was. Moving back into the server's own file works the same way. Moves are refused while calls are in progress.
@@ -542,6 +602,8 @@ The page also says what to do when a number is labelled.`,
     id: 'calendar', title: 'Calendars and do not disturb', route: '/extensions', keys: 'calendar outlook google meeting busy out of office time off holiday do not disturb dnd forward presence away',
     body: `An extension can follow its person's calendar: during meetings and time off, its calls go to voicemail, or are forwarded (to another extension, or a mobile), instead of ringing a phone nobody will answer. Ring groups ring the others meanwhile, and in queues the agent shows as **Away**.
 
+::figure calendar
+
 In the extension, **Calendar and do not disturb**, paste the calendar's private address:
 - **Outlook**: Settings, Calendar, Shared calendars, Publish a calendar; choose the calendar and "Can view all details", then copy the ICS link.
 - **Google Calendar**: Settings, the calendar on the left, then **Secret address in iCal format**.
@@ -556,6 +618,8 @@ The private address works like a password: anyone with it can read that calendar
     id: 'insight', title: 'Call insight for supervisors', route: '/quality', keys: 'insight coaching sentiment mood talk time talk ratio interruptions supervisor quality monitoring contact centre',
     body: `For contact centres: evidence about how calls went, for a supervisor to listen to, never an automatic score.
 
+::figure insight
+
 In a call's **Transcript**, **How it went** shows, measured from the recording's sound alone: how much each side talked, each side's longest stretch, how often each started talking over the other, how long both spoke at once, and the quiet (a long silence is often a hold or dead air).
 
 With **Note how each transcribed call went** on (Settings, AI), the AI also reads the transcript and says how the caller seemed at the start and the end, and lists up to six moments: **Went well**, **Look at** (talking over the caller, a long hold, an unclear answer), **Not answered** (a question the caller asked that got no answer) and **Promised** (something someone said they would do), each with the time and the words said, so you can go straight to it. An administrator can ask for it on any transcribed call with **Look at this call**.
@@ -566,17 +630,34 @@ On [Call quality](#/quality), **Conversations, by who took them** sums the trans
     id: 'calllinks', title: 'Call links and website calling', route: '/call-links', keys: 'call link website call button qr code click to call browser web call no app',
     body: `A call link is a web address that rings your business from any browser: no phone number, no app. Put it in an email signature, print its **QR code** on a flyer or a shop window, or paste the **website button** into your site.
 
+::figure calllinks
+
 On [Call links](#/call-links), add a link, choose where its calls go (an extension, a group, a queue, a menu, the AI receptionist, a schedule or voicemail), and save: the page shows its address and QR code. The caller sees the title and words you set, gives their name if you ask for it, allows the microphone and presses **Call now**; the keypad works for menus. Whoever answers sees **Web:** and the caller's name.
 
 Switch **Open** off to close the line (the page says so). **Calls at once** limits how many people can call through one link (5 unless set). The address holds a long random part so it cannot be guessed; repeated wrong addresses are blocked like failed sign-ins. Callers' microphones need the page to be served over HTTPS, so give out the HTTPS address.`,
   },
   {
     id: 'timeline', title: 'Customer timeline', route: '/timeline', keys: 'timeline customer history notes everything one view contact calls texts voicemail',
-    body: `**Timeline** shows everything with one phone number over the last year, newest first: calls (who took them, how long, and the summary when the call was transcribed, with the recording and transcript), voicemails with their summaries, texts both ways, callbacks asked for, and the team's **notes**. A number matches however it is written.
+    body: `The customer timeline shows everything with one phone number over the last year, newest first, so whoever picks up knows the whole story.
 
 ::figure timeline
 
-Open it from a caller card (**Timeline**), from Contacts, from an incoming call in Call history, from a text conversation, or type a number at the top. Administrators can add a note (it shows on the timeline for everyone) and remove one.`,
+## What it shows
+| Item | With |
+|---|---|
+| Calls | who took them, how long, and with a transcript, its summary, the recording and the transcript |
+| Voicemails | their summaries |
+| Texts | both ways |
+| Callbacks | asked for, and whether done |
+| Notes | the team's own notes |
+
+A number matches however it is written: +1 212 555 0100 and 2125550100 are the same.
+
+## Opening it
+From a caller card (**Timeline**), from Contacts, from an incoming call in Call history, from a text conversation, or type a number at the top of [Timeline](#/timeline).
+
+## Notes
+Administrators can **Add a note for the team**: it shows on the timeline for everyone, with who wrote it and when, and can be removed.`,
   },
   {
     id: 'texts', title: 'Business texting (SMS)', route: '/texts', keys: 'sms text message texting textmagic 10dlc stop opt out reply provider',
@@ -599,6 +680,8 @@ Each conversation shows who it is (from Contacts), unread texts, and the thread.
     id: 'briefing', title: 'Transfer briefings', route: '/settings', keys: 'warm transfer briefing summary whisper handover hand over caller repeat themselves ai',
     body: `So a caller never has to repeat themselves: with **Brief whoever a call is transferred to** on (Settings, AI), when a call is transferred, BitVoice writes a two-sentence summary of the call so far (who is calling, what they want, anything already promised) for the person it goes to. It appears on their browser phone with the ringing call, on [Live calls](#/calls), and as a text on their desk phone's screen (for phones that show SIP messages).
 
+::figure briefing
+
 It works the same when the AI receptionist hands a caller to a person: the briefing comes from what the caller told the assistant.
 
 It needs the AI service and a speech-to-text model (Settings, AI), and the call's audio so far (up to five minutes) is sent to that service to be written out. A summary takes a few seconds, so it may appear just after the phone starts ringing.`,
@@ -606,6 +689,8 @@ It needs the AI service and a speech-to-text model (Settings, AI), and the call'
   {
     id: 'spam', title: 'Spam protection and STIR/SHAKEN', route: '/settings', keys: 'spam robocall block number blocklist stir shaken attestation verstat spoof spoofed caller id withheld anonymous label',
     body: `In the US and Canada, the provider a call starts with signs its caller ID (**STIR/SHAKEN**): **A** when it knows the caller may use the number, **B** when it knows the caller but not the number, **C** when it only passed the call on. Your provider either tells BitVoice its verdict (verstat) or passes the signed Identity header on, which BitVoice then checks itself: the signature, that it is under a minute old, and that it names the numbers of this call. The verdict shows as **Verified**, **Partly verified**, **Unverified** or **Not verified** on Live calls and in Call history.
+
+::figure spam
 
 In Settings, **Spam protection**, choose what happens when a caller ID fails verification (ring, ring labelled, or refuse), when it is not verified at all, and when the number is withheld. A labelled call rings with **Spam?** (or your own label) before the caller's name. **Blocked numbers** are refused; an entry ending in * blocks a range (+1900* is every US premium-rate number). **Always allowed** numbers are never refused or labelled. In Call history, the block button beside a caller adds them to the list; refused calls are listed as **Blocked**.
 
@@ -619,6 +704,8 @@ To check certificates against the STI authorities, paste their certificates unde
 - **No notice**.
 - **Announce**: as the call is answered, both sides hear the notice (record it in the same place, for example "This call is recorded for training and quality"), and recording starts only after it has played. Until one is recorded, three beeps are played, and Health says so.
 - **Beep**: a short tone to both sides every 15 seconds while the call is recorded.
+
+::figure recording
 
 **Rules** pick by the outside number (the caller on calls in, the number dialled on calls out), longest match first: for example numbers starting 1415 (California) **Announce**, 49 (Germany) **Never record**, everything else as above. A rule's **No notice** records without one; **Never record** leaves those calls out of recording altogether. Calls between extensions follow the main setting.
 
@@ -643,6 +730,8 @@ On [Phones](#/phones), **Hot desks** shows who is signed in where; administrator
   {
     id: 'contacts', title: 'Contacts on every phone', route: '/contacts', keys: 'contacts directory phonebook address book csv import export yealink polycom grandstream snom caller name',
     body: `**Contacts** is the company directory: the suppliers, clients and other offices people call. Every phone lists it beside the extensions, and when one of these numbers rings in, phones and the caller card show the contact's name (when the provider sent none). A number matches however it is written: +1 212 555 0100 and 2125550100 are the same line.
+
+::figure contacts
 
 ## Adding contacts
 **Add contact** for one at a time, with as many numbers (work, mobile, home, other) as they have. **Import** takes a spreadsheet saved as CSV whose first row names the columns: name, company, work (or phone), mobile, home, other, email, notes. BitVoice checks the whole file first and says which lines are wrong; a contact with the same name as one there is updated rather than added twice, and **Replace every contact** starts the list afresh. **Export** downloads the list as CSV.
@@ -688,13 +777,34 @@ If every place loses sound at once, the cause is what they share: the internet l
     id: 'callbacks', title: 'Callbacks', route: '/callbacks', keys: 'call back ring back request receptionist',
     body: `People who asked to be rung back. An AI receptionist books one when a caller asks: it collects their name, the number to call (offering the one they are calling from), a good time and what it is about, reads them back, and books it only when the caller agrees. It never promises an exact time. Administrators can also add callbacks by hand.
 
+::figure callbacks
+
 A new callback shows an alert on every open screen, and is emailed to the owner of the receptionist's **Take messages for** mailbox when that extension has an email address and email is set up in Settings.
 
 To ring back, choose your extension and press **Ring back**: your phone rings first, and when you pick up BitVoice calls the number for you, with your normal routes and caller ID. Then add a note if you like and press **Done** (or **Cancel it**). Finished callbacks are kept below the open ones and can be opened again.`,
   },
   {
     id: 'holds', title: 'Legal holds', route: '/holds', keys: 'retention litigation ediscovery keep preserve',
-    body: `A legal hold keeps call records, recordings and voicemail for the numbers and dates it names, or everything, and stops anyone deleting them, until it is released. Held calls show a lock in Call history. Releasing a hold makes what it kept subject to the retention settings again; released holds stay listed.`,
+    body: `A legal hold keeps call records, recordings and voicemail that a matter may need, and stops anyone deleting them, until it is released. Use it when a lawyer asks for records to be preserved.
+
+::figure holds
+
+## Adding a hold
+On [Legal holds](#/holds), press **Add**:
+| Field | What it is |
+|---|---|
+| Name | what the matter is called |
+| Reason | why, for the record |
+| Numbers | the extensions and outside numbers it covers (\`101, +15551234567\`), or **Everything** |
+| From, To | the dates it covers; empty for no limit |
+
+## While a hold is on
+- Retention leaves what it covers alone, whatever its age.
+- Nobody can delete a held call, recording or voicemail, administrators included.
+- Held calls show a lock in [Call history](#/history).
+
+## Releasing
+**Release** makes what the hold kept subject to the retention settings again: things older than the retention are deleted at the next clean-up. Released holds stay listed, with when and by whom, and adding and releasing holds is in the audit log.`,
   },
   {
     id: 'portal', title: 'The staff portal', keys: 'staff portal self service my phone forwarding do not disturb follow me voicemail greeting pin ucp user control panel',
@@ -944,25 +1054,53 @@ A different thing: one switch that sends every incoming call to one place (an ev
   },
   {
     id: 'sso', title: 'Single sign-on', keys: 'oidc entra azure google okta keycloak login provider groups',
-    body: `In [Settings](#/settings), **Single sign-on** lets people sign in with their work account through any OpenID Connect provider.
+    body: `Single sign-on lets people sign in to BitVoice with their work account, through any OpenID Connect provider: Microsoft Entra ID, Google, Okta, Keycloak and others. Leaving the organisation then removes their access here too.
 
-1. Register an application with the provider, with the **Redirect address** shown in Settings.
-2. Copy its issuer address, client ID and client secret into Settings (the provider buttons fill in the issuer).
-3. Name the provider **groups** whose members are administrators and viewers.
+::figure sso
 
-The account here is made at first sign-in, and the provider's groups set the role at every sign-in. With **Also allow passwords** off, passwords work only on this computer, so a provider outage never locks you out.`,
+## Setting it up
+In [Settings](#/settings), **Single sign-on**:
+1. Register an application with the provider, with the **Redirect address** shown here.
+2. **Fill in for a provider** sets the **Issuer** for the common ones; copy the **Client ID** and **Client secret** from the provider.
+3. Name the provider's **Administrator groups** and **Viewer groups**. **Groups claim** is where the provider puts them (\`groups\` unless set).
+4. Optionally change the **Button text** on the sign-in page.
+5. Switch on **Use single sign-on**.
+
+## How it works
+- The account here is made at the first sign-in; the groups set the role at every sign-in, so moving someone between groups at the provider changes their role here.
+- Someone in neither kind of group is refused, and the refusal is in the audit log.
+- With **Also allow passwords** off, passwords work only on this computer, so a provider outage never locks you out.
+
+> Two-step sign-in is then the provider's job: switch it on there.`,
   },
   {
     id: 'compat', title: 'Asterisk compatibility (AMI and ARI)', keys: 'ami ari asterisk manager rest crm wallboard click to dial originate',
-    body: `Tools written for Asterisk can control BitVoice (Settings, **Asterisk compatibility**). They see calls as channels named like \`PJSIP/100-...\`.
+    body: `Tools written for Asterisk can control BitVoice: CRMs, wallboards, click-to-dial buttons, call recorders' controllers. Switch it on in [Settings](#/settings), **Asterisk compatibility**. Tools see calls as channels named like \`PJSIP/100-...\`, as on Asterisk.
+
+::figure compat
 
 ## AMI
-The manager interface on TCP port 5038 (this computer only by default). Supported: Login (plain or MD5 challenge), Ping, Events, CoreShowChannels, Status, PJSIPShowEndpoints, ExtensionState, QueueStatus, Originate, Redirect, Hangup, Logoff, and the Newchannel, Newstate and Hangup events.
+The manager interface on TCP port 5038 (**AMI listens on**: this computer only by default). Supported:
+| Kind | Names |
+|---|---|
+| Actions | Login (plain or MD5 challenge), Ping, Events, CoreShowChannels, Status, PJSIPShowEndpoints, ExtensionState, QueueStatus, Originate, Redirect, Hangup, Logoff |
+| Events | Newchannel, Newstate, Hangup |
 
 ## ARI
-At \`/ari/\` with basic authentication or \`?api_key=user:secret\`: \`GET /ari/channels\`, \`POST /ari/channels?endpoint=PJSIP/100&extension=5551234\` (ring 100, then call the number), \`DELETE /ari/channels/{id}\`, \`POST /ari/channels/{id}/redirect?endpoint=PJSIP/102\`, \`/ari/endpoints\`, \`/ari/bridges\`, \`/ari/asterisk/info\`, and the \`/ari/events\` WebSocket. Stasis media applications are not offered: use Scripts.
+At \`/ari/\`, with basic authentication or \`?api_key=user:secret\`:
+| Request | What it does |
+|---|---|
+| \`GET /ari/channels\` | the calls in progress |
+| \`POST /ari/channels?endpoint=PJSIP/100&extension=5551234\` | ring 100, then call the number |
+| \`DELETE /ari/channels/{id}\` | hang up |
+| \`POST /ari/channels/{id}/redirect?endpoint=PJSIP/102\` | send the call to 102 |
+| \`/ari/endpoints\`, \`/ari/bridges\`, \`/ari/asterisk/info\` | phones, bridges, version |
+| \`/ari/events\` | a WebSocket of events |
 
-Logins are **read only** unless marked **Can change calls**.`,
+Stasis media applications are not offered: use [Scripts](#scripts) for call logic.
+
+## Logins
+Each login has a **Username** and **Secret**. Logins are **read only** unless marked **Can change calls**. Keep AMI on this computer unless the tool runs elsewhere: AMI is plain, unencrypted TCP.`,
   },
   {
     id: 'codecs', title: 'Codecs and sound', keys: 'g722 hd voice g711 pcmu pcma opus g729 codec noise clean',
@@ -994,11 +1132,24 @@ Converting takes processor time, only on calls where the two sides differ. Per c
   },
   {
     id: 'automation', title: 'Configuration as code', keys: 'api token terraform opentofu openapi git gitops automation script ci',
-    body: `Everything the screens do goes through BitVoice's REST API, described for tools at [/api/openapi.json](/api/openapi.json).
+    body: `Everything the screens do goes through BitVoice's REST API, so anything can be scripted, kept in Git, or managed with Terraform. The API is described for tools at [/api/openapi.json](/api/openapi.json).
 
-- **API tokens** ([Administrators](#/users)): make one per program, read only or able to change everything, and send it as \`Authorization: Bearer bv_...\`. It is shown once; revoke it when no longer needed.
-- **Terraform or OpenTofu**: the repository's \`deploy/terraform\` shows extensions, ring groups and routes managed with the generic REST provider.
-- **Git** ([Settings](#/settings), Configuration from Git): BitVoice reads the configuration from a file in a repository every few minutes and shows what differs, or makes the changes. Export the starting file with **Export for Git**, which leaves out passwords; BitVoice keeps its own.`,
+::figure automation
+
+## API tokens
+Made on [Administrators](#/users): one per program, read only or able to change everything. Send it as \`Authorization: Bearer bv_...\`. It is shown once; revoke it when no longer needed. A token's changes show in Changes and the audit log under its name.
+
+\`\`\`
+curl -H "Authorization: Bearer bv_..." https://pbx.example.com/api/extensions
+\`\`\`
+
+## Terraform or OpenTofu
+The repository's \`deploy/terraform\` shows extensions, ring groups and routes managed with the generic REST provider: plan shows what would change, apply makes the change.
+
+## Configuration from Git
+In [Settings](#/settings), **Configuration from Git**, BitVoice reads the configuration from a file in a repository every few minutes and either shows what differs or makes the changes. Start the file with **Export for Git**, which leaves out passwords; BitVoice keeps its own, so secrets never go into the repository.
+
+> With BitVoice making the changes, a change made in the screens is undone at the next read if the file says otherwise: choose one place to make changes.`,
   },
   {
     id: 'updates', title: 'Updates', route: '/updates', keys: 'upgrade version install rollback release signed',
@@ -1018,7 +1169,31 @@ The version you left is kept: **Go back** returns to it in one click. A new vers
   },
   {
     id: 'loadtest', title: 'Call generator', route: '/loadtest', keys: 'load test stress regression capacity',
-    body: `The call generator places real calls with real audio into BitVoice from this computer, to see how many calls it carries and how well, or to check after a change that calls still go where they should. It only calls numbers inside BitVoice (never trunks or emergency numbers). **Answer as** lets it answer calls to an extension itself. Results show answers, failures by reason, answer times, audio lost and an estimated audio score (MOS).`,
+    body: `The call generator places real calls with real audio into BitVoice from this computer: to see how many calls a server carries and how well, or to check after a change that calls still go where they should.
+
+::figure loadtest
+
+## Running a test
+| Setting | What it is |
+|---|---|
+| Number to call | a number inside BitVoice: an extension, a group, a queue, a menu |
+| Calls come from | the caller number the calls show |
+| Answer as | an extension the generator answers for itself; or nobody, when the number answers by itself (a menu, the echo test) |
+| Calls | how many in all |
+| At once | the most in progress together |
+| New per second | how fast they start |
+| Each lasts (s) | how long each talks |
+
+## Reading the results
+| Result | What it says |
+|---|---|
+| Answered, Failed | and **Why calls failed**, by reason |
+| Answer time, median and 95% | how long callers waited |
+| Audio lost | the share of sound packets that never arrived |
+| Audio score | an estimate of the sound (MOS): 4 and over is good, under 3.6 is poor |
+| Calls in progress over time | a chart of the load |
+
+> It only calls numbers inside BitVoice, never trunks or emergency numbers, so a test can never cost money or reach 911. It is for this server's administrators only.`,
   },
   {
     id: 'changes', title: 'Changes, backups and import', route: '/changes', keys: 'revision undo restore export import backup freepbx asterisk',
@@ -1071,21 +1246,56 @@ Click a box (or Tab to it and press Enter) to change where calls go from it: a r
   },
   {
     id: 'sites', title: 'Sites and office 911', route: '/sites', keys: 'site building address 911 emergency location remote worker floor room network e911 karis ray baum',
-    body: `A site is a building with its street address and the networks its phones use. Give every extension its site, floor and room (on the extension), and emergency calls carry that location to the 911 centre.
+    body: `A site is a building: its street address and the networks its phones use. Sites are how an emergency call says where the caller is, down to the floor and room. In the US, Kari's Law and RAY BAUM'S Act require exactly this from business phone systems.
 
 ::figure sites
 
-## Remote workers
-A phone that registers from outside every site's networks is a remote worker. On its first emergency-capable registration from a new place, its user is asked to confirm their address on their phone page; emergency calls then carry that address instead.
+## Adding a site
+On [Sites](#/sites), press **Add**:
+| Field | What it is |
+|---|---|
+| Name | what people call it: Head office |
+| Street, City, State or province, Postal code, Country | the civic address responders are sent to |
+| Networks | the address ranges its phones use, such as \`10.1.0.0/16\`; one per line |
+
+Then on each extension give its site, **floor** and **room**. [Health](#/health) lists extensions without a location.
+
+## How a phone's place is found
+1. A phone registering from one of a site's networks is at that site, with its extension's floor and room.
+2. A hot desk carries the desk's own site, floor and room, not the person signed in ([Hot desking](#hotdesk)).
+3. A phone registering from outside every site's networks is a **remote worker**. On its first emergency-capable registration from a new place, its user is asked to confirm their address on their phone page; emergency calls then carry that address.
+4. If a remote worker never confirmed, the call still goes out, with the extension's usual site, and alerts say the address was not confirmed.
 
 ## On-site alerts
-With **Email when someone calls 911** set in Settings, the people named there get the caller's name, extension, site, floor and room as soon as a call to an emergency number starts, so someone can meet the responders at the door.`,
+With **Email when someone calls 911** set in Settings, the people named there get the caller's name, extension, site, floor and room as soon as a call to an emergency number starts, so someone can meet the responders at the door. **Notify** extensions get a message on their phones, and every open BitVoice screen shows an alert. See [Emergency calls](#emergency).
+
+> Check each site's address with your provider: dial \`933\` (in the US) from a phone at the site to hear the address the provider has.`,
   },
   {
     id: 'calls', title: 'Live calls', route: '/calls', keys: 'live active current calls hang up transfer listen whisper barge supervise door pause recording',
-    body: `Calls in progress, updated as they happen. Administrators can hang up a call, open a door station's door, pause and resume a call's recording for card numbers (the pause is marked in the recording), and supervise an agent: **Listen** (silent), **Whisper** (only the agent hears you) or **Barge** (everyone hears you).
+    body: `Live calls shows every call in progress, updated as it happens: who called whom, how long it has been going, its codecs and its quality.
 
-::figure history`,
+::figure history
+
+## What administrators can do
+| Action | What it does |
+|---|---|
+| Hang up | ends the call for both sides |
+| Open the door | for a call from a door station |
+| Pause recording | for a card number: the paused stretch is silent in the recording and marked in the history ([Call recording](#recording)) |
+| Listen | hear the call silently |
+| Whisper | talk to the agent only; the caller does not hear |
+| Barge | join the call; everyone hears you |
+
+To listen, whisper or barge, press **Supervise**, choose the phone to use under **From phone** and press **Ring me**: your phone rings, and when you answer you join the call. You can switch between listening, whispering and barging while you are in it.
+
+## What else shows
+- A caller card while an outside call rings (from your CRM, or past calls; see [CRM](#crm)).
+- The briefing written for the person a call was transferred to ([Transfer briefings](#briefing)).
+- The caller ID verdict: **Verified**, **Partly verified** or **Unverified** ([Spam protection](#spam)).
+- With several servers, calls on the others too, read only: hang up or listen on the server that has the call.
+
+When a call ends, it moves to [Call history](#history).`,
   },
   {
     id: 'history', title: 'Call history', route: '/history', keys: 'cdr call records history log export csv recording transcript search said summary action items',
@@ -1123,15 +1333,53 @@ Problems are coloured: red stops calls (no emergency route), amber should be loo
   },
   {
     id: 'trace', title: 'SIP trace', route: '/trace', keys: 'sip trace debug messages ladder invite register packet capture',
-    body: `The SIP messages BitVoice sends and receives, live, for finding out why a phone will not register or a call fails. Filter by number, address or Call-ID.`,
+    body: `The SIP trace shows the messages BitVoice sends and receives, live: the first place to look when a phone will not register or a call fails, and what a provider's support desk will ask for.
+
+::figure trace
+
+## Finding a message
+BitVoice keeps the last 2,000 messages in memory (nothing is written to disk, and they are gone after a restart). Type part of a number, an address or a Call-ID in the filter. Press **Refresh** for the newest.
+
+Choose a message to see it in full and, beside it, the **call flow**: every message of the same call in order, between the phone, BitVoice and the provider, as in the figure.
+
+## Reading a trace
+| You see | It usually means |
+|---|---|
+| REGISTER answered 401, then nothing | the phone does not have the password, or has the wrong one |
+| REGISTER answered 403 | the address is banned, or the phone signs in as another extension |
+| INVITE answered 404 | no route matches the number dialled ([Call routing](#routes)) |
+| INVITE answered 403 by the provider | the provider refuses the caller ID or the number |
+| 486 | the other side is busy |
+| 488 | the two sides have no codec in common ([Codecs](#codecs)) |
+| 200 OK, then BYE after about 30 seconds | the ACK never arrived: a router in between rewrites or drops messages (switch off its "SIP ALG") |
+| A call connects but nobody hears anything | the sound is blocked: check the public address in Settings, and the media ports in the firewall |
+
+> A trace shows phone numbers and sign-in names. Only people signed in to this server see it; hosted organisations never do, since it would show every organisation's messages.`,
   },
   {
     id: 'archive', title: 'Archive', route: '/archive', keys: 'archive backup s3 azure blob offsite copy recordings',
-    body: `Copies backups, recordings and voicemail to Amazon S3 or Azure Blob Storage on a schedule. Keys can be references to a key vault (see Settings, Key vaults).`,
+    body: `The archive keeps copies of recordings, voicemail and the configuration somewhere else: an Amazon S3 bucket (or any S3-compatible store) or an Azure Blob Storage container. If this server's disk is lost, the archive still has them.
+
+::figure archive
+
+## Setting it up
+1. On [Archive](#/archive), choose **Where to archive**: Amazon S3 or Azure.
+2. For S3: the **Bucket**, its **Region**, an optional **Folder in the bucket** and **Endpoint** (for S3-compatible stores), and an **Access key ID** and **Secret access key**. **Copy the policy** gives the only permission BitVoice needs, to attach to the user or role.
+3. For Azure: a **Container SAS URL** with write permission, and an optional **Folder in the container**.
+4. Choose what to copy besides the configuration: **Call recordings**, **Voicemail**, or both.
+
+## What happens
+Every ten minutes BitVoice copies new recordings and messages that are not in the archive yet, and once a day a dated copy of the configuration (\`config/2026-10-13.json\`). The page shows the last run, the last success and any error.
+
+> Keys can be references to a key vault instead of the keys themselves (Settings, Key vaults), so they are never stored in BitVoice.
+
+Deleting something here (by retention or by hand) does not delete the archive's copy: set the bucket's or container's own lifecycle rules for how long the archive keeps things.`,
   },
   {
     id: 'import', title: 'Import', route: '/import', keys: 'import migrate freepbx asterisk 3cx cisco cucm avaya ip office mitel move from replace hunt group hunt pilot line group ring group route pattern bat tar',
     body: `Brings extensions, ring groups, queues and trunks over from FreePBX, Asterisk or 3CX; and people, hunt and ring groups, SIP trunks, incoming numbers and dial patterns from Cisco, Avaya and Mitel. Upload the exported files, several at once (a .zip or .tar of them works too); BitVoice shows exactly what would change before anything is applied, and the import becomes a revision you can undo on [Changes](#/changes).
+
+::figure import
 
 Where each export is:
 - **FreePBX:** Admin → Bulk Handler → Export → Extensions (CSV).
@@ -1155,6 +1403,8 @@ These exports hold no SIP passwords, so each extension gets a new one; voicemail
   {
     id: 'video', title: 'Video calls', route: '/settings', keys: 'video calls camera h264 h.264 vp8 video phone face to face picture',
     body: `When both phones in a call send video (video desk phones, softphones, video doorbells), the picture passes between them through BitVoice. Nothing to set up: it is on unless **Settings → Video calls** is switched off.
+
+::figure video
 
 - BitVoice relays the video as it is, on a port of its own for each phone, so the phones never learn each other's addresses. It never converts video: the two need a codec in common (nearly every video phone has H.264). When they number the same codec differently, BitVoice renumbers it on the way.
 - The picture is encrypted (SRTP) to each phone that encrypts its sound.
