@@ -47,6 +47,7 @@ func TestConfigRevisionsAndRevert(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer s2.Close() // Windows cannot remove the test's folder while the database file is open
 	c, rev := s2.Config()
 	if rev != 2 || len(c.Extensions) != 1 || c.Extensions[0].Secret == "" {
 		t.Fatalf("after reopen rev %d %+v", rev, c.Extensions)

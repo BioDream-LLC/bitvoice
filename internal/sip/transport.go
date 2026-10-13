@@ -16,7 +16,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -124,7 +123,7 @@ func (s *Stack) Listen(addr string) error {
 		// Any free port: UDP picks one, and TCP must get the same number, which something else may
 		// hold. Try a few.
 		for range 20 {
-			if err = s.listen(addr, ua); err == nil || !errors.Is(err, syscall.EADDRINUSE) {
+			if err = s.listen(addr, ua); err == nil || !addrInUse(err) {
 				return err
 			}
 		}

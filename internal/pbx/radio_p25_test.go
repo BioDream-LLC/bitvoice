@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"os"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -194,21 +195,44 @@ func radioConsoleP25(t *testing.T, encrypted bool) {
 	}
 }
 
+// handedOut is every port pair freeUDP has given this test binary, so two calls never return the same
+// pair. Windows hands out free ports in order rather than at random, so without it the next free port is
+// often the one just returned.
+var handedOut = struct {
+	sync.Mutex
+	ports map[int]bool
+}{ports: map[int]bool{}}
+
+// freeUDP returns an even port, free together with the odd one above it, that no earlier call returned.
 func freeUDP(t *testing.T) int {
-	for {
+	handedOut.Lock()
+	defer handedOut.Unlock()
+	for range 1000 {
 		c, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
 		if err != nil {
 			t.Fatal(err)
 		}
-		p := c.LocalAddr().(*net.UDPAddr).Port
+		p := c.LocalAddr().(*net.UDPAddr).Port &^ 1
 		c.Close()
-		if p > 40000 && p < 64000 {
-			if c2, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: p &^ 1}); err == nil {
-				c2.Close()
-				return p
+		if p <= 40000 || p >= 64000 || handedOut.ports[p] {
+			continue
+		}
+		ok := true
+		for _, q := range []int{p, p + 1} {
+			c2, err := net.ListenUDP("udp", &net.UDPAddr{Port: q})
+			if err != nil {
+				ok = false
+				break
 			}
+			c2.Close()
+		}
+		if ok {
+			handedOut.ports[p] = true
+			return p
 		}
 	}
+	t.Fatal("no free UDP port pair")
+	return 0
 }
 
 // voicePacket is 20 ms of a voice-like sound (a 150 Hz voice with a moving pitch and twelve
