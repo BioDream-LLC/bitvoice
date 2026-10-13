@@ -15,6 +15,9 @@ export const manual: Article[] = [
 4. **Call routing**: where calls from outside go (a person, a ring group, a menu), and which trunk outside calls use. [Open Call routing](#/routes)
 5. **Health** tells you what is still missing, emergency calling first. [Open Health](#/health)
 
+## Where it runs
+BitVoice runs on Linux, macOS and Windows. On Windows, double-click \`bitvoice.exe\`: keep the window it opens while you use BitVoice (closing it stops BitVoice), and when Windows asks whether it may use the network, allow private networks so phones can connect. Its data is in \`%APPDATA%\\BitVoice\`, on macOS in \`~/Library/Application Support/BitVoice\`, on Linux in \`~/.config/BitVoice\`, or wherever \`-data\` says.
+
 ## Finding your way
 - Press **⌘K** (Ctrl+K) anywhere to jump to a screen, or type an extension's name or number to open it.
 - Every screen has a **Help** link at the top right that opens its page of this manual.
