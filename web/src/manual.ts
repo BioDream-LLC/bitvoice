@@ -6,8 +6,8 @@ export interface Article { id: string; title: string; route?: string; keys: stri
 /** The manual's parts, in reading order: Help groups the chapters by them, and the printed manual numbers
  * its chapters through them. Every article is in exactly one part. */
 export const parts: { title: string; intro: string; ids: string[] }[] = [
-  { title: 'Getting started', intro: 'From a new install to a working phone system: extensions, phones, a phone company, where calls go, and how to tell everything is ready.',
-    ids: ['start', 'extensions', 'phones', 'trunks', 'routes', 'health', 'settings'] },
+  { title: 'Getting started', intro: 'From a new install to a working phone system: extensions, phones, a phone company, where calls go, emergency calling from your offices, and how to tell everything is ready.',
+    ids: ['start', 'extensions', 'phones', 'trunks', 'routes', 'emergency', 'sites', 'health', 'settings'] },
   { title: 'Where calls go', intro: 'The building blocks callers move through: groups and queues, menus and schedules, scripts and the AI receptionist, voicemail, and the diagram that shows it all.',
     ids: ['flow', 'ringgroups', 'queues', 'menus', 'schedules', 'scripts', 'ai', 'voicemail', 'callbacks', 'calllinks'] },
   { title: 'Everyday calling', intro: 'What people do on their phones every day, and what they set for themselves: forwarding, follow-me, pickup, conference rooms, paging, hot desks, faxes and texts.',
@@ -16,8 +16,8 @@ export const parts: { title: string; intro: string; ids: string[] }[] = [
     ids: ['calls', 'history', 'timeline', 'crm', 'insight', 'recording', 'consent', 'quality', 'costs', 'reputation', 'spam'] },
   { title: 'Running BitVoice', intro: 'Keeping it safe and running: administrators and sign-in, security, changes and updates, several servers, hosted organisations, codecs, Teams, importing, automation and the tools for finding faults.',
     ids: ['users', 'sso', 'security', 'changes', 'updates', 'servers', 'database', 'tenants', 'codecs', 'teams', 'import', 'automation', 'compat', 'archive', 'holds', 'metrics', 'loadtest', 'trace'] },
-  { title: 'Emergency, radio and core services', intro: 'The 911 side of BitVoice: emergency calls from offices, the answering point profile, the radio dispatch console and NG911 Core Services.',
-    ids: ['emergency', 'sites', 'psap', 'radio', 'core'] },
+  { title: 'Public safety: the lab track', intro: 'The 911 answering-point profile, the radio dispatch console and NG911 Core Services. They are a lab and design-partner track: built and tested against recorded captures, sample data and stand-ins, but not certified for live 911 or radio dispatch and not yet tried with a live ESInet, P25 system or CAD. They are off the menu until switched on in Settings. Emergency calls from your own phones (Getting started) are not part of this track: they are part of every phone system.',
+    ids: ['psap', 'radio', 'core'] },
 ]
 
 export const manual: Article[] = [
@@ -69,6 +69,12 @@ On Windows, keep the window it opens while you use BitVoice (closing it stops Bi
 | 8280 TCP (this computer only), 8443 TCP | this web interface: plain on this computer, HTTPS from others |
 
 If another phone system already has 5060, BitVoice takes the next free port and Health says so.
+
+## Everything in the web interface
+Every setting has a screen, and every screen has a chapter here. Nothing needs a configuration file, a command line or a second tool. For automation, the same screens are a REST API, and the configuration can follow a file in Git ([Configuration as code](#automation)), but neither is ever required.
+
+## What BitVoice is for
+BitVoice is first a phone system for offices and contact centres, and a hosted phone service for providers: everything in the first five parts of this manual. The 911 answering-point profile, the radio dispatch console and NG911 Core Services are a separate **lab and design-partner track** ([Public safety](#psap)): they are off the menu until switched on in Settings, and not certified for live use. Emergency calls from your own phones are not part of that track; they work on every phone system from the first start.
 
 ## Finding your way
 - Press **⌘K** (Ctrl+K) anywhere to jump to a screen, or type an extension's name or number to open it.
@@ -1415,7 +1421,9 @@ These exports hold no SIP passwords, so each extension gets a new one; voicemail
   },
   {
     id: 'psap', title: '911 calls (the 911 profile)', route: '/psap', keys: '911 psap ng911 i3 esinet location pidf-lo held rebid ali spill eido cad nena log answer time call-taker',
-    body: `BitVoice answers 911 calls as a PSAP's call-handling system: calls from the emergency services network (the ESInet, NENA i3) arrive with the caller's location and the network's data, the call-taker sees them at once, and CAD is told when the call is answered.
+    body: `> **Lab and design-partner track.** Not certified for live 911 or radio dispatch, and not yet tried with a live ESInet, P25 system or CAD. Use it in a lab or in shadow mode beside your current equipment. Switch on **Public-safety profiles (lab)** in [Settings](#/settings) to show it in the menu.
+
+BitVoice answers 911 calls as a PSAP's call-handling system: calls from the emergency services network (the ESInet, NENA i3) arrive with the caller's location and the network's data, the call-taker sees them at once, and CAD is told when the call is answered.
 
 ::figure psap
 
@@ -1442,7 +1450,9 @@ What is not here yet: text to 911 (RTT and SMS), TTY, and transfer to another PS
   },
   {
     id: 'core', title: 'NG911 Core Services (ECRF, ESRP, LVF, BCF)', route: '/core', keys: 'ng911 core services ecrf lost esrp routing boundaries gis geojson psap overflow default policy rules bcf border control denial of service lvf address validation centerline address points',
-    body: `For a state or regional 911 authority that runs its own NG911 core: BitVoice answers LoST as the ECRF, and routes each 911 call as the ESRP to the PSAP that serves the caller.
+    body: `> **Lab and design-partner track.** Not certified for live 911 or radio dispatch, and not yet tried with a live ESInet, P25 system or CAD. Use it in a lab or in shadow mode beside your current equipment. Switch on **Public-safety profiles (lab)** in [Settings](#/settings) to show it in the menu.
+
+For a state or regional 911 authority that runs its own NG911 core: BitVoice answers LoST as the ECRF, and routes each 911 call as the ESRP to the PSAP that serves the caller.
 
 ::figure core-services
 
@@ -1463,7 +1473,9 @@ Not here yet: the BCF's media checks (it limits and denies by address; it does n
   },
   {
     id: 'radio', title: 'Radio dispatch console', route: '/radio', keys: 'radio console dispatch roip ptt push to talk channel talkgroup patch lmr gateway p25 issi cssi rfss imbe wacn unit encryption aes des key private call unit to unit alert tone warble emergency recording radio log cad',
-    body: `Dispatchers talk on radio channels from the same headset as their phone calls. BitVoice reaches the radios through radio-over-IP (RoIP) gateways; the radio network itself stays with whoever runs it.
+    body: `> **Lab and design-partner track.** Not certified for live 911 or radio dispatch, and not yet tried with a live ESInet, P25 system or CAD. Use it in a lab or in shadow mode beside your current equipment. Switch on **Public-safety profiles (lab)** in [Settings](#/settings) to show it in the menu.
+
+Dispatchers talk on radio channels from the same headset as their phone calls. BitVoice reaches the radios through radio-over-IP (RoIP) gateways; the radio network itself stays with whoever runs it.
 
 ::figure radio
 

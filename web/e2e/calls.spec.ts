@@ -172,3 +172,33 @@ test('an IAX2 trunk', async ({ page }) => {
   await page.getByRole('button', { name: 'Save' }).click()
   await expect(page.getByText('Old Asterisk').first()).toBeVisible()
 })
+
+// The public-safety profiles are a lab track: off the menu on a phone system until switched on in
+// Settings, with a notice on their screens either way.
+test('public-safety profiles are switched on in Settings', async ({ page }) => {
+  await signIn(page)
+  const info = await page.evaluate(async () => (await fetch('./api/system')).json())
+  test.skip(!!info.publicSafetyInUse, 'a public-safety profile is already set up on this server')
+  const menu = page.getByRole('navigation', { name: 'Main' })
+  await page.goto('/#/')
+  await expect(menu.getByRole('link', { name: 'Extensions' })).toBeVisible()
+  await expect(menu.getByRole('link', { name: '911 calls' })).toHaveCount(0)
+  await expect(menu.getByRole('link', { name: 'Radio console' })).toHaveCount(0)
+
+  // Still reachable by its address (from the manual), with the notice and the way to show it.
+  await page.goto('/#/psap')
+  await expect(page.getByRole('note').getByText('Lab and design-partner track.')).toBeVisible()
+  await page.getByRole('link', { name: 'Hidden from the menu: show it in Settings' }).click()
+
+  const sw = page.getByRole('switch', { name: 'Public-safety profiles (lab)' })
+  await sw.click()
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('Settings saved')).toBeVisible()
+  await expect(menu.getByRole('link', { name: '911 calls' })).toBeVisible()
+  await expect(menu.getByText('Public safety · lab')).toBeVisible()
+
+  // Off again: a phone system shows only its own screens.
+  await sw.click()
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(menu.getByRole('link', { name: '911 calls' })).toHaveCount(0)
+})

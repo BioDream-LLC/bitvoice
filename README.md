@@ -4,11 +4,11 @@
 
 <h1><img src="docs/assets/wordmark.svg" alt="BitVoice" width="470"></h1>
 
-### Open-source phone system, 911 call handling and radio dispatch console in one Go binary
+### An open-source, single-binary alternative to FreePBX and Asterisk
 
-**A complete, Apache-2.0 licensed phone system for offices and contact centres, and NG911 equipment for
-911 centres.** No Asterisk or FreeSWITCH underneath. No paid modules. No licence meter.
-Everything is set up in the web interface built into the binary.
+**A complete, Apache-2.0 licensed phone system for offices, contact centres and hosted providers, run
+100% from its web interface.** No Asterisk or FreeSWITCH underneath. No configuration files to edit. No
+paid modules. No licence meter.
 
 **One 34 MB file. 47 MB of memory carrying four live calls and eight phones.** Double-click it and a
 browser opens on a setup wizard; a few minutes later a phone rings.
@@ -23,7 +23,7 @@ browser opens on a setup wizard; a few minutes later a phone rings.
 
 <sub>One file, nothing to install. [ARM64 Linux and Windows, Intel Macs and checksums](#download)</sub>
 
-[**Quick start**](#quick-start) · [**Everything it does**](#everything-it-does) ·
+[**Quick start**](#quick-start) · [**Everything it does**](#everything-it-does) · [**Public safety (lab)**](#public-safety-lab-and-design-partner-track) ·
 [**What it looks like**](#what-it-looks-like) · [**Manual**](https://biodream-llc.github.io/bitvoice/manual/) ·
 [**Manual (PDF)**](docs/manual/bitvoice-manual.pdf) · [**FAQ**](#faq)
 
@@ -33,10 +33,18 @@ browser opens on a setup wizard; a few minutes later a phone rings.
 
 ## What is BitVoice?
 
-**BitVoice is an open-source real-time communications engine** written in Go: its own SIP stack, RTP and
-SRTP, media engine, WebRTC, codecs and P25 radio link, with a web interface compiled into the same binary.
-Calls arrive, wait in queues, ring phones and browsers, are recorded and logged, and reach the people who
-answer them. On top of that one engine it runs as:
+**BitVoice is a phone system packaged like an appliance:** one binary, one built-in web interface, no
+outside runtime, and still a REST API and configuration in Git for those who want them. Underneath is its
+own Go engine: SIP and IAX2, RTP and SRTP, a media engine with codec conversion, and WebRTC. Calls arrive,
+wait in queues, ring phones and browsers, are recorded and logged, and reach the people who answer them.
+
+**100% in the web interface.** That is the first rule of the project. Setup, extensions, phones, routing,
+queues, trunks, updates and rollback, diagnostics: every setting has a screen, and a feature that can only be
+reached through a file or a command line is treated as a bug. Every screen has a chapter in the manual and
+automated browser tests. Telecom administrators run it without being developers; developers automate the
+same screens through the API.
+
+It runs as:
 
 - **A phone system** for offices and businesses: extensions, ring groups, queues, menus, voicemail to
   email, recording, conference rooms, forwarding and follow-me, a staff portal, desk-phone set-up, a
@@ -45,26 +53,22 @@ answer them. On top of that one engine it runs as:
   administrators and web address, and limits on what each may use.
 - **A contact centre:** queues with a live wallboard, callbacks, VIP and sticky routing, supervisors
   listening in, transcripts and summaries, caller cards from your CRM.
-- **911 call-handling equipment** for public safety answering points: NENA i3 calls from the ESInet with
-  the caller's location, ALI spill and EIDO to any CAD, the i3 log and answer-time reports.
-- **A radio dispatch console:** radio-over-IP channels and P25 talkgroups over the ISSI, encrypted
-  talkgroups, private calls to radios, alert tones, every transmission recorded.
-- **NG911 Core Services** for 911 authorities: ESRP with policy rules, an ECRF answering LoST, a location
-  validation function and a border control function.
 
-**Everything is in the web interface.** That is the first rule of the project: a feature that can only be
-reached through a file or a command line is treated as a bug. Every screen has an article in the manual and
-automated browser tests.
+**Built to a 911 reliability bar.** Routing scripts and integrations can never lose or hold up a call: each
+has a time limit and a fixed outcome when it fails. Emergency calls from every extension always go out,
+with the caller's building, floor and room.
 
-**Built to the 911 reliability bar, whichever profile runs.** Routing scripts and integrations can never
-lose or hold up a call: each has a time limit and a fixed outcome when it fails.
+**Public safety is a separate lab track.** The same engine also carries a 911 answering-point profile, a P25
+radio dispatch console and NG911 Core Services. They are built and tested against recorded captures, sample
+data and stand-ins, **not certified and not yet tried with a live ESInet, P25 system or CAD**. They are off the
+menu until switched on in Settings; see [Public safety: lab and design-partner track](#public-safety-lab-and-design-partner-track).
 
 <img src="docs/assets/architecture.svg" alt="BitVoice sits between phone carriers, the ESInet, radio systems and phones on one side, and the people answering, CAD, records and Teams or CRMs on the other. In the middle it routes, queues, records, logs and converts codecs." width="100%">
 
 ## Everything it does
 
-Fourteen areas, itemised. Where something has only been tested against stand-ins rather than real
-equipment, [it says so](#how-it-is-tested).
+Eleven areas of the phone system, itemised; the public-safety lab track [follows](#public-safety-lab-and-design-partner-track).
+Where something has only been tested against stand-ins rather than real equipment, [it says so](#how-it-is-tested).
 
 <table width="100%">
 <thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/calls.svg" width="168" height="40" alt="Phone system"></th><th align="left" valign="middle">Everything an office phone system does</th></tr></thead>
@@ -77,6 +81,7 @@ equipment, [it says so](#how-it-is-tested).
 <tr><td colspan="2"><b>SIP trunks</b> over UDP, TCP or TLS, with registration, channel limits and failover between trunks</td></tr>
 <tr><td colspan="2"><b>IAX2 trunks</b> (RFC 5456) to Asterisk and FreePBX servers and IAX2 providers, registering either way, with call tokens; tested against Asterisk 23</td></tr>
 <tr><td colspan="2"><b>Call routing</b> by dial pattern, with prefixes added or digits removed, and 911 always allowed from every extension</td></tr>
+<tr><td colspan="2"><b>Office 911</b> for every profile: Kari's Law notification, RAY BAUM'S Act building, floor and room, remote workers asked to confirm where they are</td></tr>
 <tr><td colspan="2"><b>Routing scripts in JavaScript or Lua</b>, sandboxed and time-limited, with a fixed fallback if a script fails</td></tr>
 <tr><td colspan="2">A <b>call flow diagram</b> of where calls go, and a <b>call-path simulator</b>: pick a caller, number and time and see the exact route, without ringing anything</td></tr>
 <tr><td colspan="2"><b>Video calls</b> between phones that both send video, relayed and encrypted like the sound</td></tr>
@@ -140,37 +145,6 @@ equipment, [it says so](#how-it-is-tested).
 </tbody></table>
 
 <table width="100%">
-<thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/psap.svg" width="168" height="40" alt="911 profile"></th><th align="left" valign="middle">NG911 call handling for a PSAP</th></tr></thead>
-<tbody>
-<tr><td colspan="2"><b>NENA i3 calls</b> from the ESInet with the caller's <b>PIDF-LO location</b> and the network's additional data, shown to the call-taker as the call rings</td></tr>
-<tr><td colspan="2"><b>ALI spill</b> over TCP and <b>EIDO</b> over HTTPS to any CAD when a call is answered</td></tr>
-<tr><td colspan="2">Location <b>rebids</b> and <b>transfers between PSAPs</b> with the data kept</td></tr>
-<tr><td colspan="2">The <b>NENA i3 log</b>, and <b>answer-time reports</b> by call-taker and hour against your goal</td></tr>
-<tr><td colspan="2"><b>Office 911</b> for every profile: Kari's Law notification, RAY BAUM'S Act building, floor and room, remote workers asked to confirm where they are</td></tr>
-</tbody></table>
-
-<table width="100%">
-<thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/radio.svg" width="168" height="40" alt="Radio console"></th><th align="left" valign="middle">Radio dispatch on the same headset as the phones</th></tr></thead>
-<tbody>
-<tr><td colspan="2"><b>Radio-over-IP channels</b> through gateways (JPS, Omnitronics, Cisco, Telex and others): hold to talk, monitoring, patches</td></tr>
-<tr><td colspan="2"><b>P25 talkgroups over the ISSI</b>: the console joins a talkgroup's home RFSS, asks for the floor, shows the talking unit and its emergency flag</td></tr>
-<tr><td colspan="2"><b>Encrypted talkgroups</b> (TIA-102.AAAD): AES-256, DES-OFB and triple DES. Keys are never shown again once saved; without a key the audio is muted, never noise</td></tr>
-<tr><td colspan="2"><b>Private calls</b>: a dispatcher calls a radio by unit ID, and radios call the console</td></tr>
-<tr><td colspan="2"><b>Alert tones</b>: steady, warble, pulsed and beep</td></tr>
-<tr><td colspan="2">Every transmission <b>recorded in a radio log</b> with unit, dispatcher, tone, emergency and encryption, played back from the log</td></tr>
-<tr><td colspan="2"><b>Radio data to CAD</b>: who is talking where, emergencies and each transmission, as JSON</td></tr>
-</tbody></table>
-
-<table width="100%">
-<thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/core.svg" width="168" height="40" alt="NG911 core"></th><th align="left" valign="middle">NG911 Core Services for a 911 authority</th></tr></thead>
-<tbody>
-<tr><td colspan="2">An <b>ESRP</b> with policy rules by service, PSAP, schedule and missing or suspicious location, with overflow and a default PSAP</td></tr>
-<tr><td colspan="2">An <b>ECRF</b> answering <b>LoST</b> (RFC 5222) from your service boundaries</td></tr>
-<tr><td colspan="2">An <b>LVF</b> validating civic addresses against NENA address points and road centrelines</td></tr>
-<tr><td colspan="2">A <b>BCF</b> at the ESInet edge: calls per minute and at once per source, deny lists, suspicious calls marked for the policy rules</td></tr>
-</tbody></table>
-
-<table width="100%">
 <thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/insight.svg" width="168" height="40" alt="Insight"></th><th align="left" valign="middle">Quality, costs and evidence</th></tr></thead>
 <tbody>
 <tr><td colspan="2"><b>Call quality</b> per site and per provider (MOS, jitter, loss) with a <b>diagnosis in plain words</b></td></tr>
@@ -217,6 +191,52 @@ equipment, [it says so](#how-it-is-tested).
 <tr><td colspan="2"><b>AWS and Azure</b> images and templates; recordings, voicemail and backups copied to <b>S3 or Azure Blob Storage</b> (our own SigV4 and Entra code, no cloud SDKs)</td></tr>
 </tbody></table>
 
+## Public safety: lab and design-partner track
+
+The engine that runs the phone system also carries three public-safety profiles. **They are not certified
+for live 911 or radio dispatch, and they have not yet run against a live ESInet, P25 RFSS or PSAP CAD.** They
+are tested against a real ISSI capture, NENA sample data and stand-ins (see [How it is tested](#how-it-is-tested)).
+They stay off the menu until **Public-safety profiles (lab)** is switched on in Settings, and their screens say
+they are a lab track.
+
+**We are looking for design partners:** a PSAP, a 911 authority or a radio shop willing to run BitVoice in a
+lab or in shadow mode beside their current equipment. One real integration is worth more to us than any
+feature on this list. [Open an issue](https://github.com/BioDream-LLC/bitvoice/issues) titled "Design partner" and we will get in touch.
+
+<table width="100%">
+<thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/psap.svg" width="168" height="40" alt="911 profile"></th><th align="left" valign="middle">NG911 call handling for a PSAP</th></tr></thead>
+<tbody>
+<tr><td colspan="2"><b>NENA i3 calls</b> from the ESInet with the caller's <b>PIDF-LO location</b> and the network's additional data, shown to the call-taker as the call rings</td></tr>
+<tr><td colspan="2"><b>ALI spill</b> over TCP and <b>EIDO</b> over HTTPS to any CAD when a call is answered</td></tr>
+<tr><td colspan="2">Location <b>rebids</b> and <b>transfers between PSAPs</b> with the data kept</td></tr>
+<tr><td colspan="2">The <b>NENA i3 log</b>, and <b>answer-time reports</b> by call-taker and hour against your goal</td></tr>
+</tbody></table>
+
+<table width="100%">
+<thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/radio.svg" width="168" height="40" alt="Radio console"></th><th align="left" valign="middle">Radio dispatch on the same headset as the phones</th></tr></thead>
+<tbody>
+<tr><td colspan="2"><b>Radio-over-IP channels</b> through gateways (JPS, Omnitronics, Cisco, Telex and others): hold to talk, monitoring, patches</td></tr>
+<tr><td colspan="2"><b>P25 talkgroups over the ISSI</b>: the console joins a talkgroup's home RFSS, asks for the floor, shows the talking unit and its emergency flag</td></tr>
+<tr><td colspan="2"><b>Encrypted talkgroups</b> (TIA-102.AAAD): AES-256, DES-OFB and triple DES. Keys are never shown again once saved; without a key the audio is muted, never noise</td></tr>
+<tr><td colspan="2"><b>Private calls</b>: a dispatcher calls a radio by unit ID, and radios call the console</td></tr>
+<tr><td colspan="2"><b>Alert tones</b>: steady, warble, pulsed and beep</td></tr>
+<tr><td colspan="2">Every transmission <b>recorded in a radio log</b> with unit, dispatcher, tone, emergency and encryption, played back from the log</td></tr>
+<tr><td colspan="2"><b>Radio data to CAD</b>: who is talking where, emergencies and each transmission, as JSON</td></tr>
+</tbody></table>
+
+<table width="100%">
+<thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/core.svg" width="168" height="40" alt="NG911 core"></th><th align="left" valign="middle">NG911 Core Services for a 911 authority</th></tr></thead>
+<tbody>
+<tr><td colspan="2">An <b>ESRP</b> with policy rules by service, PSAP, schedule and missing or suspicious location, with overflow and a default PSAP</td></tr>
+<tr><td colspan="2">An <b>ECRF</b> answering <b>LoST</b> (RFC 5222) from your service boundaries</td></tr>
+<tr><td colspan="2">An <b>LVF</b> validating civic addresses against NENA address points and road centrelines</td></tr>
+<tr><td colspan="2">A <b>BCF</b> at the ESInet edge: calls per minute and at once per source, deny lists, suspicious calls marked for the policy rules</td></tr>
+</tbody></table>
+
+**Radio console**: radio channels and P25 talkgroups beside the phones, with the radio log.
+
+<img src="docs/assets/screens/radio.png" alt="The radio console with EMS, Fire dispatch and Police 1 channels, hold to talk and patch buttons, and the radio log with recorded transmissions." width="100%">
+
 ---
 
 ## What it looks like
@@ -239,10 +259,6 @@ calls in progress.
 **Call flow**: where calls from outside go, step by step, with a simulator that shows the route a call would take.
 
 <img src="docs/assets/screens/flow.png" alt="The call flow diagram: the main number goes to clinic hours, then the main menu, then the Appointments queue, Billing, the clinical team and the front office, each ending at voicemail." width="100%">
-
-**Radio console**: radio channels and P25 talkgroups beside the phones, with the radio log.
-
-<img src="docs/assets/screens/radio.png" alt="The radio console with EMS, Fire dispatch and Police 1 channels, hold to talk and patch buttons, and the radio log with recorded transmissions." width="100%">
 
 **Call history**: every finished call, with recordings, quality and search across what was said.
 
@@ -321,6 +337,8 @@ setting in the web interface.
 - **On every push** ([CI](https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml)): the Go tests
   on Linux with the race detector on both SQLite and PostgreSQL, on Windows and on macOS; and the browser
   tests below. Fuzzing covers the SIP, SDP, STUN and SRTP parsers.
+- **Every setting has a screen**, checked on every push: a test walks the whole configuration and fails if any
+  setting is not named in the web interface, so nothing can quietly become file-only or API-only.
 - **Browser tests in Chromium** that drive every screen the way a person would: the setup wizard, every
   form, real **WebRTC calls** between browser phones and the call engine with sound checked in both
   directions, a fax sent, and the radio console joined with the browser phone.

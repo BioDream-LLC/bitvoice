@@ -126,7 +126,7 @@ section.chapter{break-inside:auto}h2,h3,h4{break-after:avoid}figure,table,aside,
 <input type="search" placeholder="Find a topic" aria-label="Find a topic" oninput="const q=this.value.toLowerCase();document.querySelectorAll('nav a[data-k]').forEach(a=>a.style.display=a.dataset.k.includes(q)?'':'none')">
 ${parts.map((p) => `<div class="np">${esc(p.title)}</div>` + p.ids.map((id) => { const a = byId[id]; return `<a href="#${a.id}" data-k="${esc((a.title + ' ' + a.keys).toLowerCase())}">${number[id]}. ${esc(a.title)}</a>` }).join('')).join('\n')}</nav>
 <main>
-<section class="title">${bigLogo}<h1>BitVoice manual</h1><div class="sub">The phone system, conference rooms and staff portal, hosted organisations, the 911 profile, the radio dispatch console and NG911 Core Services, all set up in the web interface.</div>
+<section class="title">${bigLogo}<h1>BitVoice manual</h1><div class="sub">An open-source phone system in one program, set up entirely in the web interface: extensions, queues, conference rooms, the staff portal, hosted organisations, and the public-safety lab track.</div>
 <div class="meta">${order.length} chapters · ${figureNo || '—'} figures · ${Math.round(words / 1000)} thousand words · BioDream LLC</div></section>
 <section class="contents"><h2>Contents</h2><ol class="toc">${toc}</ol></section>
 ${chapters}

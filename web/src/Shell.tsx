@@ -4,7 +4,7 @@ import {
   Activity, BookOpen, BookOpenText, Braces, CloudUpload, Megaphone, Workflow, CalendarClock, FileUp, Grid3x3, ListOrdered, Smartphone, Voicemail, ChevronRight, History, LayoutDashboard, LogOut, Monitor, Moon, Phone, PhoneCall, PhoneForwarded, Signal, Coins, BookUser, MessageSquare, ScrollText, Link2, BadgeCheck, Server as ServerIcon,
   Gauge, MapPin, PackageCheck, Route, Scale, Search, Server, Settings, Shield, Stethoscope, Sun, Users, UserCog, Waypoints,
   Bot, Printer,
-  Siren, Network, RadioTower, Users2, Asterisk, Building2
+  Siren, Network, RadioTower, Users2, Asterisk, Building2, FlaskConical
 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
@@ -17,16 +17,34 @@ import { api, useExtensionsQuery, useLogoutMutation, useSystemQuery, useMenusQue
 import { onServerEvent, store, useLiveEvents } from './store'
 import { PhoneDock } from './PhoneDock'
 
+const labRoutes = ['/psap', '/radio', '/core']
+
+/** On the public-safety screens: what they are (a lab track), and how to show them in the menu. */
+function LabNotice() {
+  const { pathname } = useLocation()
+  const { data: sys } = useSystemQuery()
+  if (!labRoutes.includes(pathname)) return null
+  return (
+    <div role="note" className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-amber-500/30 bg-amber-950/40 px-6 py-2 text-sm text-amber-200">
+      <FlaskConical size={16} className="shrink-0 text-amber-300" aria-hidden />
+      <span><b>Lab and design-partner track.</b> Not certified for live 911 or radio dispatch, and not yet tried with a live ESInet, P25 system or CAD.</span>
+      {sys && !sys.publicSafety && <NavLink to="/settings" className="text-amber-300 underline">Hidden from the menu: show it in Settings</NavLink>}
+    </div>
+  )
+}
+
 /** Which screens show: administrators' screens to administrators, the server's own screens not inside
- * a hosted organisation, and Organisations only on the main system. */
+ * a hosted organisation, Organisations only on the main system, and the public-safety profiles (a lab
+ * track) only once they are switched on in Settings or set up. */
 export function useVisible(me: { role: string }) {
   const { data: sys } = useSystemQuery()
   const hosted = !!sys?.tenant
-  return (n: { admin?: boolean; system?: boolean; hostOnly?: boolean }) =>
-    (!n.admin || me.role === 'admin') && !(n.system && hosted) && !(n.hostOnly && (hosted || sys?.hosts === false))
+  return (n: { admin?: boolean; system?: boolean; hostOnly?: boolean; safety?: boolean }) =>
+    (!n.admin || me.role === 'admin') && !(n.system && hosted) && !(n.hostOnly && (hosted || sys?.hosts === false)) &&
+    !(n.safety && !sys?.publicSafety)
 }
 
-type NavItem = { to: string; label: string; icon: typeof Users; color: string; keys: string; group: string; admin?: boolean; system?: boolean; hostOnly?: boolean }
+type NavItem = { to: string; label: string; icon: typeof Users; color: string; keys: string; group: string; admin?: boolean; system?: boolean; hostOnly?: boolean; safety?: boolean }
 
 export const nav: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, color: 'text-sky-300', keys: 'home overview', group: 'Today' },
@@ -36,8 +54,6 @@ export const nav: NavItem[] = [
   { to: '/callbacks', label: 'Callbacks', icon: PhoneForwarded, color: 'text-emerald-300', keys: 'call back ring back request message', group: 'Today' },
   { to: '/texts', label: 'Texts', icon: MessageSquare, color: 'text-sky-300', keys: 'sms text message texting mms textmagic twilio telnyx bandwidth vonage plivo signalwire flowroute voip.ms 10dlc reply', group: 'Today' },
   { to: '/faxes', label: 'Faxes', icon: Printer, color: 'text-violet-300', keys: 'fax t38 t.38 pdf received send sent outbox fax to email email to fax fax number', group: 'Today' },
-  { to: '/psap', label: '911 calls', icon: Siren, color: 'text-rose-300', keys: '911 psap ng911 i3 esinet location pidf ali eido cad call-taker answer time rebid nena log', group: 'Today' },
-  { to: '/radio', label: 'Radio console', icon: RadioTower, color: 'text-amber-300', keys: 'radio console dispatch roip ptt push to talk channel talkgroup patch p25 issi cssi rfss lmr gateway encryption private call alert tone radio log', group: 'Today' },
   { to: '/reputation', label: 'Caller ID reputation', icon: BadgeCheck, color: 'text-emerald-300', keys: 'reputation spam likely labelled caller id branded calling rich call data rcd cnam logo answer rate robocall', group: 'Calls' },
   { to: '/call-links', label: 'Call links', icon: Link2, color: 'text-emerald-300', keys: 'call link website call button qr code web call click to call browser', group: 'Calls' },
   { to: '/timeline', label: 'Timeline', icon: ScrollText, color: 'text-sky-300', keys: 'timeline customer history notes everything one view', group: 'Today' },
@@ -57,7 +73,6 @@ export const nav: NavItem[] = [
   { to: '/trunks', label: 'Trunks', icon: Server, color: 'text-teal-300', keys: 'carrier provider line sip', group: 'Calls' },
   { to: '/phones', label: 'Phones', icon: Smartphone, color: 'text-emerald-300', keys: 'devices provisioning yealink polycom grandstream snom mac', group: 'Calls' },
   { to: '/sites', label: 'Sites', icon: MapPin, color: 'text-amber-300', keys: 'building office address 911 location remote', group: 'Calls' },
-  { to: '/core', label: 'Core services', icon: Network, color: 'text-violet-300', keys: 'ng911 core services ecrf lost esrp routing boundaries gis geojson psap overflow policy rules bcf border lvf address validation', admin: true, group: 'System' },
   { to: '/servers', label: 'Servers', icon: ServerIcon, color: 'text-sky-300', keys: 'servers cluster failover high availability redundancy second server backup shared database several servers', group: 'System' , system: true },
   { to: '/health', label: 'Health', icon: Stethoscope, color: 'text-emerald-300', keys: 'check status problems', group: 'System' },
   { to: '/costs', label: 'Costs', icon: Coins, color: 'text-amber-300', keys: 'cost costs spend money budget rates prices toll fraud billing department', group: 'System' },
@@ -73,6 +88,9 @@ export const nav: NavItem[] = [
   { to: '/tenants', label: 'Organisations', icon: Building2, color: 'text-violet-300', keys: 'tenants organisations organizations customers multi-tenant hosted hosting reseller provider domain', admin: true, hostOnly: true, group: 'System' },
   { to: '/users', label: 'Administrators', icon: UserCog, color: 'text-fuchsia-300', keys: 'accounts login', admin: true, group: 'System' },
   { to: '/settings', label: 'Settings', icon: Settings, color: 'text-slate-300', keys: 'system ports 911 emergency', group: 'System' },
+  { to: '/psap', label: '911 calls', icon: Siren, color: 'text-rose-300', keys: '911 psap ng911 i3 esinet location pidf ali eido cad call-taker answer time rebid nena log', group: 'Public safety · lab', safety: true },
+  { to: '/radio', label: 'Radio console', icon: RadioTower, color: 'text-amber-300', keys: 'radio console dispatch roip ptt push to talk channel talkgroup patch p25 issi cssi rfss lmr gateway encryption private call alert tone radio log', group: 'Public safety · lab', safety: true },
+  { to: '/core', label: 'Core services', icon: Network, color: 'text-violet-300', keys: 'ng911 core services ecrf lost esrp routing boundaries gis geojson psap overflow policy rules bcf border lvf address validation', admin: true, group: 'Public safety · lab', safety: true },
   { to: '/help', label: 'Help', icon: BookOpenText, color: 'text-sky-300', keys: 'manual how to documentation guide', group: 'System' },
 ]
 
@@ -299,6 +317,7 @@ export function Shell({ me, children }: { me: Me; children: ReactNode }) {
       </aside>
       <main className="min-w-0 flex-1 overflow-auto">
         <EmergencyBanner />
+        <LabNotice />
         <Crash resetKey={location.pathname}>{children}</Crash>
       </main>
       <Palette open={palette} setOpen={setPalette} me={me} />

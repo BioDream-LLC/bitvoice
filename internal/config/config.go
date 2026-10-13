@@ -145,6 +145,11 @@ type System struct {
 	// VideoOff refuses video in calls (audio only). By default video passes between phones that both
 	// offer it, as it is, without conversion.
 	VideoOff bool `json:"videoOff,omitempty"`
+	// PublicSafety shows the 911 profile, the radio console and NG911 Core Services in the menu. They
+	// are a lab and design-partner track, not certified for live 911 or radio dispatch, so a phone
+	// system shows only its own screens until someone switches them on. Office 911 (emergency calls,
+	// sites) is part of every phone system and does not depend on this.
+	PublicSafety bool `json:"publicSafety,omitempty"`
 }
 
 // Provisioning lets desk phones fetch their configuration from BitVoice, protected by a user name and
@@ -713,6 +718,26 @@ func cleanDial(s string) string {
 }
 
 // FindConference returns the conference room with a number, or nil.
+// PublicSafetyInUse names a public-safety profile that is set up, or is empty when none is. A profile
+// that is set up stays in the menu whatever PublicSafety says, so switching the menu off never hides
+// a console someone relies on.
+func (c *Config) PublicSafetyInUse() string {
+	switch {
+	case c.System.Radio.Console != "" || len(c.System.Radio.Channels) > 0:
+		return "the radio console"
+	case c.System.Core.ECRF || len(c.System.Core.PSAPs) > 0 || len(c.System.Core.Rules) > 0:
+		return "NG911 Core Services"
+	case c.System.PSAP.AgencyID != "" || c.System.PSAP.ALIAddress != "" || c.System.PSAP.EIDOURL != "":
+		return "the 911 profile"
+	}
+	for _, tr := range c.Trunks {
+		if tr.ESInet {
+			return "the 911 profile"
+		}
+	}
+	return ""
+}
+
 func (c *Config) FindConference(number string) *Conference {
 	for i := range c.Conferences {
 		if c.Conferences[i].Number == number {

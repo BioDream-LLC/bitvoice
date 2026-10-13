@@ -212,7 +212,8 @@ func (s *Server) liveRoutes() {
 		cfg, rev := s.Store.Config()
 		writeJSON(w, 200, map[string]any{"version": s.Version, "name": cfg.System.Name, "rev": rev,
 			"addresses": s.Engine.PhoneAddresses(localAddresses()), "sipPort": s.Engine.SIPPort(), "tlsPort": s.Engine.TLSPort(), "httpsPort": s.HTTPSPort.Load(), "amiAddress": s.amiAddr(), "uptimeSeconds": int(time.Since(s.started).Seconds()),
-			"instanceId": s.Store.State().InstanceID, "tenant": s.Tenant, "hosts": s.Tenancy != nil})
+			"instanceId": s.Store.State().InstanceID, "tenant": s.Tenant, "hosts": s.Tenancy != nil,
+			"publicSafety": cfg.System.PublicSafety || cfg.PublicSafetyInUse() != "", "publicSafetyInUse": cfg.PublicSafetyInUse()})
 	})
 	s.handle("GET /api/health", false, s.health)
 	s.handle("GET /api/sip-trace", true, func(w http.ResponseWriter, r *http.Request, u store.User) {

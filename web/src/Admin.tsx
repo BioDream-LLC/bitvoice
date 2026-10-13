@@ -8,7 +8,7 @@ import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   useAuditQuery, useBansQuery, useChangePasswordMutation, useDeleteUserMutation, useExtensionsQuery, useHistoryQuery,
-  useImportConfigMutation, useMeQuery, useRestoreMutation, useSaveSettingsMutation, useSaveUserMutation, useSettingsQuery,
+  useImportConfigMutation, useMeQuery, useRestoreMutation, useSaveSettingsMutation, useSaveUserMutation, useSettingsQuery, useSystemQuery,
   useUnbanMutation, useUsersQuery, type ApiErrorBody, type AuditEntry, type Role, type Settings as SettingsT, type User,
 } from './api'
 import { CompatSettings } from './Compat'
@@ -262,6 +262,7 @@ export function Settings() {
             <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={!sys.videoOff} onChange={(v) => setSys({ videoOff: !v })} label="Video calls" /><span>Video calls</span></label>
             <p className="text-xs text-slate-500">Video passes between phones (and video apps) that both send it, as it is: BitVoice does not convert video, so both need a codec in common (most use H.264). A phone without video gets sound only.</p>
           </div>
+          <PublicSafetySwitch on={!!sys.publicSafety} set={(v) => setSys({ publicSafety: v })} />
           <Field label="Country" htmlFor="sc" hint="Sets the tones callers hear.">
             <div className="flex gap-2">
               <select id="sc" className="input" value={sys.country} onChange={(e) => setSys({ country: e.target.value })}>
@@ -427,6 +428,23 @@ export function Settings() {
         </section>
       </fieldset>
     </Page>
+  )
+}
+
+/** Shows the 911 profile, radio console and Core Services in the menu: a lab track, off on a phone system. */
+function PublicSafetySwitch({ on, set }: { on: boolean; set: (v: boolean) => void }) {
+  const { data: info } = useSystemQuery()
+  const inUse = info?.publicSafetyInUse
+  return (
+    <div className="space-y-1">
+      <label className="flex items-center gap-3 text-sm text-slate-300">
+        <Toggle checked={on || !!inUse} disabled={!!inUse} onChange={set} label="Public-safety profiles (lab)" /><span>Public-safety profiles (lab)</span>
+      </label>
+      <p className="text-xs text-slate-500">
+        Shows the 911 profile, the radio console and NG911 Core Services in the menu. They are a <span className="text-amber-300">lab and design-partner track</span>: not certified for live 911 or radio dispatch, and not yet tried with a live ESInet, P25 system or CAD. Office emergency calling (911 from your phones, sites) does not depend on this and is always on.
+        {inUse && <> <span className="text-amber-300">Stays on while {inUse} is set up.</span></>}
+      </p>
+    </div>
   )
 }
 
