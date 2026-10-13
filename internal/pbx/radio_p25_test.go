@@ -217,14 +217,18 @@ func freeUDP(t *testing.T) int {
 		if p <= 40000 || p >= 64000 || handedOut.ports[p] {
 			continue
 		}
+		// Both on loopback and on every address: Windows lets a socket on every address share a port
+		// with one on 127.0.0.1, and then the loopback one gets the packets.
 		ok := true
 		for _, q := range []int{p, p + 1} {
-			c2, err := net.ListenUDP("udp", &net.UDPAddr{Port: q})
-			if err != nil {
-				ok = false
-				break
+			for _, ip := range []net.IP{net.IPv4(127, 0, 0, 1), nil} {
+				c2, err := net.ListenUDP("udp", &net.UDPAddr{IP: ip, Port: q})
+				if err != nil {
+					ok = false
+					break
+				}
+				c2.Close()
 			}
-			c2.Close()
 		}
 		if ok {
 			handedOut.ports[p] = true
