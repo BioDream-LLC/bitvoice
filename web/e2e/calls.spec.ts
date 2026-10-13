@@ -53,3 +53,59 @@ test('conference rooms, feature codes, follow-me and forwarding', async ({ page 
   await page.getByRole('region', { name: 'Forwarding right now' }).getByRole('switch', { name: 'Do not disturb' }).click()
   await expect(page.getByText('Do not disturb off').first()).toBeVisible()
 })
+
+// The staff portal: a person signs in with their extension and voicemail PIN and sets their own calls.
+test('staff portal', async ({ page }) => {
+  await signIn(page)
+  const ext = await page.evaluate(async () => {
+    const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
+    const all = (await (await fetch('./api/extensions')).json()).items
+    const x = all[0]
+    x.voicemail = { ...x.voicemail, enabled: true, pin: '2468' }
+    x.outbound = true
+    const r = await fetch(`./api/extensions/${x.id}`, { method: 'PUT', headers: H, body: JSON.stringify(x) })
+    if (!r.ok) throw new Error(await r.text())
+    await fetch('./api/auth/logout', { method: 'POST', headers: H })
+    return x.number as string
+  })
+  await page.goto('/#/me')
+  await page.getByLabel('Your extension').fill(ext)
+  await page.getByLabel('Voicemail PIN').fill('1111')
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await expect(page.getByText('that extension and PIN do not match').first()).toBeVisible()
+  await page.getByLabel('Voicemail PIN').fill('2468')
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await expect(page.getByText(`Extension ${ext}`)).toBeVisible()
+
+  await page.getByRole('switch', { name: 'Do not disturb' }).click()
+  await expect(page.getByText('On: your phones do not ring')).toBeVisible()
+  await page.getByLabel('Every call to').fill(ext)
+  await page.getByRole('button', { name: 'Save forwarding' }).click()
+  await expect(page.getByText('cannot be forwarded to the extension itself').first()).toBeVisible()
+  await page.getByLabel('Every call to').fill('')
+  await page.getByLabel('When I do not answer, to').fill('+1 212 555 0100')
+  await page.getByRole('button', { name: 'Save forwarding' }).click()
+  await expect(page.getByText('Forwarding saved').first()).toBeVisible()
+
+  const follow = page.getByRole('switch', { name: 'Follow-me' })
+  if (await follow.getAttribute('aria-checked') !== 'true') await follow.click() // the first test may have switched it on
+  await page.getByLabel('Follow-me number 1').fill('2125550123')
+  await page.getByRole('button', { name: 'Add a speed dial' }).click()
+  await page.getByLabel(/^Speed dial \d+ number$/).last().fill('2125550144')
+  await page.getByRole('button', { name: 'Save follow-me and speed dials' }).click()
+  await expect(page.getByText('Saved', { exact: true }).first()).toBeVisible()
+
+  await page.getByRole('button', { name: /^Voicemail/ }).click()
+  await expect(page.getByText('No messages.')).toBeVisible()
+  await page.getByRole('button', { name: 'Your calls' }).click()
+  await page.getByRole('button', { name: 'PIN' }).click()
+  await page.getByLabel('Current PIN').fill('2468')
+  await page.getByLabel('New PIN').fill('12')
+  await page.getByRole('button', { name: 'Change PIN' }).click()
+  await expect(page.getByText('4 to 10 digits').first()).toBeVisible()
+  await page.getByLabel('New PIN').fill('13579')
+  await page.getByRole('button', { name: 'Change PIN' }).click()
+  await expect(page.getByText('PIN changed').first()).toBeVisible()
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await expect(page.getByLabel('Your extension')).toBeVisible()
+})

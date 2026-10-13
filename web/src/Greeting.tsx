@@ -44,11 +44,12 @@ export function Greeting({ box }: { box: string }) {
 
 /** A recording BitVoice plays to callers (a greeting or a menu prompt): hear it, record it in the browser,
  * upload any audio file (converted to telephone audio here), or remove it. */
-export function AudioRecording({ label, missing, has, src, busy, saved, save, reset }: {
+export function AudioRecording({ label, missing, has, src, busy, saved, save, reset, canEdit }: {
   label: string; missing: string; has: boolean; src: string; busy?: boolean; saved: string
-  save: (wav: Blob) => Promise<unknown>; reset: () => Promise<unknown>
+  save: (wav: Blob) => Promise<unknown>; reset: () => Promise<unknown>; canEdit?: boolean
 }) {
-  const admin = useIsAdmin()
+  const isAdmin = useIsAdmin()
+  const admin = canEdit ?? isAdmin
   const [recording, setRecording] = useState(false)
   const [seconds, setSeconds] = useState(0)
   const [version, setVersion] = useState(0)

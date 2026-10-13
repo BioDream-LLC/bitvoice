@@ -53,6 +53,7 @@ export function Login() {
         </button>
         <p className="flex items-center justify-center gap-1 text-xs text-slate-500"><KeyRound size={12} aria-hidden /> Forgot it? Another administrator can reset it.</p>
         </>}
+        <p className="text-center text-xs"><a className="text-teal-300 underline" href="#/me">Staff: your own forwarding, follow-me and voicemail</a></p>
       </form>
     </div>
   )

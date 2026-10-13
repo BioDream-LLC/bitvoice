@@ -113,9 +113,12 @@ const (
 // Handler builds the HTTP handler.
 func (s *Server) Handler() http.Handler {
 	s.sessions = map[string]*session{}
+	cfg0, _ := s.Store.Config()
 	for k, v := range s.Store.LoadSessions() {
 		if u, ok := s.Store.User(v.Username); ok {
 			s.sessions[k] = &session{user: u, expires: v.Expires}
+		} else if x := cfg0.FindExtension(strings.TrimPrefix(v.Username, "ext:")); strings.HasPrefix(v.Username, "ext:") && x != nil {
+			s.sessions[k] = &session{user: portalUser(x), expires: v.Expires}
 		}
 	}
 	s.logins = map[string][]time.Time{}
@@ -147,6 +150,7 @@ func (s *Server) Handler() http.Handler {
 
 	// Signed in.
 	s.routes()
+	s.portalRoutes()
 
 	if s.ARI != nil {
 		m.Handle("/ari/", s.ARI)
@@ -196,6 +200,10 @@ func (s *Server) handle(pattern string, admin bool, f func(w http.ResponseWriter
 		u, ok := s.user(r)
 		if !ok {
 			writeError(w, http.StatusUnauthorized, "sign in first")
+			return
+		}
+		if u.Role == portalRole {
+			writeError(w, http.StatusForbidden, "the staff portal reaches only your own settings")
 			return
 		}
 		if admin && u.Role != "admin" {

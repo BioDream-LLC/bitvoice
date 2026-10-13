@@ -2,7 +2,7 @@
 // Every state-changing request carries X-BitVoice, which the server requires (CSRF protection).
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 
-export type Role = 'admin' | 'viewer'
+export type Role = 'admin' | 'viewer' | 'extension'
 export interface Me { username: string; name: string; role: Role; setupComplete: boolean; mfa?: boolean }
 
 export interface Destination { type: 'extension' | 'ringgroup' | 'queue' | 'menu' | 'schedule' | 'script' | 'receptionist' | 'voicemail' | 'fax' | 'esrp' | 'conference' | 'echo' | 'hangup'; target: string }
@@ -30,6 +30,11 @@ export interface Conference {
 }
 export interface ConferenceMember { id: string; number: string; name: string; leader: boolean; muted: boolean; hand: boolean; speaking: boolean; waiting: boolean; joined: string }
 export interface ConferenceRoom { number: string; name: string; started: string; locked: boolean; members: ConferenceMember[] | null; waiting: number; records: boolean }
+export interface Myself {
+  number: string; name: string; email: string; voicemail: boolean; followMe: FollowMe; speedDials: SpeedDial[]; companySpeedDials: SpeedDial[]
+  pickupGroup: string; noIntercom: boolean; outbound: boolean; divert: { all?: string; busy?: string; noAnswer?: string; followMe?: boolean | null }
+  dnd: boolean; followMeOn: boolean; messages: { new: number; old: number }; codes: FeatureCodes; voicemailNumber: string
+}
 export interface Divert { ext: string; all?: string; busy?: string; noAnswer?: string; followMe?: boolean | null; dnd: boolean; followMeOn: boolean }
 export interface Voicemail { id: string; box: string; from: string; fromName: string; at: string; seconds: number; heard: boolean; transcript?: string; summary?: string; aiError?: string; urgency?: 'urgent' | 'normal' | 'low'; category?: string }
 export interface RingGroup {
@@ -297,7 +302,7 @@ const baseQuery = fetchBaseQuery({
 })
 
 const tags = ['Me', 'Extensions', 'RingGroups', 'Trunks', 'Inbound', 'Outbound', 'Settings', 'Users', 'Calls',
-  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts'] as const
+  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail'] as const
 
 export const api = createApi({
   reducerPath: 'api',
@@ -585,6 +590,21 @@ export const api = createApi({
         invalidatesTags: ['Voicemail'] }),
       resetGreeting: b.mutation<void, string>({
         query: (box) => ({ url: `voicemail/${box}/greeting`, method: 'DELETE' }), invalidatesTags: ['Voicemail'] }),
+      portalLogin: b.mutation<Me, { extension: string; pin: string }>({
+        query: (body) => ({ url: 'portal/login', method: 'POST', body }), invalidatesTags: ['Me', 'Myself'] }),
+      myself: b.query<Myself, void>({ query: () => 'me', providesTags: ['Myself'] }),
+      setMyDivert: b.mutation<void, Partial<Divert>>({ query: (body) => ({ url: 'me/divert', method: 'PUT', body }), invalidatesTags: ['Myself'] }),
+      saveMySettings: b.mutation<{ rev: number }, { followMe?: FollowMe; speedDials?: SpeedDial[]; noIntercom?: boolean }>({
+        query: (body) => ({ url: 'me/settings', method: 'PUT', body }), invalidatesTags: ['Myself'] }),
+      changeMyPin: b.mutation<void, { old: string; new: string }>({ query: (body) => ({ url: 'me/pin', method: 'PUT', body }) }),
+      myVoicemail: b.query<{ items: Voicemail[]; greeting: boolean }, void>({ query: () => 'me/voicemail', providesTags: ['MyVoicemail'] }),
+      markMyVoicemail: b.mutation<Voicemail, { id: string; heard: boolean }>({
+        query: ({ id, heard }) => ({ url: `me/voicemail/${id}`, method: 'PATCH', body: { heard } }), invalidatesTags: ['MyVoicemail', 'Myself'] }),
+      deleteMyVoicemail: b.mutation<void, string>({ query: (id) => ({ url: `me/voicemail/${id}`, method: 'DELETE' }), invalidatesTags: ['MyVoicemail', 'Myself'] }),
+      saveMyGreeting: b.mutation<{ seconds: number }, Blob>({
+        query: (wav) => ({ url: 'me/greeting', method: 'PUT', body: wav, headers: { 'Content-Type': 'audio/wav' } }), invalidatesTags: ['MyVoicemail'] }),
+      resetMyGreeting: b.mutation<void, void>({ query: () => ({ url: 'me/greeting', method: 'DELETE' }), invalidatesTags: ['MyVoicemail'] }),
+      myCalls: b.query<{ items: CDR[] }, void>({ query: () => 'me/calls' }),
   }),
 })
 
@@ -608,6 +628,8 @@ export const {
   useConferencesQuery, useCreateConferenceMutation, useUpdateConferenceMutation, useDeleteConferenceMutation,
   useConferenceLiveQuery, useLockConferenceMutation, useMuteConferenceMemberMutation, useRemoveConferenceMemberMutation,
   useDivertsQuery, useDivertQuery, useSetDivertMutation,
+  usePortalLoginMutation, useMyselfQuery, useSetMyDivertMutation, useSaveMySettingsMutation, useChangeMyPinMutation, useMyVoicemailQuery,
+  useMarkMyVoicemailMutation, useDeleteMyVoicemailMutation, useSaveMyGreetingMutation, useResetMyGreetingMutation, useMyCallsQuery,
   useQueuesQuery, useCreateQueueMutation, useUpdateQueueMutation, useDeleteQueueMutation, useQueueStatusQuery,
   useVoicemailQuery, useMarkHeardMutation, useDeleteVoicemailMutation, useSaveGreetingMutation, useResetGreetingMutation,
 } = api

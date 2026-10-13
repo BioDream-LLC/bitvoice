@@ -38,6 +38,7 @@ import { Queues } from './Queues'
 import { Schedules } from './Schedules'
 import { RingGroups } from './RingGroups'
 import { Conferences } from './Conferences'
+import { Portal } from './Portal'
 import { FeatureCodesPage } from './FeatureCodes'
 import { Routes } from './Routes'
 import { Setup } from './Setup'
@@ -67,6 +68,7 @@ function App() {
   }, [])
   const slug = callSlug(hash)
   if (slug) return <CallPage slug={slug} />
+  if (/^#\/me(?:[/?]|$)/.test(hash)) return <Portal />
   return isPhoneApp(hash) ? <PhoneApp /> : <Admin />
 }
 
