@@ -298,6 +298,18 @@ service yet.
 shasum -a 256 -c SHA256SUMS --ignore-missing
 ```
 
+**Signed releases.** From v0.1.3, every program carries BioDream's release key and comes with a
+`bitvoice.sig` beside it in the archive. A release build's **Updates** page installs only programs signed
+with that key, so a forged or damaged file is refused. The public key, for checking a signature yourself
+(ed25519, base64):
+
+```
+M6UaGaLM1T0SekufRzAlUSeSTjfxpVL18YHE5eKkKxY=
+```
+
+v0.1.2 and earlier carry no key: their Updates page accepts any program, signed or not. Upgrade to v0.1.3
+or later by hand once to get the check.
+
 <details>
 <summary><b>Other ways to install</b></summary>
 

@@ -1164,14 +1164,23 @@ In [Settings](#/settings), **Configuration from Git**, BitVoice reads the config
 ::figure updates
 
 ## Installing an update
-1. On [Updates](#/updates), upload the new BitVoice program and its \`.sig\` file.
-2. Press **Install**. By default BitVoice waits until no calls are in progress; you can also install at once.
-3. BitVoice restarts on the new version. With several servers, calls in progress are handed to another server and carry on.
+1. Download the new release and unpack it. Beside the program is \`bitvoice.sig\`, BioDream's signature for it.
+2. On [Updates](#/updates), upload the program and its \`.sig\` file.
+3. Press **Install**. By default BitVoice waits until no calls are in progress; you can also install at once.
+4. BitVoice restarts on the new version. With several servers, calls in progress are handed to another server and carry on.
 
 ## Going back
 The version you left is kept: **Go back** returns to it in one click. A new version that fails to start twice, or does not stay up for a minute, is replaced by the previous one by itself.
 
-> Release builds install only versions signed by BioDream, so a forged program cannot be installed through this page.`,
+## Signatures
+Every release from v0.1.3 carries BioDream's release key. Such a build installs only programs signed with that key: an unsigned file, one signed by anyone else, or one changed by a single byte is refused with **the signature does not match**. The page says whether this build checks (**Required**) or not.
+
+| You run | Updates accepts |
+|---|---|
+| a release, v0.1.3 or later | only programs signed by BioDream |
+| v0.1.2 or earlier, or a build of your own | any program: with no key, a .sig file cannot be checked and is ignored |
+
+> Install v0.1.3 or later by hand once (download, replace the program, start it): from then on the Updates page checks every update.`,
   },
   {
     id: 'loadtest', title: 'Call generator', route: '/loadtest', keys: 'load test stress regression capacity',

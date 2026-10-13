@@ -1,0 +1,40 @@
+# When GitHub could not find a runner for a CI job (macOS arm64 runners are sometimes short, and the job
+# is then cancelled without running), run the failed jobs again, up to three attempts in all. A job that
+# ran and failed is left alone: only jobs no runner ever picked up count.
+name: CI retry
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  retry:
+    if: github.event.workflow_run.conclusion != 'success' && github.event.workflow_run.run_attempt < 3
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Re-run jobs that never got a runner
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN: ${{ github.event.workflow_run.id }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          # A newer push cancels the older run on purpose: retry only the newest commit of its branch.
+          head=$(gh api "repos/$REPO/branches/$BRANCH" --jq .commit.sha 2>/dev/null || echo "")
+          if [ "$head" != "$SHA" ]; then echo "a newer commit is on $BRANCH; nothing to retry"; exit 0; fi
+          jobs=$(gh api "repos/$REPO/actions/runs/$RUN/jobs" --jq '.jobs[] | [.conclusion, .runner_name // ""] | @tsv')
+          echo "$jobs"
+          # A job that ran and failed: not ours to retry.
+          if echo "$jobs" | awk -F'\t' '$1 == "failure" && $2 != ""' | grep -q .; then
+            echo "a job failed after running; leaving the run as it is"; exit 0
+          fi
+          if echo "$jobs" | awk -F'\t' '($1 == "cancelled" || $1 == "failure") && $2 == ""' | grep -q .; then
+            echo "a job never got a runner; running the failed jobs again"
+            gh api -X POST "repos/$REPO/actions/runs/$RUN/rerun-failed-jobs"
+          fi

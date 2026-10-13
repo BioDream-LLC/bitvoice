@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/biodream-llc/bitvoice/internal/config"
@@ -15,7 +16,9 @@ import (
 
 // trunkState is what BitVoice knows about a trunk right now.
 type trunkState struct {
-	cfg        config.Trunk
+	// cfg is the trunk's settings. A change of settings stores a new copy and never edits one in place,
+	// so a check running in the background reads a whole, consistent copy without the engine's lock.
+	cfg        atomic.Pointer[config.Trunk]
 	addrs      []netip.Addr
 	resolved   time.Time
 	state      string // registering, registered, failed, reachable, unreachable, disabled
@@ -27,6 +30,14 @@ type trunkState struct {
 	latencyMS  int
 	lastChange time.Time
 	owner      string // for a trunk held one server at a time by another server: its name
+}
+
+// conf is the trunk's settings as they are now; nil for a trunkState that has none yet.
+func (st *trunkState) conf() *config.Trunk {
+	if st == nil {
+		return nil
+	}
+	return st.cfg.Load()
 }
 
 // TrunkStatus is a trunk's live state for the interface.
@@ -107,13 +118,15 @@ func (e *Engine) syncTrunks(cfg config.Config) {
 			delete(e.trunks, t.ID)
 			continue
 		}
-		if st == nil || st.cfg.Host != t.Host || st.cfg.Port != t.Port || st.cfg.Username != t.Username ||
-			st.cfg.Password != t.Password || st.cfg.Register != t.Register || st.cfg.Transport != t.Transport ||
-			st.cfg.AuthUser != t.AuthUser {
-			e.trunks[t.ID] = &trunkState{cfg: t, state: "starting", callID: sip.NewCallID(), lastChange: time.Now()}
+		if old := st.conf(); st == nil || old.Host != t.Host || old.Port != t.Port || old.Username != t.Username ||
+			old.Password != t.Password || old.Register != t.Register || old.Transport != t.Transport ||
+			old.AuthUser != t.AuthUser {
+			st = &trunkState{state: "starting", callID: sip.NewCallID(), lastChange: time.Now()}
+			st.cfg.Store(&t)
+			e.trunks[t.ID] = st
 			continue
 		}
-		st.cfg = t
+		st.cfg.Store(&t)
 	}
 	for id := range e.trunks {
 		if !seen[id] {
@@ -158,7 +171,7 @@ func (e *Engine) setTrunk(st *trunkState, state, errText string, next time.Durat
 	st.nextCheck = time.Now().Add(next)
 	e.mu.Unlock()
 	if changed {
-		e.publish("trunks.changed", map[string]any{"id": st.cfg.ID, "state": state, "error": errText})
+		e.publish("trunks.changed", map[string]any{"id": st.conf().ID, "state": state, "error": errText})
 	}
 }
 
@@ -171,7 +184,7 @@ func (e *Engine) iaxStatus(id string) string {
 
 // checkTrunk registers a trunk that needs it, or pings one that does not.
 func (e *Engine) checkTrunk(ctx context.Context, st *trunkState) {
-	if isIAX(&st.cfg) {
+	if isIAX(st.conf()) {
 		e.setTrunk(st, "ready", "", time.Minute) // the IAX2 gateway registers and keeps it alive
 		return
 	}
@@ -179,20 +192,20 @@ func (e *Engine) checkTrunk(ctx context.Context, st *trunkState) {
 		e.setTrunk(st, "unreachable", err.Error(), 30*time.Second)
 		return
 	}
-	peer, err := e.trunkPeer(&st.cfg)
+	peer, err := e.trunkPeer(st.conf())
 	if err != nil {
 		e.setTrunk(st, "unreachable", err.Error(), 30*time.Second)
 		return
 	}
-	if e.Cluster != nil && st.cfg.Shared == "one" {
-		node, mine := e.Cluster.TrunkOwner(st.cfg.ID)
+	if e.Cluster != nil && st.conf().Shared == "one" {
+		node, mine := e.Cluster.TrunkOwner(st.conf().ID)
 		if !mine {
 			// Another server holds it: stand by, and let go of any registration this server had.
 			e.mu.Lock()
 			was := st.state == "registered"
 			st.owner = e.Cluster.NodeName(node)
 			e.mu.Unlock()
-			if was && st.cfg.Register {
+			if was && st.conf().Register {
 				e.unregisterTrunk(st, peer)
 			}
 			why := "registered by " + e.Cluster.NodeName(node) + "; this server sends its calls through it"
@@ -209,7 +222,7 @@ func (e *Engine) checkTrunk(ctx context.Context, st *trunkState) {
 		}
 		e.mu.Unlock()
 	}
-	if st.cfg.Register {
+	if st.conf().Register {
 		e.registerTrunk(st, peer)
 		return
 	}
@@ -238,8 +251,8 @@ func finalOf(tx *sip.ClientTx) *sip.Message {
 }
 
 func (e *Engine) trunkRequest(st *trunkState, method string, peer sip.Peer) *sip.Message {
-	host := sip.HostPort(st.cfg.Host, st.cfg.Port)
-	user := st.cfg.Username
+	host := sip.HostPort(st.conf().Host, st.conf().Port)
+	user := st.conf().Username
 	if user == "" {
 		user = "bitvoice"
 	}
@@ -248,13 +261,13 @@ func (e *Engine) trunkRequest(st *trunkState, method string, peer sip.Peer) *sip
 	seq := st.cseq
 	e.mu.Unlock()
 	ruri := "sip:" + host
-	if st.cfg.Transport == "tcp" || st.cfg.Transport == "tls" {
-		ruri += ";transport=" + st.cfg.Transport
+	if st.conf().Transport == "tcp" || st.conf().Transport == "tls" {
+		ruri += ";transport=" + st.conf().Transport
 	}
 	m := &sip.Message{IsRequest: true, Method: method, RequestURI: ruri}
-	aor := "<sip:" + user + "@" + st.cfg.Host + ">"
-	if st.cfg.Teams && st.cfg.SBCName != "" {
-		aor = "<sip:" + user + "@" + st.cfg.SBCName + ">"
+	aor := "<sip:" + user + "@" + st.conf().Host + ">"
+	if st.conf().Teams && st.conf().SBCName != "" {
+		aor = "<sip:" + user + "@" + st.conf().SBCName + ">"
 		teamsHeaders(m)
 	}
 	m.Set("From", aor+";tag="+sip.NewTag())
@@ -282,13 +295,13 @@ func (e *Engine) unregisterTrunk(st *trunkState, peer sip.Peer) {
 			h, header = resp.Get("Proxy-Authenticate"), "Proxy-Authorization"
 		}
 		if ch, err := sip.ParseChallenge(h); err == nil {
-			user := st.cfg.AuthUser
+			user := st.conf().AuthUser
 			if user == "" {
-				user = st.cfg.Username
+				user = st.conf().Username
 			}
 			next := e.trunkRequest(st, sip.REGISTER, peer)
 			next.Set("Expires", "0")
-			if cr, err := sip.Answer(ch, user, st.cfg.Password, sip.REGISTER, next.RequestURI); err == nil {
+			if cr, err := sip.Answer(ch, user, st.conf().Password, sip.REGISTER, next.RequestURI); err == nil {
 				next.Set(header, cr.String())
 				finalOf(e.stack.Request(next, peer))
 			}
@@ -311,13 +324,13 @@ func (e *Engine) registerTrunk(st *trunkState, peer sip.Peer) {
 		if err != nil {
 			break
 		}
-		user := st.cfg.AuthUser
+		user := st.conf().AuthUser
 		if user == "" {
-			user = st.cfg.Username
+			user = st.conf().Username
 		}
 		next := e.trunkRequest(st, sip.REGISTER, peer)
 		next.Set("Expires", strconv.Itoa(expires))
-		cr, err := sip.Answer(ch, user, st.cfg.Password, sip.REGISTER, next.RequestURI)
+		cr, err := sip.Answer(ch, user, st.conf().Password, sip.REGISTER, next.RequestURI)
 		if err != nil {
 			break
 		}
@@ -363,7 +376,7 @@ func (e *Engine) registerTrunk(st *trunkState, peer sip.Peer) {
 func (e *Engine) resolveTrunk(ctx context.Context, st *trunkState) error {
 	e.mu.Lock()
 	fresh := time.Since(st.resolved) < 5*time.Minute && len(st.addrs) > 0
-	host := st.cfg.Host
+	host := st.conf().Host
 	e.mu.Unlock()
 	if fresh {
 		return nil
@@ -414,7 +427,7 @@ func (e *Engine) trunkPeer(t *config.Trunk) (sip.Peer, error) {
 	e.mu.Lock()
 	st := e.trunks[t.ID]
 	var addrs []netip.Addr
-	if st != nil && strings.EqualFold(st.cfg.Host, t.Host) { // a Teams backup proxy is looked up itself
+	if st != nil && strings.EqualFold(st.conf().Host, t.Host) { // a Teams backup proxy is looked up itself
 		addrs = append(addrs, st.addrs...)
 	}
 	e.mu.Unlock()
