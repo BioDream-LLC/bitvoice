@@ -13,7 +13,7 @@ Everything is set up in the web interface built into the binary.
 **One 34 MB file. 47 MB of memory carrying four live calls and eight phones.** Double-click it and a
 browser opens on a setup wizard; a few minutes later a phone rings.
 
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go](https://img.shields.io/badge/Go-1.26%2B-00ADD8.svg?logo=go&logoColor=white)](https://go.dev) [![Release](https://img.shields.io/badge/release-v0.1.1-success.svg)](#download) [![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)](#download) [![Tests](https://img.shields.io/badge/tests-Go%20race%20%2B%20Chromium%20WebRTC-brightgreen.svg)](#how-it-is-tested)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go](https://img.shields.io/badge/Go-1.26%2B-00ADD8.svg?logo=go&logoColor=white)](https://go.dev) [![Release](https://img.shields.io/badge/release-v0.1.1-success.svg)](#download) [![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)](#download) [![CI](https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml/badge.svg)](https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml)
 
 ### Download v0.1.1
 
@@ -310,8 +310,9 @@ setting in the web interface.
 
 ## How it is tested
 
-- **Go tests with the race detector** on every package, on both SQLite and PostgreSQL, with fuzzing on the
-  SIP, SDP, STUN and SRTP parsers.
+- **On every push** ([CI](https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml)): the Go tests
+  on Linux with the race detector on both SQLite and PostgreSQL, on Windows and on macOS; and the browser
+  tests below. Fuzzing covers the SIP, SDP, STUN and SRTP parsers.
 - **Browser tests in Chromium** that drive every screen the way a person would: the setup wizard, every
   form, real **WebRTC calls** between browser phones and the call engine with sound checked in both
   directions, a fax sent, and the radio console joined with the browser phone.
