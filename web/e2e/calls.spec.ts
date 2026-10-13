@@ -109,3 +109,48 @@ test('staff portal', async ({ page }) => {
   await page.getByRole('button', { name: 'Sign out' }).click()
   await expect(page.getByLabel('Your extension')).toBeVisible()
 })
+
+// Hosting another organisation: created from the main system, opened by the provider, signed in to by
+// its own administrator at its own address, and seeing none of the main system.
+test('hosted organisations', async ({ page, browser }) => {
+  await signIn(page)
+  await page.goto('/#/tenants')
+  await page.getByRole('button', { name: 'Add organisation' }).click()
+  await page.getByLabel('Name', { exact: true }).fill('Acme Dental')
+  await page.getByLabel('Short name').fill('api')
+  await page.getByLabel('Username').fill('boss')
+  await page.getByLabel('Password').fill('short')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('is a word BitVoice uses itself').first()).toBeVisible()
+  await expect(page.getByText('at least 12 characters').first()).toBeVisible()
+  await page.getByLabel('Short name').fill('acme')
+  await page.getByLabel('Password').fill('acme long password')
+  await page.getByLabel('Extensions', { exact: true }).fill('5')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByRole('button', { name: 'Acme Dental' })).toBeVisible()
+  await expect(page.getByText('acme.<extension>')).toBeVisible()
+
+  // Its own administrator, in a separate browser: the organisation's own phone system, no server screens.
+  const other = await browser.newContext()
+  const acme = await other.newPage()
+  await acme.goto('/t/acme/')
+  await acme.getByLabel('Username').fill('boss')
+  await acme.getByLabel('Password').fill('acme long password')
+  await acme.getByRole('button', { name: 'Sign in' }).click()
+  await expect(acme.getByRole('navigation', { name: 'Main' })).toBeVisible()
+  await expect(acme.getByRole('navigation', { name: 'Main' }).getByText('Organisations')).toHaveCount(0)
+  await expect(acme.getByRole('navigation', { name: 'Main' }).getByText('Updates')).toHaveCount(0)
+  await acme.goto('/t/acme/#/extensions')
+  await expect(acme.getByText('No extensions yet').first()).toBeVisible()
+  await other.close()
+
+  // The provider opens it from the main system.
+  await page.getByRole('button', { name: 'Open' }).first().click()
+  await expect(page).toHaveURL(/\/t\/acme\//)
+  await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible()
+  await page.goto('/#/tenants')
+  await page.getByRole('button', { name: 'Acme Dental' }).click()
+  await page.getByRole('switch', { name: 'Suspended' }).click()
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('suspended', { exact: true })).toBeVisible()
+})

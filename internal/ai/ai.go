@@ -28,6 +28,8 @@ type Client struct {
 	// audio, such as google/gemini-2.5-flash, while Model may be a text-only one).
 	AudioModel string
 	HTTP       *http.Client
+	// Allow, when set, is asked before every request; an error refuses it (a daily allowance used up).
+	Allow func() error
 }
 
 type part struct {
@@ -47,6 +49,11 @@ type message struct {
 }
 
 func (c *Client) chat(ctx context.Context, msgs []message) (string, error) {
+	if c.Allow != nil {
+		if err := c.Allow(); err != nil {
+			return "", err
+		}
+	}
 	base := strings.TrimRight(c.BaseURL, "/")
 	if base == "" {
 		base = DefaultBaseURL
@@ -284,6 +291,11 @@ func (c *Client) TriageVoicemail(ctx context.Context, transcript string) (Triage
 // Speak turns text into speech (an OpenAI-compatible /audio/speech service) and returns WAV audio.
 // model and voice are the speech model's; the chat model's service is used.
 func (c *Client) Speak(ctx context.Context, model, voice, text string) ([]byte, error) {
+	if c.Allow != nil {
+		if err := c.Allow(); err != nil {
+			return nil, err
+		}
+	}
 	base := strings.TrimRight(c.BaseURL, "/")
 	if base == "" {
 		base = DefaultBaseURL

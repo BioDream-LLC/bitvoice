@@ -56,6 +56,14 @@ type Server struct {
 	SetupCode string
 	// Trace holds recent SIP messages for the trace screen.
 	Trace *TraceBuffer
+	// Tenant is set on the server of a hosted tenant: its own sessions and cookie, no system screens.
+	Tenant *store.Tenant
+	// Tenancy hosts other organisations on this server (the main server only).
+	Tenancy *Tenancy
+	// aiToday counts AI requests today, for a tenant's daily allowance.
+	aiDay   string
+	aiCount int
+	aiMu    sync.Mutex
 	// HTTPSPort is where the HTTPS listener ended up (0 when there is none), for provisioning addresses.
 	HTTPSPort atomic.Int32
 
@@ -151,6 +159,7 @@ func (s *Server) Handler() http.Handler {
 	// Signed in.
 	s.routes()
 	s.portalRoutes()
+	s.tenantRoutes()
 
 	if s.ARI != nil {
 		m.Handle("/ari/", s.ARI)
@@ -206,6 +215,16 @@ func (s *Server) handle(pattern string, admin bool, f func(w http.ResponseWriter
 			writeError(w, http.StatusForbidden, "the staff portal reaches only your own settings")
 			return
 		}
+		if s.Tenant != nil {
+			if s.Tenant.Suspended {
+				writeError(w, http.StatusForbidden, "this organisation's account is suspended; ask your provider")
+				return
+			}
+			if systemOnly(pattern) {
+				writeError(w, http.StatusForbidden, "this belongs to the provider hosting your phone system")
+				return
+			}
+		}
 		if admin && u.Role != "admin" {
 			writeError(w, http.StatusForbidden, "this needs an administrator")
 			return
@@ -223,7 +242,7 @@ func (s *Server) user(r *http.Request) (store.User, bool) {
 		}
 		return store.User{Username: "token:" + t.Name, Name: t.Name, Role: t.Role}, true
 	}
-	c, err := r.Cookie(cookieName)
+	c, err := r.Cookie(s.cookieName())
 	if err != nil {
 		return store.User{}, false
 	}
@@ -270,7 +289,7 @@ func (s *Server) startSession(w http.ResponseWriter, r *http.Request, u store.Us
 	s.sessions[store.SessionKey(token)] = &session{user: u, expires: time.Now().Add(sessionLife)}
 	s.saveSessionsLocked()
 	s.mu.Unlock()
-	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: token, Path: "/", HttpOnly: true,
+	http.SetCookie(w, &http.Cookie{Name: s.cookieName(), Value: token, Path: s.cookiePath(r), HttpOnly: true,
 		SameSite: http.SameSiteStrictMode, Secure: r.TLS != nil, MaxAge: int(sessionLife.Seconds())})
 }
 

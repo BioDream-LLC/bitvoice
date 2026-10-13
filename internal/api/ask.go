@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/biodream-llc/bitvoice/internal/ai"
 	"github.com/biodream-llc/bitvoice/internal/config"
 	"github.com/biodream-llc/bitvoice/internal/store"
 )
@@ -62,7 +61,7 @@ func (s *Server) propose(ctx context.Context, request string) (string, []config.
 		Explanation string                     `json:"explanation"`
 		Changes     map[string]json.RawMessage `json:"changes"`
 	}
-	c := &ai.Client{BaseURL: a.BaseURL, Key: a.Key, Model: a.Model, AudioModel: a.AudioModel}
+	c := s.aiClient(a)
 	prompt := fmt.Sprintf("Current configuration:\n%s\n\nRequest: %s", cur, request)
 	if err := c.JSON(ctx, fmt.Sprintf(askSystem, strings.Join(askable, ", ")), prompt, &out); err != nil {
 		return "", nil, "", err

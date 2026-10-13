@@ -159,6 +159,11 @@ type Store struct {
 	dirMu     sync.Mutex
 	textMu    sync.Mutex
 	noteMu    sync.Mutex
+	tenantMu  sync.Mutex
+	spec      string // the database it was opened with
+	// limit, when set, is checked on every configuration change (a hosted tenant's allowances).
+	limit func(*config.Config) config.Problems
+	quota quota
 }
 
 // Open opens or creates a data directory.
@@ -179,7 +184,7 @@ func OpenWith(dir, spec string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Store{dir: dir, db: d}
+	s := &Store{dir: dir, db: d, spec: spec}
 	if err := s.importFiles(); err != nil {
 		d.Close()
 		return nil, fmt.Errorf("store: bringing the old files into the database: %w", err)
@@ -250,6 +255,12 @@ func (s *Store) Update(actor, summary string, expectRev int, change func(*config
 	if err := next.Validate(); err != nil {
 		s.mu.Unlock()
 		return config.Config{}, 0, err
+	}
+	if s.limit != nil {
+		if p := s.limit(&next); len(p) > 0 {
+			s.mu.Unlock()
+			return config.Config{}, 0, p
+		}
 	}
 	r := Revision{Rev: s.rev + 1, At: time.Now().UTC(), Actor: actor, Summary: summary, Config: next}
 	if err := s.saveRevision(r); err != nil {

@@ -54,7 +54,7 @@ func TestStaffPortal(t *testing.T) {
 		t.Fatalf("bad follow-me number accepted: %d %v", code, body)
 	}
 	if code, _ := staff.do("PUT", "/api/me/settings", map[string]any{
-		"followMe": map[string]any{"enabled": true, "numbers": []string{"2125550123"}, "ringSeconds": 15},
+		"followMe":   map[string]any{"enabled": true, "numbers": []string{"2125550123"}, "ringSeconds": 15},
 		"speedDials": []map[string]any{{"code": "1", "number": "100", "name": "Front desk"}}}); code != 200 {
 		t.Fatalf("own settings: %d", code)
 	}

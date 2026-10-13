@@ -39,6 +39,7 @@ import { Schedules } from './Schedules'
 import { RingGroups } from './RingGroups'
 import { Conferences } from './Conferences'
 import { Portal } from './Portal'
+import { Tenants } from './Tenants'
 import { FeatureCodesPage } from './FeatureCodes'
 import { Routes } from './Routes'
 import { Setup } from './Setup'
@@ -127,6 +128,7 @@ function Admin() {
         <Route path="/sites" element={<Sites />} />
         <Route path="/archive" element={<ArchivePage />} />
         <Route path="/import" element={<ImportPage />} />
+        <Route path="/tenants" element={<Tenants />} />
         <Route path="/users" element={<Users />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Dashboard />} />

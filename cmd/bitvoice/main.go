@@ -150,11 +150,8 @@ func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 	bus := events.New()
 	trace := api.NewTraceBuffer(2000)
 	eng := pbx.New(cfg, bus, st, log)
-	eng.Mail = st
-	eng.Recordings = st
-	eng.SeenDevice = st.NoteDevice
-	eng.Remote = st
 	eng.Trace = trace.Add
+	sw := pbx.NewSwitch(eng) // one SIP port for the main system and every hosted tenant
 	addresses := lanAddresses()
 	cert, certErr := certs.Load(filepath.Join(o.data, "tls"), addresses)
 	var holder *certs.Holder
@@ -218,28 +215,10 @@ func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 	st.OnChange(func(c config.Config) { ami.Apply(c.System.Compat) })
 	defer ami.Close()
 	srv.AMIAddr = ami.Addr
-	eng.Callback = srv.BookCallback
-	eng.NameFor = srv.NameFor
-	eng.LastAgent = srv.LastAgent
-	eng.Brief = srv.Brief
-	var desks []pbx.HotDesk
-	if err := st.LoadState("hotdesk", &desks); err != nil {
-		log.Warn("could not read hot desk sign-ins", "err", err)
-	}
-	eng.LoadHotDesks(desks)
-	eng.SaveHotDesks = func(h []pbx.HotDesk) error { return st.SaveState("hotdesk", h) }
-	var div pbx.DivertState
-	if err := st.LoadState("divert", &div); err != nil {
-		log.Warn("could not read call forwarding", "err", err)
-	}
-	eng.LoadDiverts(div)
-	eng.SaveDiverts = func(s pbx.DivertState) error { return st.SaveState("divert", s) }
 	srv.ARI = &compat.ARI{PBX: eng, Bus: bus, Audit: srv.AuditSystem, Started: time.Now()}
-	eng.Mobile = srv // wakes the BitVoice apps for incoming calls
 	// The engine runs on the configuration with vault references resolved.
-	eng.Apply(srv.Resolved(cfg))
-	st.OnChange(func(c config.Config) { eng.Apply(srv.Resolved(c)) })
-	eng.SetEmergencyMode = srv.SetEmergencyMode
+	srv.WireEngine()
+	eng.HoldsAddress = srv.HoldsSharedAddress
 	if web.Available() {
 		h, err := web.Handler()
 		if err != nil {
@@ -247,26 +226,13 @@ func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 		}
 		srv.Web = h
 	}
-	handler := srv.Handler()
-	go srv.RunAI(ctx)
-	go srv.RunCRM(ctx)
-	go srv.RunMetrics(ctx)
-	go srv.RunCosts(ctx)
-	go srv.RunCalendars(ctx)
-	eng.HoldsAddress = srv.HoldsSharedAddress
-	eng.OnFax = srv.FaxReceived
-	eng.OnEmergencyAnswer = srv.EmergencyAnswered
-	eng.FindService = srv.FindService
-	go srv.RunSharedAddress(ctx)
-	go srv.RunArchive(ctx)
-	go srv.RunEmail(ctx)
-	go srv.RunFaxes(ctx)
-	go srv.RunFaxMail(ctx)
-	go srv.RunPSAPLog(ctx)
-	go srv.RunAudit(ctx)
-	go srv.RunRadioCAD(ctx)
-	go srv.RunGitOps(ctx)
-	go srv.RunEmergencyEmail(ctx)
+	// Other organisations hosted here, each with its own data, sharing the SIP and media ports.
+	ty := &api.Tenancy{Root: srv, Switch: sw, DataDir: o.data, DBSpec: spec, Log: log, Version: version, Web: srv.Web}
+	srv.Tenancy = ty
+	handler := ty.Wrap(srv.Handler())
+	ty.Start(ctx)
+	defer ty.Stop()
+	srv.RunBackground(ctx, true)
 
 	localLn, err := listenFirstFree(o.local, 20)
 	if err != nil {

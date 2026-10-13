@@ -4,7 +4,7 @@ import {
   Activity, BookOpen, BookOpenText, Braces, CloudUpload, Megaphone, Workflow, CalendarClock, FileUp, Grid3x3, ListOrdered, Smartphone, Voicemail, ChevronRight, History, LayoutDashboard, LogOut, Monitor, Moon, Phone, PhoneCall, PhoneForwarded, Signal, Coins, BookUser, MessageSquare, ScrollText, Link2, BadgeCheck, Server as ServerIcon,
   Gauge, MapPin, PackageCheck, Route, Scale, Search, Server, Settings, Shield, Stethoscope, Sun, Users, UserCog, Waypoints,
   Bot, Printer,
-  Siren, Network, RadioTower, Users2, Asterisk
+  Siren, Network, RadioTower, Users2, Asterisk, Building2
 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
@@ -13,11 +13,22 @@ import { radioKeys } from './ui'
 import { manual } from './manual'
 import { EmergencyBanner } from './EmergencyMode'
 import { Toaster, toast } from 'sonner'
-import { api, useExtensionsQuery, useLogoutMutation, useMenusQuery, useQueuesQuery, useRingGroupsQuery, useStatsQuery, useTrunksQuery, type Me } from './api'
+import { api, useExtensionsQuery, useLogoutMutation, useSystemQuery, useMenusQuery, useQueuesQuery, useRingGroupsQuery, useStatsQuery, useTrunksQuery, type Me } from './api'
 import { onServerEvent, store, useLiveEvents } from './store'
 import { PhoneDock } from './PhoneDock'
 
-export const nav = [
+/** Which screens show: administrators' screens to administrators, the server's own screens not inside
+ * a hosted organisation, and Organisations only on the main system. */
+export function useVisible(me: { role: string }) {
+  const { data: sys } = useSystemQuery()
+  const hosted = !!sys?.tenant
+  return (n: { admin?: boolean; system?: boolean; hostOnly?: boolean }) =>
+    (!n.admin || me.role === 'admin') && !(n.system && hosted) && !(n.hostOnly && (hosted || sys?.hosts === false))
+}
+
+type NavItem = { to: string; label: string; icon: typeof Users; color: string; keys: string; group: string; admin?: boolean; system?: boolean; hostOnly?: boolean }
+
+export const nav: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, color: 'text-sky-300', keys: 'home overview', group: 'Today' },
   { to: '/calls', label: 'Live calls', icon: PhoneCall, color: 'text-emerald-300', keys: 'active now', group: 'Today' },
   { to: '/queues', label: 'Queues', icon: ListOrdered, color: 'text-orange-300', keys: 'acd agents contact centre wallboard', group: 'Today' },
@@ -47,18 +58,19 @@ export const nav = [
   { to: '/phones', label: 'Phones', icon: Smartphone, color: 'text-emerald-300', keys: 'devices provisioning yealink polycom grandstream snom mac', group: 'Calls' },
   { to: '/sites', label: 'Sites', icon: MapPin, color: 'text-amber-300', keys: 'building office address 911 location remote', group: 'Calls' },
   { to: '/core', label: 'Core services', icon: Network, color: 'text-violet-300', keys: 'ng911 core services ecrf lost esrp routing boundaries gis geojson psap overflow policy rules bcf border lvf address validation', admin: true, group: 'System' },
-  { to: '/servers', label: 'Servers', icon: ServerIcon, color: 'text-sky-300', keys: 'servers cluster failover high availability redundancy second server backup shared database several servers', group: 'System' },
+  { to: '/servers', label: 'Servers', icon: ServerIcon, color: 'text-sky-300', keys: 'servers cluster failover high availability redundancy second server backup shared database several servers', group: 'System' , system: true },
   { to: '/health', label: 'Health', icon: Stethoscope, color: 'text-emerald-300', keys: 'check status problems', group: 'System' },
   { to: '/costs', label: 'Costs', icon: Coins, color: 'text-amber-300', keys: 'cost costs spend money budget rates prices toll fraud billing department', group: 'System' },
   { to: '/quality', label: 'Call quality', icon: Signal, color: 'text-emerald-300', keys: 'mos jitter packet loss sound choppy audio quality diagnosis site provider', group: 'System' },
-  { to: '/trace', label: 'SIP trace', icon: Waypoints, color: 'text-orange-300', keys: 'debug ladder messages', admin: true, group: 'System' },
+  { to: '/trace', label: 'SIP trace', icon: Waypoints, color: 'text-orange-300', keys: 'debug ladder messages', admin: true, group: 'System' , system: true },
   { to: '/security', label: 'Security', icon: Shield, color: 'text-rose-300', keys: 'ban fraud audit', group: 'System' },
-  { to: '/loadtest', label: 'Call generator', icon: Gauge, color: 'text-orange-300', keys: 'load test stress regression capacity calls per second', admin: true, group: 'System' },
-  { to: '/updates', label: 'Updates', icon: PackageCheck, color: 'text-emerald-300', keys: 'upgrade version install rollback release', admin: true, group: 'System' },
+  { to: '/loadtest', label: 'Call generator', icon: Gauge, color: 'text-orange-300', keys: 'load test stress regression capacity calls per second', admin: true, group: 'System' , system: true },
+  { to: '/updates', label: 'Updates', icon: PackageCheck, color: 'text-emerald-300', keys: 'upgrade version install rollback release', admin: true, group: 'System' , system: true },
   { to: '/changes', label: 'Changes', icon: History, color: 'text-violet-300', keys: 'revisions undo restore backup export import', group: 'System' },
   { to: '/holds', label: 'Legal holds', icon: Scale, color: 'text-amber-300', keys: 'retention keep delete litigation ediscovery compliance', admin: true, group: 'System' },
   { to: '/archive', label: 'Archive', icon: CloudUpload, color: 'text-teal-300', keys: 'backup s3 aws azure blob cloud offsite', group: 'System' },
   { to: '/import', label: 'Import', icon: FileUp, color: 'text-sky-300', keys: 'freepbx asterisk 3cx cisco cucm call manager avaya ip office communication manager mitel mivoice migrate pjsip csv move hunt pilot line group route pattern', admin: true, group: 'System' },
+  { to: '/tenants', label: 'Organisations', icon: Building2, color: 'text-violet-300', keys: 'tenants organisations organizations customers multi-tenant hosted hosting reseller provider domain', admin: true, hostOnly: true, group: 'System' },
   { to: '/users', label: 'Administrators', icon: UserCog, color: 'text-fuchsia-300', keys: 'accounts login', admin: true, group: 'System' },
   { to: '/settings', label: 'Settings', icon: Settings, color: 'text-slate-300', keys: 'system ports 911 emergency', group: 'System' },
   { to: '/help', label: 'Help', icon: BookOpenText, color: 'text-sky-300', keys: 'manual how to documentation guide', group: 'System' },
@@ -101,6 +113,7 @@ function paletteFilter(value: string, search: string): number {
 
 function Palette({ open, setOpen, me }: { open: boolean; setOpen: (v: boolean) => void; me: Me }) {
   const navigate = useNavigate()
+  const visible = useVisible(me)
   const skip = { skip: !open }
   const { data: exts } = useExtensionsQuery(undefined, skip)
   const { data: groups } = useRingGroupsQuery(undefined, skip)
@@ -129,7 +142,7 @@ function Palette({ open, setOpen, me }: { open: boolean; setOpen: (v: boolean) =
         <Command.List className="max-h-80 overflow-auto p-2">
           <Command.Empty className="p-4 text-sm text-slate-500">Nothing matches.</Command.Empty>
           <Command.Group heading="Screens" className="text-xs text-slate-500">
-            {nav.filter((n) => !n.admin || me.role === 'admin').map((n) => (
+            {nav.filter(visible).map((n) => (
               <Command.Item key={n.to} value={`${n.label} ${n.keys}`} onSelect={() => go(n.to)}
                 className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-200 data-[selected=true]:bg-slate-800">
                 <n.icon size={16} className={n.color} aria-hidden /> {n.label}
@@ -171,6 +184,7 @@ function Palette({ open, setOpen, me }: { open: boolean; setOpen: (v: boolean) =
 
 export function Shell({ me, children }: { me: Me; children: ReactNode }) {
   const [theme, setTheme] = useTheme()
+  const visible = useVisible(me)
   const location = useLocation()
   const [palette, setPalette] = useState(false)
   const [logout] = useLogoutMutation()
@@ -241,7 +255,7 @@ export function Shell({ me, children }: { me: Me; children: ReactNode }) {
           <Search size={14} aria-hidden /> Search <kbd className="ml-auto rounded border border-slate-700 px-1 text-[10px]">⌘K</kbd>
         </button>
         <nav aria-label="Main" className="flex-1 overflow-auto px-2">
-          {nav.filter((n) => !n.admin || me.role === 'admin').map((n, i, all) => (
+          {nav.filter(visible).map((n, i, all) => (
             <div key={n.to}>
             {(i === 0 || all[i - 1].group !== n.group) && (
               <div className="px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-600">{n.group}</div>

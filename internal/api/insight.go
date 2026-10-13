@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/biodream-llc/bitvoice/internal/ai"
 	"github.com/biodream-llc/bitvoice/internal/config"
 	"github.com/biodream-llc/bitvoice/internal/media"
 	"github.com/biodream-llc/bitvoice/internal/store"
@@ -96,7 +95,7 @@ func (s *Server) insightRoutes() {
 		if a.Enabled {
 			ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 			defer cancel()
-			c := &ai.Client{BaseURL: a.BaseURL, Key: a.Key, Model: a.Model, AudioModel: a.AudioModel}
+			c := s.aiClient(a)
 			in, err := c.CallInsight(ctx, t.TimedText())
 			if err != nil {
 				writeError(w, http.StatusBadGateway, "the AI service did not answer: "+err.Error())

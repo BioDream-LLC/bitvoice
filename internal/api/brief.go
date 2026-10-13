@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/biodream-llc/bitvoice/internal/ai"
 	"github.com/biodream-llc/bitvoice/internal/media"
 	"github.com/biodream-llc/bitvoice/internal/pbx"
 	"github.com/biodream-llc/bitvoice/internal/store"
@@ -41,7 +40,7 @@ func (s *Server) Brief(b pbx.BriefRequest) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
-	c := &ai.Client{BaseURL: a.BaseURL, Key: a.Key, Model: a.Model, AudioModel: a.AudioModel}
+	c := s.aiClient(a)
 	text := b.Text
 	if text == "" {
 		lines, _, _, err := transcribePCM(ctx, c, b.Caller, b.Callee, media.Rate, 40)

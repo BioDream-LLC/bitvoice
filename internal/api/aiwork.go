@@ -46,7 +46,7 @@ func (s *Server) transcribe(ctx context.Context, v store.Voicemail) {
 	if err != nil {
 		return
 	}
-	c := &ai.Client{BaseURL: a.BaseURL, Key: a.Key, Model: a.Model, AudioModel: a.AudioModel}
+	c := s.aiClient(a)
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	text, err := c.Transcribe(ctx, wav)
@@ -121,7 +121,7 @@ func (s *Server) transcribeCall(ctx context.Context, r store.CDR, force bool) {
 	}
 	talk := media.Measure(left, right, rate)
 	t.Talk, t.AnsweredExt = &talk, r.AnsweredExt
-	c := &ai.Client{BaseURL: a.BaseURL, Key: a.Key, Model: a.Model, AudioModel: a.AudioModel}
+	c := s.aiClient(a)
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Minute)
 	defer cancel()
 	var failed, pieces int

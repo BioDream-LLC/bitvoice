@@ -102,6 +102,18 @@ type Engine struct {
 	Recordings Recordings
 	// Trace sees every SIP message (the SIP trace screen).
 	Trace func(dir string, p sip.Peer, m *sip.Message)
+	// Dispatch, when set before Start, receives every new request instead of this engine (a Switch).
+	Dispatch func(tx *sip.ServerTx, in *sip.Incoming)
+	// UserPrefix is a hosted tenant's prefix on SIP user names (acme.), for phones without the
+	// tenant's own domain: acme.100 is extension 100.
+	UserPrefix string
+	// AIAllow, when set, is asked before each AI request the engine makes (a tenant's daily allowance).
+	AIAllow func() error
+	// MaxCalls caps this engine's calls at once (a tenant's allowance); emergency calls always go through.
+	MaxCalls int
+	// Suspended lets only emergency calls (and calls back after one) through.
+	Suspended atomic.Bool
+	shared    bool // the SIP stack and media ports belong to another engine
 	// T1 and T2 override the SIP timers (tests use short ones); zero keeps RFC 3261's 500 ms and 4 s.
 	T1, T2 time.Duration
 
@@ -150,7 +162,11 @@ func (e *Engine) Start(ctx context.Context, listen string) error {
 	cfg := e.Config()
 	e.ctx, e.cancel = context.WithCancel(ctx)
 	e.pool = &media.Pool{Min: cfg.System.RTPMin, Max: cfg.System.RTPMax}
-	e.stack = sip.NewStack(e.handle)
+	h := e.handle
+	if e.Dispatch != nil {
+		h = e.Dispatch // one SIP port for several hosted tenants: the switch picks the engine
+	}
+	e.stack = sip.NewStack(h)
 	e.stack.TLSClient = e.TLSClient
 	e.stack.Log = e.Log
 	e.stack.Host = cfg.System.PublicAddress
@@ -211,7 +227,7 @@ func (e *Engine) Stop() {
 	if e.cancel != nil {
 		e.cancel()
 	}
-	if e.stack != nil {
+	if e.stack != nil && !e.shared {
 		e.stack.Close()
 	}
 }

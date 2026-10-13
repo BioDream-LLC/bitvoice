@@ -580,13 +580,14 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 		p.trunk = "Call link: " + link.Name
 	} else {
 		lookup := func(user string) (string, bool) {
-			x := cfg.FindExtension(user)
+			x := cfg.FindExtension(e.localUser(user))
 			if x == nil || !x.Enabled {
 				return "", false
 			}
 			return x.Secret, true
 		}
 		result, user := e.auth.Verify(m.Get("Proxy-Authorization"), sip.INVITE, lookup)
+		user = e.localUser(user)
 		switch result {
 		case sip.AuthOK:
 			e.bans.succeed(ip)
@@ -635,6 +636,10 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 		}
 	}
 	c.direction, c.toName, c.trunk, c.intercom = p.direction, p.toName, p.trunk, p.intercom
+	if why := e.overLimit(p.direction); why != "" {
+		tx.Respond(sip.NewResponse(m, 503, why))
+		return
+	}
 
 	via := ""
 	if in.From.Local.IsValid() {

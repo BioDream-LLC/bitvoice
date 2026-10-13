@@ -23,6 +23,9 @@ func (s *Store) AddRecording(callID string, at time.Time, wav []byte) (string, e
 		id = id[:100]
 	}
 	name := at.UTC().Format("2006-01") + "/" + at.UTC().Format("20060102T150405") + "-" + id
+	if err := s.roomFor(len(wav)); err != nil {
+		return "", err
+	}
 	d := filepath.Join(s.dir, "recordings", at.UTC().Format("2006-01"))
 	if err := os.MkdirAll(d, 0o700); err != nil {
 		return "", err

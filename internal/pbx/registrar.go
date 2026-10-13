@@ -59,16 +59,17 @@ func (r *Registrar) handle(tx *sip.ServerTx, in *sip.Incoming) {
 		tx.Respond(sip.NewResponse(m, 400, "Bad To"))
 		return
 	}
-	number := to.URI.User
+	number := r.e.localUser(to.URI.User)
 	ext := cfg.FindExtension(number)
 	lookup := func(user string) (string, bool) {
-		x := cfg.FindExtension(user)
+		x := cfg.FindExtension(r.e.localUser(user))
 		if x == nil || !x.Enabled {
 			return "", false
 		}
 		return x.Secret, true
 	}
 	result, user := r.e.auth.Verify(m.Get("Authorization"), sip.REGISTER, lookup)
+	user = r.e.localUser(user)
 	ip := in.From.Addr.Addr()
 	switch result {
 	case sip.AuthOK:

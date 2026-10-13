@@ -18,6 +18,7 @@ import (
 // phone is a minimal SIP phone for tests: it registers, places and answers calls, and sends and receives
 // RTP on a real socket, so tests exercise the engine exactly as a desk phone would.
 type phone struct {
+	domain string            // the SIP domain the phone uses; 127.0.0.1 when empty
 	extra  map[string]string // headers put on every INVITE this phone sends
 	t      *testing.T
 	stack  *sip.Stack
@@ -183,10 +184,17 @@ func (p *phone) send(m *sip.Message) *sip.Message {
 	return resp
 }
 
+func (p *phone) host() string {
+	if p.domain != "" {
+		return p.domain
+	}
+	return "127.0.0.1"
+}
+
 func (p *phone) register() int {
-	m := &sip.Message{IsRequest: true, Method: sip.REGISTER, RequestURI: "sip:127.0.0.1"}
-	m.Set("From", "<sip:"+p.user+"@127.0.0.1>;tag="+sip.NewTag())
-	m.Set("To", "<sip:"+p.user+"@127.0.0.1>")
+	m := &sip.Message{IsRequest: true, Method: sip.REGISTER, RequestURI: "sip:" + p.host()}
+	m.Set("From", "<sip:"+p.user+"@"+p.host()+">;tag="+sip.NewTag())
+	m.Set("To", "<sip:"+p.user+"@"+p.host()+">")
 	m.Set("Call-ID", sip.NewCallID())
 	m.Set("CSeq", "1 REGISTER")
 	m.Set("Contact", p.contact())
@@ -231,10 +239,10 @@ func mediaOf(body []byte) netip.AddrPort {
 // dial calls a number and returns the dialog when answered, or the final status.
 func (p *phone) dial(number string) (*dialog, int) {
 	tag := sip.NewTag()
-	m := &sip.Message{IsRequest: true, Method: sip.INVITE, RequestURI: "sip:" + number + "@127.0.0.1"}
-	from := "<sip:" + p.user + "@127.0.0.1>;tag=" + tag
+	m := &sip.Message{IsRequest: true, Method: sip.INVITE, RequestURI: "sip:" + number + "@" + p.host()}
+	from := "<sip:" + p.user + "@" + p.host() + ">;tag=" + tag
 	m.Set("From", from)
-	m.Set("To", "<sip:"+number+"@127.0.0.1>")
+	m.Set("To", "<sip:"+number+"@"+p.host()+">")
 	m.Set("Call-ID", sip.NewCallID())
 	m.Set("CSeq", "1 INVITE")
 	m.Set("Contact", p.contact())

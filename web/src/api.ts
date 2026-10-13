@@ -278,7 +278,10 @@ export interface UpgradeStatus {
   running: string; signedBuild: boolean; waiting: '' | 'switch' | 'rollback'; since?: string; calls: number; possible: boolean
   state: { currentVersion: string; previousVersion: string; stagedVersion: string; stagedSigned: boolean; pending: boolean; history: { at: string; what: string }[] }
 }
-export interface SystemInfo { version: string; name: string; rev: number; addresses: string[]; sipPort: number; tlsPort: number; httpsPort: number; amiAddress: string; uptimeSeconds: number }
+export interface SystemInfo { version: string; name: string; rev: number; addresses: string[]; sipPort: number; tlsPort: number; httpsPort: number; amiAddress: string; uptimeSeconds: number; tenant?: Tenant | null; hosts?: boolean }
+export interface TenantLimits { extensions: number; calls: number; storageMB: number; aiPerDay: number }
+export interface Tenant { id: string; name: string; domain: string; suspended: boolean; limits: TenantLimits; note: string; created?: string }
+export interface TenantView extends Tenant { running: boolean; extensions: number; phones: number; calls: number; storageBytes: number; url: string; sipUser: string; admins: number }
 export interface SetupStatus { complete: boolean; allowed: boolean; addresses: string[]; sipPort: number; version: string }
 
 export interface Problem { field: string; message: string }
@@ -302,7 +305,7 @@ const baseQuery = fetchBaseQuery({
 })
 
 const tags = ['Me', 'Extensions', 'RingGroups', 'Trunks', 'Inbound', 'Outbound', 'Settings', 'Users', 'Calls',
-  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail'] as const
+  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail', 'Tenants'] as const
 
 export const api = createApi({
   reducerPath: 'api',
@@ -605,6 +608,12 @@ export const api = createApi({
         query: (wav) => ({ url: 'me/greeting', method: 'PUT', body: wav, headers: { 'Content-Type': 'audio/wav' } }), invalidatesTags: ['MyVoicemail'] }),
       resetMyGreeting: b.mutation<void, void>({ query: () => ({ url: 'me/greeting', method: 'DELETE' }), invalidatesTags: ['MyVoicemail'] }),
       myCalls: b.query<{ items: CDR[] }, void>({ query: () => 'me/calls' }),
+      tenants: b.query<{ items: TenantView[] }, void>({ query: () => 'tenants', providesTags: ['Tenants'] }),
+      createTenant: b.mutation<TenantView, Partial<Tenant> & { admin: { username: string; name: string; password: string }; country?: string }>({
+        query: (body) => ({ url: 'tenants', method: 'POST', body }), invalidatesTags: ['Tenants'] }),
+      updateTenant: b.mutation<TenantView, Tenant>({ query: (body) => ({ url: `tenants/${body.id}`, method: 'PUT', body }), invalidatesTags: ['Tenants'] }),
+      deleteTenant: b.mutation<void, string>({ query: (id) => ({ url: `tenants/${id}`, method: 'DELETE' }), invalidatesTags: ['Tenants'] }),
+      openTenant: b.mutation<{ url: string }, string>({ query: (id) => ({ url: `tenants/${id}/open`, method: 'POST' }) }),
   }),
 })
 
@@ -630,6 +639,7 @@ export const {
   useDivertsQuery, useDivertQuery, useSetDivertMutation,
   usePortalLoginMutation, useMyselfQuery, useSetMyDivertMutation, useSaveMySettingsMutation, useChangeMyPinMutation, useMyVoicemailQuery,
   useMarkMyVoicemailMutation, useDeleteMyVoicemailMutation, useSaveMyGreetingMutation, useResetMyGreetingMutation, useMyCallsQuery,
+  useTenantsQuery, useCreateTenantMutation, useUpdateTenantMutation, useDeleteTenantMutation, useOpenTenantMutation,
   useQueuesQuery, useCreateQueueMutation, useUpdateQueueMutation, useDeleteQueueMutation, useQueueStatusQuery,
   useVoicemailQuery, useMarkHeardMutation, useDeleteVoicemailMutation, useSaveGreetingMutation, useResetGreetingMutation,
 } = api

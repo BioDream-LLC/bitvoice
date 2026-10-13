@@ -69,9 +69,9 @@ func (s *Server) portalRoutes() {
 	// is a revision, made by the person.
 	s.handlePortal("PUT /api/me/settings", func(w http.ResponseWriter, r *http.Request, u store.User, x config.Extension) {
 		var in struct {
-			FollowMe   *config.FollowMe   `json:"followMe"`
+			FollowMe   *config.FollowMe    `json:"followMe"`
 			SpeedDials *[]config.SpeedDial `json:"speedDials"`
-			NoIntercom *bool              `json:"noIntercom"`
+			NoIntercom *bool               `json:"noIntercom"`
 		}
 		if err := readJSON(r, &in); err != nil {
 			writeErr(w, err)

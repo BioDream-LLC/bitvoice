@@ -46,13 +46,14 @@ func (e *Engine) subscribe(tx *sip.ServerTx, in *sip.Incoming) {
 	}
 	cfg := e.Config()
 	lookup := func(user string) (string, bool) {
-		x := cfg.FindExtension(user)
+		x := cfg.FindExtension(e.localUser(user))
 		if x == nil || !x.Enabled {
 			return "", false
 		}
 		return x.Secret, true
 	}
 	result, user := e.auth.Verify(m.Get("Authorization"), sip.SUBSCRIBE, lookup)
+	user = e.localUser(user)
 	ip := in.From.Addr.Addr()
 	switch result {
 	case sip.AuthOK:

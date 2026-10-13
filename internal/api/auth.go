@@ -72,6 +72,10 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusTooManyRequests, "too many failed sign-ins from this address; wait ten minutes")
 		return
 	}
+	if s.Tenant != nil && s.Tenant.Suspended {
+		writeError(w, http.StatusForbidden, "this organisation's account is suspended; ask your provider")
+		return
+	}
 	u, ok := s.Store.Authenticate(req.Username, req.Password)
 	if !ok {
 		s.loginFailed(ip)
@@ -99,13 +103,13 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
-	if c, err := r.Cookie(cookieName); err == nil {
+	if c, err := r.Cookie(s.cookieName()); err == nil {
 		s.mu.Lock()
 		delete(s.sessions, store.SessionKey(c.Value))
 		s.saveSessionsLocked()
 		s.mu.Unlock()
 	}
-	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true,
+	http.SetCookie(w, &http.Cookie{Name: s.cookieName(), Value: "", Path: s.cookiePath(r), MaxAge: -1, HttpOnly: true,
 		SameSite: http.SameSiteStrictMode})
 	writeJSON(w, 200, map[string]bool{"ok": true})
 }

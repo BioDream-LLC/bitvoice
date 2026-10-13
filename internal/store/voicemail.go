@@ -71,6 +71,9 @@ func (s *Store) AddVoicemail(v Voicemail, wav []byte) (Voicemail, error) {
 	if !safeName.MatchString(v.ID) {
 		return v, ErrNotFound
 	}
+	if err := s.roomFor(len(wav)); err != nil {
+		return v, err
+	}
 	if err := writeFile(filepath.Join(d, v.ID+".wav"), wav); err != nil {
 		return v, err
 	}
