@@ -4,7 +4,7 @@ import {
   Activity, BookOpen, BookOpenText, Braces, CloudUpload, Megaphone, Workflow, CalendarClock, FileUp, Grid3x3, ListOrdered, Smartphone, Voicemail, ChevronRight, History, LayoutDashboard, LogOut, Monitor, Moon, Phone, PhoneCall, PhoneForwarded, Signal, Coins, BookUser, MessageSquare, ScrollText, Link2, BadgeCheck, Server as ServerIcon,
   Gauge, MapPin, PackageCheck, Route, Scale, Search, Server, Settings, Shield, Stethoscope, Sun, Users, UserCog, Waypoints,
   Bot, Printer,
-  Siren, Network, RadioTower, Users2, Asterisk, Building2, FlaskConical, AudioLines, BookA, KeyRound, BedDouble, Router } from 'lucide-react'
+  Siren, Network, RadioTower, Users2, Asterisk, Building2, FlaskConical, AudioLines, BookA, KeyRound, BedDouble, Router, Cpu } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { Crash } from './Crash'
@@ -74,6 +74,7 @@ export const nav: NavItem[] = [
   { to: '/scripts', label: 'Scripts', icon: Braces, color: 'text-fuchsia-300', keys: 'javascript lua code route logic', group: 'Calls' },
   { to: '/routes', label: 'Call routing', icon: Route, color: 'text-amber-300', keys: 'inbound outbound did dial plan', group: 'Calls' },
   { to: '/trunks', label: 'Trunks', icon: Server, color: 'text-teal-300', keys: 'carrier provider line sip', group: 'Calls' },
+  { to: '/cards', label: 'Telephony cards', icon: Cpu, color: 'text-amber-300', keys: 'telephony card dahdi digium sangoma openvox fxs fxo analogue analog phone line pstn pots tdm wildcard tdm400 a200 bitvoice-dahdi chan_dahdi zaptel', group: 'Calls' },
   { to: '/desk-phones', label: 'Skinny and MGCP', icon: Router, color: 'text-teal-300', keys: 'skinny sccp cisco 7940 7960 7941 7942 7945 7961 7962 7965 7970 7975 8945 6941 mgcp gateway call agent ata analogue analog fxs port aaln line card chan_skinny chan_mgcp legacy desk phones', group: 'Calls' },
   { to: '/phones', label: 'Phones', icon: Smartphone, color: 'text-emerald-300', keys: 'devices provisioning yealink polycom grandstream snom fanvil cisco 3pcc spa mitel aastra sangoma algo cyberdata mac', group: 'Calls' },
   { to: '/sites', label: 'Sites', icon: MapPin, color: 'text-amber-300', keys: 'building office address 911 location remote', group: 'Calls' },

@@ -159,7 +159,7 @@ export interface AnswerReport {
 }
 export interface I3Event { logEventType: string; timestamp: string; agencyAgentId?: string; callId?: string; from?: string; to?: string; extension?: Record<string, unknown> }
 export interface Trunk {
-  id: string; name: string; enabled: boolean; host: string; port: number; transport: 'udp' | 'tcp' | 'tls'; protocol?: '' | 'iax2' | 'h323'
+  id: string; name: string; enabled: boolean; host: string; port: number; transport: 'udp' | 'tcp' | 'tls'; protocol?: '' | 'iax2' | 'h323' | 'dahdi'
   username: string; authUser: string; password: string; register: boolean; fromDomain: string
   callerId: string; maxChannels: number; allowFrom: string[]; secureMedia: boolean; richCallData?: boolean; teams?: boolean; sbcName?: string; codecs: string[]
   shared?: '' | 'one'; esinet?: boolean
@@ -186,6 +186,7 @@ export interface SystemSettings {
   chat?: { off: boolean; keepDays: number; rooms: { id: string; name: string; members: string[] | null }[] | null }
   snmp?: { enabled: boolean; listen: string; community: string; allowFrom: string[] | null; baseOid: string; contact: string; location: string; traps: { host: string; community: string }[] | null }
   desk?: DeskProtocols
+  cards?: Cards
   cdrOutputs?: { csv: boolean; syslog: { host: string; port: number; transport: '' | 'udp' | 'tcp' | 'tls'; facility: number }; postgres: { url: string; table: string } }
   publicAddress: string; cluster?: ClusterSettings; sipPort: number; rtpMin: number; rtpMax: number; codecs: string[]; echoNumber: string; voicemailNumber: string; parkNumber: string; parkSeconds: number
   codes?: FeatureCodes; speedDials?: SpeedDial[] | null
@@ -314,6 +315,9 @@ export interface UpgradeStatus {
   running: string; signedBuild: boolean; waiting: '' | 'switch' | 'rollback'; since?: string; calls: number; possible: boolean
   state: { currentVersion: string; previousVersion: string; stagedVersion: string; stagedSigned: boolean; pending: boolean; history: { at: string; what: string }[] }
 }
+/** Telephony cards (DAHDI) on this computer, through bitvoice-dahdi. */
+export interface Cards { enabled: boolean; token: string; linePort: number; alaw: boolean; channels: { channel: number; kind: 'phone' | 'line'; extension: string; number: string }[] }
+
 /** Skinny (SCCP) phones and MGCP gateways: older protocols beside SIP. */
 export interface DeskProtocols {
   sccp: { enabled: boolean; port: number; phones: { device: string; extension: string }[] }
@@ -455,6 +459,7 @@ export const api = createApi({
           dispatch(api.util.updateQueryData('chatMessages', key, (d) => { if (!d.items.some((m) => m.id === data.id)) d.items.push(data) }))
         } }),
       setChatStatus: b.mutation<void, string>({ query: (status) => ({ url: 'me/chat-status', method: 'PUT', body: { status } }), invalidatesTags: ['Chat'] }),
+      cardsStatus: b.query<{ running: boolean; seen: string; version: string; channels: Record<string, string> }, void>({ query: () => 'cards', providesTags: ['Settings'] }),
       deskStatus: b.query<{ sccp: Record<string, string>; mgcp: Record<string, string> }, void>({ query: () => 'desk', providesTags: ['Settings'] }),
       snmpStatus: b.query<{ running: boolean; listen: string; address: string; error: string }, void>({ query: () => 'snmp', providesTags: ['Settings'] }),
       cdrCsv: b.query<{ items: { day: string; bytes: number }[] }, void>({ query: () => 'cdr/csv', providesTags: ['CDR'] }),
@@ -735,7 +740,7 @@ export const {
   useDirectoriesQuery, useCreateDirectoryMutation, useUpdateDirectoryMutation, useDeleteDirectoryMutation,
   useDialInsQuery, useCreateDialInMutation, useUpdateDialInMutation, useDeleteDialInMutation,
   useHotelQuery, useCheckInMutation, useCheckOutMutation, useSetRoomStatusMutation, useWakeUpsQuery, useSetWakeUpMutation, useCancelWakeUpMutation,
-  useSaveNameAudioMutation, useDeleteNameAudioMutation, useSnmpStatusQuery, useDeskStatusQuery, useCdrCsvQuery, useTestCdrOutputsMutation, useChatListQuery, useChatMessagesQuery, useSendChatMutation, useSetChatStatusMutation,
+  useSaveNameAudioMutation, useDeleteNameAudioMutation, useSnmpStatusQuery, useDeskStatusQuery, useCardsStatusQuery, useCdrCsvQuery, useTestCdrOutputsMutation, useChatListQuery, useChatMessagesQuery, useSendChatMutation, useSetChatStatusMutation,
   usePromptsQuery, useSaveLangPromptMutation, useDeleteLangPromptMutation, useGeneratePromptsMutation, useMusicQuery, useAddMusicMutation, useDeleteMusicMutation,
 } = api
 

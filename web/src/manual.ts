@@ -7,7 +7,7 @@ export interface Article { id: string; title: string; route?: string; keys: stri
  * its chapters through them. Every article is in exactly one part. */
 export const parts: { title: string; intro: string; ids: string[] }[] = [
   { title: 'Getting started', intro: 'From a new install to a working phone system: extensions, phones, a phone company, where calls go, emergency calling from your offices, and how to tell everything is ready.',
-    ids: ['start', 'extensions', 'phones', 'deskphones', 'trunks', 'routes', 'emergency', 'sites', 'health', 'settings'] },
+    ids: ['start', 'extensions', 'phones', 'deskphones', 'cards', 'trunks', 'routes', 'emergency', 'sites', 'health', 'settings'] },
   { title: 'Where calls go', intro: 'The building blocks callers move through: groups and queues, menus and schedules, scripts and the AI receptionist, voicemail, and the diagram that shows it all.',
     ids: ['flow', 'ringgroups', 'queues', 'sounds', 'menus', 'directory', 'dialin', 'schedules', 'scripts', 'ai', 'voicemail', 'callbacks', 'calllinks'] },
   { title: 'Everyday calling', intro: 'What people do on their phones every day, and what they set for themselves: forwarding, follow-me, pickup, conference rooms, paging, hot desks, faxes and texts.',
@@ -153,6 +153,26 @@ Hold, transfer and conference are done from the extension's other phones for now
 Neither protocol has passwords. Skinny phones are accepted only from the local network and only when listed; MGCP commands are obeyed only from the gateway's address (or, without one, from the local network). Keep both ports off the internet.
 
 > Both are tested against BitVoice's own test phone and test gateway, which follow the protocols, but not yet against Cisco phones or gateway hardware.`,
+  },
+  {
+    id: 'cards', title: 'Telephony cards', route: '/cards', keys: 'telephony card dahdi digium sangoma openvox wildcard fxs fxo analogue analog phone line pstn pots tdm bitvoice-dahdi chan_dahdi',
+    body: `A telephony card in the BitVoice computer (Digium, Sangoma, OpenVox and other cards with Linux DAHDI drivers) can carry analogue phones and phone company lines. A separate program, **bitvoice-dahdi**, drives the card and joins its ports to BitVoice over the computer's own network connection, so BitVoice itself never touches the kernel driver and a card problem cannot stop the phone system.
+
+## Setting it up
+1. Install the DAHDI drivers and set the ports up as usual in /etc/dahdi/system.conf (\`fxoks=1-4\` for ports with phones, \`fxsks=5-8\` for ports with lines, and the country's tones in \`loadzone\` and \`defaultzone\`), then run \`dahdi_cfg\`.
+2. In **Telephony cards** (under Calls) switch on **Use telephony cards**. A token is made; copy it into a file only root can read, such as /etc/bitvoice/cards.token.
+3. Add each port by its DAHDI channel number: a **phone** port (FXS, a phone, fax or door phone plugged in) with its extension, or a **line** port (FXO, a phone company line) with the line's number. Choose A-law for Europe and most of the world, µ-law for North America and Japan.
+4. For lines, add a trunk with the protocol **Telephony card lines** on Trunks, and route numbers to it as to any trunk; inbound routes match each line's number.
+5. Start \`bitvoice-dahdi -server https://127.0.0.1:8443 -token-file /etc/bitvoice/cards.token\` as a service user that may open /dev/dahdi. It is in the Linux download beside bitvoice. The page shows whether it is running and each port's state; changes reach it within ten seconds.
+
+## What works
+- Phones: dial tone, dialling (digits are heard by BitVoice's own tone detector; the number goes after a pause or #), ringback, busy and congestion tones from the card's tone zone, ringing for incoming calls, and keys pressed during a call (sent on as RFC 4733 events too).
+- Lines: a ringing line calls its number here and is answered when the call is; calls out take a free line, wait for the exchange's dial tone and dial the number as tones. The far end hanging up is noticed when the line reports it (loop current or polarity, depending on the line). Analogue lines do not say when the far end answers, so a call out counts as answered once the number is dialled.
+- Sound is G.711 to and from the card; BitVoice converts to whatever the other party uses.
+
+Not yet: caller ID shown on the phones or read from the lines, hook flash, ISDN cards (use a SIP gateway for ISDN), and echo cancellation beyond what the card itself does.
+
+> bitvoice-dahdi is tested against a simulated card, not yet against real card hardware. It must run on the same computer as BitVoice: it only talks to 127.0.0.1, and BitVoice answers its token only from there.`,
   },
   {
     id: 'phones', title: 'Connecting phones', route: '/phones', keys: 'provisioning yealink polycom poly grandstream snom mac auto configure softphone',
@@ -1679,7 +1699,7 @@ Not here yet: P25 Phase 2 (TDMA) voice in its own half-rate vocoder. A Phase 2 s
   },
   {
     id: 'fax', title: 'Fax: sending and receiving, fax machines and analogue phones', route: '/faxes', keys: 'fax t38 t.38 fax to email email to fax send fax outbox imap poppler libreoffice pdf fax number receive analogue analog ata gateway fxs fxo isdn pri bri patton audiocodes grandstream ht802 modem',
-    body: `Fax machines, analogue phones, door phones and old lines connect through a SIP gateway: an ATA (Grandstream HT series, for one or two analogue phones or a fax), or a bigger gateway (Patton SmartNode, AudioCodes MediaPack and Mediant) for many analogue ports, an ISDN line (BRI/PRI) or old analogue lines (FXO). Each port registers to BitVoice as an extension, like a phone.
+    body: `Fax machines, analogue phones, door phones and old lines connect through a SIP gateway (or a telephony card in the BitVoice computer: see [Telephony cards](#cards)): an ATA (Grandstream HT series, for one or two analogue phones or a fax), or a bigger gateway (Patton SmartNode, AudioCodes MediaPack and Mediant) for many analogue ports, an ISDN line (BRI/PRI) or old analogue lines (FXO). Each port registers to BitVoice as an extension, like a phone.
 
 ::figure fax
 

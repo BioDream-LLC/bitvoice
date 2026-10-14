@@ -48,7 +48,8 @@ manual:
 		node scripts/manual.mjs /tmp/bitvoice-manual/manual.mjs $(CURDIR)/docs/manual/index.html $(CURDIR)/docs/manual/bitvoice-manual.pdf
 
 # release builds the six downloads into dist/: each program carries BioDream's release key and is signed
-# (bitvoice.sig or bitvoice.exe.sig beside it, for the Updates page), packed with LICENSE, NOTICE and the manual, with
+# (bitvoice.sig or bitvoice.exe.sig beside it, for the Updates page), packed with LICENSE, NOTICE and the manual (Linux
+# archives also carry bitvoice-dahdi, for telephony cards), with
 # SHA256SUMS. Archives name no person: files are owned by root, and zips keep no owner at all.
 #   make release VERSION=v0.1.3 SIGNING_KEY=path/to/release.key
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
@@ -61,6 +62,8 @@ release:
 		exe=bitvoice; [ $$os = windows ] && exe=bitvoice.exe; mkdir -p dist/$$name; \
 		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch $(GO) build -trimpath -ldflags "-s -w -X main.version=$(VERSION) -X main.releaseKey=$(BIODREAM_KEY)" -o dist/$$name/$$exe $(PKG); \
 		dist/.bvsign -key "$(SIGNING_KEY)" dist/$$name/$$exe > /dev/null; \
+		if [ $$os = linux ]; then CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch $(GO) build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o dist/$$name/bitvoice-dahdi ./cmd/bitvoice-dahdi; \
+			dist/.bvsign -key "$(SIGNING_KEY)" dist/$$name/bitvoice-dahdi > /dev/null; fi; \
 		cp LICENSE NOTICE docs/manual/bitvoice-manual.pdf dist/$$name/; \
 		if [ $$os = windows ]; then (cd dist && TZ=UTC zip -qrX $$name.zip $$name); \
 		else COPYFILE_DISABLE=1 tar -C dist --uid 0 --gid 0 --uname root --gname root -czf dist/$$name.tar.gz $$name; fi; \

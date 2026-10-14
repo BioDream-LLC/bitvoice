@@ -347,3 +347,47 @@ test('an H.323 trunk', async ({ page }) => {
   expect(t.protocol).toBe('h323')
   expect(t.port).toBe(1720)
 })
+
+// Telephony cards: switched on (a token is made), ports added and checked, the card trunk added,
+// and bitvoice-dahdi's API answers the token from this computer.
+test('telephony cards', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/#/extensions')
+  await page.getByRole('button', { name: 'Add extension' }).click()
+  await page.getByLabel('Number', { exact: true }).fill('250')
+  await page.getByLabel('Name', { exact: true }).fill('Warehouse phone')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByRole('cell', { name: '250', exact: true })).toBeVisible()
+
+  await page.goto('/#/cards')
+  await page.getByRole('switch', { name: 'Telephony cards' }).click()
+  await expect(page.getByText('bitvoice-dahdi is not running')).toBeVisible()
+  const token = await page.getByRole('textbox', { name: 'Token' }).inputValue()
+  expect(token).toMatch(/^[0-9a-f]{48}$/)
+  await page.getByRole('button', { name: 'Add a port' }).click()
+  await page.getByRole('button', { name: 'Add a port' }).click()
+  await page.getByLabel('Port 2 kind').selectOption('line')
+  await page.getByLabel('Port 2 line number').fill('2125550100')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('choose the extension this phone belongs to')).toBeVisible()
+  await page.getByLabel('Port 1 extension').selectOption('250')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('Telephony cards saved')).toBeVisible()
+  await expect(page.getByText(/Lines need the card trunk/)).toBeVisible()
+
+  await page.goto('/#/trunks')
+  await page.getByRole('button', { name: 'Add trunk' }).click()
+  await page.getByLabel('Name', { exact: true }).fill('Card lines')
+  await page.getByLabel('Protocol').selectOption('dahdi')
+  await expect(page.getByLabel('Provider server')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('Card lines').first()).toBeVisible()
+
+  const bridge = await page.evaluate(async (tok) => {
+    const r = await fetch('./api/cards/bridge', { headers: { Authorization: 'Bearer ' + tok } })
+    return { status: r.status, body: await r.json() }
+  }, token)
+  expect(bridge.status).toBe(200)
+  expect(bridge.body.channels.map((c: { kind: string }) => c.kind)).toEqual(['phone', 'line'])
+  expect(bridge.body.channels[0].extension).toBe('250')
+})

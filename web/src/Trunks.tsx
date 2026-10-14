@@ -121,17 +121,18 @@ function Editor({ t: initial, status, onClose }: { t: Trunk; status?: TrunkStatu
         {note && <p className="rounded-lg border border-sky-900 bg-sky-950/40 p-3 text-xs text-sky-200">{note}</p>}
         {t.teams && <TeamsSetup t={t} set={set} p={p} />}
         {!t.teams && !t.esinet && (
-          <Field label="Protocol" htmlFor="tproto" error={p('protocol')} hint={t.protocol === 'iax2' ? 'IAX2 is Asterisk\u2019s own protocol, on port 4569: for an Asterisk or FreePBX server, or an IAX2 provider. Leave the server empty when the other server registers here with the username and password.' : t.protocol === 'h323' ? 'H.323 on port 1720, for older gateways, PBXs and video-conference systems: calls are set up by Fast Connect with G.711, and calls are accepted only from this server\u2019s address. No gatekeeper and no H.245.' : undefined}>
+          <Field label="Protocol" htmlFor="tproto" error={p('protocol')} hint={t.protocol === 'iax2' ? 'IAX2 is Asterisk\u2019s own protocol, on port 4569: for an Asterisk or FreePBX server, or an IAX2 provider. Leave the server empty when the other server registers here with the username and password.' : t.protocol === 'dahdi' ? 'The phone company lines on this computer\u2019s telephony card, through bitvoice-dahdi: set the ports in Telephony cards. Its server and port are set from there.' : t.protocol === 'h323' ? 'H.323 on port 1720, for older gateways, PBXs and video-conference systems: calls are set up by Fast Connect with G.711, and calls are accepted only from this server\u2019s address. No gatekeeper and no H.245.' : undefined}>
             <select id="tproto" className="input" value={t.protocol ?? ''} onChange={(e) => {
               const v = e.target.value as Trunk['protocol']
-              const def = (x: Trunk['protocol']) => (x === 'iax2' ? 4569 : x === 'h323' ? 1720 : 5060)
-              setT((t0) => ({ ...t0, protocol: v, port: t0.port === def(t0.protocol) || !t0.port ? def(v) : t0.port, register: v === 'h323' ? false : t0.register }))
+              const def = (x: Trunk['protocol']) => (x === 'iax2' ? 4569 : x === 'h323' ? 1720 : x === 'dahdi' ? 5091 : 5060)
+              setT((t0) => ({ ...t0, protocol: v, port: t0.port === def(t0.protocol) || !t0.port ? def(v) : t0.port, register: v === 'h323' || v === 'dahdi' ? false : t0.register, host: v === 'dahdi' ? '127.0.0.1' : t0.host }))
             }}>
-              <option value="">SIP</option><option value="iax2">IAX2 (Asterisk, FreePBX)</option><option value="h323">H.323 (older gateways)</option>
+              <option value="">SIP</option><option value="iax2">IAX2 (Asterisk, FreePBX)</option><option value="h323">H.323 (older gateways)</option><option value="dahdi">Telephony card lines</option>
             </select>
           </Field>
         )}
         <Field label="Name" htmlFor="tn" error={p('name')}><input id="tn" className="input" autoFocus={isNew} value={t.name} onChange={(e) => set('name', e.target.value)} placeholder="Main line" /></Field>
+        {t.protocol !== 'dahdi' && (
         <div className="grid grid-cols-[1fr_6rem_6rem] gap-3">
           <Field label="Provider server" htmlFor="th" error={p('host')}><input id="th" className="input font-mono" value={t.host} onChange={(e) => set('host', e.target.value.trim())} placeholder="sip.provider.com" /></Field>
           <Field label="Port" htmlFor="tp"><input id="tp" type="number" className="input" value={t.port} onChange={(e) => set('port', Number(e.target.value))} /></Field>
@@ -143,7 +144,8 @@ function Editor({ t: initial, status, onClose }: { t: Trunk; status?: TrunkStatu
           </Field>
           )}
         </div>
-        {t.protocol !== 'h323' && (<>
+        )}
+        {t.protocol !== 'h323' && t.protocol !== 'dahdi' && (<>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Username" htmlFor="tu" error={p('username')}><input id="tu" className="input" value={t.username} onChange={(e) => set('username', e.target.value.trim())} /></Field>
           <Field label="Password" htmlFor="tw" hint={!isNew ? 'Leave empty to keep the current one.' : undefined}>

@@ -30,6 +30,7 @@ import (
 type Server struct {
 	hotel  hotelLink
 	snmp   snmpState
+	cards  cardsState
 	cdrOut cdrOut
 	Store  *store.Store
 	Engine *pbx.Engine

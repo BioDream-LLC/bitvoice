@@ -305,6 +305,7 @@ func (s *Server) routes() {
 	s.chatRoutes()
 	s.snmpRoutes()
 	s.deskRoutes()
+	s.cardsRoutes()
 	s.cdrOutputRoutes()
 	s.importRoutes()
 	s.phoneRoutes()

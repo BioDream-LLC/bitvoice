@@ -40,6 +40,7 @@ import { Sounds } from './Sounds'
 import { DialIns, Directories } from './DialIn'
 import { Hotel } from './Hotel'
 import { DeskPhones } from './DeskPhones'
+import { TelephonyCards } from './TelephonyCards'
 import { RingGroups } from './RingGroups'
 import { Conferences } from './Conferences'
 import { Portal } from './Portal'
@@ -113,6 +114,7 @@ function Admin() {
         <Route path="/dial-in" element={<DialIns />} />
         <Route path="/hotel" element={<Hotel />} />
         <Route path="/desk-phones" element={<DeskPhones />} />
+        <Route path="/cards" element={<TelephonyCards />} />
         <Route path="/paging" element={<Paging />} />
         <Route path="/conferences" element={<Conferences />} />
         <Route path="/codes" element={<FeatureCodesPage />} />

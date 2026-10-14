@@ -70,6 +70,8 @@ type System struct {
 	CDROutputs CDROutputs `json:"cdrOutputs"`
 	// Desk is the older phone protocols beside SIP: Skinny (SCCP) phones and MGCP gateways.
 	Desk DeskProtocols `json:"desk"`
+	// Cards is this computer's telephony cards (DAHDI), through bitvoice-dahdi.
+	Cards Cards `json:"cards"`
 
 	// PublicAddress is advertised in SIP and SDP. Empty means work it out per peer.
 	PublicAddress string `json:"publicAddress"`
@@ -850,7 +852,8 @@ type Trunk struct {
 	// Protocol is sip (the default) or iax2: Asterisk's own protocol, for an Asterisk or FreePBX
 	// server or an IAX2 provider (port 4569). An IAX2 trunk with no host waits for the far server to
 	// register here with Username and Password. h323 is H.323 (port 1720) with Fast Connect and
-	// G.711, for older gateways and video-conference systems.
+	// G.711, for older gateways and video-conference systems. dahdi is the card trunk: the phone
+	// company lines on this computer's telephony cards (see Cards), through bitvoice-dahdi.
 	Protocol string `json:"protocol,omitempty"`
 	Username string `json:"username"`
 	AuthUser string `json:"authUser"`
@@ -1393,6 +1396,7 @@ func (c *Config) Validate() error {
 	c.validateChat(&p)
 	c.validateOutputs(&p)
 	c.validateDesk(&p)
+	c.validateCards(&p)
 	if s.PublicAddress != "" {
 		if _, err := netip.ParseAddr(s.PublicAddress); err != nil && !hostRe.MatchString(s.PublicAddress) {
 			p.add("system.publicAddress", "must be an IP address or host name")
@@ -2231,9 +2235,16 @@ func (c *Config) Validate() error {
 		}
 		iax2 := t.Protocol == "iax2"
 		h323 := t.Protocol == "h323"
+		if t.Protocol == "dahdi" {
+			// The card trunk: bitvoice-dahdi on this computer, at the Telephony cards port.
+			t.Host, t.Port, t.Register, t.Transport, t.Teams, t.ESInet = "127.0.0.1", c.System.Cards.LinePort, false, "udp", false, false
+			if t.Port == 0 {
+				t.Port = DefaultCardLinePort
+			}
+		}
 		switch {
-		case t.Protocol != "" && !iax2 && !h323:
-			p.add(f+".protocol", "choose SIP, IAX2 or H.323")
+		case t.Protocol != "" && !iax2 && !h323 && t.Protocol != "dahdi":
+			p.add(f+".protocol", "choose SIP, IAX2, H.323 or Telephony cards")
 		case h323 && t.Host == "":
 			p.add(f+".host", "enter the H.323 gateway's address")
 		case h323 && (t.Teams || t.ESInet):
