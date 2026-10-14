@@ -59,7 +59,7 @@ func asteriskRow(r store.CDR) []string {
 	if r.Trunk != "" && r.Direction == "outbound" {
 		dst = "SIP/" + r.Trunk
 	}
-	return []string{r.Department, r.From, r.To, r.Direction, clid, channel, dst, "Dial", r.To,
+	return []string{firstNonEmpty(r.Account, r.Department), r.From, r.To, r.Direction, clid, channel, dst, "Dial", r.To,
 		at(r.Start), at(r.Answer), at(r.End), strconv.Itoa(r.Duration), strconv.Itoa(r.Billsec),
 		asteriskDisposition(r.Disposition), "3", r.ID, r.Cause}
 }

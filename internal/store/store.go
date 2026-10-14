@@ -103,6 +103,8 @@ type CDR struct {
 	// Ext is the extension that placed an outgoing call; Department is its department then.
 	Ext        string `json:"ext,omitempty"`
 	Department string `json:"department,omitempty"`
+	// Account is the account code: the PIN an outbound route asked for, when its PIN set records it.
+	Account string `json:"account,omitempty"`
 	// Cost is what the provider charges for the call, in the system currency, from the trunk's rates;
 	// Rate names the rate used.
 	Cost float64 `json:"cost,omitempty"`

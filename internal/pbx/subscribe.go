@@ -73,7 +73,7 @@ func (e *Engine) subscribe(tx *sip.ServerTx, in *sip.Incoming) {
 	if ev == "dialog" {
 		// Busy lamp: any extension may watch any other.
 		u, err := sip.ParseURI(m.RequestURI)
-		if err != nil || cfg.FindExtension(u.User) == nil {
+		if err != nil || (cfg.FindExtension(u.User) == nil && toggleLamp(cfg, u.User) == nil) {
 			tx.Respond(sip.NewResponse(m, 404, "No Such Extension"))
 			return
 		}
@@ -201,6 +201,9 @@ func (e *Engine) sendMWI(s *subscription, fresh, old int) {
 // extensionState is an extension's dialog state for busy lamps: terminated (idle), early (ringing) or
 // confirmed (on a call).
 func (e *Engine) extensionState(ext string) string {
+	if t := toggleLamp(e.Config(), ext); t != nil {
+		return toggleState(e.ToggleOn(t.ID))
+	}
 	busy, ringing := e.busyExtensions()
 	switch {
 	case busy[ext]:
@@ -249,9 +252,12 @@ func (e *Engine) presenceChanged() {
 		return
 	}
 	busy, ringing := e.busyExtensions()
+	cfg := e.Config()
 	for _, s := range subs {
 		state := "terminated"
-		if busy[s.box] {
+		if t := toggleLamp(cfg, s.box); t != nil {
+			state = toggleState(e.ToggleOn(t.ID))
+		} else if busy[s.box] {
 			state = "confirmed"
 		} else if ringing[s.box] {
 			state = "early"
@@ -291,4 +297,12 @@ func (e *Engine) sendNotify(s *subscription, contentType, body string) {
 			e.mu.Unlock()
 		}
 	}
+}
+
+// toggleState is a toggle's busy lamp: lit (confirmed) while switched over.
+func toggleState(on bool) string {
+	if on {
+		return "confirmed"
+	}
+	return "terminated"
 }

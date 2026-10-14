@@ -108,9 +108,11 @@ type Engine struct {
 	away          aways
 	lastEmergency atomic.Int64 // unix seconds of the last emergency call, so a call back is never blocked
 
-	hot  hotDesks
-	div  diverts
-	conf conferences
+	hot     hotDesks
+	div     diverts
+	tog     toggles
+	lookups lookupCache
+	conf    conferences
 	// Recordings stores call recordings; nil switches recording off.
 	Recordings Recordings
 	// Trace sees every SIP message (the SIP trace screen).

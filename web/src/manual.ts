@@ -7,9 +7,9 @@ export interface Article { id: string; title: string; route?: string; keys: stri
  * its chapters through them. Every article is in exactly one part. */
 export const parts: { title: string; intro: string; ids: string[] }[] = [
   { title: 'Getting started', intro: 'From a new install to a working phone system: extensions, phones, a phone company, where calls go, emergency calling from your offices, and how to tell everything is ready.',
-    ids: ['start', 'extensions', 'phones', 'deskphones', 'cards', 'trunks', 'routes', 'emergency', 'sites', 'health', 'settings'] },
+    ids: ['start', 'extensions', 'phones', 'deskphones', 'cards', 'trunks', 'routes', 'pinsets', 'lookups', 'emergency', 'sites', 'health', 'settings'] },
   { title: 'Where calls go', intro: 'The building blocks callers move through: groups and queues, menus and schedules, scripts and the AI receptionist, voicemail, and the diagram that shows it all.',
-    ids: ['flow', 'ringgroups', 'queues', 'sounds', 'menus', 'directory', 'dialin', 'schedules', 'scripts', 'ai', 'voicemail', 'callbacks', 'calllinks'] },
+    ids: ['flow', 'ringgroups', 'queues', 'sounds', 'menus', 'directory', 'dialin', 'toggles', 'schedules', 'scripts', 'ai', 'voicemail', 'callbacks', 'calllinks'] },
   { title: 'Everyday calling', intro: 'What people do on their phones every day, and what they set for themselves: forwarding, follow-me, pickup, conference rooms, paging, hot desks, faxes and texts.',
     ids: ['codes', 'portal', 'conferences', 'paging', 'hotdesk', 'hotel', 'contacts', 'calendar', 'mobile', 'video', 'fax', 'texts', 'briefing'] },
   { title: 'Customers and insight', intro: 'Knowing who called and how it went: the live calls and history, the customer timeline, CRMs, recordings and consent, quality, costs and caller ID reputation.',
@@ -467,6 +467,18 @@ Callers hear "Please enter the first three letters of the person's name". One ma
 Callers hear "Please enter your PIN, then press hash", then "Please enter the number to call, then press hash", and are put through. The words come from the dial-in prompts in [Sounds](#/sounds).
 
 > A dial-in is a door to your phone bill. Three wrong PINs end the call, every attempt (refused number, wrong PIN, connected call) is logged and shown in Security, and calls follow the extension's limits. Use a long PIN, list callers' numbers where you can (caller ID can be faked, so keep the PIN too), and keep the extension's outside calls to what is needed.`,
+  },
+  {
+    id: 'toggles', title: 'Day/night toggles', route: '/toggles', keys: 'day night toggle call flow control switch override night service closed early snow day holiday *28 busy lamp blf freepbx',
+    body: `A [day/night toggle](#/toggles) is a switch for a call flow (FreePBX calls it call flow control). Calls sent to it go to its **normal** destination, or to the other one while someone has **switched it over**: the office closes early for a storm, someone dials \`*281\` on the way out, and calls go to voicemail until it is switched back in the morning. It stays as it was left, across restarts.
+
+1. **Add toggle**, give it a code (1 to 3 digits: dialled after \`*28\`) and choose where calls go normally and when switched over. Either side may be a schedule, so a toggle can sit in front of the opening hours and override them.
+2. Choose who may switch it from a phone (nobody chosen lets any extension).
+3. Send calls to it from [Call routing](#/routes), a menu option or a schedule, like any other destination.
+
+Switch it by dialling \`*28\` and its code (a rising tone: switched over; a falling tone: back to normal), with the switch beside it on the Toggles page, or through the API (\`POST /api/toggles/{id}/state\`). A busy lamp key watching \`*281\` is lit while that toggle is switched over, so the person who closes up can see it from their desk. The toggle code itself is on [Feature codes](#/codes).
+
+> [Call flow](#/flow) shows both sides of every toggle and which one calls take now; the call-path simulator follows the side that is in force.`,
   },
   {
     id: 'hotel', title: 'Hotel and wake-up calls', route: '/hotel', keys: 'hotel wake up wake-up alarm morning call guest room check in check out pms property management fias opera housekeeping room status charges hospitality markup',
@@ -1060,6 +1072,7 @@ Switch on **HD audio** in a room (new rooms have it on) and it is mixed at 16 kH
 | \`*0\` and a code | a speed dial |
 | \`*62\` | wake-up call: hear it, book one (four digits, such as 0630) or cancel it (star) |
 | \`*68\` and a digit | room status, for housekeeping in hotels |
+| \`*28\` and a toggle's code | switch a [day/night toggle](#toggles) over, or back |
 | \`*43\` | the echo test |
 | \`*97\` | your voicemail |
 | \`70\` | park a call (transfer it here); 71 to 79 pick it up |
@@ -1176,6 +1189,27 @@ Organisations never see this server's own screens: updates, the database, the ot
 | How | dial the group's number | \`*80\` and the extension |
 
 Phones that do not answer a page by themselves within a few seconds are left out, so one phone without auto-answer never holds a page up. Some phones need auto-answer (intercom) allowed in their own settings.`,
+  },
+  {
+    id: 'pinsets', title: 'PIN sets', route: '/pin-sets', keys: 'pin set pinset account code long distance international outbound route authorisation authorization billing client project code freepbx',
+    body: `A [PIN set](#/pin-sets) is a list of PINs an outbound route asks for before it calls out: to keep international or long-distance calls to people with a PIN, or to bill calls to clients and projects by their code.
+
+1. **Add PIN set** and list its PINs (4 to 10 digits each).
+2. Switch on **Keep the PIN in the call record** to write the PIN used into each call's record as its account code (the accountcode column of the CSV, syslog and PostgreSQL call record outputs, and \`account\` in the API).
+3. On [Call routing](#/routes), open an outbound route and choose the set under **Ask for a PIN**.
+
+Callers dialling a number that route takes hear "Please enter your PIN, then press hash", enter it, and the call goes out. Three wrong PINs end the call, and the attempt is logged as a security event. Emergency numbers never ask for a PIN, whatever route they take, and forwarded calls and follow-me numbers are not asked either: only people dialling from a phone.`,
+  },
+  {
+    id: 'lookups', title: 'Caller ID lookup', route: '/lookups', keys: 'caller id lookup cnam opencnam caller name superfecta crm name callers contact lookup',
+    body: `Many phone companies send a caller's number but no name. BitVoice first looks in the [company contacts](#/contacts); after that, an inbound route can ask a [caller ID lookup](#/lookups):
+
+- **A web address**: your CRM or any service that answers with the name. Put \`{number}\` where the number goes (\`https://crm.example.com/api/callers?phone={number}\`). A plain-text answer gives the name on its first line; for JSON, give the **name field** as a dotted path (\`data.contact.name\`). Basic authentication is optional.
+- **OpenCNAM**: the North American caller-name database, with your account SID and auth token.
+
+Choose the lookup on an inbound route on [Call routing](#/routes) (**Caller ID lookup**). Phones show the name while they ring, and it goes into the call record.
+
+A lookup never holds a call up: BitVoice waits at most its **wait** (1.5 seconds unless you change it, 5 at most) and then rings without a name. Answers are kept for a day (or as long as you set, or never with -1), so a regular caller is not looked up on every call; numbers the service does not know are asked again after an hour. **Try it** on the lookup's page asks for a number at once, with the settings as saved.`,
   },
   {
     id: 'emergency', title: 'Emergency calls', keys: '911 933 112 999 karis law ray baums location notify',

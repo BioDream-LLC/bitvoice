@@ -33,6 +33,8 @@ func (d Divert) empty() bool {
 type DivertState struct {
 	Diverts []Divert `json:"diverts"`
 	Away    []Away   `json:"away"`
+	// Toggles are the IDs of the day/night switches switched over.
+	Toggles []string `json:"toggles,omitempty"`
 }
 
 type diverts struct {
@@ -160,6 +162,7 @@ func (e *Engine) LoadDiverts(s DivertState) {
 		}
 	}
 	e.away.mu.Unlock()
+	e.loadToggles(s.Toggles)
 }
 
 // saveDiverts keeps the diverts and the hand-set do not disturbs.
@@ -169,6 +172,7 @@ func (e *Engine) saveDiverts() {
 	}
 	var s DivertState
 	s.Diverts = e.Diverts()
+	s.Toggles = e.TogglesOn()
 	for _, a := range e.Aways() {
 		if a.Source == "manual" {
 			s.Away = append(s.Away, a)
@@ -350,7 +354,7 @@ func (e *Engine) featureCode(cfg *config.Config, caller *config.Extension, diall
 		code string
 		kind string
 	}
-	pres := []pre{{fc.DirectedPickup, "pickup"}, {fc.Intercom, "intercom"}, {fc.SpeedDial, "speed"}, {fc.RoomStatus, "room"}}
+	pres := []pre{{fc.DirectedPickup, "pickup"}, {fc.Intercom, "intercom"}, {fc.SpeedDial, "speed"}, {fc.RoomStatus, "room"}, {fc.Toggle, "toggle"}}
 	slices.SortFunc(pres, func(a, b pre) int { return len(b.code) - len(a.code) })
 	for _, pr := range pres {
 		rest, ok := prefixed(pr.code)
@@ -364,6 +368,15 @@ func (e *Engine) featureCode(cfg *config.Config, caller *config.Extension, diall
 			return e.intercomPlan(cfg, caller, rest), true
 		case "room":
 			return local("roomstatus", rest, "Room status")
+		case "toggle":
+			t := cfg.FindToggleCode(rest)
+			if t == nil {
+				return plan{reject: 404, reason: "No Such Toggle", direction: "internal"}, true
+			}
+			if caller == nil || !t.ToggleAllowed(caller.Number) {
+				return plan{reject: 403, reason: "Not Allowed To Switch This Toggle", direction: "internal"}, true
+			}
+			return local("toggle", t.ID, t.Name)
 		case "speed":
 			n := speedDial(cfg, caller, rest)
 			if n == "" {

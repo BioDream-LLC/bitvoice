@@ -22,6 +22,7 @@ type Call struct {
 	ID string
 
 	mu        sync.Mutex
+	account   string // the PIN an outbound route asked for, when its set records it
 	caller    *Leg
 	callee    *Leg
 	forks     []*Leg
@@ -1009,6 +1010,14 @@ func (c *Call) answerLocal(p plan) {
 		if c.answerHere(p.toName) {
 			go c.wakeUpCode()
 		}
+	case "pinout":
+		if c.answerHere(p.toName) {
+			go c.pinOut(p)
+		}
+	case "toggle":
+		if c.answerHere(p.toName) {
+			go c.toggleCode(p.box)
+		}
 	case "roomstatus":
 		if c.answerHere(p.toName) {
 			go c.roomStatusCode(p.box)
@@ -1214,6 +1223,7 @@ func (c *Call) writeRecord(info CallInfo, recording string) {
 	if c.callee != nil {
 		r.AnsweredExt = c.callee.Ext
 	}
+	r.Account = c.account
 	var trunkID, number string
 	if c.callee != nil && c.callee.TrunkID != "" {
 		trunkID, number = c.callee.TrunkID, c.callee.Number

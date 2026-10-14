@@ -198,6 +198,7 @@ func (s *Server) routes() {
 		list:  func(c *config.Config) *[]config.Directory { return &c.Directories },
 		id:    func(x *config.Directory) *string { return &x.ID },
 		label: func(x *config.Directory) string { return x.Name }})
+	registerFlow(s)
 	register(s, collection[config.DialIn]{path: "dial-ins", noun: "dial-in",
 		list:  func(c *config.Config) *[]config.DialIn { return &c.DialIns },
 		id:    func(x *config.DialIn) *string { return &x.ID },
@@ -305,6 +306,7 @@ func (s *Server) routes() {
 	s.chatRoutes()
 	s.snmpRoutes()
 	s.deskRoutes()
+	s.flowRoutes()
 	s.cardsRoutes()
 	s.cdrOutputRoutes()
 	s.importRoutes()
@@ -648,6 +650,12 @@ func ownerName(cfg *config.Config, field string) string {
 		return pick(len(cfg.PageGroups), func(i int) string { return "paging group " + cfg.PageGroups[i].Name })
 	case "directories":
 		return pick(len(cfg.Directories), func(i int) string { return "directory " + cfg.Directories[i].Name })
+	case "toggles":
+		return pick(len(cfg.Toggles), func(i int) string { return "toggle " + cfg.Toggles[i].Name })
+	case "pinSets":
+		return pick(len(cfg.PINSets), func(i int) string { return "PIN set " + cfg.PINSets[i].Name })
+	case "lookups":
+		return pick(len(cfg.Lookups), func(i int) string { return "caller ID lookup " + cfg.Lookups[i].Name })
 	case "dialIns":
 		return pick(len(cfg.DialIns), func(i int) string { return "dial-in " + cfg.DialIns[i].Name })
 	case "conferences":

@@ -9,7 +9,7 @@ import { Field, Page, StaleBanner, problemFor } from './ui'
 
 const defaults: FeatureCodes = {
   forwardAll: '*72', forwardAllOff: '*73', forwardBusy: '*90', forwardBusyOff: '*91', forwardNoAnswer: '*52', forwardNoAnswerOff: '*53',
-  dndOn: '*78', dndOff: '*79', dndToggle: '*76', followMe: '*21', pickup: '*8', directedPickup: '**', intercom: '*80', speedDial: '*0', wakeUp: '*62', roomStatus: '*68',
+  dndOn: '*78', dndOff: '*79', dndToggle: '*76', followMe: '*21', pickup: '*8', directedPickup: '**', intercom: '*80', speedDial: '*0', wakeUp: '*62', roomStatus: '*68', toggle: '*28',
 }
 
 const groups: { title: string; color: string; codes: { key: keyof FeatureCodes; label: string; how: string }[] }[] = [
@@ -32,6 +32,7 @@ const groups: { title: string; color: string; codes: { key: keyof FeatureCodes; 
     { key: 'directedPickup', label: 'Answer a call ringing one extension', how: 'Followed by the extension: **101.' },
     { key: 'intercom', label: 'Intercom', how: 'Followed by the extension: *80101. Its phone answers on the speaker, both ways.' },
     { key: 'speedDial', label: 'Speed dial', how: 'Followed by the code: *05.' },
+    { key: 'toggle', label: 'Switch a day/night toggle', how: 'Followed by the toggle\u2019s code: *281. Rising tone: switched over; falling tone: back to normal.' },
   ] },
   { title: 'Wake-up calls and hotel', color: 'text-amber-300', codes: [
     { key: 'wakeUp', label: 'Wake-up call', how: 'Hear the one set, enter four digits (0630) to book one, or star to cancel it.' },

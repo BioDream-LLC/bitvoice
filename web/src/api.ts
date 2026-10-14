@@ -5,7 +5,7 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 export type Role = 'admin' | 'viewer' | 'extension'
 export interface Me { username: string; name: string; role: Role; setupComplete: boolean; mfa?: boolean }
 
-export interface Destination { type: 'extension' | 'ringgroup' | 'queue' | 'menu' | 'schedule' | 'script' | 'receptionist' | 'voicemail' | 'fax' | 'esrp' | 'conference' | 'directory' | 'dialin' | 'echo' | 'hangup'; target: string }
+export interface Destination { type: 'extension' | 'ringgroup' | 'queue' | 'menu' | 'schedule' | 'toggle' | 'script' | 'receptionist' | 'voicemail' | 'fax' | 'esrp' | 'conference' | 'directory' | 'dialin' | 'echo' | 'hangup'; target: string }
 export interface Receptionist { id: string; name: string; greeting: string; knowledge: string; person: Destination; messageBox: string }
 
 export interface Extension {
@@ -24,7 +24,7 @@ export interface SpeedDial { code: string; number: string; name: string }
 export interface FeatureCodes {
   forwardAll: string; forwardAllOff: string; forwardBusy: string; forwardBusyOff: string; forwardNoAnswer: string; forwardNoAnswerOff: string
   dndOn: string; dndOff: string; dndToggle: string; followMe: string; pickup: string; directedPickup: string; intercom: string; speedDial: string
-  wakeUp?: string; roomStatus?: string
+  wakeUp?: string; roomStatus?: string; toggle?: string
 }
 export interface Directory { id: string; number: string; name: string; match: 'last' | 'first' | 'any'; members: string[] | null; language?: string }
 export interface DialIn { id: string; number: string; name: string; pin: string; allowedCallers: string[] | null; as: string; language?: string }
@@ -168,8 +168,14 @@ export interface Trunk {
 }
 export interface Shaken { sign: boolean; cert: string; key: string; x5u: string; attest: '' | 'A' | 'B' | 'C'; origId: string }
 export interface Rate { prefix: string; name: string; perMinute: number; setup: number; increment: number; minimum: number }
-export interface InboundRoute { id: string; name: string; did: string; trunk: string; destination: Destination }
-export interface OutboundRoute { id: string; name: string; patterns: string[]; strip: number; prepend: string; trunks: string[] }
+export interface InboundRoute { id: string; name: string; did: string; trunk: string; destination: Destination; lookup?: string }
+/** A day/night switch: calls go to normal, or to override while switched over. */
+export interface Toggle { id: string; name: string; code: string; normal: Destination; override: Destination; allowed: string[] | null }
+/** PINs an outbound route asks for before calling out. */
+export interface PINSet { id: string; name: string; pins: string[]; record: boolean }
+/** Names callers the provider sent no name for. */
+export interface CallerIDLookup { id: string; name: string; kind: 'http' | 'opencnam'; url: string; field: string; username: string; password: string; timeoutMs: number; cacheHours: number }
+export interface OutboundRoute { id: string; name: string; patterns: string[]; strip: number; prepend: string; trunks: string[]; pinSet?: string }
 
 export interface ClusterSettings { name: string; sharedAddress: string; interface: string }
 export interface SharedAddress { address: string; held: boolean; holder: string; error?: string; since?: string }
@@ -350,7 +356,7 @@ const baseQuery = fetchBaseQuery({
 })
 
 const tags = ['Me', 'Extensions', 'RingGroups', 'Trunks', 'Inbound', 'Outbound', 'Settings', 'Users', 'Calls',
-  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail', 'Tenants', 'System', 'Prompts', 'Music', 'Directories', 'DialIns', 'Hotel', 'WakeUps', 'Chat'] as const
+  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail', 'Tenants', 'System', 'Prompts', 'Music', 'Directories', 'DialIns', 'Toggles', 'ToggleState', 'PINSets', 'Lookups', 'Hotel', 'WakeUps', 'Chat'] as const
 
 export const api = createApi({
   reducerPath: 'api',
@@ -433,6 +439,21 @@ export const api = createApi({
       createDirectory: b.mutation<Item<Directory>, Partial<Directory>>({ query: (body) => ({ url: 'directories', method: 'POST', body }), invalidatesTags: ['Directories', 'History'] }),
       updateDirectory: b.mutation<Item<Directory>, Directory>({ query: (body) => ({ url: `directories/${body.id}`, method: 'PUT', body }), invalidatesTags: ['Directories', 'History'] }),
       deleteDirectory: b.mutation<void, string>({ query: (id) => ({ url: `directories/${id}`, method: 'DELETE' }), invalidatesTags: ['Directories', 'History'] }),
+      toggles: b.query<List<Toggle>, void>({ query: () => 'toggles', providesTags: ['Toggles'] }),
+      createToggle: b.mutation<Item<Toggle>, Partial<Toggle>>({ query: (body) => ({ url: 'toggles', method: 'POST', body }), invalidatesTags: ['Toggles', 'History'] }),
+      updateToggle: b.mutation<Item<Toggle>, Toggle>({ query: (body) => ({ url: `toggles/${body.id}`, method: 'PUT', body }), invalidatesTags: ['Toggles', 'History'] }),
+      deleteToggle: b.mutation<void, string>({ query: (id) => ({ url: `toggles/${id}`, method: 'DELETE' }), invalidatesTags: ['Toggles', 'History'] }),
+      toggleState: b.query<{ override: string[] }, void>({ query: () => 'toggles/state', providesTags: ['ToggleState'] }),
+      switchToggle: b.mutation<{ override: boolean }, { id: string; override: boolean }>({ query: ({ id, override }) => ({ url: `toggles/${id}/state`, method: 'POST', body: { override } }), invalidatesTags: ['ToggleState'] }),
+      pinSets: b.query<List<PINSet>, void>({ query: () => 'pin-sets', providesTags: ['PINSets'] }),
+      createPinSet: b.mutation<Item<PINSet>, Partial<PINSet>>({ query: (body) => ({ url: 'pin-sets', method: 'POST', body }), invalidatesTags: ['PINSets', 'History'] }),
+      updatePinSet: b.mutation<Item<PINSet>, PINSet>({ query: (body) => ({ url: `pin-sets/${body.id}`, method: 'PUT', body }), invalidatesTags: ['PINSets', 'History'] }),
+      deletePinSet: b.mutation<void, string>({ query: (id) => ({ url: `pin-sets/${id}`, method: 'DELETE' }), invalidatesTags: ['PINSets', 'History'] }),
+      lookups: b.query<List<CallerIDLookup>, void>({ query: () => 'lookups', providesTags: ['Lookups'] }),
+      createLookup: b.mutation<Item<CallerIDLookup>, Partial<CallerIDLookup>>({ query: (body) => ({ url: 'lookups', method: 'POST', body }), invalidatesTags: ['Lookups', 'History'] }),
+      updateLookup: b.mutation<Item<CallerIDLookup>, CallerIDLookup>({ query: (body) => ({ url: `lookups/${body.id}`, method: 'PUT', body }), invalidatesTags: ['Lookups', 'History'] }),
+      deleteLookup: b.mutation<void, string>({ query: (id) => ({ url: `lookups/${id}`, method: 'DELETE' }), invalidatesTags: ['Lookups', 'History'] }),
+      testLookup: b.mutation<{ ok: boolean; name?: string; error?: string }, { id: string; number: string }>({ query: ({ id, number }) => ({ url: `lookups/${id}/test`, method: 'POST', body: { number } }) }),
       dialIns: b.query<List<DialIn>, void>({ query: () => 'dial-ins', providesTags: ['DialIns'] }),
       createDialIn: b.mutation<Item<DialIn>, Partial<DialIn>>({ query: (body) => ({ url: 'dial-ins', method: 'POST', body }), invalidatesTags: ['DialIns', 'History'] }),
       updateDialIn: b.mutation<Item<DialIn>, DialIn>({ query: (body) => ({ url: `dial-ins/${body.id}`, method: 'PUT', body }), invalidatesTags: ['DialIns', 'History'] }),
@@ -739,6 +760,9 @@ export const {
   useVoicemailQuery, useMarkHeardMutation, useDeleteVoicemailMutation, useSaveGreetingMutation, useResetGreetingMutation,
   useDirectoriesQuery, useCreateDirectoryMutation, useUpdateDirectoryMutation, useDeleteDirectoryMutation,
   useDialInsQuery, useCreateDialInMutation, useUpdateDialInMutation, useDeleteDialInMutation,
+  useTogglesQuery, useCreateToggleMutation, useUpdateToggleMutation, useDeleteToggleMutation, useToggleStateQuery, useSwitchToggleMutation,
+  usePinSetsQuery, useCreatePinSetMutation, useUpdatePinSetMutation, useDeletePinSetMutation,
+  useLookupsQuery, useCreateLookupMutation, useUpdateLookupMutation, useDeleteLookupMutation, useTestLookupMutation,
   useHotelQuery, useCheckInMutation, useCheckOutMutation, useSetRoomStatusMutation, useWakeUpsQuery, useSetWakeUpMutation, useCancelWakeUpMutation,
   useSaveNameAudioMutation, useDeleteNameAudioMutation, useSnmpStatusQuery, useDeskStatusQuery, useCardsStatusQuery, useCdrCsvQuery, useTestCdrOutputsMutation, useChatListQuery, useChatMessagesQuery, useSendChatMutation, useSetChatStatusMutation,
   usePromptsQuery, useSaveLangPromptMutation, useDeleteLangPromptMutation, useGeneratePromptsMutation, useMusicQuery, useAddMusicMutation, useDeleteMusicMutation,

@@ -2,7 +2,7 @@ import { ArrowDown, ArrowDownLeft, ArrowUp, ArrowUpRight, Plus, Route, Siren } f
 import { useState } from 'react'
 import {
   useCreateInboundMutation, useCreateOutboundMutation, useDeleteInboundMutation, useDeleteOutboundMutation,
-  useInboundRoutesQuery, useOutboundRoutesQuery, useReorderOutboundMutation, useSettingsQuery, useTrunksQuery,
+  useInboundRoutesQuery, useLookupsQuery, useOutboundRoutesQuery, usePinSetsQuery, useReorderOutboundMutation, useSettingsQuery, useTrunksQuery,
   useUpdateInboundMutation, useUpdateOutboundMutation, type ApiErrorBody, type Destination, type InboundRoute,
   type OutboundRoute,
 } from './api'
@@ -101,6 +101,7 @@ function DestChip({ d }: { d: Destination }) {
   if (d.type === 'script') return <span className="text-fuchsia-300">a script</span>
   if (d.type === 'menu') return <span className="text-sky-300">a menu</span>
   if (d.type === 'schedule') return <span className="text-amber-300">a schedule</span>
+  if (d.type === 'toggle') return <span className="text-indigo-300">a day/night toggle</span>
   if (d.type === 'voicemail') return <span className="text-violet-300">voicemail of {d.target}</span>
   if (d.type === 'fax') return <span className="text-violet-300">fax {d.target}</span>
   if (d.type === 'esrp') return <span className="text-rose-300">ESRP (by location)</span>
@@ -138,6 +139,7 @@ function InboundEditor({ r: initial, onClose }: { r: InboundRoute; onClose: () =
         </Field>
         <DestinationPicker label="Send calls to" required value={r.destination.target || r.destination.type === 'echo' || r.destination.type === 'hangup' ? r.destination : null}
           onChange={(d) => d && setR((r0) => ({ ...r0, destination: d }))} error={problemFor(err?.problems, 'destination')} />
+        <LookupField value={r.lookup ?? ''} onChange={(v) => setR((r0) => ({ ...r0, lookup: v }))} error={problemFor(err?.problems, 'lookup')} />
       </fieldset>
     </Drawer>
   )
@@ -188,7 +190,34 @@ function OutboundEditor({ r: initial, onClose }: { r: OutboundRoute; onClose: ()
             {!trunks?.items.length && <p className="text-sm text-amber-300">Add a trunk first.</p>}
           </div>
         </Field>
+        <PINSetField value={r.pinSet ?? ''} onChange={(v) => setR((r0) => ({ ...r0, pinSet: v }))} error={p('pinSet')} />
       </fieldset>
     </Drawer>
+  )
+}
+
+/** The caller ID lookup an inbound route asks for callers sent without a name. */
+function LookupField({ value, onChange, error }: { value: string; onChange: (v: string) => void; error?: string }) {
+  const { data } = useLookupsQuery()
+  return (
+    <Field label="Caller ID lookup" htmlFor="ilk" error={error} hint={data?.items.length ? 'For callers the provider sends without a name.' : <>Add one on <a className="text-sky-300 underline" href="#/lookups">Caller ID lookup</a> to name callers from your CRM or OpenCNAM.</>}>
+      <select id="ilk" className="input" value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">None</option>
+        {data?.items.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+      </select>
+    </Field>
+  )
+}
+
+/** The PIN set an outbound route asks for before calling out. */
+function PINSetField({ value, onChange, error }: { value: string; onChange: (v: string) => void; error?: string }) {
+  const { data } = usePinSetsQuery()
+  return (
+    <Field label="Ask for a PIN" htmlFor="opin" error={error} hint={data?.items.length ? 'Callers enter one of its PINs before the call goes out. Emergency calls never ask.' : <>Make a list of PINs on <a className="text-sky-300 underline" href="#/pin-sets">PIN sets</a> to ask for one here.</>}>
+      <select id="opin" className="input" value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">No PIN</option>
+        {data?.items.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+      </select>
+    </Field>
   )
 }

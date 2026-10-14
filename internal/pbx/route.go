@@ -1,6 +1,7 @@
 package pbx
 
 import (
+	"context"
 	"fmt"
 	"github.com/biodream-llc/bitvoice/internal/i3"
 	"net/netip"
@@ -27,6 +28,9 @@ type plan struct {
 	toName    string
 	direction string
 	trunk     string
+	// pinSet is the PIN set the outbound route asks for; pinThen the call that goes out after the PIN.
+	pinSet  string
+	pinThen *plan
 }
 
 type stage struct {
@@ -114,6 +118,16 @@ func (e *Engine) resolveFor(cfg *config.Config, d config.Destination, depth int,
 		next := s.Closed
 		if s.IsOpen(time.Now().In(cfg.System.Location())) {
 			next = s.Open
+		}
+		return e.resolveFor(cfg, next, depth+1, sc)
+	case "toggle":
+		t := cfg.FindToggle(d.Target)
+		if t == nil {
+			return plan{reject: 404}
+		}
+		next := t.Normal
+		if e.ToggleOn(t.ID) {
+			next = t.Override
 		}
 		return e.resolveFor(cfg, next, depth+1, sc)
 	case "esrp":
@@ -338,6 +352,12 @@ func (e *Engine) route(cfg *config.Config, caller *config.Extension, dialled str
 	}
 	p := e.outbound(cfg, caller, dialled)
 	p.direction = "outbound"
+	if p.pinSet != "" && p.reject == 0 {
+		// The route asks for a PIN: BitVoice answers, asks for it, then places the call.
+		then := p
+		then.pinSet = ""
+		return plan{local: "pinout", box: p.pinSet, toName: "PIN for " + dialled, direction: "outbound", trunk: p.trunk, pinThen: &then}
+	}
 	return p
 }
 
@@ -405,6 +425,9 @@ func (e *Engine) outbound(cfg *config.Config, caller *config.Extension, dialled 
 			return plan{reject: 503, reason: "No Trunk Available"}
 		}
 		p.toName = dialled
+		if !slices.Contains(cfg.System.EmergencyNumbers, dialled) {
+			p.pinSet = r.PINSet
+		}
 		return p
 	}
 	return plan{reject: 404, reason: "No Route"}
@@ -570,6 +593,12 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 		if e.NameFor != nil && (c.fromName == "" || cleanNumber(c.fromName) == c.from || c.screened != "") {
 			// The provider sent no name (or only the number): the company directory may know it.
 			if n := e.NameFor(c.from); n != "" {
+				c.fromName = n
+			}
+		}
+		if l := cfg.FindLookup(route.Lookup); l != nil && (c.fromName == "" || cleanNumber(c.fromName) == c.from) {
+			// Still no name: ask the route's caller ID lookup, for a moment at most.
+			if n := e.lookupName(context.Background(), l, c.from); n != "" {
 				c.fromName = n
 			}
 		}

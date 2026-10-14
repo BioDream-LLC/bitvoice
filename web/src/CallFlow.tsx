@@ -5,7 +5,7 @@ import { Plus, Workflow } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  useExtensionsQuery, useInboundRoutesQuery, useMenusQuery, useQueuesQuery, useRingGroupsQuery, useSchedulesQuery,
+  useExtensionsQuery, useInboundRoutesQuery, useMenusQuery, useQueuesQuery, useRingGroupsQuery, useSchedulesQuery, useTogglesQuery,
   useScriptsQuery, useTrunksQuery, useReceptionistsQuery, type Destination,
 } from './api'
 import { Empty, Page } from './ui'
@@ -15,7 +15,7 @@ import { FlowEdit, NewRoute, type FlowBox } from './FlowEdit'
 // Colours match the rest of the interface: each kind of thing has one colour.
 const colours: Record<string, [string, string]> = {
   route: ['#fbbf24', 'Incoming'], extension: ['#7dd3fc', 'Extension'], ringgroup: ['#c4b5fd', 'Ring group'],
-  queue: ['#fdba74', 'Queue'], menu: ['#7dd3fc', 'Menu'], schedule: ['#fcd34d', 'Schedule'], script: ['#f0abfc', 'Script'], receptionist: ['#c4b5fd', 'AI receptionist'],
+  queue: ['#fdba74', 'Queue'], menu: ['#7dd3fc', 'Menu'], schedule: ['#fcd34d', 'Schedule'], toggle: ['#a5b4fc', 'Day/night toggle'], script: ['#f0abfc', 'Script'], receptionist: ['#c4b5fd', 'AI receptionist'],
   voicemail: ['#c4b5fd', 'Voicemail'], fax: ['#a78bfa', 'Fax'], esrp: ['#fb7185', 'ESRP'], echo: ['#94a3b8', 'Echo test'], hangup: ['#fda4af', 'Hang up'],
 }
 const pages: Record<string, string> = {
@@ -31,6 +31,7 @@ export function CallFlow() {
   const { data: queues } = useQueuesQuery()
   const { data: menus } = useMenusQuery()
   const { data: schedules } = useSchedulesQuery()
+  const { data: toggles } = useTogglesQuery()
   const { data: scripts } = useScriptsQuery()
   const { data: trunks } = useTrunksQuery()
   const { data: receptionists } = useReceptionistsQuery()
@@ -110,6 +111,12 @@ export function CallFlow() {
           const s = schedules?.items.find((e) => e.id === d.target)
           name = s?.name ?? 'Schedule'
           next.push([s?.open, 'open'], [s?.closed, 'closed'])
+          break
+        }
+        case 'toggle': {
+          const s = toggles?.items.find((e) => e.id === d.target)
+          name = s?.name ?? 'Toggle'
+          next.push([s?.normal, 'normal'], [s?.override, 'switched over'])
           break
         }
         case 'script': {

@@ -133,9 +133,23 @@ func (s *sim) fromExtension(x *config.Extension, to string, res *SimResult) *Sim
 	switch {
 	case p.reject != 0:
 		return &SimStep{Kind: "refused", Name: "Not allowed", Status: "fail", Says: plainRefusal(to, p.reason) + "."}
+	case p.local == "pinout" && p.pinThen != nil:
+		ps := cfg.FindPINSet(p.box)
+		name := p.box
+		if ps != nil {
+			name = ps.Name
+		}
+		st := s.outboundStep(to, *p.pinThen)
+		st.Says = "The caller is asked for a PIN from " + name + " first. " + st.Says
+		return st
 	case p.local != "":
 		return &SimStep{Kind: "feature", Name: p.toName, Status: "ok", Says: to + " is a feature code: " + p.toName + "."}
 	}
+	return s.outboundStep(to, p)
+}
+
+// outboundStep says which trunks a call out takes.
+func (s *sim) outboundStep(to string, p plan) *SimStep {
 	var trunks []string
 	for _, st := range p.stages {
 		for _, t := range st.targets {
@@ -354,6 +368,22 @@ func (s *sim) walk(d config.Destination, depth int, path []string, direction, fr
 			{When: "Closed", Taken: !open, Step: next(sc.Closed)},
 		}
 		return st
+	case "toggle":
+		t := cfg.FindToggle(d.Target)
+		if t == nil {
+			return missing("toggle")
+		}
+		over := s.e.ToggleOn(t.ID)
+		state := "normal"
+		if over {
+			state = "switched over"
+		}
+		st := &SimStep{Kind: "toggle", Target: t.ID, Name: t.Name, Status: "ok", Says: t.Name + " is " + state + " now (" + cfg.System.Codes.Toggle + t.Code + " switches it)."}
+		st.Branches = []SimBranch{
+			{When: "Normal", Taken: !over, Step: next(t.Normal)},
+			{When: "Switched over", Taken: over, Step: next(t.Override)},
+		}
+		return st
 	case "script":
 		sc := cfg.FindScript(d.Target)
 		if sc == nil {
@@ -472,6 +502,8 @@ func (s *sim) exists(d config.Destination) bool {
 		return c.FindMenu(d.Target) != nil
 	case "schedule":
 		return c.FindSchedule(d.Target) != nil
+	case "toggle":
+		return c.FindToggle(d.Target) != nil
 	case "receptionist":
 		return c.FindReceptionist(d.Target) != nil
 	case "conference":
@@ -515,6 +547,10 @@ func (s *sim) nameOf(d config.Destination) string {
 	case "schedule":
 		if x := c.FindSchedule(d.Target); x != nil {
 			return "schedule " + x.Name
+		}
+	case "toggle":
+		if x := c.FindToggle(d.Target); x != nil {
+			return "toggle " + x.Name
 		}
 	case "script":
 		if x := c.FindScript(d.Target); x != nil {

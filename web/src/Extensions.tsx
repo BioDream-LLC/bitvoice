@@ -9,7 +9,7 @@ import {
   useMenusQuery, useQueuesQuery, useScriptsQuery, useRegistrationsQuery, useSchedulesQuery, useRingGroupsQuery, useSystemQuery, useUpdateExtensionMutation, type ApiErrorBody,
   type Destination, type Extension, useReceptionistsQuery, useSitesQuery, useRemoteAddressQuery,
   useConferencesQuery, useDivertQuery, useSetDivertMutation, type Divert, type FollowMe, type SpeedDial,
-  usePromptsQuery, useSettingsQuery, useDirectoriesQuery, useDialInsQuery, useSaveNameAudioMutation, useDeleteNameAudioMutation, useVoicemailQuery,
+  usePromptsQuery, useSettingsQuery, useDirectoriesQuery, useDialInsQuery, useTogglesQuery, useSaveNameAudioMutation, useDeleteNameAudioMutation, useVoicemailQuery,
 } from './api'
 import { MobileDevices } from './Mobile'
 import { useOpenParam } from './useOpenParam'
@@ -227,6 +227,7 @@ export function DestinationPicker({ label, value, onChange, exclude, required, n
   const { data: rooms } = useConferencesQuery()
   const { data: dirs } = useDirectoriesQuery()
   const { data: dialIns } = useDialInsQuery()
+  const { data: toggles } = useTogglesQuery()
   const key = value ? `${value.type}:${value.target}` : ''
   return (
     <Field label={label} htmlFor={id} error={error}>
@@ -253,6 +254,11 @@ export function DestinationPicker({ label, value, onChange, exclude, required, n
         {!noSchedules && (
           <optgroup label="Schedules">
             {schedules?.items.map((s) => <option key={s.id} value={`schedule:${s.id}`}>{s.name} (open or closed)</option>)}
+          </optgroup>
+        )}
+        {!noSchedules && (toggles?.items.length ?? 0) > 0 && (
+          <optgroup label="Day/night toggles">
+            {toggles!.items.map((s) => <option key={s.id} value={`toggle:${s.id}`}>{s.name} (toggle)</option>)}
           </optgroup>
         )}
         {!noSchedules && (
@@ -355,6 +361,7 @@ export function useDescribe() {
   const { data: schedules } = useSchedulesQuery()
   const { data: scripts } = useScriptsQuery()
   const { data: receptionists } = useReceptionistsQuery()
+  const { data: toggles } = useTogglesQuery()
   return (d: Destination | null | undefined) => {
     if (!d) return 'Nowhere'
     const t = d.target
@@ -366,6 +373,7 @@ export function useDescribe() {
       case 'menu': return `Menu ${menus?.items.find((x) => x.id === t)?.name ?? ''}`.trim()
       case 'schedule': return `Schedule ${schedules?.items.find((x) => x.id === t)?.name ?? ''}`.trim()
       case 'script': return `Script ${scripts?.items.find((x) => x.id === t)?.name ?? ''}`.trim()
+      case 'toggle': return `Toggle ${toggles?.items.find((x) => x.id === t)?.name ?? ''}`.trim()
       case 'receptionist': return `AI receptionist ${receptionists?.items.find((x) => x.id === t)?.name ?? ''}`.trim()
       case 'conference': return `Conference room ${t}`
       case 'directory': return 'Dial-by-name directory'

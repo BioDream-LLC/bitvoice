@@ -43,7 +43,11 @@ type Config struct {
 	Trunks         []Trunk         `json:"trunks"`
 	InboundRoutes  []InboundRoute  `json:"inboundRoutes"`
 	OutboundRoutes []OutboundRoute `json:"outboundRoutes"`
-	Security       Security        `json:"security"`
+	// Toggles are day/night switches; PINSets the PINs outbound routes may ask for; Lookups name callers.
+	Toggles  []Toggle         `json:"toggles"`
+	PINSets  []PINSet         `json:"pinSets"`
+	Lookups  []CallerIDLookup `json:"lookups"`
+	Security Security         `json:"security"`
 }
 
 // System holds settings for the whole installation.
@@ -294,6 +298,16 @@ func (c *Config) backToAssistant(d Destination) string {
 				return r
 			}
 			return walk(s.Closed, w)
+		case "toggle":
+			s := c.FindToggle(d.Target)
+			if s == nil {
+				return ""
+			}
+			w := "through the toggle " + s.Name
+			if r := walk(s.Normal, w); r != "" {
+				return r
+			}
+			return walk(s.Override, w)
 		case "menu":
 			m := c.FindMenu(d.Target)
 			if m == nil || m.Timeout == nil {
@@ -806,6 +820,7 @@ type FeatureCodes struct {
 	SpeedDial          string `json:"speedDial"`          // *0 then the code
 	WakeUp             string `json:"wakeUp"`             // *62 books, hears or cancels a wake-up call
 	RoomStatus         string `json:"roomStatus"`         // *68 then a digit: housekeeping reports a room's status
+	Toggle             string `json:"toggle"`             // *28 then a toggle's code switches it over and back
 }
 
 // Door opens a door from a call with a door station: the person answering presses Code, or the button on
@@ -920,6 +935,8 @@ type InboundRoute struct {
 	DID         string      `json:"did"`   // empty matches any number
 	Trunk       string      `json:"trunk"` // trunk ID, empty for any
 	Destination Destination `json:"destination"`
+	// Lookup names callers the provider sent no name for (a caller ID lookup's ID); empty for none.
+	Lookup string `json:"lookup"`
 }
 
 // OutboundRoute sends dialled numbers matching a pattern to trunks, in failover order.
@@ -930,6 +947,9 @@ type OutboundRoute struct {
 	Strip    int      `json:"strip"`    // digits removed from the front
 	Prepend  string   `json:"prepend"`  // digits added to the front after stripping
 	Trunks   []string `json:"trunks"`   // trunk IDs in order
+	// PINSet asks callers for one of its PINs before the call goes out (a PIN set's ID); empty for none.
+	// Emergency calls never ask.
+	PINSet string `json:"pinSet"`
 }
 
 // PageGroup is a number that makes every member's phone answer on its speaker and play the caller: an
@@ -1233,7 +1253,7 @@ func (s *System) Location() *time.Location {
 
 // Destination is where a call goes.
 type Destination struct {
-	Type   string `json:"type"`   // extension, ringgroup, queue, menu, schedule, script, voicemail, echo, hangup, fax, esrp, conference, directory, dialin
+	Type   string `json:"type"`   // extension, ringgroup, queue, menu, schedule, toggle, script, voicemail, echo, hangup, fax, esrp, conference, directory, dialin
 	Target string `json:"target"` // a number for extension and ringgroup
 	// Via is set only inside the engine: the extension whose own forwarding a "forward" destination is.
 	Via string `json:"via,omitempty"`
@@ -1720,6 +1740,7 @@ func (c *Config) Validate() error {
 		{"system.codes.speedDial", &codes.SpeedDial, "*0", "the speed dial code", true},
 		{"system.codes.wakeUp", &codes.WakeUp, "*62", "the wake-up call code", false},
 		{"system.codes.roomStatus", &codes.RoomStatus, "*68", "the room status code", true},
+		{"system.codes.toggle", &codes.Toggle, "*28", "the toggle code", true},
 	} {
 		*fc.v = strings.TrimSpace(*fc.v)
 		if *fc.v == "" {
@@ -2412,6 +2433,10 @@ func (c *Config) Validate() error {
 			if c.FindDialIn(d.Target) == nil {
 				p.add(field, "no dial-in %s", d.Target)
 			}
+		case "toggle":
+			if c.FindToggle(d.Target) == nil {
+				p.add(field, "no toggle %s", d.Target)
+			}
 		case "esrp":
 			if len(c.System.Core.PSAPs) == 0 {
 				p.add(field, "list the PSAPs on Core services before routing to the ESRP")
@@ -2607,6 +2632,7 @@ func (c *Config) Validate() error {
 		}
 		checkDest(f+".destination", &r.Destination)
 	}
+	c.validateFlow(&p, checkID, checkDest)
 	for i := range c.System.CallLinks {
 		if d := &c.System.CallLinks[i].Destination; d.Type != "" {
 			checkDest(fmt.Sprintf("system.callLinks[%d].destination", i), d)

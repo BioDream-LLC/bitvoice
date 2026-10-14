@@ -4,7 +4,7 @@ import {
   Activity, BookOpen, BookOpenText, Braces, CloudUpload, Megaphone, Workflow, CalendarClock, FileUp, Grid3x3, ListOrdered, Smartphone, Voicemail, ChevronRight, History, LayoutDashboard, LogOut, Monitor, Moon, Phone, PhoneCall, PhoneForwarded, Signal, Coins, BookUser, MessageSquare, ScrollText, Link2, BadgeCheck, Server as ServerIcon,
   Gauge, MapPin, PackageCheck, Route, Scale, Search, Server, Settings, Shield, Stethoscope, Sun, Users, UserCog, Waypoints,
   Bot, Printer,
-  Siren, Network, RadioTower, Users2, Asterisk, Building2, FlaskConical, AudioLines, BookA, KeyRound, BedDouble, Router, Cpu } from 'lucide-react'
+  Siren, Network, RadioTower, Users2, Asterisk, Building2, FlaskConical, AudioLines, BookA, KeyRound, BedDouble, Router, Cpu, ToggleRight, Contact } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { Crash } from './Crash'
@@ -70,8 +70,11 @@ export const nav: NavItem[] = [
   { to: '/directories', label: 'Dial by name', icon: BookA, color: 'text-sky-300', keys: 'directory dial by name company directory spell name 411 staff directory', group: 'Calls' },
   { to: '/dial-in', label: 'Dial-in', icon: KeyRound, color: 'text-amber-300', keys: 'disa dial in direct inward system access call in pin call out through the office road warrior', group: 'Calls' },
   { to: '/hotel', label: 'Hotel', icon: BedDouble, color: 'text-violet-300', keys: 'hotel wake up wake-up alarm morning call guest room check in check out pms property management fias opera housekeeping room status minibar charges hospitality', group: 'Calls' },
+  { to: '/toggles', label: 'Day/night toggles', icon: ToggleRight, color: 'text-indigo-300', keys: 'day night toggle call flow control switch override night service closed early holiday *28 busy lamp blf', group: 'Calls' },
   { to: '/schedules', label: 'Schedules', icon: CalendarClock, color: 'text-amber-300', keys: 'opening hours holidays time night closed', group: 'Calls' },
   { to: '/scripts', label: 'Scripts', icon: Braces, color: 'text-fuchsia-300', keys: 'javascript lua code route logic', group: 'Calls' },
+  { to: '/pin-sets', label: 'PIN sets', icon: KeyRound, color: 'text-amber-300', keys: 'pin set pinset account code long distance outbound route authorisation authorization billing client code', group: 'Calls' },
+  { to: '/lookups', label: 'Caller ID lookup', icon: Contact, color: 'text-sky-300', keys: 'caller id lookup cnam opencnam caller name superfecta crm name callers', group: 'Calls' },
   { to: '/routes', label: 'Call routing', icon: Route, color: 'text-amber-300', keys: 'inbound outbound did dial plan', group: 'Calls' },
   { to: '/trunks', label: 'Trunks', icon: Server, color: 'text-teal-300', keys: 'carrier provider line sip', group: 'Calls' },
   { to: '/cards', label: 'Telephony cards', icon: Cpu, color: 'text-amber-300', keys: 'telephony card dahdi digium sangoma openvox fxs fxo analogue analog phone line pstn pots tdm wildcard tdm400 a200 bitvoice-dahdi chan_dahdi zaptel', group: 'Calls' },
