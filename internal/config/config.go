@@ -44,10 +44,12 @@ type Config struct {
 	InboundRoutes  []InboundRoute  `json:"inboundRoutes"`
 	OutboundRoutes []OutboundRoute `json:"outboundRoutes"`
 	// Toggles are day/night switches; PINSets the PINs outbound routes may ask for; Lookups name callers.
-	Toggles  []Toggle         `json:"toggles"`
-	PINSets  []PINSet         `json:"pinSets"`
-	Lookups  []CallerIDLookup `json:"lookups"`
-	Security Security         `json:"security"`
+	Toggles []Toggle         `json:"toggles"`
+	PINSets []PINSet         `json:"pinSets"`
+	Lookups []CallerIDLookup `json:"lookups"`
+	// AudioStreams send calls to voice bots over AudioSocket.
+	AudioStreams []AudioStream `json:"audioStreams"`
+	Security     Security      `json:"security"`
 }
 
 // System holds settings for the whole installation.
@@ -304,6 +306,12 @@ func (c *Config) backToAssistant(d Destination) string {
 				return r
 			}
 			return walk(s.Closed, w)
+		case "audiosocket":
+			s := c.FindAudioStream(d.Target)
+			if s == nil {
+				return ""
+			}
+			return walk(s.Fallback, "through the audio stream "+s.Name)
 		case "toggle":
 			s := c.FindToggle(d.Target)
 			if s == nil {
@@ -1259,7 +1267,7 @@ func (s *System) Location() *time.Location {
 
 // Destination is where a call goes.
 type Destination struct {
-	Type   string `json:"type"`   // extension, ringgroup, queue, menu, schedule, toggle, script, voicemail, echo, hangup, fax, esrp, conference, directory, dialin
+	Type   string `json:"type"`   // extension, ringgroup, queue, menu, schedule, toggle, audiosocket, script, voicemail, echo, hangup, fax, esrp, conference, directory, dialin
 	Target string `json:"target"` // a number for extension and ringgroup
 	// Via is set only inside the engine: the extension whose own forwarding a "forward" destination is.
 	Via string `json:"via,omitempty"`
@@ -2443,6 +2451,10 @@ func (c *Config) Validate() error {
 			if c.FindToggle(d.Target) == nil {
 				p.add(field, "no toggle %s", d.Target)
 			}
+		case "audiosocket":
+			if c.FindAudioStream(d.Target) == nil {
+				p.add(field, "no audio stream %s", d.Target)
+			}
 		case "esrp":
 			if len(c.System.Core.PSAPs) == 0 {
 				p.add(field, "list the PSAPs on Core services before routing to the ESRP")
@@ -2639,6 +2651,7 @@ func (c *Config) Validate() error {
 		checkDest(f+".destination", &r.Destination)
 	}
 	c.validateFlow(&p, checkID, checkDest)
+	c.validateStreams(&p, claim, checkID, checkDest)
 	c.validateACME(&p)
 	c.validateTURN(&p)
 	for i := range c.System.CallLinks {

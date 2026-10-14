@@ -101,6 +101,7 @@ function DestChip({ d }: { d: Destination }) {
   if (d.type === 'script') return <span className="text-fuchsia-300">a script</span>
   if (d.type === 'menu') return <span className="text-sky-300">a menu</span>
   if (d.type === 'schedule') return <span className="text-amber-300">a schedule</span>
+  if (d.type === 'audiosocket') return <span className="text-fuchsia-300">a voice bot</span>
   if (d.type === 'toggle') return <span className="text-indigo-300">a day/night toggle</span>
   if (d.type === 'voicemail') return <span className="text-violet-300">voicemail of {d.target}</span>
   if (d.type === 'fax') return <span className="text-violet-300">fax {d.target}</span>

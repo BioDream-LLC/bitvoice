@@ -5,7 +5,7 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 export type Role = 'admin' | 'viewer' | 'extension'
 export interface Me { username: string; name: string; role: Role; setupComplete: boolean; mfa?: boolean }
 
-export interface Destination { type: 'extension' | 'ringgroup' | 'queue' | 'menu' | 'schedule' | 'toggle' | 'script' | 'receptionist' | 'voicemail' | 'fax' | 'esrp' | 'conference' | 'directory' | 'dialin' | 'echo' | 'hangup'; target: string }
+export interface Destination { type: 'extension' | 'ringgroup' | 'queue' | 'menu' | 'schedule' | 'toggle' | 'audiosocket' | 'script' | 'receptionist' | 'voicemail' | 'fax' | 'esrp' | 'conference' | 'directory' | 'dialin' | 'echo' | 'hangup'; target: string }
 export interface Receptionist { id: string; name: string; greeting: string; knowledge: string; person: Destination; messageBox: string }
 
 export interface Extension {
@@ -169,6 +169,8 @@ export interface Trunk {
 export interface Shaken { sign: boolean; cert: string; key: string; x5u: string; attest: '' | 'A' | 'B' | 'C'; origId: string }
 export interface Rate { prefix: string; name: string; perMinute: number; setup: number; increment: number; minimum: number }
 export interface InboundRoute { id: string; name: string; did: string; trunk: string; destination: Destination; lookup?: string }
+/** A voice bot reached over AudioSocket (Asterisk's protocol); fallback takes the caller if it fails. */
+export interface AudioStream { id: string; name: string; number: string; address: string; fallback: Destination }
 /** A day/night switch: calls go to normal, or to override while switched over. */
 export interface Toggle { id: string; name: string; code: string; normal: Destination; override: Destination; allowed: string[] | null }
 /** PINs an outbound route asks for before calling out. */
@@ -366,7 +368,7 @@ const baseQuery = fetchBaseQuery({
 })
 
 const tags = ['Me', 'Extensions', 'RingGroups', 'Trunks', 'Inbound', 'Outbound', 'Settings', 'Users', 'Calls',
-  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail', 'Tenants', 'System', 'Prompts', 'Music', 'Directories', 'DialIns', 'Toggles', 'ToggleState', 'PINSets', 'Lookups', 'Hotel', 'WakeUps', 'Chat'] as const
+  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail', 'Tenants', 'System', 'Prompts', 'Music', 'Directories', 'DialIns', 'AudioStreams', 'Toggles', 'ToggleState', 'PINSets', 'Lookups', 'Hotel', 'WakeUps', 'Chat'] as const
 
 export const api = createApi({
   reducerPath: 'api',
@@ -449,6 +451,10 @@ export const api = createApi({
       createDirectory: b.mutation<Item<Directory>, Partial<Directory>>({ query: (body) => ({ url: 'directories', method: 'POST', body }), invalidatesTags: ['Directories', 'History'] }),
       updateDirectory: b.mutation<Item<Directory>, Directory>({ query: (body) => ({ url: `directories/${body.id}`, method: 'PUT', body }), invalidatesTags: ['Directories', 'History'] }),
       deleteDirectory: b.mutation<void, string>({ query: (id) => ({ url: `directories/${id}`, method: 'DELETE' }), invalidatesTags: ['Directories', 'History'] }),
+      audioStreams: b.query<List<AudioStream>, void>({ query: () => 'audio-streams', providesTags: ['AudioStreams'] }),
+      createAudioStream: b.mutation<Item<AudioStream>, Partial<AudioStream>>({ query: (body) => ({ url: 'audio-streams', method: 'POST', body }), invalidatesTags: ['AudioStreams', 'History'] }),
+      updateAudioStream: b.mutation<Item<AudioStream>, AudioStream>({ query: (body) => ({ url: `audio-streams/${body.id}`, method: 'PUT', body }), invalidatesTags: ['AudioStreams', 'History'] }),
+      deleteAudioStream: b.mutation<void, string>({ query: (id) => ({ url: `audio-streams/${id}`, method: 'DELETE' }), invalidatesTags: ['AudioStreams', 'History'] }),
       toggles: b.query<List<Toggle>, void>({ query: () => 'toggles', providesTags: ['Toggles'] }),
       createToggle: b.mutation<Item<Toggle>, Partial<Toggle>>({ query: (body) => ({ url: 'toggles', method: 'POST', body }), invalidatesTags: ['Toggles', 'History'] }),
       updateToggle: b.mutation<Item<Toggle>, Toggle>({ query: (body) => ({ url: `toggles/${body.id}`, method: 'PUT', body }), invalidatesTags: ['Toggles', 'History'] }),
@@ -774,6 +780,7 @@ export const {
   useVoicemailQuery, useMarkHeardMutation, useDeleteVoicemailMutation, useSaveGreetingMutation, useResetGreetingMutation,
   useDirectoriesQuery, useCreateDirectoryMutation, useUpdateDirectoryMutation, useDeleteDirectoryMutation,
   useDialInsQuery, useCreateDialInMutation, useUpdateDialInMutation, useDeleteDialInMutation,
+  useAudioStreamsQuery, useCreateAudioStreamMutation, useUpdateAudioStreamMutation, useDeleteAudioStreamMutation,
   useTogglesQuery, useCreateToggleMutation, useUpdateToggleMutation, useDeleteToggleMutation, useToggleStateQuery, useSwitchToggleMutation,
   usePinSetsQuery, useCreatePinSetMutation, useUpdatePinSetMutation, useDeletePinSetMutation,
   useLookupsQuery, useCreateLookupMutation, useUpdateLookupMutation, useDeleteLookupMutation, useTestLookupMutation,

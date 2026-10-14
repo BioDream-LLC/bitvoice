@@ -651,6 +651,8 @@ func ownerName(cfg *config.Config, field string) string {
 		return pick(len(cfg.PageGroups), func(i int) string { return "paging group " + cfg.PageGroups[i].Name })
 	case "directories":
 		return pick(len(cfg.Directories), func(i int) string { return "directory " + cfg.Directories[i].Name })
+	case "audioStreams":
+		return pick(len(cfg.AudioStreams), func(i int) string { return "audio stream " + cfg.AudioStreams[i].Name })
 	case "toggles":
 		return pick(len(cfg.Toggles), func(i int) string { return "toggle " + cfg.Toggles[i].Name })
 	case "pinSets":

@@ -1,7 +1,8 @@
 import { clsx } from 'clsx'
-import { Contact, FlaskConical, KeyRound, Moon, Plus, Sun, ToggleRight } from 'lucide-react'
+import { Bot, Contact, FlaskConical, KeyRound, Moon, Plus, Sun, ToggleRight } from 'lucide-react'
 import { useState } from 'react'
 import {
+  useAudioStreamsQuery, useCreateAudioStreamMutation, useDeleteAudioStreamMutation, useUpdateAudioStreamMutation, type AudioStream,
   useCreateLookupMutation, useCreatePinSetMutation, useCreateToggleMutation, useDeleteLookupMutation, useDeletePinSetMutation, useDeleteToggleMutation,
   useExtensionsQuery, useLookupsQuery, useOutboundRoutesQuery, useInboundRoutesQuery, usePinSetsQuery, useSettingsQuery, useSwitchToggleMutation, useTestLookupMutation,
   useToggleStateQuery, useTogglesQuery, useUpdateLookupMutation, useUpdatePinSetMutation, useUpdateToggleMutation,
@@ -274,6 +275,69 @@ function LookupEditor({ l: initial, onClose }: { l: CallerIDLookup; onClose: () 
             : <p className="text-sm text-rose-300">Failed: {result.error}</p>)}
         </section>
       )}
+    </Drawer>
+  )
+}
+
+/** Voice bots: calls handed to a program over AudioSocket, with a fallback that always takes the caller. */
+export function VoiceBots() {
+  const admin = useIsAdmin()
+  const { data } = useAudioStreamsQuery()
+  const describe = useDescribe()
+  const [edit, setEdit] = useState<AudioStream | null>(null)
+  return (
+    <Page icon={Bot} title="Voice bots (AudioSocket)" accent="from-fuchsia-400 to-sky-400"
+      intro="Hand callers to a voice bot or speech service of your own over AudioSocket, the protocol Asterisk uses: BitVoice answers, connects to the bot, and streams the caller's audio and key presses both ways (8 kHz linear). Bots written for Asterisk work unchanged. Programs can also join a call in progress through ARI external media (Asterisk compatibility)."
+      actions={admin && <button className="btn btn-primary" onClick={() => setEdit({ id: '', name: 'Voice bot', number: '', address: '', fallback: { type: 'hangup', target: '' } })}><Plus size={15} aria-hidden /> Add voice bot</button>}>
+      {!data?.items.length ? <Empty icon={Bot} title="No voice bots yet">For example: after hours, calls go to your own AI agent at 10.0.0.9:9092; if it is down, to voicemail.</Empty> : (
+        <div className="grid gap-3 md:grid-cols-2">
+          {data.items.map((s) => (
+            <button key={s.id} className="card p-4 text-left hover:border-slate-700" onClick={() => setEdit(s)}>
+              <div className="flex items-center gap-2">
+                <Bot size={16} className="text-fuchsia-300" aria-hidden />
+                {s.number && <span className="font-mono text-fuchsia-300">{s.number}</span>}
+                <span className="font-semibold text-slate-100">{s.name}</span>
+                <span className="ml-auto font-mono text-xs text-sky-300">{s.address}</span>
+              </div>
+              <p className="mt-1 text-sm text-slate-400">If the bot fails: <span className="text-amber-300">{describe(s.fallback)}</span></p>
+            </button>
+          ))}
+        </div>
+      )}
+      {edit && <VoiceBotEditor s={edit} onClose={() => setEdit(null)} />}
+    </Page>
+  )
+}
+
+function VoiceBotEditor({ s: initial, onClose }: { s: AudioStream; onClose: () => void }) {
+  const admin = useIsAdmin()
+  const [s, setS] = useState(initial)
+  const [err, setErr] = useState<ApiErrorBody | null>(null)
+  const [create] = useCreateAudioStreamMutation()
+  const [update] = useUpdateAudioStreamMutation()
+  const [remove] = useDeleteAudioStreamMutation()
+  const isNew = !initial.id
+  const p = (f: string) => problemFor(err?.problems, f)
+  const save = async () => {
+    const e = await attempt(() => (isNew ? create(s) : update(s)).unwrap(), `Voice bot ${s.name} saved`)
+    setErr(e)
+    if (!e) onClose()
+  }
+  return (
+    <Drawer open onClose={onClose} title={isNew ? 'New voice bot' : s.name} icon={<Bot className="text-fuchsia-300" aria-hidden />}
+      onSave={admin ? save : undefined} error={err}
+      footer={admin && !isNew && <DeleteButton what={initial.name} onDelete={async () => { if (!await attempt(() => remove(initial.id).unwrap(), 'Voice bot removed', { problemsInToast: true })) onClose() }} />}>
+      <fieldset disabled={!admin} className="space-y-5">
+        <div className="grid grid-cols-[8rem_1fr] gap-4">
+          <Field label="Number" htmlFor="vbn" error={p('number')} hint="Optional."><input id="vbn" className="input font-mono text-fuchsia-300" value={s.number} onChange={(e) => setS({ ...s, number: e.target.value.replace(/\D/g, '') })} /></Field>
+          <Field label="Name" htmlFor="vbm" error={p('name')}><input id="vbm" className="input" value={s.name} onChange={(e) => setS({ ...s, name: e.target.value })} /></Field>
+        </div>
+        <Field label="Bot address" htmlFor="vba" error={p('address')} hint="host:port of its AudioSocket server. BitVoice connects to it for each call.">
+          <input id="vba" className="input font-mono" value={s.address} onChange={(e) => setS({ ...s, address: e.target.value.trim() })} placeholder="10.0.0.9:9092" />
+        </Field>
+        <DestinationPicker label="If the bot cannot take the call, or breaks off" required noSchedules={false} value={s.fallback.type ? s.fallback : null} onChange={(d) => d && setS({ ...s, fallback: d })} error={p('fallback')} />
+        <p className="text-xs text-slate-500">The bot hanging up (an AudioSocket hang-up) ends the call. It gets the call&apos;s ID as the AudioSocket UUID, the caller&apos;s audio as 20 ms frames of 8 kHz 16-bit linear, and each key pressed.</p>
+      </fieldset>
     </Drawer>
   )
 }

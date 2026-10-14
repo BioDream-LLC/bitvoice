@@ -3,7 +3,7 @@ import { useState, type ReactNode } from 'react'
 import {
   useCreateInboundMutation, useExtensionsQuery, useInboundRoutesQuery, useMenusQuery, useQueuesQuery, useReceptionistsQuery,
   useRingGroupsQuery, useSchedulesQuery, useScriptsQuery, useTrunksQuery, useUpdateExtensionMutation, useUpdateInboundMutation,
-  useUpdateMenuMutation, useUpdateQueueMutation, useUpdateReceptionistMutation, useUpdateRingGroupMutation, useUpdateScheduleMutation, useUpdateToggleMutation, useTogglesQuery,
+  useUpdateMenuMutation, useUpdateQueueMutation, useUpdateReceptionistMutation, useUpdateRingGroupMutation, useUpdateScheduleMutation, useUpdateToggleMutation, useTogglesQuery, useAudioStreamsQuery, useUpdateAudioStreamMutation,
   useUpdateScriptMutation, type ApiErrorBody, type Destination, type InboundRoute, type Menu,
 } from './api'
 import { attempt, Drawer } from './Editor'
@@ -26,6 +26,7 @@ export function FlowEdit({ box, onClose, onOpen }: { box: FlowBox; onClose: () =
   const { data: menus } = useMenusQuery()
   const { data: schedules } = useSchedulesQuery()
   const { data: toggles } = useTogglesQuery()
+  const { data: streams } = useAudioStreamsQuery()
   const { data: scripts } = useScriptsQuery()
   const { data: receptionists } = useReceptionistsQuery()
   const props = { onClose, onOpen }
@@ -35,6 +36,7 @@ export function FlowEdit({ box, onClose, onOpen }: { box: FlowBox; onClose: () =
     case 'ringgroup': { const x = groups?.items.find((g) => g.number === t); return x ? <One title={`${x.number} ${x.name}`} links={[['If nobody answers', x.noAnswer, false, 'noAnswer']]} {...props} useSave={() => { const [u, s] = useUpdateRingGroupMutation(); return [(l) => u({ ...x, noAnswer: l[0] }).unwrap(), s.isLoading] }} exclude={x.number} /> : null }
     case 'queue': { const x = queues?.items.find((q) => q.number === t); return x ? <One title={`${x.number} ${x.name}`} links={[['After waiting too long', x.timeout, false, 'timeout']]} {...props} useSave={() => { const [u, s] = useUpdateQueueMutation(); return [(l) => u({ ...x, timeout: l[0] }).unwrap(), s.isLoading] }} exclude={x.number} /> : null }
     case 'schedule': { const x = schedules?.items.find((s) => s.id === t); return x ? <One title={x.name} links={[['When open', x.open, true, 'open'], ['When closed', x.closed, true, 'closed']]} {...props} useSave={() => { const [u, s] = useUpdateScheduleMutation(); return [(l) => u({ ...x, open: l[0]!, closed: l[1]! }).unwrap(), s.isLoading] }} /> : null }
+    case 'audiosocket': { const x = streams?.items.find((s) => s.id === t); return x ? <One title={x.name} links={[['If the bot fails', x.fallback, true, 'fallback']]} {...props} useSave={() => { const [u, s] = useUpdateAudioStreamMutation(); return [(l) => u({ ...x, fallback: l[0]! }).unwrap(), s.isLoading] }} /> : null }
     case 'toggle': { const x = toggles?.items.find((s) => s.id === t); return x ? <One title={x.name} links={[['Normally', x.normal, true, 'normal'], ['Switched over', x.override, true, 'override']]} {...props} useSave={() => { const [u, s] = useUpdateToggleMutation(); return [(l) => u({ ...x, normal: l[0]!, override: l[1]! }).unwrap(), s.isLoading] }} /> : null }
     case 'script': { const x = scripts?.items.find((s) => s.id === t); return x ? <One title={x.name} links={[['If the script fails', x.fallback, true, 'fallback']]} {...props} useSave={() => { const [u, s] = useUpdateScriptMutation(); return [(l) => u({ ...x, fallback: l[0]! }).unwrap(), s.isLoading] }} /> : null }
     case 'receptionist': { const x = receptionists?.items.find((r) => r.id === t); return x ? <One title={x.name} links={[['A person is', x.person, true, 'person']]} {...props} noSelf={`receptionist:${x.id}`} useSave={() => { const [u, s] = useUpdateReceptionistMutation(); return [(l) => u({ ...x, person: l[0]! }).unwrap(), s.isLoading] }} /> : null }

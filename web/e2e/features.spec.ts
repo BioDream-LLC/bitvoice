@@ -509,3 +509,23 @@ test('SIP over WebSocket setting', async ({ page }) => {
   const st = await page.evaluate(async () => (await (await fetch('./api/websocket')).json()))
   expect(st.enabled).toBe(true)
 })
+
+// Voice bots: a bot needs an address and a fallback; it is offered as a destination.
+test('voice bots over AudioSocket', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/#/voice-bots')
+  await page.getByRole('button', { name: 'Add voice bot' }).click()
+  await page.getByLabel('Bot address').fill('not an address')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText(/enter the bot's address and port/).first()).toBeVisible()
+  await page.getByLabel('Bot address').fill('127.0.0.1:9092')
+  await page.getByLabel('If the bot cannot take the call, or breaks off').selectOption('echo:')
+  await page.getByLabel('Number', { exact: true }).fill('473')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText('If the bot fails:')).toBeVisible()
+  await expect(page.getByText('127.0.0.1:9092')).toBeVisible()
+  await page.goto('/#/routes')
+  await page.getByRole('button', { name: 'Add' }).first().click()
+  const options = await page.getByLabel('Send calls to').locator('option').allTextContents()
+  expect(options.some((o) => o.includes('(voice bot)'))).toBe(true)
+})

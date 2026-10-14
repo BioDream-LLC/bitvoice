@@ -1010,6 +1010,10 @@ func (c *Call) answerLocal(p plan) {
 		if c.answerHere(p.toName) {
 			go c.wakeUpCode()
 		}
+	case "audiosocket":
+		if c.answerHere(p.toName) {
+			go c.runAudioStream(p.box)
+		}
 	case "pinout":
 		if c.answerHere(p.toName) {
 			go c.pinOut(p)

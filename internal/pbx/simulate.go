@@ -368,6 +368,14 @@ func (s *sim) walk(d config.Destination, depth int, path []string, direction, fr
 			{When: "Closed", Taken: !open, Step: next(sc.Closed)},
 		}
 		return st
+	case "audiosocket":
+		as := cfg.FindAudioStream(d.Target)
+		if as == nil {
+			return missing("audio stream")
+		}
+		st := &SimStep{Kind: "audiosocket", Target: as.ID, Name: as.Name, Status: "ok", Says: "BitVoice answers and streams the call to the bot at " + as.Address + " (AudioSocket)."}
+		st.Branches = []SimBranch{{When: "The bot cannot take it", Step: next(as.Fallback)}}
+		return st
 	case "toggle":
 		t := cfg.FindToggle(d.Target)
 		if t == nil {
@@ -504,6 +512,8 @@ func (s *sim) exists(d config.Destination) bool {
 		return c.FindSchedule(d.Target) != nil
 	case "toggle":
 		return c.FindToggle(d.Target) != nil
+	case "audiosocket":
+		return c.FindAudioStream(d.Target) != nil
 	case "receptionist":
 		return c.FindReceptionist(d.Target) != nil
 	case "conference":
@@ -551,6 +561,10 @@ func (s *sim) nameOf(d config.Destination) string {
 	case "toggle":
 		if x := c.FindToggle(d.Target); x != nil {
 			return "toggle " + x.Name
+		}
+	case "audiosocket":
+		if x := c.FindAudioStream(d.Target); x != nil {
+			return "audio stream " + x.Name
 		}
 	case "script":
 		if x := c.FindScript(d.Target); x != nil {

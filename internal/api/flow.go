@@ -56,6 +56,10 @@ func (s *Server) flowRoutes() {
 }
 
 func registerFlow(s *Server) {
+	register(s, collection[config.AudioStream]{path: "audio-streams", noun: "audio stream",
+		list:  func(c *config.Config) *[]config.AudioStream { return &c.AudioStreams },
+		id:    func(x *config.AudioStream) *string { return &x.ID },
+		label: func(x *config.AudioStream) string { return x.Name }})
 	register(s, collection[config.Toggle]{path: "toggles", noun: "toggle",
 		list:  func(c *config.Config) *[]config.Toggle { return &c.Toggles },
 		id:    func(x *config.Toggle) *string { return &x.ID },

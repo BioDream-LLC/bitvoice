@@ -120,6 +120,12 @@ func (e *Engine) resolveFor(cfg *config.Config, d config.Destination, depth int,
 			next = s.Open
 		}
 		return e.resolveFor(cfg, next, depth+1, sc)
+	case "audiosocket":
+		s := cfg.FindAudioStream(d.Target)
+		if s == nil {
+			return plan{reject: 404}
+		}
+		return plan{local: "audiosocket", box: s.ID, toName: s.Name}
 	case "toggle":
 		t := cfg.FindToggle(d.Target)
 		if t == nil {
@@ -322,6 +328,9 @@ func (e *Engine) route(cfg *config.Config, caller *config.Extension, dialled str
 	}
 	if r := cfg.FindDirectoryNumber(dialled); r != nil {
 		return plan{local: "directory", box: r.ID, toName: r.Name, direction: "internal"}
+	}
+	if r := cfg.FindAudioStreamNumber(dialled); r != nil {
+		return plan{local: "audiosocket", box: r.ID, toName: r.Name, direction: "internal"}
 	}
 	if r := cfg.FindDialInNumber(dialled); r != nil {
 		return plan{local: "dialin", box: r.ID, toName: r.Name, direction: "internal"}

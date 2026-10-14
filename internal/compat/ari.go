@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/biodream-llc/bitvoice/internal/config"
@@ -21,6 +22,9 @@ type ARI struct {
 	Bus     *events.Bus
 	Audit   func(user, action, detail string)
 	Started time.Time
+
+	extOnce sync.Once
+	exts    *externals
 }
 
 type ariChannel struct {
@@ -143,6 +147,24 @@ func (a *ARI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		ariJSON(w, map[string]string{"id": id + "-1"})
+	case path == "channels/externalMedia" && r.Method == http.MethodPost:
+		a.externalMedia(w, r, u)
+	case len(parts) == 2 && parts[0] == "channels" && a.findExternal(parts[1]) != nil:
+		x := a.findExternal(parts[1])
+		switch r.Method {
+		case http.MethodGet:
+			ariJSON(w, x.ari())
+		case http.MethodDelete:
+			a.dropExternal(x.id)
+			a.audit(u, "ari.hangup", x.name)
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			ariError(w, http.StatusNotImplemented, "an external media channel takes GET and DELETE")
+		}
+	case len(parts) == 3 && parts[0] == "bridges" && parts[2] == "addChannel" && r.Method == http.MethodPost:
+		a.addChannel(w, r, u, parts[1])
+	case len(parts) == 3 && parts[0] == "bridges" && parts[2] == "removeChannel" && r.Method == http.MethodPost:
+		a.removeChannel(w, r, u)
 	case len(parts) >= 2 && parts[0] == "channels":
 		c, ch, ok := Find(p, parts[1])
 		if !ok {

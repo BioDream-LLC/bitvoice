@@ -9,7 +9,7 @@ export const parts: { title: string; intro: string; ids: string[] }[] = [
   { title: 'Getting started', intro: 'From a new install to a working phone system: extensions, phones, a phone company, where calls go, emergency calling from your offices, and how to tell everything is ready.',
     ids: ['start', 'extensions', 'phones', 'deskphones', 'cards', 'trunks', 'routes', 'pinsets', 'lookups', 'emergency', 'sites', 'health', 'settings'] },
   { title: 'Where calls go', intro: 'The building blocks callers move through: groups and queues, menus and schedules, scripts and the AI receptionist, voicemail, and the diagram that shows it all.',
-    ids: ['flow', 'ringgroups', 'queues', 'sounds', 'menus', 'directory', 'dialin', 'toggles', 'schedules', 'scripts', 'ai', 'voicemail', 'callbacks', 'calllinks'] },
+    ids: ['flow', 'ringgroups', 'queues', 'sounds', 'menus', 'directory', 'dialin', 'voicebots', 'toggles', 'schedules', 'scripts', 'ai', 'voicemail', 'callbacks', 'calllinks'] },
   { title: 'Everyday calling', intro: 'What people do on their phones every day, and what they set for themselves: forwarding, follow-me, pickup, conference rooms, paging, hot desks, faxes and texts.',
     ids: ['codes', 'portal', 'conferences', 'paging', 'hotdesk', 'hotel', 'contacts', 'calendar', 'mobile', 'video', 'fax', 'texts', 'briefing'] },
   { title: 'Customers and insight', intro: 'Knowing who called and how it went: the live calls and history, the customer timeline, CRMs, recordings and consent, quality, costs and caller ID reputation.',
@@ -477,6 +477,18 @@ Callers hear "Please enter the first three letters of the person's name". One ma
 Callers hear "Please enter your PIN, then press hash", then "Please enter the number to call, then press hash", and are put through. The words come from the dial-in prompts in [Sounds](#/sounds).
 
 > A dial-in is a door to your phone bill. Three wrong PINs end the call, every attempt (refused number, wrong PIN, connected call) is logged and shown in Security, and calls follow the extension's limits. Use a long PIN, list callers' numbers where you can (caller ID can be faked, so keep the PIN too), and keep the extension's outside calls to what is needed.`,
+  },
+  {
+    id: 'voicebots', title: 'Voice bots (AudioSocket)', route: '/voice-bots', keys: 'voice bot audiosocket ai agent speech stream external media llm conversational ivr asterisk deepgram openai realtime',
+    body: `A [voice bot](#/voice-bots) is a program of your own (an AI agent, a speech-recognition IVR, a recorder) that takes calls over **AudioSocket**, the simple protocol Asterisk uses: BitVoice answers the call, opens a TCP connection to the bot, and sends the call's UUID, then the caller's sound as 20 ms frames of 8 kHz 16-bit linear audio and each key pressed; whatever sound the bot sends back is played to the caller. Bots and speech-service connectors written for Asterisk's AudioSocket work with BitVoice unchanged.
+
+1. **Add voice bot**: its name, the bot's address (\`10.0.0.9:9092\`) and, optionally, a number to dial it.
+2. Choose where the caller goes **if the bot cannot take the call, or breaks off** (a person, a queue, voicemail): required, so no caller is ever dropped because a bot is down.
+3. Send calls to it from [Call routing](#/routes), a menu option, a schedule or a toggle.
+
+When the bot sends an AudioSocket hang-up, the call ends; when the caller hangs up, the bot is sent one. A bot that cannot be reached within three seconds, or whose connection breaks without a hang-up, hands the caller to the fallback, and the failure is logged.
+
+To bring a program into a call already in progress (a listening transcriber, an assistant that whispers to no one), use ARI's external media: see [Asterisk compatibility](#compat).`,
   },
   {
     id: 'toggles', title: 'Day/night toggles', route: '/toggles', keys: 'day night toggle call flow control switch override night service closed early snow day holiday *28 busy lamp blf freepbx',
@@ -1320,8 +1332,12 @@ At \`/ari/\`, with basic authentication or \`?api_key=user:secret\`:
 | \`POST /ari/channels/{id}/redirect?endpoint=PJSIP/102\` | send the call to 102 |
 | \`/ari/endpoints\`, \`/ari/bridges\`, \`/ari/asterisk/info\` | phones, bridges, version |
 | \`/ari/events\` | a WebSocket of events |
+| \`POST /ari/channels/externalMedia?external_host=host:port&encapsulation=rtp&format=ulaw\` | a channel sending sound to a program by RTP (ulaw or alaw over UDP); its local port is in the channel's \`UNICASTRTP_LOCAL_PORT\` |
+| \`POST /ari/channels/externalMedia?external_host=host:port&encapsulation=audiosocket&transport=tcp&format=slin&data=<uuid>\` | the same by AudioSocket |
+| \`POST /ari/bridges/{call}/addChannel?channel={id}\` | the external media channel joins a call: it hears both parties and both hear it; with \`role=listener\` nobody hears it (for live transcription) |
+| \`POST /ari/bridges/{call}/removeChannel?channel={id}\` | it leaves the call; the two parties talk directly again |
 
-Stasis media applications are not offered: use [Scripts](#scripts) for call logic.
+An external media channel not added to a call within a minute is closed. Stasis dialplan applications are not offered: use [Scripts](#scripts) for call logic, and [Voice bots](#voicebots) to hand a whole call to a program.
 
 ## Logins
 Each login has a **Username** and **Secret**. Logins are **read only** unless marked **Can change calls**. Keep AMI on this computer unless the tool runs elsewhere: AMI is plain, unencrypted TCP.`,
