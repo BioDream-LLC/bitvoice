@@ -64,7 +64,8 @@ type IAXLink interface {
 // IAXTokenHeader carries the secret between the engine and the IAX2 gateway.
 const IAXTokenHeader = "X-BitVoice-IAX"
 
-func isIAX(t *config.Trunk) bool { return t != nil && t.Protocol == "iax2" }
+// isIAX reports a trunk the engine reaches through a loopback gateway: IAX2 or H.323.
+func isIAX(t *config.Trunk) bool { return t != nil && (t.Protocol == "iax2" || t.Protocol == "h323") }
 
 // SetIAX connects the IAX2 gateway (safe while calls arrive).
 func (e *Engine) SetIAX(l IAXLink) { e.iaxLink.Store(&l) }
@@ -98,6 +99,8 @@ func (e *Engine) TrunkStatus() []TrunkStatus {
 				ts.State = "registered"
 			case strings.HasPrefix(s, "failed: "):
 				ts.State, ts.Error = "failed", strings.TrimPrefix(s, "failed: ")
+			case s == "not running" && t.Protocol == "h323":
+				ts.State, ts.Error = "failed", "the H.323 gateway is not running"
 			case s == "not running":
 				ts.State, ts.Error = "failed", "the IAX2 port (4569) could not be opened"
 			}
@@ -409,7 +412,7 @@ func (e *Engine) trunkPeer(t *config.Trunk) (sip.Peer, error) {
 			port = e.iax().SIPPort(t.ID)
 		}
 		if port == 0 {
-			return sip.Peer{}, errors.New("the IAX2 gateway is not running")
+			return sip.Peer{}, errors.New("the IAX2 or H.323 gateway is not running")
 		}
 		return sip.Peer{Transport: "UDP", Addr: netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(port))}, nil
 	}

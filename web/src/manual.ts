@@ -65,6 +65,9 @@ On Windows, keep the window it opens while you use BitVoice (closing it stops Bi
 | 5060 UDP and TCP | SIP: phones and trunks |
 | 5061 TCP | SIP over TLS (encrypted signalling) |
 | 4569 UDP | IAX2 trunks, only once one is set up |
+| 1720 TCP | H.323 trunks, only once one is set up |
+| 2000 TCP | Skinny (SCCP) phones, only when switched on |
+| 2727 UDP | MGCP gateways, only when switched on |
 | 10000–20000 UDP | the sound of calls (RTP), set in Settings |
 | 8443 TCP | this web interface, HTTPS only (plain HTTP to it is sent on to HTTPS) |
 
@@ -224,7 +227,7 @@ Set **Address the apps use** to this server's https address as it is reached fro
 BitVoice wakes the app; it connects, rings on the phone's own call screen, and is answered like any other phone of the extension: ring groups and queues ring it with the extension's other phones. The extension's page lists its paired phones, whether each **Can be woken for calls**, when it was last seen and last woken, and any push problem. **Unpair** stops a phone ringing at once, for a lost phone.`,
   },
   {
-    id: 'trunks', title: 'Trunks', route: '/trunks', keys: 'carrier provider sip trunk line register channels codecs',
+    id: 'trunks', title: 'Trunks', route: '/trunks', keys: 'carrier provider sip trunk line register channels codecs iax2 h323 h.323 h225 fast connect gateway',
     body: `A trunk is your account with a phone company. It carries calls to and from outside numbers. Most are SIP trunks; an Asterisk or FreePBX server, or an IAX2 provider, can be reached with IAX2 instead.
 
 ::figure trunk
@@ -274,6 +277,11 @@ context=from-bitvoice
 \`\`\`
 
 IAX2 port 4569 opens only when the first IAX2 trunk is added, so an Asterisk running on the same computer keeps it until then.
+
+## H.323 trunks
+Choose **H.323** as the protocol for older gateways, PBXs and video-conference systems that speak H.323 but not SIP. Give the gateway's address (port 1720); calls are accepted only from it. Calls are set up with **Fast Connect** and G.711 (µ-law or A-law; the trunk's codec list may narrow it to one), and the sound goes straight between the gateway and BitVoice's media ports. BitVoice converts to whatever the other party uses.
+
+H.323 here is deliberately small: no gatekeeper (RAS), no H.245 (so a gateway that will not use Fast Connect gets no call, and is told so), no video, no H.235 security. Caller ID comes from the Q.931 calling number or the caller's dialled-digits alias, the name from the display or its H.323 ID. BitVoice's H.225.0 and H.245 encoding was checked against an independent ASN.1 encoder, but not yet against gateway hardware.
 
 ## What the status means
 | Status | Meaning |

@@ -32,6 +32,7 @@ import (
 	"github.com/biodream-llc/bitvoice/internal/compat"
 	"github.com/biodream-llc/bitvoice/internal/config"
 	"github.com/biodream-llc/bitvoice/internal/events"
+	"github.com/biodream-llc/bitvoice/internal/h323"
 	"github.com/biodream-llc/bitvoice/internal/iax"
 	"github.com/biodream-llc/bitvoice/internal/mgcp"
 	"github.com/biodream-llc/bitvoice/internal/pbx"
@@ -233,11 +234,18 @@ func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 	}
 	// IAX2 trunks (Asterisk's own protocol): the port opens with the first IAX2 trunk.
 	iaxSvc := iax.NewService(ctx, iaxAddr(o.sip), eng.LocalSIP, log)
-	eng.SetIAX(iaxSvc)
-	applyIAX := func(c config.Config) { iaxSvc.Apply(iaxTrunks(srv.Resolved(c))) }
+	// H.323 trunks (port 1720) go through a loopback gateway too, with the same secret.
+	h323Svc := h323.NewService(ctx, portAddr(o.sip, "1720"), eng.LocalSIP, iaxSvc.Token(), log)
+	eng.SetIAX(loopbackTrunks{iax: iaxSvc, h323: h323Svc})
+	applyIAX := func(c config.Config) {
+		r := srv.Resolved(c)
+		iaxSvc.Apply(iaxTrunks(r))
+		h323Svc.Apply(h323Trunks(r))
+	}
 	applyIAX(cfg)
 	st.OnChange(applyIAX)
 	defer iaxSvc.Close()
+	defer h323Svc.Close()
 	// Skinny (SCCP) desk phones and MGCP gateway ports: each is a device of its extension, bridged
 	// through loopback SIP as browser phones are.
 	if desk, err := webphone.New(ctx, eng.SIPPort(), eng); err != nil {
@@ -482,6 +490,48 @@ func iaxTrunks(c config.Config) []iax.Trunk {
 		}
 	}
 	return out
+}
+
+func h323Trunks(c config.Config) []h323.Trunk {
+	var out []h323.Trunk
+	for _, t := range c.Trunks {
+		if t.Enabled && t.Protocol == "h323" {
+			out = append(out, h323.Trunk{ID: t.ID, Name: t.Name, Host: t.Host, Port: t.Port, Codecs: t.Codecs})
+		}
+	}
+	return out
+}
+
+// loopbackTrunks is the IAX2 and H.323 gateways, as the engine's one link to trunks it reaches
+// through loopback SIP.
+type loopbackTrunks struct {
+	iax  *iax.Service
+	h323 *h323.Service
+}
+
+func (l loopbackTrunks) SIPPort(id string) int {
+	if p := l.h323.SIPPort(id); p != 0 {
+		return p
+	}
+	return l.iax.SIPPort(id)
+}
+
+func (l loopbackTrunks) Token() string { return l.iax.Token() }
+
+func (l loopbackTrunks) Status(id string) string {
+	if l.h323.SIPPort(id) != 0 {
+		return l.h323.Status(id)
+	}
+	return l.iax.Status(id)
+}
+
+// portAddr is a port on the address SIP was given (every address by default).
+func portAddr(sipListen, port string) string {
+	host, _, err := net.SplitHostPort(sipListen)
+	if err != nil {
+		host = ""
+	}
+	return net.JoinHostPort(host, port)
 }
 
 // iaxAddr is where IAX2 listens: port 4569 on the address SIP was given (every address by default).

@@ -817,7 +817,7 @@ func (e *Engine) emergency(cfg *config.Config, ext *config.Extension, number str
 func (e *Engine) trunkFor(cfg *config.Config, src netip.AddrPort) *config.Trunk {
 	ip := src.Addr()
 	if ip.IsLoopback() && e.iax() != nil {
-		// The IAX2 gateway: each IAX2 trunk is a loopback port of its own.
+		// The IAX2 and H.323 gateways: each such trunk is a loopback port of its own.
 		for _, t := range cfg.Trunks {
 			if t.Enabled && isIAX(&t) && int(src.Port()) == e.iax().SIPPort(t.ID) {
 				tc := t

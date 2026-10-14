@@ -849,7 +849,8 @@ type Trunk struct {
 	Transport string `json:"transport"` // udp or tcp
 	// Protocol is sip (the default) or iax2: Asterisk's own protocol, for an Asterisk or FreePBX
 	// server or an IAX2 provider (port 4569). An IAX2 trunk with no host waits for the far server to
-	// register here with Username and Password.
+	// register here with Username and Password. h323 is H.323 (port 1720) with Fast Connect and
+	// G.711, for older gateways and video-conference systems.
 	Protocol string `json:"protocol,omitempty"`
 	Username string `json:"username"`
 	AuthUser string `json:"authUser"`
@@ -2229,9 +2230,22 @@ func (c *Config) Validate() error {
 			t.Protocol = ""
 		}
 		iax2 := t.Protocol == "iax2"
+		h323 := t.Protocol == "h323"
 		switch {
-		case t.Protocol != "" && !iax2:
-			p.add(f+".protocol", "choose SIP or IAX2")
+		case t.Protocol != "" && !iax2 && !h323:
+			p.add(f+".protocol", "choose SIP, IAX2 or H.323")
+		case h323 && t.Host == "":
+			p.add(f+".host", "enter the H.323 gateway's address")
+		case h323 && (t.Teams || t.ESInet):
+			p.add(f+".protocol", "Teams and ESInet trunks are SIP")
+		case h323:
+			for _, c := range t.Codecs {
+				if c != "PCMU" && c != "PCMA" {
+					p.add(f+".codecs", "H.323 trunks use G.711 (µ-law or A-law); BitVoice converts the rest")
+					break
+				}
+			}
+			t.Register = false
 		case iax2 && t.Host == "":
 			// The far server registers here: it needs a name and a password to do it with.
 			if t.Username == "" || t.Password == "" {
@@ -2248,6 +2262,9 @@ func (c *Config) Validate() error {
 			t.Port = 5060
 			if iax2 {
 				t.Port = 4569
+			}
+			if h323 {
+				t.Port = 1720
 			}
 		}
 		if t.MaxChannels < 0 {

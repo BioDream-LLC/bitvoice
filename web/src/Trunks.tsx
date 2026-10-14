@@ -121,12 +121,13 @@ function Editor({ t: initial, status, onClose }: { t: Trunk; status?: TrunkStatu
         {note && <p className="rounded-lg border border-sky-900 bg-sky-950/40 p-3 text-xs text-sky-200">{note}</p>}
         {t.teams && <TeamsSetup t={t} set={set} p={p} />}
         {!t.teams && !t.esinet && (
-          <Field label="Protocol" htmlFor="tproto" error={p('protocol')} hint={t.protocol === 'iax2' ? 'IAX2 is Asterisk\u2019s own protocol, on port 4569: for an Asterisk or FreePBX server, or an IAX2 provider. Leave the server empty when the other server registers here with the username and password.' : undefined}>
+          <Field label="Protocol" htmlFor="tproto" error={p('protocol')} hint={t.protocol === 'iax2' ? 'IAX2 is Asterisk\u2019s own protocol, on port 4569: for an Asterisk or FreePBX server, or an IAX2 provider. Leave the server empty when the other server registers here with the username and password.' : t.protocol === 'h323' ? 'H.323 on port 1720, for older gateways, PBXs and video-conference systems: calls are set up by Fast Connect with G.711, and calls are accepted only from this server\u2019s address. No gatekeeper and no H.245.' : undefined}>
             <select id="tproto" className="input" value={t.protocol ?? ''} onChange={(e) => {
               const v = e.target.value as Trunk['protocol']
-              setT((t0) => ({ ...t0, protocol: v, port: v === 'iax2' ? (t0.port === 5060 ? 4569 : t0.port) : (t0.port === 4569 ? 5060 : t0.port) }))
+              const def = (x: Trunk['protocol']) => (x === 'iax2' ? 4569 : x === 'h323' ? 1720 : 5060)
+              setT((t0) => ({ ...t0, protocol: v, port: t0.port === def(t0.protocol) || !t0.port ? def(v) : t0.port, register: v === 'h323' ? false : t0.register }))
             }}>
-              <option value="">SIP</option><option value="iax2">IAX2 (Asterisk, FreePBX)</option>
+              <option value="">SIP</option><option value="iax2">IAX2 (Asterisk, FreePBX)</option><option value="h323">H.323 (older gateways)</option>
             </select>
           </Field>
         )}
@@ -134,7 +135,7 @@ function Editor({ t: initial, status, onClose }: { t: Trunk; status?: TrunkStatu
         <div className="grid grid-cols-[1fr_6rem_6rem] gap-3">
           <Field label="Provider server" htmlFor="th" error={p('host')}><input id="th" className="input font-mono" value={t.host} onChange={(e) => set('host', e.target.value.trim())} placeholder="sip.provider.com" /></Field>
           <Field label="Port" htmlFor="tp"><input id="tp" type="number" className="input" value={t.port} onChange={(e) => set('port', Number(e.target.value))} /></Field>
-          {t.protocol === 'iax2' ? <div /> : (
+          {t.protocol === 'iax2' || t.protocol === 'h323' ? <div /> : (
           <Field label="Transport" htmlFor="tt">
             <select id="tt" className="input" value={t.transport} onChange={(e) => set('transport', e.target.value as Trunk['transport'])}>
               <option value="udp">UDP</option><option value="tcp">TCP</option><option value="tls">TLS (encrypted)</option>
@@ -142,6 +143,7 @@ function Editor({ t: initial, status, onClose }: { t: Trunk; status?: TrunkStatu
           </Field>
           )}
         </div>
+        {t.protocol !== 'h323' && (<>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Username" htmlFor="tu" error={p('username')}><input id="tu" className="input" value={t.username} onChange={(e) => set('username', e.target.value.trim())} /></Field>
           <Field label="Password" htmlFor="tw" hint={!isNew ? 'Leave empty to keep the current one.' : undefined}>
@@ -152,6 +154,7 @@ function Editor({ t: initial, status, onClose }: { t: Trunk; status?: TrunkStatu
           </Field>
         </div>
         <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={t.register} onChange={(v) => set('register', v)} label="Register" /> Register with the provider</label>
+        </>)}
         <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={t.enabled} onChange={(v) => set('enabled', v)} label="Enabled" /> Enabled</label>
         {servers?.shared && (
           <Field label="Shared between servers" htmlFor="tsh" error={p('shared')}

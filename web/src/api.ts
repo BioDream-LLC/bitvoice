@@ -159,7 +159,7 @@ export interface AnswerReport {
 }
 export interface I3Event { logEventType: string; timestamp: string; agencyAgentId?: string; callId?: string; from?: string; to?: string; extension?: Record<string, unknown> }
 export interface Trunk {
-  id: string; name: string; enabled: boolean; host: string; port: number; transport: 'udp' | 'tcp' | 'tls'; protocol?: '' | 'iax2'
+  id: string; name: string; enabled: boolean; host: string; port: number; transport: 'udp' | 'tcp' | 'tls'; protocol?: '' | 'iax2' | 'h323'
   username: string; authUser: string; password: string; register: boolean; fromDomain: string
   callerId: string; maxChannels: number; allowFrom: string[]; secureMedia: boolean; richCallData?: boolean; teams?: boolean; sbcName?: string; codecs: string[]
   shared?: '' | 'one'; esinet?: boolean
