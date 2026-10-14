@@ -15,6 +15,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -39,6 +40,7 @@ import (
 	"github.com/biodream-llc/bitvoice/internal/pbx"
 	"github.com/biodream-llc/bitvoice/internal/sccp"
 	"github.com/biodream-llc/bitvoice/internal/store"
+	"github.com/biodream-llc/bitvoice/internal/turn"
 	"github.com/biodream-llc/bitvoice/internal/upgrade"
 	"github.com/biodream-llc/bitvoice/internal/web"
 	"github.com/biodream-llc/bitvoice/internal/webphone"
@@ -335,6 +337,44 @@ func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 	}
 	go acm.Run(ctx)
 	st.OnChange(func(config.Config) { acm.Wake() })
+
+	// TURN for browser and WebRTC phones that cannot reach the media ports directly: relays only to
+	// this computer's own addresses.
+	publicIP := func() netip.Addr {
+		c, _ := st.Config()
+		a, _ := netip.ParseAddr(c.System.PublicAddress)
+		return a
+	}
+	turnSrv := &turn.Server{Realm: "bitvoice", Log: log, Route: turn.LocalRoute(publicIP)}
+	turnSvc := &turn.Service{Server: turnSrv, TLS: &tls.Config{GetCertificate: holder.Get, MinVersion: tls.VersionTLS12}}
+	applyTURN := func(c config.Config) {
+		t := c.System.TURN
+		if a := publicIP(); a.IsValid() {
+			turnSrv.Advertise = a
+		} else if len(addresses) > 0 {
+			turnSrv.Advertise, _ = netip.ParseAddr(addresses[0])
+		}
+		turnSvc.Apply(turn.Settings{Enabled: t.Enabled, Port: t.Port, TLSPort: t.TLSPort, RelayMin: t.RelayMin, RelayMax: t.RelayMax, Secret: t.Secret})
+	}
+	turnCfg, _ := st.Config()
+	applyTURN(turnCfg)
+	st.OnChange(applyTURN)
+	defer turnSvc.Close()
+	srv.TURNStatus = turnSvc.Status
+	srv.ICEServers = func(host string) []api.ICEServer {
+		c, _ := st.Config()
+		tc := c.System.TURN
+		if !tc.Enabled || tc.Secret == "" || host == "" {
+			return nil
+		}
+		user, pass := turn.Credentials([]byte(tc.Secret), "web", 12*time.Hour)
+		hp := net.JoinHostPort(host, strconv.Itoa(tc.Port))
+		urls := []string{"turn:" + hp + "?transport=udp", "turn:" + hp + "?transport=tcp"}
+		if tc.TLSPort > 0 {
+			urls = append(urls, "turns:"+net.JoinHostPort(host, strconv.Itoa(tc.TLSPort))+"?transport=tcp")
+		}
+		return []api.ICEServer{{URLs: urls, Username: user, Credential: pass}}
+	}
 	// The browser on this computer: the loopback address, which the certificate covers.
 	localURL := "https://" + net.JoinHostPort("127.0.0.1", port)
 	var secureURLs []string

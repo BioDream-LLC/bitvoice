@@ -279,3 +279,60 @@ test('a call link places a browser call without signing in', async ({ page, brow
   await expect(q.getByRole('heading', { name: 'This link does not work' })).toBeVisible()
   await q.close()
 })
+
+// TURN: Chromium's own TURN client, told to use relays only, reaches the echo test through BitVoice's
+// TURN server: over UDP, then over TCP alone (as from a network that blocks UDP).
+test('browser audio relayed through BitVoice TURN', async ({ page }) => {
+  await signIn(page)
+  const ok = await page.evaluate(async () => {
+    const s = await (await fetch('./api/settings')).json()
+    s.system.turn = { ...(s.system.turn ?? {}), enabled: true, port: 3478, tlsPort: -1 }
+    const r = await fetch('./api/settings', { method: 'PUT', headers: { 'X-BitVoice': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(s) })
+    return r.ok ? '' : (await r.json()).message
+  })
+  expect(ok).toBe('')
+  await expect.poll(async () => page.evaluate(async () => (await (await fetch('./api/turn')).json()).running), { timeout: 5000 }).toBe(true)
+  for (const transport of ['udp', 'tcp']) {
+    const result = await page.evaluate(async (transport) => {
+      const ice = (await (await fetch('./api/ice')).json()).iceServers as RTCIceServer[]
+      const urls = (ice[0].urls as string[]).filter((u) => u.endsWith('transport=' + transport)).map((u) => u.replace(/^turn:[^:]+/, 'turn:127.0.0.1'))
+      const pc = new RTCPeerConnection({ iceServers: [{ ...ice[0], urls }], iceTransportPolicy: 'relay' })
+      const mic = await navigator.mediaDevices.getUserMedia({ audio: true })
+      mic.getTracks().forEach((t) => pc.addTrack(t, mic))
+      await pc.setLocalDescription(await pc.createOffer())
+      const r = await fetch('./api/phone/echo', { method: 'POST', headers: { 'X-BitVoice': '1', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sdp: pc.localDescription!.sdp }) })
+      const body = await r.json()
+      if (!r.ok) return { error: body.message }
+      await pc.setRemoteDescription({ type: 'answer', sdp: body.sdp })
+      const deadline = Date.now() + 15000
+      while (pc.connectionState !== 'connected' && Date.now() < deadline && pc.connectionState !== 'failed') await new Promise((ok) => setTimeout(ok, 100))
+      const state = pc.connectionState
+      await new Promise((ok) => setTimeout(ok, 2000))
+      let received = 0, local = '', relayProto = ''
+      const stats = await pc.getStats()
+      const byId = new Map<string, any>()
+      stats.forEach((s) => byId.set(s.id, s))
+      stats.forEach((s) => {
+        if (s.type === 'inbound-rtp' && s.kind === 'audio') received = s.packetsReceived
+        if (s.type === 'candidate-pair' && s.nominated && s.state === 'succeeded') {
+          const l = byId.get(s.localCandidateId)
+          local = l?.candidateType ?? ''
+          relayProto = l?.relayProtocol ?? ''
+        }
+      })
+      const relays = (await (await fetch('./api/turn')).json()).relays
+      pc.close()
+      return { state, received, local, relayProto, relays }
+    }, transport)
+    console.log(transport, JSON.stringify(result))
+    expect(result.error).toBeUndefined()
+    expect(result.state).toBe('connected')
+    // relay, or peer-reflexive through the relay (the relay's address as the echo test sees it); with
+    // iceTransportPolicy relay Chromium sends nothing any other way.
+    expect(['relay', 'prflx']).toContain(result.local)
+    expect(result.relayProto).toBe(transport)
+    expect(result.received).toBeGreaterThan(20)
+    expect(result.relays).toBeGreaterThan(0)
+  }
+})

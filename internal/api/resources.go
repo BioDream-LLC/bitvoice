@@ -307,6 +307,7 @@ func (s *Server) routes() {
 	s.snmpRoutes()
 	s.deskRoutes()
 	s.flowRoutes()
+	s.iceRoutes()
 	s.cardsRoutes()
 	s.cdrOutputRoutes()
 	s.importRoutes()

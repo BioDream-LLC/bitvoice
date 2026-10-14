@@ -1,6 +1,6 @@
-import { Activity, Download, FileSpreadsheet, Plus, Send, Trash2 } from 'lucide-react'
+import { Activity, Download, FileSpreadsheet, Network, Plus, Send, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { useCdrCsvQuery, useSnmpStatusQuery, useTestCdrOutputsMutation, type SystemSettings } from './api'
+import { useCdrCsvQuery, useSnmpStatusQuery, useTestCdrOutputsMutation, useTurnStatusQuery, type SystemSettings, type TURN } from './api'
 import { Field, ListInput, Toggle } from './ui'
 
 type SNMP = NonNullable<SystemSettings['snmp']>
@@ -113,5 +113,34 @@ export function CDRCsvFiles() {
         ))}
       </ul>
     </details>
+  )
+}
+
+const turnDefaults: TURN = { enabled: false, port: 3478, tlsPort: 5349, relayMin: 49152, relayMax: 49407, secret: '' }
+
+/** TURN: BitVoice relays browser phones' sound when their network blocks UDP or hides them behind a strict NAT. */
+export function TURNSettings({ turn, onChange, p }: { turn: SystemSettings['turn']; onChange: (v: TURN) => void; p: (f: string) => string | undefined }) {
+  const s: TURN = { ...turnDefaults, ...turn }
+  const { data: status } = useTurnStatusQuery(undefined, { pollingInterval: 10000 })
+  const set = (v: Partial<TURN>) => onChange({ ...s, ...v })
+  return (
+    <section className="card space-y-4 p-5" aria-labelledby="turn-h">
+      <h2 id="turn-h" className="flex items-center gap-2 font-semibold text-slate-100"><Network size={17} className="text-sky-300" aria-hidden /> TURN for browser phones</h2>
+      <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={s.enabled} onChange={(v) => set({ enabled: v })} label="TURN server" />
+        TURN server <span className="text-xs text-slate-500">(for browser phones and call links on networks that block UDP: hotels, guest Wi-Fi, strict company firewalls)</span></label>
+      {s.enabled && status && (status.running
+        ? <p className="text-sm text-emerald-300">Running on {status.port} (UDP and TCP){(status.tlsPort ?? 0) > 0 ? ` and ${status.tlsPort} (TLS)` : ''}; {status.relays ?? 0} relays open.</p>
+        : <p className="text-sm text-amber-300">Not running yet: save, then it starts.</p>)}
+      {s.enabled && (status?.problems?.length ?? 0) > 0 && <p className="text-sm text-rose-300">{status!.problems!.join('; ')}</p>}
+      {s.enabled && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Port (UDP and TCP)" htmlFor="tup" error={p('system.turn.port')}><input id="tup" type="number" className="input w-32" value={s.port || ''} onChange={(e) => set({ port: Number(e.target.value) })} /></Field>
+          <Field label="TLS port" htmlFor="tut" error={p('system.turn.tlsPort')} hint="With this server's certificate; -1 for none. 443 gets through almost any firewall."><input id="tut" type="number" className="input w-32" value={s.tlsPort || ''} onChange={(e) => set({ tlsPort: Number(e.target.value) })} /></Field>
+          <Field label="Relay ports from" htmlFor="tur" error={p('system.turn.relayMin')} hint="UDP; open them in the firewall."><input id="tur" type="number" className="input w-32" value={s.relayMin || ''} onChange={(e) => set({ relayMin: Number(e.target.value) })} /></Field>
+          <Field label="to" htmlFor="tur2" error={p('system.turn.relayMax')}><input id="tur2" type="number" className="input w-32" value={s.relayMax || ''} onChange={(e) => set({ relayMax: Number(e.target.value) })} /></Field>
+        </div>
+      )}
+      {s.enabled && <p className="text-xs text-slate-500">Browser phones and call links are given short-lived credentials made from a secret BitVoice keeps (<span className="font-mono">secret</span>, never shown again). It relays only to this server&apos;s own addresses, so nobody can use it to reach anything else.</p>}
+    </section>
   )
 }

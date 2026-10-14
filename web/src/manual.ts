@@ -216,6 +216,11 @@ Softphones and other makes take the same three things: server (this computer's a
 ## The browser phone
 The phone icon at the bottom of every screen makes this browser a phone for an extension, with your microphone and speakers. It uses WebRTC: the sound is encrypted end to end, and it works through most firewalls without any setting.
 
+## TURN, for networks that block UDP
+Some networks (hotels, guest Wi-Fi, strict company firewalls) let no UDP out, or hide computers behind NATs WebRTC cannot get through. For those, switch on **TURN server** in [Settings](#/settings): BitVoice then runs its own TURN server (RFC 8656) on port 3478 (UDP and TCP) and, with this server's certificate, on port 5349 over TLS. Browser phones, the staff phone and call links are given short-lived credentials for it, and use it when they cannot reach the media ports directly; the sound is still encrypted end to end, and BitVoice relays it only to its own addresses, so nobody can use it to reach anything else.
+
+Open the TURN port, the TLS port and the relay ports (49152 to 49407 unless you change them) in the firewall. TURN over TLS needs a certificate browsers trust, such as one from Let's Encrypt; set its port to 443 on a server with a spare address to get through firewalls that allow only HTTPS.
+
 ## The staff phone
 Open \`#/phone\` on any computer or mobile browser: people sign in with their extension and SIP password, without an administrator account. It is a full phone: dial, answer, hold, transfer and the keypad. For their own forwarding and voicemail they use the staff portal at \`#/me\` (see [The staff portal](#portal)).
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { newPeer } from './ice'
 import { openMicrophone } from './mic'
 
 // The browser phone: one WebRTC peer connection per call, signalling over BitVoice's /api/phone endpoints.
@@ -79,7 +80,7 @@ export function usePhone() {
   }), [])
 
   const peer = useCallback(async () => {
-    const pc = new RTCPeerConnection()
+    const pc = await newPeer()
     const mic = await openMicrophone({ echoCancellation: true, noiseSuppression: true })
     mic.getTracks().forEach((t) => pc.addTrack(t, mic))
     pc.ontrack = (e) => {

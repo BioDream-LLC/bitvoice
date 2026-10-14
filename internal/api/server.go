@@ -52,6 +52,11 @@ type Server struct {
 	// ARI serves /ari (Asterisk compatibility); AMIAddr reports where AMI listens. Both optional.
 	ARI     http.Handler
 	AMIAddr func() string
+	// ICEServers are the STUN and TURN servers browser phones are given, with fresh credentials, for
+	// the host name they reached this server by (set by main; nil for none).
+	ICEServers func(host string) []ICEServer
+	// TURNStatus says how the TURN server runs (set by main).
+	TURNStatus func() map[string]any
 	// ACMEStatus and ACMEWake are the Let's Encrypt manager's state and its "look again now" (set by main).
 	ACMEStatus func() acme.Status
 	ACMEWake   func()

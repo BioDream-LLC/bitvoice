@@ -50,6 +50,16 @@ func walkSecrets(v, from reflect.Value, keep bool) {
 			if from.IsValid() {
 				ff = from.Field(i)
 			}
+			if sf.Type.Kind() == reflect.Slice && sf.Type.Elem().Kind() == reflect.String && secretKey.MatchString(strings.TrimSuffix(strings.Split(sf.Tag.Get("json"), ",")[0], "s")) {
+				// A list of secrets (a PIN set's PINs).
+				switch {
+				case !keep:
+					fv.Set(reflect.Zero(fv.Type()))
+				case fv.Len() == 0 && ff.IsValid():
+					fv.Set(ff)
+				}
+				continue
+			}
 			if isSecretField(t, sf) {
 				switch {
 				case !keep:

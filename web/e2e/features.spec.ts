@@ -475,3 +475,24 @@ test("Let's Encrypt certificate", async ({ page }) => {
   expect(st.state).toBe('failed')
   expect(st.challenge).toBe('http-01')
 })
+
+// TURN for browser phones: switched on in Settings, it reports its ports.
+test('TURN server setting', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/#/settings')
+  await page.getByRole('switch', { name: 'TURN server' }).click()
+  await page.getByLabel('Port (UDP and TCP)').fill('3479')
+  await page.getByLabel('TLS port').fill('-1')
+  await page.getByLabel('Relay ports from').fill('80')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText(/relay ports are a range of at least 16/).first()).toBeVisible()
+  await page.getByLabel('Relay ports from').fill('49152')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText('Settings saved')).toBeVisible()
+  await expect(page.getByText(/Running on 3479 \(UDP and TCP\)/)).toBeVisible({ timeout: 15000 })
+  const ice = await page.evaluate(async () => (await (await fetch('./api/ice')).json()).iceServers)
+  expect(ice[0].urls[0]).toMatch(/^turn:.*:3479\?transport=udp$/)
+  expect(ice[0].username).toMatch(/^\d+:web$/)
+  const s = await page.evaluate(async () => (await (await fetch('./api/settings')).json()).system.turn)
+  expect(s.secret.length).toBeGreaterThanOrEqual(24) // administrators see it; viewers never
+})

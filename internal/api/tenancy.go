@@ -115,7 +115,7 @@ func (ty *Tenancy) open(t store.Tenant) error {
 	eng := pbx.New(cfg, bus, st, log)
 	tt := t
 	srv := &Server{Store: st, Engine: eng, Bus: bus, Log: log, Version: ty.Version, DataDir: dir, Tenant: &tt, Web: ty.Web,
-		SetupCode: ty.Root.SetupCode, Certs: ty.Root.Certs}
+		SetupCode: ty.Root.SetupCode, Certs: ty.Root.Certs, ICEServers: ty.Root.ICEServers}
 	h := &hosted{t: t, st: st, eng: eng, srv: srv, cancel: cancel}
 	ty.applyLimits(h)
 	srv.WireEngine()

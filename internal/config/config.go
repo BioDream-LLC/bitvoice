@@ -78,6 +78,8 @@ type System struct {
 	Cards Cards `json:"cards"`
 	// ACME gets the web interface's certificate from Let's Encrypt and renews it.
 	ACME ACME `json:"acme"`
+	// TURN is BitVoice's own TURN server for browser and WebRTC phones.
+	TURN TURN `json:"turn"`
 
 	// PublicAddress is advertised in SIP and SDP. Empty means work it out per peer.
 	PublicAddress string `json:"publicAddress"`
@@ -2636,6 +2638,7 @@ func (c *Config) Validate() error {
 	}
 	c.validateFlow(&p, checkID, checkDest)
 	c.validateACME(&p)
+	c.validateTURN(&p)
 	for i := range c.System.CallLinks {
 		if d := &c.System.CallLinks[i].Destination; d.Type != "" {
 			checkDest(fmt.Sprintf("system.callLinks[%d].destination", i), d)

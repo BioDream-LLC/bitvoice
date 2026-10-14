@@ -1,4 +1,5 @@
 import { clsx } from 'clsx'
+import { newPeer } from './ice'
 import { Mic, MicOff, Phone, PhoneOff } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { openMicrophone } from './mic'
@@ -55,7 +56,7 @@ export function CallPage({ slug }: { slug: string }) {
     setError('')
     setState('starting')
     try {
-      const p = new RTCPeerConnection()
+      const p = await newPeer()
       pc.current = p
       const mic = await openMicrophone({ echoCancellation: true, noiseSuppression: true })
       mic.getTracks().forEach((t) => p.addTrack(t, mic))
