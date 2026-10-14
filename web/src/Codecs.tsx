@@ -17,9 +17,10 @@ export const codecInfo: Record<string, { label: string; detail: string; color: s
   AMR: { label: 'AMR', detail: 'Mobile networks\u2019 narrowband codec (4.75 to 12.2 kbit/s); some mobile carriers and gateways', color: 'text-amber-300', converts: true },
   'AMR-WB': { label: 'AMR-WB (HD)', detail: 'HD voice of mobile networks (G.722.2, up to 23.85 kbit/s); VoLTE interconnects', color: 'text-emerald-300', converts: true },
   ILBC: { label: 'iLBC', detail: 'Low bandwidth (13.3 to 15.2 kbit/s) that copes well with lost packets; older softphones and apps', color: 'text-violet-300', converts: true },
+  SPEEX: { label: 'Speex', detail: 'Open narrowband codec (15 kbit/s, 2.15 to 24.6); older softphones, Asterisk links', color: 'text-sky-300', converts: true },
   GSM: { label: 'GSM', detail: 'GSM 06.10 full rate (13 kbit/s); some older softphones and gateways', color: 'text-fuchsia-300', converts: true },
 }
-export const allCodecs = ['G722', 'PCMU', 'PCMA', 'OPUS', 'AMR-WB', 'G729', 'AMR', 'G726-40', 'G726-32', 'AAL2-G726-32', 'G726-24', 'G726-16', 'ILBC', 'GSM']
+export const allCodecs = ['G722', 'PCMU', 'PCMA', 'OPUS', 'AMR-WB', 'G729', 'AMR', 'G726-40', 'G726-32', 'AAL2-G726-32', 'G726-24', 'G726-16', 'ILBC', 'SPEEX', 'GSM']
 
 /**
  * An ordered list of codecs: switch each on or off and move it up or down (buttons, or Alt+arrow keys on

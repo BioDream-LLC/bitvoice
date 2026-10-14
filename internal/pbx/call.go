@@ -1571,7 +1571,7 @@ func onlyG711(m *sdp.Media) bool {
 		}
 	}
 	// No G.711: the best of the codecs BitVoice converts (each costs a little processor time).
-	for _, name := range []string{"G722", "OPUS", "AMR-WB", "G726-40", "G729", "G726-32", "AMR", "ILBC", "AAL2-G726-32", "G726-24", "G726-16", "GSM"} {
+	for _, name := range []string{"G722", "OPUS", "AMR-WB", "G726-40", "G729", "G726-32", "AMR", "ILBC", "SPEEX", "AAL2-G726-32", "G726-24", "G726-16", "GSM"} {
 		for _, c := range m.Codecs() {
 			if codec == "" && strings.EqualFold(c.Name, name) {
 				codec = strconv.Itoa(c.PT)

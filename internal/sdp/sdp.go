@@ -283,6 +283,13 @@ func (c Codec) Attributes() []Line {
 			f = "mode=20"
 		}
 		return []Line{{'a', fmt.Sprintf("rtpmap:%d iLBC/8000", c.PT)}, {'a', fmt.Sprintf("fmtp:%d %s", c.PT, f)}}
+	case "SPEEX":
+		// RFC 5574: narrowband only; an answer keeps the other side's fmtp (its mode=).
+		l := []Line{{'a', fmt.Sprintf("rtpmap:%d speex/8000", c.PT)}}
+		if c.Fmtp != "" {
+			l = append(l, Line{'a', fmt.Sprintf("fmtp:%d %s", c.PT, c.Fmtp)})
+		}
+		return l
 	case "AMR", "AMR-WB":
 		// RFC 4867: octet-aligned unless the other side asked for bandwidth-efficient framing.
 		f := c.Fmtp
@@ -329,6 +336,10 @@ func (m *Media) Codecs() []Codec {
 		}
 		if len(parts) > 2 {
 			c.Channels, _ = strconv.Atoi(parts[2])
+		}
+		if strings.EqualFold(c.Name, "speex") && c.ClockRate != 0 && c.ClockRate != 8000 {
+			// Wideband Speex is another codec (Asterisk's speex16 and speex32); BitVoice has only narrowband.
+			c.Name = "speex" + strconv.Itoa(c.ClockRate/1000)
 		}
 		maps[pt] = c
 	}

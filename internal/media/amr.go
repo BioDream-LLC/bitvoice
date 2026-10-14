@@ -26,6 +26,9 @@ func CodecPTFmtp(name, fmtp string) int {
 	if pt == PTILBC30 {
 		return ilbcPT(fmtp)
 	}
+	if pt == PTSpeex {
+		return pt
+	}
 	if (pt == PTAMR || pt == PTAMRWB) && !strings.Contains(strings.ReplaceAll(strings.ToLower(fmtp), " ", ""), "octet-align=1") {
 		pt++ // the bandwidth-efficient twin
 	}
@@ -142,6 +145,8 @@ func newVoiceFmtp(pt int, fmtp string) voice {
 			return v
 		}
 		return nil
+	case PTSpeex:
+		return newSpeex(fmtp)
 	}
 	return newVoice(pt)
 }

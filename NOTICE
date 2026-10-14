@@ -24,6 +24,9 @@ BitVoice includes these third-party Go modules, each under its own licence:
 - internal/media/ilbc: a Go translation of the iLBC reference implementation in RFC 3951, Appendix A,
   Copyright (C) The Internet Society (2004), used under BCP 78 (RFC 3667, section 3.3(a)(E));
   its notices are in internal/media/ilbc/LICENSE-RFC3951
+- internal/media/speex: a Go translation of narrowband Speex from libspeex 1.2.1, Copyright 2002-2008
+  Xiph.org Foundation, Jean-Marc Valin and the other holders listed in
+  internal/media/speex/LICENSE-SPEEX (BSD 3-clause)
 - internal/p25/imbe, internal/p25/mbe and internal/p25/dsp/biquad.go: the IMBE voice decoder,
   from GopherTrunk (github.com/MattCheramie/GopherTrunk), Apache License 2.0
   (internal/p25/mbe/LICENSE.GopherTrunk)

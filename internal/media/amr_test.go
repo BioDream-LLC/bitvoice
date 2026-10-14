@@ -112,3 +112,36 @@ func TestILBCTranscoding(t *testing.T) {
 		t.Fatalf("mode switch: %d samples, mode %d", len(pcm), v.mode)
 	}
 }
+
+func TestSpeexTranscoding(t *testing.T) {
+	if speexMode("mode=3;vbr=off") != 3 || speexMode(`mode="1,any"`) != 1 || speexMode("") != 5 || speexMode("mode=any") != 5 {
+		t.Fatal("Speex mode from fmtp")
+	}
+	tone := make([]int16, 8000)
+	for i := range tone {
+		tone[i] = int16(6000 * math.Sin(2*math.Pi*440*float64(i)/8000))
+	}
+	there, back := NewTranscoder(PTPCMU, PTSpeex), NewTranscoder(PTSpeex, PTPCMU)
+	var out []int16
+	for _, p := range pcmuPackets(tone) {
+		a := there.Convert(p)
+		if a == nil {
+			continue
+		}
+		if int(a[1]&0x7f) != PTSpeex || len(a)-12 != 38 {
+			t.Fatalf("type %d, %d bytes", a[1]&0x7f, len(a)-12)
+		}
+		if b := back.Convert(a); b != nil {
+			for _, u := range b[12:] {
+				out = append(out, UlawToLinear(u))
+			}
+		}
+	}
+	mid := out[2000:6000]
+	if p440, p1000 := goertzel(mid, 440, 8000), goertzel(mid, 1000, 8000); p440 < 1e5 || p440 < 20*p1000 {
+		t.Fatalf("tone lost (%.0f %.0f)", p440, p1000)
+	}
+	if !Transcodable(CodecPTFmtp("speex", "")) || Transcodable(CodecPT("SPEEX16")) {
+		t.Fatal("narrowband Speex only")
+	}
+}

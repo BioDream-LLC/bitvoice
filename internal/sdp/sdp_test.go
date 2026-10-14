@@ -144,3 +144,16 @@ func TestILBCOffer(t *testing.T) {
 		t.Fatalf("answer keeps the mode %+v", l)
 	}
 }
+
+func TestSpeex(t *testing.T) {
+	if l := (Codec{PT: 98, Name: "SPEEX"}).Attributes(); len(l) != 1 || l[0].Value != "rtpmap:98 speex/8000" {
+		t.Fatalf("%+v", l)
+	}
+	if l := (Codec{PT: 98, Name: "speex", Fmtp: "mode=3"}).Attributes(); len(l) != 2 || l[1].Value != "fmtp:98 mode=3" {
+		t.Fatalf("answer keeps the mode %+v", l)
+	}
+	m := &Media{Type: "audio", Formats: []string{"98", "99"}, Lines: []Line{{'a', "rtpmap:98 speex/16000"}, {'a', "rtpmap:99 speex/8000"}}}
+	if cs := m.Codecs(); cs[0].Name != "speex16" || cs[1].Name != "speex" {
+		t.Fatalf("wideband Speex is not narrowband: %+v", cs)
+	}
+}
