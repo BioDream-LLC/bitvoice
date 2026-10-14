@@ -18,12 +18,14 @@ const (
 	PTG726_32     = 112
 	PTG726_16     = 113
 	PTAAL2G726_32 = 114
+	PTG726_24     = 115
+	PTG726_40     = 116
 )
 
 // Dynamic says whether a codec BitVoice speaks has a dynamic payload number, mapped per party.
 func Dynamic(pt int) bool {
 	switch pt {
-	case PTOpus, PTG726_32, PTG726_16, PTAAL2G726_32:
+	case PTOpus, PTG726_32, PTG726_16, PTAAL2G726_32, PTG726_24, PTG726_40:
 		return true
 	}
 	return false
@@ -58,6 +60,10 @@ func newVoice(pt int) voice {
 		return &g726v{enc: NewG726Encoder(32), dec: NewG726Decoder(32)}
 	case PTG726_16:
 		return &g726v{enc: NewG726Encoder(16), dec: NewG726Decoder(16)}
+	case PTG726_24:
+		return &g726v{enc: NewG726Encoder(24), dec: NewG726Decoder(24)}
+	case PTG726_40:
+		return &g726v{enc: NewG726Encoder(40), dec: NewG726Decoder(40)}
 	case PTAAL2G726_32:
 		return &g726v{enc: NewG726Encoder(32).MSBFirst(), dec: NewG726Decoder(32).MSBFirst()}
 	case PTGSM:

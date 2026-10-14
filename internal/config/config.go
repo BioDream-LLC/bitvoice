@@ -2841,7 +2841,7 @@ func reservedBy(s *System, park map[string]bool, number string) (field, what str
 }
 
 // Codecs BitVoice knows, by the names SDP uses.
-var KnownCodecs = []string{"PCMU", "PCMA", "G722", "OPUS", "G729", "G726-32", "G726-16", "AAL2-G726-32", "GSM"}
+var KnownCodecs = []string{"PCMU", "PCMA", "G722", "OPUS", "G729", "G726-40", "G726-32", "G726-24", "G726-16", "AAL2-G726-32", "GSM"}
 
 // DefaultCodecs is the list a new system starts with: wideband first between phones that have it, G.711
 // for everything else. Opus and G.729 are opt-in: BitVoice converts them, at some processor cost.

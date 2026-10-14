@@ -1234,7 +1234,7 @@ Stasis media applications are not offered: use [Scripts](#scripts) for call logi
 Each login has a **Username** and **Secret**. Logins are **read only** unless marked **Can change calls**. Keep AMI on this computer unless the tool runs elsewhere: AMI is plain, unencrypted TCP.`,
   },
   {
-    id: 'codecs', title: 'Codecs and sound', keys: 'g722 hd voice g711 pcmu pcma opus g729 codec noise clean',
+    id: 'codecs', title: 'Codecs and sound', keys: 'g722 hd voice g711 pcmu pcma opus g729 g726 g726-24 g726-40 adpcm codec noise clean',
     body: `A codec is how sound is turned into data on a call. Phones, browsers and carriers each support some; BitVoice converts between any two of its codecs when two parties differ, so everyone can talk to everyone. When both use the same codec the sound passes through untouched.
 
 ::figure codecs
@@ -1247,13 +1247,15 @@ Each login has a **Username** and **Secret**. Logins are **read only** unless ma
 | G.711 A-law | telephone | 64 kbit/s | the rest of the world |
 | Opus | HD, copes with loss | 24 kbit/s | browsers and the mobile apps |
 | G.729 | telephone, a little rougher | 8 kbit/s | thin links, some carriers |
+| G.726 (40 kbit/s) | telephone; carries modem tones best of the G.726 rates | 40 kbit/s | gateways, some DECT systems |
 | G.726 (32 kbit/s) | near telephone | 32 kbit/s | DECT bases, older gateways |
+| G.726 (24 kbit/s) | between 32 and 16 | 24 kbit/s | some DECT systems |
 | G.726 (16 kbit/s) | rough | 16 kbit/s | very thin links |
 | GSM | rougher | 13 kbit/s | older softphones and gateways |
 
 Settings lists the codecs phones may use, best first; each trunk may have its own list. Analog adapter ports always use G.711, which faxes, modems and alarm panels need.
 
-> G.726 comes in two packings: RFC 3551's (G726-32) and the older AAL2 order. Most equipment uses the first; choose **G.726 (AAL2 order)** only for equipment that sounds garbled with it.
+> BitVoice's G.726 is bit-exact with the ITU-T's own reference implementation at all four rates (ffmpeg's differs at 24 and 40 kbit/s, so equipment built on ffmpeg may sound slightly different there). G.726 comes in two packings: RFC 3551's (G726-32) and the older AAL2 order. Most equipment uses the first; choose **G.726 (AAL2 order)** only for equipment that sounds garbled with it.
 
 ## What converting costs
 Converting takes processor time, only on calls where the two sides differ. Per call, about 0.3 ms of one core every 20 ms for Opus and 0.12 ms for G.729 (some 60 and 170 converted calls per core); G.726 and GSM cost less than G.729; G.711 and G.722 almost nothing. G.729 is sent without Annex B (no silence frames).

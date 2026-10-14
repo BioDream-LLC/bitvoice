@@ -18,7 +18,7 @@ const (
 // Transcodable reports whether BitVoice can convert audio of this payload type.
 func Transcodable(pt int) bool {
 	switch pt {
-	case PTPCMU, PTPCMA, PTG722, PTG729, PTOpus, PTG726_32, PTG726_16, PTAAL2G726_32, PTGSM:
+	case PTPCMU, PTPCMA, PTG722, PTG729, PTOpus, PTG726_32, PTG726_16, PTAAL2G726_32, PTGSM, PTG726_24, PTG726_40:
 		return true
 	}
 	return false
@@ -41,6 +41,10 @@ func CodecPT(name string) int {
 		return PTG726_32
 	case "G726-16":
 		return PTG726_16
+	case "G726-24":
+		return PTG726_24
+	case "G726-40":
+		return PTG726_40
 	case "AAL2-G726-32":
 		return PTAAL2G726_32
 	case "GSM":

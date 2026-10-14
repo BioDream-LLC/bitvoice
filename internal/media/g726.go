@@ -1,7 +1,8 @@
 package media
 
-// G.726: ADPCM at 32 and 16 kbit/s (ITU-T G.726, which absorbed G.721), the two rates RTP equipment
-// uses (G726-32 and G726-16, RFC 3551). Both decode bit for bit as ffmpeg's implementation does. The
+// G.726: ADPCM at 16, 24, 32 and 40 kbit/s (ITU-T G.726, which absorbed G.721 and G.723), as RTP
+// carries them (G726-16, G726-24, G726-32, G726-40, RFC 3551). The encoder is bit-exact with the
+// ITU-T's own reference implementation at every rate (see the test). The
 // arithmetic follows the recommendation bit for bit, in the integer form of the widely used public
 // domain reference: a 14-bit linear signal, an adaptive quantizer and a pole-zero predictor whose
 // coefficients adapt sample by sample. Packing on the wire is RFC 3551's: the first codeword sits in
@@ -24,6 +25,17 @@ var (
 		dqln: []int32{-2048, 4, 135, 213, 273, 323, 373, 425, 425, 373, 323, 273, 213, 135, 4, -2048},
 		wi:   []int32{-12 << 5, 18 << 5, 41 << 5, 64 << 5, 112 << 5, 198 << 5, 355 << 5, 1122 << 5, 1122 << 5, 355 << 5, 198 << 5, 112 << 5, 64 << 5, 41 << 5, 18 << 5, -12 << 5},
 		fi:   []int32{0, 0, 0, 0x200, 0x200, 0x200, 0x600, 0xE00, 0xE00, 0x600, 0x200, 0x200, 0x200, 0, 0, 0}}
+	g726r24 = &g726Rate{bits: 3, qtab: []int32{8, 218, 331},
+		dqln: []int32{-2048, 135, 273, 373, 373, 273, 135, -2048},
+		wi:   []int32{-128, 960, 4384, 18624, 18624, 4384, 960, -128},
+		fi:   []int32{0, 0x200, 0x400, 0xE00, 0xE00, 0x400, 0x200, 0}}
+	g726r40 = &g726Rate{bits: 5, qtab: []int32{-122, -16, 68, 139, 198, 250, 298, 339, 378, 413, 445, 475, 502, 528, 553},
+		dqln: []int32{-2048, -66, 28, 104, 169, 224, 274, 318, 358, 395, 429, 459, 488, 514, 539, 566,
+			566, 539, 514, 488, 459, 429, 395, 358, 318, 274, 224, 169, 104, 28, -66, -2048},
+		wi: []int32{448, 448, 768, 1248, 1280, 1312, 1856, 3200, 4512, 5728, 7008, 8960, 11456, 14080, 16928, 22272,
+			22272, 16928, 14080, 11456, 8960, 7008, 5728, 4512, 3200, 1856, 1312, 1280, 1248, 768, 448, 448},
+		fi: []int32{0, 0, 0, 0, 0, 0x200, 0x200, 0x200, 0x200, 0x200, 0x400, 0x600, 0x800, 0xA00, 0xC00, 0xC00,
+			0xC00, 0xC00, 0xA00, 0x800, 0x600, 0x400, 0x200, 0x200, 0x200, 0x200, 0x200, 0, 0, 0, 0, 0}}
 )
 
 // g726State is the adaptive state of one direction of one stream.
@@ -375,16 +387,20 @@ func g726RateFor(kbps int) *g726Rate {
 	switch kbps {
 	case 16:
 		return g726r16
+	case 24:
+		return g726r24
+	case 40:
+		return g726r40
 	}
 	return g726r32
 }
 
-// NewG726Encoder makes an encoder for 32 or 16 kbit/s.
+// NewG726Encoder makes an encoder for 16, 24, 32 or 40 kbit/s.
 func NewG726Encoder(kbps int) *G726Encoder {
 	return &G726Encoder{r: g726RateFor(kbps), s: newG726State()}
 }
 
-// NewG726Decoder makes a decoder for 32 or 16 kbit/s.
+// NewG726Decoder makes a decoder for 16, 24, 32 or 40 kbit/s.
 func NewG726Decoder(kbps int) *G726Decoder {
 	return &G726Decoder{r: g726RateFor(kbps), s: newG726State()}
 }

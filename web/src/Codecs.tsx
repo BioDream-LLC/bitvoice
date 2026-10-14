@@ -11,10 +11,12 @@ export const codecInfo: Record<string, { label: string; detail: string; color: s
   G729: { label: 'G.729', detail: 'Low bandwidth (8 kbit/s) for thin links and some carriers', color: 'text-amber-300', converts: true },
   'G726-32': { label: 'G.726 (32 kbit/s)', detail: 'Half the bandwidth of G.711 at near its quality; DECT phones and older gateways', color: 'text-teal-300', converts: true },
   'AAL2-G726-32': { label: 'G.726 (AAL2 order)', detail: 'G.726 packed the other way round, for equipment that needs it', color: 'text-teal-300', converts: true },
+  'G726-40': { label: 'G.726 (40 kbit/s)', detail: 'Close to G.711 quality, carries modem and fax tones better than lower rates', color: 'text-teal-300', converts: true },
+  'G726-24': { label: 'G.726 (24 kbit/s)', detail: 'Between 32 and 16 kbit/s; some DECT systems', color: 'text-teal-300', converts: true },
   'G726-16': { label: 'G.726 (16 kbit/s)', detail: 'Quarter of G.711\u2019s bandwidth, noticeably rougher sound', color: 'text-orange-300', converts: true },
   GSM: { label: 'GSM', detail: 'GSM 06.10 full rate (13 kbit/s); some older softphones and gateways', color: 'text-fuchsia-300', converts: true },
 }
-export const allCodecs = ['G722', 'PCMU', 'PCMA', 'OPUS', 'G729', 'G726-32', 'AAL2-G726-32', 'G726-16', 'GSM']
+export const allCodecs = ['G722', 'PCMU', 'PCMA', 'OPUS', 'G729', 'G726-40', 'G726-32', 'AAL2-G726-32', 'G726-24', 'G726-16', 'GSM']
 
 /**
  * An ordered list of codecs: switch each on or off and move it up or down (buttons, or Alt+arrow keys on
