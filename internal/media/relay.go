@@ -142,7 +142,7 @@ type Endpoint struct {
 	dtmf   func(key byte)
 	lastEv uint32
 	haveEv bool
-	fmtp string // the format parameters this party agreed (AMR's mode-set)
+	fmtp   string // the format parameters this party agreed (AMR's mode-set)
 }
 
 // SetTap sets a function that sees every packet this party sends, after clean-up; nil removes it. It
