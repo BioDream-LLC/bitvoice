@@ -1,0 +1,116 @@
+import { Activity, Download, FileSpreadsheet, Plus, Send, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { useCdrCsvQuery, useSnmpStatusQuery, useTestCdrOutputsMutation, type SystemSettings } from './api'
+import { Field, ListInput, Toggle } from './ui'
+
+type SNMP = NonNullable<SystemSettings['snmp']>
+type Outputs = NonNullable<SystemSettings['cdrOutputs']>
+
+const snmpDefaults: SNMP = { enabled: false, listen: ':161', community: '', allowFrom: [], baseOid: '', contact: '', location: '', traps: [] }
+
+/** Settings: the SNMP agent for monitoring systems, and where its traps go. */
+export function SNMPSettings({ snmp, onChange, p }: { snmp: SystemSettings['snmp']; onChange: (v: SNMP) => void; p: (f: string) => string | undefined }) {
+  const s: SNMP = { ...snmpDefaults, ...snmp }
+  const { data: status } = useSnmpStatusQuery(undefined, { pollingInterval: 10000 })
+  const set = (v: Partial<SNMP>) => onChange({ ...s, ...v })
+  const traps = s.traps ?? []
+  return (
+    <section className="card space-y-4 p-5" aria-labelledby="snmp-h">
+      <h2 id="snmp-h" className="flex items-center gap-2 font-semibold text-slate-100"><Activity size={17} className="text-emerald-300" aria-hidden /> SNMP monitoring</h2>
+      <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={s.enabled} onChange={(v) => set({ enabled: v })} label="SNMP agent" />
+        SNMP agent <span className="text-xs text-slate-500">(SNMPv2c, read only: for Zabbix, PRTG, LibreNMS, Nagios)</span></label>
+      {s.enabled && status && (status.running
+        ? <p className="text-sm text-emerald-300">Answering on {status.address}</p>
+        : status.error && <p className="text-sm text-rose-300">Not running: {status.error}. Port 161 needs the right to open low ports; or use another, such as :1161.</p>)}
+      {s.enabled && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Listen on" htmlFor="snl" error={p('system.snmp.listen')}><input id="snl" className="input font-mono" value={s.listen} onChange={(e) => set({ listen: e.target.value.trim() })} placeholder=":161" /></Field>
+          <Field label="Community" htmlFor="snc" error={p('system.snmp.community')} hint="Like a password, sent in clear: not public."><input id="snc" className="input font-mono" value={s.community} onChange={(e) => set({ community: e.target.value.trim() })} /></Field>
+          <Field label="Answer only these networks" htmlFor="sna" error={p('system.snmp.allowFrom')} hint="Your monitoring servers, such as 10.0.0.5 or 10.0.0.0/24.">
+            <ListInput id="sna" mono value={s.allowFrom ?? []} onChange={(v) => set({ allowFrom: v })} placeholder="10.0.0.0/24" invalid={!!p('system.snmp.allowFrom')} />
+          </Field>
+          <Field label="Base OID" htmlFor="snb" error={p('system.snmp.baseOid')} hint="Under your enterprise number; empty for BitVoice's default.">
+            <input id="snb" className="input font-mono" value={s.baseOid} onChange={(e) => set({ baseOid: e.target.value.trim() })} placeholder="1.3.6.1.4.1.8072.9999.9999.7" />
+          </Field>
+          <Field label="Contact (sysContact)" htmlFor="snt"><input id="snt" className="input" value={s.contact} onChange={(e) => set({ contact: e.target.value })} placeholder="noc@example.com" /></Field>
+          <Field label="Location (sysLocation)" htmlFor="sno"><input id="sno" className="input" value={s.location} onChange={(e) => set({ location: e.target.value })} placeholder="Server room, 2nd floor" /></Field>
+        </div>
+      )}
+      <div className="space-y-2">
+        <span className="label">Traps</span>
+        <p className="text-xs text-slate-500">Sent when a trunk goes down or comes back, an emergency call is made, or a server of the cluster stops answering.</p>
+        {traps.map((t, i) => (
+          <div key={i} className="grid gap-2 sm:grid-cols-[1fr_12rem_auto]">
+            <input className="input font-mono" aria-label={`Trap ${i + 1} manager`} value={t.host} placeholder="10.0.0.5:162" onChange={(e) => set({ traps: traps.map((x, j) => (j === i ? { ...x, host: e.target.value.trim() } : x)) })} />
+            <input className="input font-mono" aria-label={`Trap ${i + 1} community`} value={t.community} placeholder="community" onChange={(e) => set({ traps: traps.map((x, j) => (j === i ? { ...x, community: e.target.value.trim() } : x)) })} />
+            <button type="button" className="btn" aria-label={`Remove trap ${i + 1}`} onClick={() => set({ traps: traps.filter((_, j) => j !== i) })}><Trash2 size={14} className="text-rose-300" aria-hidden /></button>
+            {(p(`system.snmp.traps[${i}].host`) || p(`system.snmp.traps[${i}].community`)) && <p className="text-sm text-rose-300 sm:col-span-3">{p(`system.snmp.traps[${i}].host`) ?? p(`system.snmp.traps[${i}].community`)}</p>}
+          </div>
+        ))}
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn" onClick={() => set({ traps: [...traps, { host: '', community: '' }] })}><Plus size={14} aria-hidden /> Add a trap receiver</button>
+          <a className="btn" href="./api/snmp/mib"><Download size={14} className="text-sky-300" aria-hidden /> BITVOICE-MIB</a>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/** Settings: more places call records go: syslog, a CSV file a day, an external PostgreSQL table. */
+export function CDROutputSettings({ out, onChange, p }: { out: SystemSettings['cdrOutputs']; onChange: (v: Outputs) => void; p: (f: string) => string | undefined }) {
+  const o: Outputs = { csv: false, syslog: { host: '', port: 0, transport: 'udp', facility: 16 }, postgres: { url: '', table: 'cdr' }, ...out }
+  const [test, { isLoading }] = useTestCdrOutputsMutation()
+  const run = async () => {
+    const r = await test().unwrap().catch(() => null)
+    if (!r) { toast.error('The test could not run'); return }
+    const lines = Object.entries(r).map(([k, v]) => `${k}: ${v}`)
+    if (!lines.length) toast.message('Set a syslog server or a PostgreSQL address first, and save.')
+    else if (Object.values(r).every((v) => v === 'ok')) toast.success(`Test record sent (${Object.keys(r).join(', ')})`)
+    else toast.error(lines.join('; '))
+  }
+  return (
+    <section className="card space-y-4 p-5" aria-labelledby="cdro-h">
+      <h2 id="cdro-h" className="flex items-center gap-2 font-semibold text-slate-100"><FileSpreadsheet size={17} className="text-fuchsia-300" aria-hidden /> Call records elsewhere</h2>
+      <p className="text-sm text-slate-400">Each call record, as the call ends, can also go to these, beside Call history.</p>
+      <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={o.csv} onChange={(v) => onChange({ ...o, csv: v })} label="CSV files" />
+        A CSV file a day <span className="text-xs text-slate-500">(Asterisk's Master.csv columns; download them on Call history)</span></label>
+      <div className="grid gap-3 sm:grid-cols-[1fr_7rem_7rem_8rem]">
+        <Field label="Syslog server" htmlFor="slh" error={p('system.cdrOutputs.syslog.host')} hint="Empty: off."><input id="slh" className="input font-mono" value={o.syslog.host} onChange={(e) => onChange({ ...o, syslog: { ...o.syslog, host: e.target.value.trim() } })} placeholder="logs.example.com" /></Field>
+        <Field label="Port" htmlFor="slp" error={p('system.cdrOutputs.syslog.port')}><input id="slp" type="number" className="input" value={o.syslog.port || ''} placeholder={o.syslog.transport === 'tls' ? '6514' : '514'} onChange={(e) => onChange({ ...o, syslog: { ...o.syslog, port: Number(e.target.value) } })} /></Field>
+        <Field label="Transport" htmlFor="slt" error={p('system.cdrOutputs.syslog.transport')}>
+          <select id="slt" className="input" value={o.syslog.transport || 'udp'} onChange={(e) => onChange({ ...o, syslog: { ...o.syslog, transport: e.target.value as Outputs['syslog']['transport'] } })}>
+            <option value="udp">UDP</option><option value="tcp">TCP</option><option value="tls">TLS</option>
+          </select>
+        </Field>
+        <Field label="Facility" htmlFor="slf" error={p('system.cdrOutputs.syslog.facility')}>
+          <select id="slf" className="input" value={o.syslog.facility || 16} onChange={(e) => onChange({ ...o, syslog: { ...o.syslog, facility: Number(e.target.value) } })}>
+            {[16, 17, 18, 19, 20, 21, 22, 23].map((f) => <option key={f} value={f}>local{f - 16}</option>)}
+          </select>
+        </Field>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-[1fr_10rem]">
+        <Field label="PostgreSQL database" htmlFor="pgu" error={p('system.cdrOutputs.postgres.url')} hint="Another database for reports and billing tools; the table is made with Asterisk's cdr columns. Empty: off.">
+          <input id="pgu" className="input font-mono" value={o.postgres.url} onChange={(e) => onChange({ ...o, postgres: { ...o.postgres, url: e.target.value.trim() } })} placeholder="postgres://reports:secret@db.example.com/calls" />
+        </Field>
+        <Field label="Table" htmlFor="pgt" error={p('system.cdrOutputs.postgres.table')}><input id="pgt" className="input font-mono" value={o.postgres.table} onChange={(e) => onChange({ ...o, postgres: { ...o.postgres, table: e.target.value.trim() } })} placeholder="cdr" /></Field>
+      </div>
+      <button type="button" className="btn" disabled={isLoading} onClick={run}><Send size={14} className="text-emerald-300" aria-hidden /> Send a test record (save first)</button>
+    </section>
+  )
+}
+
+/** Call history: the CSV files written each day. */
+export function CDRCsvFiles() {
+  const { data } = useCdrCsvQuery()
+  if (!data?.items.length) return null
+  return (
+    <details className="card mt-4 p-4">
+      <summary className="cursor-pointer text-sm text-sky-300">CSV files ({data.items.length} days)</summary>
+      <ul className="mt-2 grid gap-1 sm:grid-cols-3">
+        {data.items.map((d) => (
+          <li key={d.day}><a className="flex items-center gap-2 text-sm text-slate-300 hover:text-sky-300" href={`./api/cdr/csv/${d.day}`}><Download size={13} aria-hidden /> {d.day} <span className="text-xs text-slate-500">{Math.ceil(d.bytes / 1024)} KB</span></a></li>
+        ))}
+      </ul>
+    </details>
+  )
+}

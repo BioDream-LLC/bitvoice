@@ -184,6 +184,8 @@ export interface SystemSettings {
   name: string; purpose: 'office' | 'contact-centre' | '911'; country: string; timezone: string; language: string
   promptLanguages?: string[] | null; music?: MusicClass[] | null; holdMusic?: string; hotel?: Hotel
   chat?: { off: boolean; keepDays: number; rooms: { id: string; name: string; members: string[] | null }[] | null }
+  snmp?: { enabled: boolean; listen: string; community: string; allowFrom: string[] | null; baseOid: string; contact: string; location: string; traps: { host: string; community: string }[] | null }
+  cdrOutputs?: { csv: boolean; syslog: { host: string; port: number; transport: '' | 'udp' | 'tcp' | 'tls'; facility: number }; postgres: { url: string; table: string } }
   publicAddress: string; cluster?: ClusterSettings; sipPort: number; rtpMin: number; rtpMax: number; codecs: string[]; echoNumber: string; voicemailNumber: string; parkNumber: string; parkSeconds: number
   codes?: FeatureCodes; speedDials?: SpeedDial[] | null
   callLinks?: CallLink[] | null; brands?: Brand[] | null; texting: Texting; screening: Screening; vips?: VIP[] | null; agentLogin: string; agentPause: string; hotDesk: { login: string; logout: string; signOutAt: string }
@@ -447,6 +449,9 @@ export const api = createApi({
           dispatch(api.util.updateQueryData('chatMessages', key, (d) => { if (!d.items.some((m) => m.id === data.id)) d.items.push(data) }))
         } }),
       setChatStatus: b.mutation<void, string>({ query: (status) => ({ url: 'me/chat-status', method: 'PUT', body: { status } }), invalidatesTags: ['Chat'] }),
+      snmpStatus: b.query<{ running: boolean; listen: string; address: string; error: string }, void>({ query: () => 'snmp', providesTags: ['Settings'] }),
+      cdrCsv: b.query<{ items: { day: string; bytes: number }[] }, void>({ query: () => 'cdr/csv', providesTags: ['CDR'] }),
+      testCdrOutputs: b.mutation<Record<string, string>, void>({ query: () => ({ url: 'cdr/outputs/test', method: 'POST' }) }),
       conferenceLive: b.query<{ items: ConferenceRoom[] }, void>({ query: () => 'conferences/live', providesTags: ['ConferenceLive'] }),
       lockConference: b.mutation<void, { number: string; locked: boolean }>({
         query: ({ number, locked }) => ({ url: `conferences/live/${number}`, method: 'PUT', body: { locked } }), invalidatesTags: ['ConferenceLive'] }),
@@ -723,7 +728,7 @@ export const {
   useDirectoriesQuery, useCreateDirectoryMutation, useUpdateDirectoryMutation, useDeleteDirectoryMutation,
   useDialInsQuery, useCreateDialInMutation, useUpdateDialInMutation, useDeleteDialInMutation,
   useHotelQuery, useCheckInMutation, useCheckOutMutation, useSetRoomStatusMutation, useWakeUpsQuery, useSetWakeUpMutation, useCancelWakeUpMutation,
-  useSaveNameAudioMutation, useDeleteNameAudioMutation, useChatListQuery, useChatMessagesQuery, useSendChatMutation, useSetChatStatusMutation,
+  useSaveNameAudioMutation, useDeleteNameAudioMutation, useSnmpStatusQuery, useCdrCsvQuery, useTestCdrOutputsMutation, useChatListQuery, useChatMessagesQuery, useSendChatMutation, useSetChatStatusMutation,
   usePromptsQuery, useSaveLangPromptMutation, useDeleteLangPromptMutation, useGeneratePromptsMutation, useMusicQuery, useAddMusicMutation, useDeleteMusicMutation,
 } = api
 

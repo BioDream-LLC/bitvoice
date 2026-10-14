@@ -65,6 +65,9 @@ type System struct {
 	Hotel Hotel `json:"hotel"`
 	// Chat is the staff portal's chat and presence.
 	Chat Chat `json:"chat"`
+	// SNMP is the monitoring agent; CDROutputs more places call records go.
+	SNMP       SNMP       `json:"snmp"`
+	CDROutputs CDROutputs `json:"cdrOutputs"`
 
 	// PublicAddress is advertised in SIP and SDP. Empty means work it out per peer.
 	PublicAddress string `json:"publicAddress"`
@@ -1380,6 +1383,7 @@ func (c *Config) Validate() error {
 	c.validateHotel(&p)
 	c.validateShaken(&p)
 	c.validateChat(&p)
+	c.validateOutputs(&p)
 	if s.PublicAddress != "" {
 		if _, err := netip.ParseAddr(s.PublicAddress); err != nil && !hostRe.MatchString(s.PublicAddress) {
 			p.add("system.publicAddress", "must be an IP address or host name")

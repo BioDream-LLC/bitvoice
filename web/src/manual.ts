@@ -579,7 +579,7 @@ Administrators and viewers can play recordings and read transcripts; only admini
 > None of this is legal advice: recording laws differ by country and state. Check the laws where you and your callers are.`,
   },
   {
-    id: 'metrics', title: 'Metrics: Prometheus, OpenTelemetry and Grafana', route: '/settings', keys: 'metrics prometheus grafana opentelemetry otel otlp monitoring dashboard scrape observability',
+    id: 'metrics', title: 'Metrics: Prometheus, OpenTelemetry, Grafana, SNMP and call records', route: '/settings', keys: 'snmp mib trap zabbix prtg librenms nagios solarwinds syslog siem csv master.csv cdr postgres database billing reports metrics prometheus grafana opentelemetry otel otlp monitoring dashboard scrape observability',
     body: `**Prometheus** scrapes \`/metrics\` on the web address. Make an API token under Administrators (a viewer token is enough) and give it to Prometheus as its bearer token:
 
 ::figure metrics
@@ -596,7 +596,22 @@ It reads calls in progress (by state), calls ended (by direction and outcome), t
 
 **OpenTelemetry**: in Settings, Metrics, enter a collector's OTLP/HTTP address (and a header such as Authorization, with its value) to have the same measurements pushed every minute (or as often as you set, from 15 seconds). **Push now** checks the saved settings.
 
-**Grafana dashboard** downloads a ready-made dashboard: import it in Grafana and pick your Prometheus data source.`,
+**Grafana dashboard** downloads a ready-made dashboard: import it in Grafana and pick your Prometheus data source.
+
+## SNMP
+For monitoring systems that speak SNMP (Zabbix, PRTG, LibreNMS, Nagios, SolarWinds), switch on the **SNMP agent** in Settings. It answers SNMPv2c GET, GETNEXT and GETBULK, read only, on UDP port 161 (or another you choose: port 161 needs the right to open low ports on Linux), and only from the networks you list. Choose a **community** that is not public or private: it is a password that crosses the network in clear.
+
+It serves the standard system group (sysDescr, sysUpTime, sysContact, sysName, sysLocation) and BitVoice's own values under the **base OID**: calls in progress and ringing, phones registered, trunks up and set up, callers waiting, calls ended, talk seconds, lost packets, average call quality, a trunk table (name, up or down, latency) and a queue table (waiting, agents, answered, abandoned). Download **BITVOICE-MIB** beside the settings for your monitoring to load. BioDream LLC has no enterprise number yet, so the default base OID is in Net-SNMP's experimental space; put one under your own enterprise number to keep it stable.
+
+**Traps** (SNMPv2) go to each receiver you list when a trunk goes down or comes back, an emergency call is made, or a server of a cluster stops answering. SNMPv3 is not supported yet.
+
+## Call records elsewhere
+Beside Call history, each record can go, as its call ends, to:
+- **Syslog** (RFC 5424, as JSON) over UDP, TCP or TLS, for a log server or a SIEM.
+- **A CSV file a day**, with Asterisk's Master.csv columns, so the reports and billing tools made for Asterisk read it. Download the files at the foot of [Call history](#/history). Cells that a spreadsheet would run as a formula are written safely.
+- **A PostgreSQL table** in another database, made the first time with Asterisk's \`cdr\` columns (calldate, clid, src, dst, duration, billsec, disposition, uniqueid…) plus BitVoice's direction, trunk, cost and MOS. Each call is written once.
+
+**Send a test record** tries the syslog server and the database with the settings saved.`,
   },
   {
     id: 'crm', title: 'CRM: caller cards and call logging', route: '/settings', keys: 'crm salesforce hubspot zoho pipedrive webhook screen pop caller card lookup log calls integration',

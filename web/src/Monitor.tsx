@@ -1,3 +1,4 @@
+import { CDRCsvFiles } from './Outputs'
 import { createColumnHelper } from '@tanstack/react-table'
 import { ArrowRight, BookOpen, Disc, Download, Gauge, Lock, Stethoscope, Waypoints } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
@@ -83,6 +84,7 @@ export function History() {
         </div>
       )}
       <Table data={items} columns={columns} empty={<Empty icon={BookOpen} title="No calls yet">Calls appear here as soon as they end.</Empty>} />
+      <CDRCsvFiles />
     </Page>
   )
 }

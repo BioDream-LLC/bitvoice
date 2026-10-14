@@ -75,4 +75,8 @@ func (s *Server) RunBackground(ctx context.Context, main bool) {
 	go s.RunGitOps(ctx)
 	go s.RunEmergencyEmail(ctx)
 	go s.RunHotel(ctx)
+	go s.RunCDROutputs(ctx)
+	if main {
+		go s.RunSNMP(ctx)
+	}
 }
