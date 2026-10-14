@@ -165,7 +165,7 @@ export interface SystemSettings {
   emergencyMode: { on: boolean; destination: Destination; code: string; allowed: string[]; since?: string; by?: string }
   mobile: { push: '' | 'relay' | 'direct'; relayUrl: string; relayKey: string; relaySecret: string; serverUrl: string; fcm: string
     apns: { keyId: string; teamId: string; topic: string; key: string; sandbox: boolean } }
-  provisioning: { enabled: boolean; username: string; password: string; transport: 'udp' | 'tcp' | 'tls' }
+  provisioning: { enabled: boolean; username: string; password: string; transport: 'udp' | 'tcp' | 'tls'; httpsOnly?: boolean }
   email: { host: string; port: number; username: string; password: string; from: string }
   ai: { enabled: boolean; baseUrl: string; key: string; model: string; voicemail: boolean; calls: boolean; briefings?: boolean; insights?: boolean; audioModel: string; speechModel: string; voice: string }
   crm: CRM

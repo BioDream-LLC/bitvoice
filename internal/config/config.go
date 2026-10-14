@@ -92,7 +92,7 @@ type System struct {
 	ParkSeconds int `json:"parkSeconds"`
 	// EmergencyNumbers are always routed, to the emergency route, from every extension.
 	EmergencyNumbers []string `json:"emergencyNumbers"`
-	// Provisioning serves phones their settings over HTTPS.
+	// Provisioning serves phones their settings over HTTPS, or HTTP for phones that need it.
 	Provisioning Provisioning `json:"provisioning"`
 	// Email is the mail server BitVoice sends voicemail through.
 	Email Email `json:"email"`
@@ -160,6 +160,10 @@ type Provisioning struct {
 	Password string `json:"password"`
 	// Transport the phones register with: udp, tcp or tls.
 	Transport string `json:"transport"`
+	// HTTPSOnly refuses plain HTTP for the phones' settings files. Off, phones may fetch them over
+	// HTTP or HTTPS (older phones cannot do HTTPS, or do not trust a self-signed certificate);
+	// the rest of the web interface is HTTPS only either way.
+	HTTPSOnly bool `json:"httpsOnly,omitempty"`
 }
 
 // Email is an SMTP server for outgoing mail.

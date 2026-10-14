@@ -243,7 +243,7 @@ func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 	srv.RunBackground(ctx, true)
 
 	// The web interface is HTTPS only, on this computer too. Plain HTTP to the port is answered with
-	// a redirect to HTTPS and nothing else.
+	// a redirect to HTTPS, except the desk phones' settings files when phones may use plain HTTP.
 	if certErr != nil {
 		return fmt.Errorf("web interface: no certificate for HTTPS: %w", certErr)
 	}
@@ -256,7 +256,15 @@ func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 	}
 	httpsSrv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second,
 		TLSConfig: &tls.Config{GetCertificate: holder.Get, MinVersion: tls.VersionTLS12}}
-	go func() { _ = httpsSrv.ServeTLS(redirectPlain{ln}, "", "") }()
+	webPort := newSplitPort(ln)
+	plainSrv := &http.Server{ReadHeaderTimeout: 10 * time.Second, Handler: plainHandler(handler, func() bool {
+		c, _ := st.Config()
+		return !c.System.Provisioning.HTTPSOnly
+	})}
+	go func() { _ = httpsSrv.ServeTLS(webPort.tls, "", "") }()
+	go func() { _ = plainSrv.Serve(webPort.plain) }()
+	defer webPort.Close()
+	defer plainSrv.Close()
 	defer httpsSrv.Close()
 	host, port, _ := net.SplitHostPort(ln.Addr().String())
 	if n, err := strconv.Atoi(port); err == nil {

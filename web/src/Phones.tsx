@@ -68,7 +68,10 @@ function ProvisioningCard() {
   const pv = data.system.provisioning
   const host = sys?.addresses[0] ?? location.hostname
   const port = sys?.httpsPort || (location.protocol === 'https:' ? Number(location.port) || 443 : 0)
-  const url = port ? `https://${host}${port === 443 ? '' : ':' + port}/provision/` : ''
+  const where = `${host}${port === 443 ? '' : ':' + port}`
+  const url = port ? `https://${where}/provision/` : ''
+  // Plain HTTP reaches the same port; phones send to port 80 when none is given, so it is always written.
+  const plainURL = port && !pv.httpsOnly ? `http://${host}:${port}/provision/` : ''
   const update = (v: Partial<typeof pv>) => attempt(() => save({ ...data, system: { ...data.system, provisioning: { ...pv, ...v } } }).unwrap(), 'Provisioning saved')
   return (
     <section className="card mb-6 space-y-4 p-5">
@@ -79,7 +82,11 @@ function ProvisioningCard() {
       </div>
       {pv.enabled && (
         <div className="grid gap-3 text-sm sm:grid-cols-3">
-          <div><span className="label">Provisioning address</span>{url ? <Copyable text={url} /> : <p className="text-sm text-rose-300">HTTPS is not running, so phones cannot fetch their settings. See the startup log.</p>}</div>
+          <div>
+            <span className="label">Provisioning address</span>
+            {url ? <Copyable text={url} /> : <p className="text-sm text-rose-300">HTTPS is not running, so phones cannot fetch their settings. See the startup log.</p>}
+            {plainURL && <div className="mt-2"><span className="label">For phones without HTTPS</span><Copyable text={plainURL} /></div>}
+          </div>
           <div><span className="label">User name</span><Copyable text={pv.username} /></div>
           <div>
             <span className="label">Password</span>
@@ -93,6 +100,9 @@ function ProvisioningCard() {
           <p className="text-xs text-slate-500 sm:col-span-3">
             Enter the address, user name and password in the phone's web page (Auto Provision), or hand the address out with DHCP option 66.
             Phones register over <span className="text-emerald-300">{pv.transport.toUpperCase()}</span>.
+            {pv.httpsOnly
+              ? <> Settings files go out over <span className="text-emerald-300">HTTPS only</span>.</>
+              : <> Settings files go out over HTTPS, or <span className="text-amber-300">plain HTTP</span> for phones that cannot use HTTPS or do not trust this server's certificate: over HTTP the phone's SIP password crosses the network unencrypted.</>}
           </p>
           {admin && (
             <div className="flex flex-wrap items-end gap-3 sm:col-span-3">
@@ -101,6 +111,9 @@ function ProvisioningCard() {
                   <option value="udp">UDP</option><option value="tcp">TCP</option><option value="tls">TLS (encrypted)</option>
                 </select>
               </Field>
+              <label className="flex items-center gap-2 pb-2 text-sm text-slate-300">
+                <Toggle checked={!!pv.httpsOnly} onChange={(v) => update({ httpsOnly: v })} label="HTTPS only for phones" /> HTTPS only for phones
+              </label>
               <Field label="New password" htmlFor="pp" hint="At least 12 characters. Every phone then needs it.">
                 <input id="pp" className="input w-64" type="password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} />
               </Field>

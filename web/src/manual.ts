@@ -142,6 +142,8 @@ An extension that is open shows every device signed in as it: the phone's make a
 3. Tell the phone where BitVoice is: in your DHCP server, set **option 66** to the provisioning address shown on the screen, so every phone on the network finds it by itself; or type the same address in the phone's own web page, under auto provisioning.
 4. Restart the phone. It fetches its file over HTTPS, signs in, and its line keys show who is on the phone.
 
+**HTTPS or plain HTTP.** Phones fetch their file over HTTPS when they can. Some older phones cannot use HTTPS at all, and many do not trust the certificate BitVoice made itself; for those, the screen also shows a plain \`http://\` address on the same port. Plain HTTP is only for these files: every other page still goes to HTTPS. Over plain HTTP the phone's SIP password crosses the network unencrypted, so keep it to a trusted office network, or install a certificate from an authority and switch on **HTTPS only for phones**.
+
 The file carries the extension, its password, the time zone, the codecs, busy lamp keys and the address of this server. Provisioning is protected by a user name and password the phones are given once.
 
 | Make | Models tested | What it gets |
