@@ -773,7 +773,7 @@ It works the same when the AI receptionist hands a caller to a person: the brief
 It needs the AI service and a speech-to-text model (Settings, AI), and the call's audio so far (up to five minutes) is sent to that service to be written out. A summary takes a few seconds, so it may appear just after the phone starts ringing.`,
   },
   {
-    id: 'spam', title: 'Spam protection and STIR/SHAKEN', route: '/settings', keys: 'spam robocall block number blocklist stir shaken attestation verstat spoof spoofed caller id withheld anonymous label',
+    id: 'spam', title: 'Spam protection and STIR/SHAKEN', route: '/settings', keys: 'spam robocall block number blocklist stir shaken attestation verstat spoof spoofed caller id withheld anonymous label sign signing sti certificate identity header passport x5u',
     body: `In the US and Canada, the provider a call starts with signs its caller ID (**STIR/SHAKEN**): **A** when it knows the caller may use the number, **B** when it knows the caller but not the number, **C** when it only passed the call on. Your provider either tells BitVoice its verdict (verstat) or passes the signed Identity header on, which BitVoice then checks itself: the signature, that it is under a minute old, and that it names the numbers of this call. The verdict shows as **Verified**, **Partly verified**, **Unverified** or **Not verified** on Live calls and in Call history.
 
 ::figure spam
@@ -782,7 +782,14 @@ In Settings, **Spam protection**, choose what happens when a caller ID fails ver
 
 Within an hour of an emergency call from any extension, no call is refused (blocked ones ring labelled instead), in case it is the emergency service calling back.
 
-To check certificates against the STI authorities, paste their certificates under **STI certificate authorities**; without them, BitVoice checks that the call was signed with the certificate it names but not who issued that certificate.`,
+To check certificates against the STI authorities, paste their certificates under **STI certificate authorities**; without them, BitVoice checks that the call was signed with the certificate it names but not who issued that certificate.
+
+## Signing your own calls
+Most providers sign their customers' calls themselves. If yours lets you sign (or you are a provider running BitVoice), switch on **Sign caller ID** on the trunk ([Trunks](#/trunks)) and give it your **STI certificate** (from an STI certification authority, with your service provider code token) and its **private key** (P-256). Every call out through the trunk then carries a signed Identity header (ES256, as SHAKEN requires).
+
+- **Certificate address (x5u)** is where the called side fetches the certificate. Leave it empty and BitVoice publishes it at \`/stir/<trunk>.pem\` on its public address (Settings), which must then be reachable from the internet over HTTPS.
+- **Attestation**: automatic gives **A** when an extension calls with one of this system's numbers (a number routed in, or a caller ID set on the trunk or the extension), **B** when an extension calls with any other number, and **C** for calls passed on from outside (a forwarded caller). Or fix it at A, B or C.
+- Call history marks each signed call with **signed A**, **B** or **C**. A call is never stopped because it could not be signed; the reason is in the log.`,
   },
   {
     id: 'consent', title: 'Recording consent', route: '/settings', keys: 'recording consent notice announce beep two party all party law gdpr california this call is recorded',

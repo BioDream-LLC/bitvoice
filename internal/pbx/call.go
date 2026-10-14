@@ -59,6 +59,7 @@ type Call struct {
 
 	direction, from, fromName, to, toName, trunk string
 	callerExt                                    string
+	signed                                       string // the SHAKEN attestation this call was signed with
 	deskExt                                      string // the hot desk the call was made from, when it was
 	notice                                       string // a recording notice still to give: announce or beep
 	noticeLeg                                    *Leg
@@ -308,6 +309,7 @@ func (c *Call) startFork(t target, stageNo int) bool {
 	fromNum, fromName := c.from, c.fromName
 	c.mu.Unlock()
 	var rcd *config.Brand
+	signCID := ""
 	if t.trunk != nil {
 		c.mu.Lock()
 		passedOn := c.direction == "cluster" // the sending server counted the channel already
@@ -351,6 +353,7 @@ func (c *Call) startFork(t target, stageNo int) bool {
 			fromName = brand.Name
 		}
 		fromVal = fmt.Sprintf("%s<sip:%s@%s>;tag=%s", display(fromName), cid, domain, tag)
+		signCID = cid
 		leg.Number, leg.Name, leg.TrunkID = t.number, t.number, t.trunk.ID
 		c.mu.Lock()
 		c.presented = cid
@@ -403,6 +406,9 @@ func (c *Call) startFork(t target, stageNo int) bool {
 	}
 	if t.trunk != nil && t.trunk.Teams {
 		teamsHeaders(inv)
+	}
+	if t.trunk != nil && signCID != "" {
+		c.signCall(cfg, t.trunk, inv, signCID, t.number)
 	}
 	if t.binding != nil && t.binding.node != "" && t.viaTrunk != "" {
 		inv.Set(nodeHeader, e.Cluster.Sign(callID, t.ext+"@"+t.viaTrunk))
@@ -1186,7 +1192,7 @@ func (c *Call) writeRecord(info CallInfo, recording string) {
 	r := store.CDR{ID: c.ID, Start: c.start.UTC(), End: end.UTC(), Direction: c.direction, From: c.from,
 		FromName: c.fromName, To: c.to, ToName: c.toName, AnsweredBy: c.answeredBy, Trunk: c.trunk,
 		Disposition: c.disposition, Cause: c.cause, HangupBy: c.hangupBy, MOS: info.MOS,
-		Duration: int(end.Sub(c.start).Seconds()), Recording: recording, Paused: c.recPaused}
+		Duration: int(end.Sub(c.start).Seconds()), Recording: recording, Paused: c.recPaused, Signed: c.signed}
 	if !c.answer.IsZero() {
 		r.Answer = c.answer.UTC()
 		r.Billsec = int(end.Sub(c.answer).Seconds())

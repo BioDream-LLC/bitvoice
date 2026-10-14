@@ -16,6 +16,7 @@ func (s *Server) WireEngine() {
 	eng.Music = st
 	eng.WakeUps = st
 	eng.PMSEvent = s.pmsEvent
+	eng.WebBase = s.WebBase
 	eng.Recordings = st
 	eng.SeenDevice = st.NoteDevice
 	eng.Remote = st

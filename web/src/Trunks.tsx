@@ -1,11 +1,11 @@
 import { createColumnHelper } from '@tanstack/react-table'
 import { TeamsSetup } from './Teams'
 import { Eye, EyeOff, Plus, Server } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   useCreateTrunkMutation, useDeleteTrunkMutation, useServersQuery, useSystemQuery, useTrunkStatusQuery, useTrunksQuery, useUpdateTrunkMutation,
-  type ApiErrorBody, type Trunk, type TrunkStatus,
+  type ApiErrorBody, type Trunk, type TrunkStatus, type Shaken,
 } from './api'
 import { CodecList } from './Codecs'
 import { RatesEditor } from './Rates'
@@ -164,6 +164,7 @@ function Editor({ t: initial, status, onClose }: { t: Trunk; status?: TrunkStatu
         <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={t.secureMedia} onChange={(v) => set('secureMedia', v)} label="Encrypt media" /> Encrypt media (SRTP), if your provider supports it</label>
         {(safety || t.esinet) && <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={!!t.esinet} onChange={(v) => set('esinet', v)} label="ESInet" /> <span>From the ESInet <span className="text-xs text-slate-500">(911 profile: calls on this trunk are 911 calls, shown with their location on <a className="text-sky-300 underline" href="#/psap">911 calls</a>)</span></span></label>}
         <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={!!t.richCallData} onChange={(v) => set('richCallData', v)} label="Send branded caller ID" /> <span>Send branded caller ID <span className="text-xs text-slate-500">(the logo and reason set on <a className="text-sky-300 underline" href="#/reputation">Caller ID reputation</a>, for providers that pass rich call data on)</span></span></label>
+        <ShakenFields t={t} setT={setT} p={p} />
         <div className="space-y-2">
           <label className="flex items-center gap-3 text-sm text-slate-300">
             <Toggle checked={(t.codecs ?? []).length > 0} label="Choose codecs for this trunk" onChange={(v) => set('codecs', v ? ['PCMU', 'PCMA'] : [])} />
@@ -189,5 +190,37 @@ function Editor({ t: initial, status, onClose }: { t: Trunk; status?: TrunkStatu
         <RatesEditor t={t} onChange={(v) => setT((t0) => ({ ...t0, ...v }))} p={p} />
       </fieldset>
     </Drawer>
+  )
+}
+
+/** STIR/SHAKEN signing of calls out through this trunk, with the provider's STI certificate. */
+function ShakenFields({ t, setT, p }: { t: Trunk; setT: Dispatch<SetStateAction<Trunk>>; p: (f: string) => string | undefined }) {
+  const s: Shaken = { sign: false, cert: '', key: '', x5u: '', attest: '', origId: '', ...t.shaken }
+  const set = (v: Partial<Shaken>) => setT((t0) => ({ ...t0, shaken: { ...s, ...t0.shaken, ...v } }))
+  return (
+    <div className="space-y-3">
+      <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={s.sign} onChange={(v) => set({ sign: v })} label="Sign caller ID" />
+        <span>Sign caller ID (STIR/SHAKEN) <span className="text-xs text-slate-500">(with your own STI certificate, where the provider lets you sign; most providers sign for you)</span></span></label>
+      {s.sign && (
+        <div className="card space-y-3 p-4">
+          <Field label="STI certificate" htmlFor="shc" error={p('shaken.cert')} hint="PEM: the certificate first, then its chain, from your STI certification authority.">
+            <textarea id="shc" rows={4} className="input font-mono text-xs" value={s.cert} onChange={(e) => set({ cert: e.target.value })} placeholder="-----BEGIN CERTIFICATE-----" />
+          </Field>
+          <Field label="Private key" htmlFor="shk" error={p('shaken.key')} hint={t.id ? 'Leave empty to keep the key already saved. PEM, P-256.' : 'PEM, P-256.'}>
+            <textarea id="shk" rows={3} className="input font-mono text-xs" value={s.key} onChange={(e) => set({ key: e.target.value })} placeholder="-----BEGIN EC PRIVATE KEY-----" />
+          </Field>
+          <Field label="Certificate address (x5u)" htmlFor="shx" error={p('shaken.x5u')} hint="Where verifiers fetch the certificate. Empty: this server publishes it at /stir/<trunk>.pem on its public address (Settings), which must be reachable from the internet.">
+            <input id="shx" className="input font-mono" value={s.x5u} onChange={(e) => set({ x5u: e.target.value.trim() })} placeholder="https://certs.example.com/sti.pem" />
+          </Field>
+          <Field label="Attestation" htmlFor="sha" error={p('shaken.attest')}>
+            <select id="sha" className="input" value={s.attest} onChange={(e) => set({ attest: e.target.value as Shaken['attest'] })}>
+              <option value="">Automatic: A for your own numbers, B for others, C for calls passed on from outside</option>
+              <option value="A">A (full) for every call</option><option value="B">B (partial) for every call</option><option value="C">C (gateway) for every call</option>
+            </select>
+          </Field>
+          {s.origId && <p className="text-xs text-slate-500">Origination ID <span className="font-mono text-slate-400">{s.origId}</span></p>}
+        </div>
+      )}
+    </div>
   )
 }

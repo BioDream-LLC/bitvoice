@@ -88,7 +88,9 @@ type CDR struct {
 	Quality []LegQuality `json:"quality,omitempty"`
 	// Attest and Verified are the caller ID's STIR/SHAKEN attestation (A, B, C) and verification
 	// (passed, failed); Screened is labelled or blocked when spam screening acted.
-	Attest   string `json:"attest,omitempty"`
+	Attest string `json:"attest,omitempty"`
+	// Signed is the attestation (A, B, C) this system signed a call out with (STIR/SHAKEN).
+	Signed   string `json:"signed,omitempty"`
 	Verified string `json:"verified,omitempty"`
 	Screened string `json:"screened,omitempty"`
 	// AnsweredExt is the extension that answered, when one did.

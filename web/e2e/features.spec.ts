@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
 import { signIn } from './helpers'
 
@@ -129,4 +130,33 @@ test('directory, dial-in and hotel', async ({ page }) => {
   await expect(page.getByText('Hotel system not reachable')).toBeVisible()
   await page.getByRole('button', { name: 'Check out' }).click()
   await expect(page.getByText('0 of 1 occupied')).toBeVisible()
+})
+
+// STIR/SHAKEN signing on a trunk: a key that is not the certificate's is refused; the right pair is
+// kept, and the certificate published at /stir/<trunk>.pem.
+test('a trunk signs its calls (STIR/SHAKEN)', async ({ page }) => {
+  await signIn(page)
+  const key = readFileSync(new URL('./fixtures/sti-test.key', import.meta.url), 'utf8')
+  const cert = readFileSync(new URL('./fixtures/sti-test.pem', import.meta.url), 'utf8')
+  await page.goto('/#/trunks')
+  await page.getByRole('button', { name: 'Add trunk' }).click()
+  await page.getByLabel('Name', { exact: true }).fill('Signed line')
+  await page.getByLabel('Provider server').fill('127.0.0.1')
+  await page.getByLabel('Port', { exact: true }).fill('25998')
+  await page.getByLabel('Username', { exact: true }).fill('acct')
+  await page.getByRole('switch', { name: 'Sign caller ID' }).click()
+  await page.getByLabel('STI certificate').fill(cert)
+  await page.getByLabel('Private key').fill('-----BEGIN EC PRIVATE KEY-----\nnonsense\n-----END EC PRIVATE KEY-----')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('the signing key could not be read').first()).toBeVisible()
+  await page.getByLabel('Private key').fill(key)
+  await page.getByLabel('Attestation').selectOption('B')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('Signed line').first()).toBeVisible()
+  const t = await page.evaluate(async () => (await (await fetch('./api/trunks')).json()).items.find((x: { name: string }) => x.name === 'Signed line'))
+  expect(t.shaken.sign).toBe(true)
+  expect(t.shaken.attest).toBe('B')
+  expect(t.shaken.origId).toMatch(/^[0-9a-f-]{36}$/)
+  const pem = await page.evaluate(async (id) => (await fetch(`./stir/${id}.pem`)).text(), t.id)
+  expect(pem).toContain('BEGIN CERTIFICATE')
 })

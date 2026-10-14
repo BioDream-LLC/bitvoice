@@ -156,6 +156,8 @@ func (s *Server) Handler() http.Handler {
 	m.HandleFunc("GET /api/auth/sso/start", s.ssoStart)
 	m.HandleFunc("GET /api/auth/sso/callback", s.ssoCallback)
 	m.HandleFunc("GET /provision/{file}", s.provisionFile)
+	// A trunk's STI certificate, public by nature: verifiers of the calls it signs fetch it here.
+	m.HandleFunc("GET /stir/{file}", s.stirCert)
 
 	// Signed in.
 	s.routes()

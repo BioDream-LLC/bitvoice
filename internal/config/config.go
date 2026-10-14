@@ -871,6 +871,27 @@ type Trunk struct {
 	// ESInet marks a trunk from the emergency services network: calls on it are 911 calls, with
 	// their location and Additional Data shown to the call-taker.
 	ESInet bool `json:"esinet"`
+	// Shaken signs the caller ID of calls out through this trunk (STIR/SHAKEN), for providers that
+	// let a customer with its own STI certificate sign, or for a provider running BitVoice itself.
+	Shaken Shaken `json:"shaken"`
+}
+
+// Shaken is STIR/SHAKEN signing on a trunk: the STI certificate (from an STI certification
+// authority, with the provider's service provider code token), its key, and the address where
+// verifiers fetch the certificate.
+type Shaken struct {
+	Sign bool   `json:"sign"`
+	Cert string `json:"cert"` // PEM, the certificate first then its chain
+	Key  string `json:"key"`  // PEM, P-256
+	// X5U is the https:// address of the certificate; empty serves it from this server at
+	// /stir/<trunk id>.pem (which must then be reachable from the internet).
+	X5U string `json:"x5u"`
+	// Attest is the attestation: "" decides per call (A for this system's own numbers called from its
+	// extensions, B for other numbers from its extensions, C for calls passed on from outside), or A, B
+	// or C for every call.
+	Attest string `json:"attest"`
+	// OrigID identifies where calls enter (a UUID); empty makes one.
+	OrigID string `json:"origId"`
 }
 
 // InboundRoute sends calls arriving on trunks to a destination.
@@ -1352,6 +1373,7 @@ func (c *Config) Validate() error {
 	c.validateSites(&p)
 	c.validateSounds(&p)
 	c.validateHotel(&p)
+	c.validateShaken(&p)
 	if s.PublicAddress != "" {
 		if _, err := netip.ParseAddr(s.PublicAddress); err != nil && !hostRe.MatchString(s.PublicAddress) {
 			p.add("system.publicAddress", "must be an IP address or host name")

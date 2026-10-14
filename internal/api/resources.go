@@ -258,10 +258,13 @@ func (s *Server) routes() {
 		list:   func(c *config.Config) *[]config.Trunk { return &c.Trunks },
 		id:     func(x *config.Trunk) *string { return &x.ID },
 		label:  func(x *config.Trunk) string { return x.Name },
-		redact: func(x *config.Trunk) { x.Password = "" },
+		redact: func(x *config.Trunk) { x.Password, x.Shaken.Key = "", "" },
 		keep: func(old, x *config.Trunk) {
 			if x.Password == "" {
 				x.Password = old.Password
+			}
+			if x.Shaken.Key == "" {
+				x.Shaken.Key = old.Shaken.Key
 			}
 		}})
 	register(s, collection[config.Receptionist]{path: "receptionists", noun: "receptionist",

@@ -158,7 +158,9 @@ export interface Trunk {
   callerId: string; maxChannels: number; allowFrom: string[]; secureMedia: boolean; richCallData?: boolean; teams?: boolean; sbcName?: string; codecs: string[]
   shared?: '' | 'one'; esinet?: boolean
   rates?: Rate[] | null; inboundPerMinute?: number
+  shaken?: Shaken
 }
+export interface Shaken { sign: boolean; cert: string; key: string; x5u: string; attest: '' | 'A' | 'B' | 'C'; origId: string }
 export interface Rate { prefix: string; name: string; perMinute: number; setup: number; increment: number; minimum: number }
 export interface InboundRoute { id: string; name: string; did: string; trunk: string; destination: Destination }
 export interface OutboundRoute { id: string; name: string; patterns: string[]; strip: number; prepend: string; trunks: string[] }
@@ -228,7 +230,7 @@ export interface CDR {
   id: string; start: string; answer?: string; end: string; direction: string; from: string; fromName: string
   to: string; toName: string; answeredBy: string; trunk: string; disposition: string; cause: string
   duration: number; billsec: number; hangupBy: string; mos: number; recording?: string
-  paused?: { from: number; to: number }[]; held?: boolean; attest?: string; verified?: string; screened?: string; ext?: string; department?: string; cost?: number; rate?: string
+  paused?: { from: number; to: number }[]; held?: boolean; attest?: string; signed?: string; verified?: string; screened?: string; ext?: string; department?: string; cost?: number; rate?: string
 }
 export interface Check { id: string; status: 'ok' | 'warn' | 'fail'; title: string; detail: string; fix?: string }
 export interface Revision { rev: number; at: string; actor: string; summary: string }

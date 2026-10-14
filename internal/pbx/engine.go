@@ -82,6 +82,10 @@ type Engine struct {
 	// PMSEvent, when set, tells the hotel system what happened (wake-up set and result, room status).
 	PMSEvent func(kind string, data map[string]string)
 	guests   guests
+	sign     signers
+	// WebBase is this server's https:// web address (no trailing slash), for the certificate a
+	// trunk's STIR/SHAKEN signatures point to; nil or empty when not known.
+	WebBase func() string
 	// SeenDevice, when set, is told the User-Agent of each phone that registers (the compatibility list).
 	SeenDevice func(userAgent, ext string)
 	// Remote gives remote workers' confirmed addresses, for emergency calls.
