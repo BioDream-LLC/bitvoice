@@ -69,6 +69,12 @@ func (e *Engine) startHold(cfg *config.Config, l *Leg, class string, tone media.
 		pt = 8
 	}
 	pl := media.NewPlayer(l.ep, pt)
+	if mc := cfg.FindMusic(class); mc != nil && mc.Stream != "" {
+		next, leave := e.listen(class, mc.Stream, e.musicSource(cfg, class))
+		pl.PlayStream(next, tone)
+		go func() { <-pl.Done(); leave() }()
+		return pl
+	}
 	if src := e.musicSource(cfg, class); src != nil {
 		pl.PlayStream(src, tone)
 	} else {

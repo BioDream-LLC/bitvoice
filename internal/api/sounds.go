@@ -180,6 +180,14 @@ func (s *Server) soundRoutes() {
 		}
 		return true
 	}
+	// The internet radio streams playing to callers on hold now.
+	s.handle("GET /api/music/streams", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		out := []pbx.StreamStatus{}
+		if s.Engine != nil {
+			out = append(out, s.Engine.MusicStreams()...)
+		}
+		writeJSON(w, 200, out)
+	})
 	s.handle("GET /api/music/{class}/{name}", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
 		b, err := s.Store.MusicAudio(r.PathValue("class"), r.PathValue("name"))
 		if err != nil {
@@ -197,7 +205,7 @@ func (s *Server) soundRoutes() {
 			writeError(w, http.StatusRequestEntityTooLarge, "the track is too large")
 			return
 		}
-		pcm, err := media.DecodeWAV(raw)
+		pcm, err := media.DecodeAudio(raw)
 		if err != nil {
 			writeError(w, http.StatusUnprocessableEntity, err.Error())
 			return

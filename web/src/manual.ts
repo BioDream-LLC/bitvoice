@@ -441,7 +441,9 @@ A **prompt** is one thing BitVoice says: "Please enter your PIN", "Your place in
 - A prompt missing in a language is played in the default language, then in English; with none recorded at all, callers hear a short tone, so every feature works before a single prompt is recorded.
 
 ## Hold music
-Hold music is grouped in **classes** (Calm, Jazz, Sales offers…), each a list of tracks played one after another, from the start or **shuffled**. Upload tracks of up to fifteen minutes in any format the browser reads.
+Hold music is grouped in **classes** (Calm, Jazz, Sales offers…), each a list of tracks played one after another, from the start or **shuffled**. Upload tracks of up to fifteen minutes in any format the browser reads; MP3 and WAV files can also be sent straight to the API (\`PUT /api/music/{class}/{name}\`), and BitVoice decodes MP3 itself (MPEG-1, 2 and 2.5 Layer III, with a decoder that gives the same samples as minimp3).
+
+**Internet radio.** A class can play a stream instead of its tracks: enter an MP3 stream's address (Icecast, Shoutcast, most internet radio) under **Internet radio**. BitVoice connects when the first caller is put on hold with that class, plays the one stream to everyone waiting, and disconnects half a minute after the last one leaves. While the stream cannot be reached, the class's own tracks play (or the hold tone, without tracks), and the class shows why.
 
 | Who hears it | Which music |
 |---|---|

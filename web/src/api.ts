@@ -79,7 +79,7 @@ export interface Queue {
   penalties?: Record<string, number> | null; weight?: number
 }
 export type QueueStrategy = 'longest-idle' | 'round-robin' | 'ring-all' | 'fewest-calls' | 'linear' | 'random' | 'weighted-random'
-export interface MusicClass { id: string; name: string; shuffle: boolean }
+export interface MusicClass { id: string; name: string; shuffle: boolean; stream?: string }
 export interface PromptInfo { key: string; group: string; text: Record<string, string> }
 export interface PromptsList {
   language: string; languages: { code: string; name: string; shipped: boolean }[]; prompts: PromptInfo[]
@@ -721,6 +721,7 @@ export const api = createApi({
         query: ({ lang, key }) => ({ url: `prompts/${lang}/${key}`, method: 'DELETE' }), invalidatesTags: ['Prompts'] }),
       generatePrompts: b.mutation<{ made: number; skipped: number; failed: string[] | null }, { lang: string; overwrite: boolean }>({
         query: ({ lang, overwrite }) => ({ url: `prompts/${lang}/generate`, method: 'POST', body: { overwrite } }), invalidatesTags: ['Prompts'] }),
+      musicStreams: b.query<{ class: string; url: string; listening: number; live: boolean; error?: string }[], void>({ query: () => 'music/streams', providesTags: ['Music'] }),
       music: b.query<Record<string, { name: string; seconds: number }[]>, void>({ query: () => 'music', providesTags: ['Music', 'Settings'] }),
       addMusic: b.mutation<{ seconds: number }, { cls: string; name: string; wav: Blob }>({
         query: ({ cls, name, wav }) => ({ url: `music/${cls}/${name}`, method: 'PUT', body: wav, headers: { 'Content-Type': 'audio/wav' } }),
@@ -785,7 +786,7 @@ export const {
   usePinSetsQuery, useCreatePinSetMutation, useUpdatePinSetMutation, useDeletePinSetMutation,
   useLookupsQuery, useCreateLookupMutation, useUpdateLookupMutation, useDeleteLookupMutation, useTestLookupMutation,
   useHotelQuery, useCheckInMutation, useCheckOutMutation, useSetRoomStatusMutation, useWakeUpsQuery, useSetWakeUpMutation, useCancelWakeUpMutation,
-  useSaveNameAudioMutation, useDeleteNameAudioMutation, useSnmpStatusQuery, useDeskStatusQuery, useCardsStatusQuery, useAcmeStatusQuery, useAcmeCheckMutation, useTurnStatusQuery, useWebSocketStatusQuery, useCdrCsvQuery, useTestCdrOutputsMutation, useChatListQuery, useChatMessagesQuery, useSendChatMutation, useSetChatStatusMutation,
+  useSaveNameAudioMutation, useDeleteNameAudioMutation, useSnmpStatusQuery, useDeskStatusQuery, useCardsStatusQuery, useAcmeStatusQuery, useAcmeCheckMutation, useMusicStreamsQuery, useTurnStatusQuery, useWebSocketStatusQuery, useCdrCsvQuery, useTestCdrOutputsMutation, useChatListQuery, useChatMessagesQuery, useSendChatMutation, useSetChatStatusMutation,
   usePromptsQuery, useSaveLangPromptMutation, useDeleteLangPromptMutation, useGeneratePromptsMutation, useMusicQuery, useAddMusicMutation, useDeleteMusicMutation,
 } = api
 

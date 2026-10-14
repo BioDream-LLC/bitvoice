@@ -1,14 +1,14 @@
 import { clsx } from 'clsx'
-import { AudioLines, Languages, Music, Play, Plus, Shuffle, Sparkles, Trash2, Upload } from 'lucide-react'
+import { AudioLines, Languages, Music, Play, Plus, Shuffle, Sparkles, Trash2, Upload, Radio } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   useAddMusicMutation, useDeleteLangPromptMutation, useDeleteMusicMutation, useGeneratePromptsMutation, useMusicQuery,
-  usePromptsQuery, useSaveLangPromptMutation, useSaveSettingsMutation, useSettingsQuery, type MusicClass, type Settings,
+  usePromptsQuery, useSaveLangPromptMutation, useSaveSettingsMutation, useSettingsQuery, type MusicClass, type Settings, type ApiErrorBody, useMusicStreamsQuery,
 } from './api'
 import { attempt, useIsAdmin } from './Editor'
 import { AudioRecording, toTelephoneWav } from './Greeting'
-import { Empty, Field, Page, Spinner, Toggle } from './ui'
+import { Empty, Field, Page, problemFor, Spinner, Toggle } from './ui'
 
 /** Sounds: the prompts callers hear, in each language, and the hold music. */
 export function Sounds() {
@@ -203,13 +203,19 @@ function MusicClassCard({ c, tracks, classes, saveSystem, isDefault }: {
     for (const f of [...files]) {
       setBusy(f.name)
       try {
-        const wav = await toTelephoneWav(f)
+        // The browser converts what it can; an MP3 it cannot (a very long one, say) goes as it is, and
+        // BitVoice decodes it itself.
+        const wav = await toTelephoneWav(f).catch((e) => { if (/\.mp3$/i.test(f.name) || f.type === 'audio/mpeg') return f; throw e })
         await attempt(() => addMusic({ cls: c.id, name: trackName(f.name), wav }).unwrap(), `${f.name} added`)
       } catch { toast.error(`${f.name} is not audio this browser can read`) }
     }
     setBusy('')
   }
   const total = tracks.reduce((s, t) => s + t.seconds, 0)
+  const [stream, setStream] = useState(c.stream ?? '')
+  const [streamErr, setStreamErr] = useState('')
+  const { data: streams } = useMusicStreamsQuery(undefined, { pollingInterval: 10000, skip: !c.stream })
+  const st = streams?.find((s) => s.class === c.id)
   return (
     <div className="rounded-md border border-slate-800 p-3">
       <div className="flex flex-wrap items-center gap-3">
@@ -236,6 +242,19 @@ function MusicClassCard({ c, tracks, classes, saveSystem, isDefault }: {
           </span>
         )}
       </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+        <Radio size={14} className="text-amber-300" aria-hidden />
+        <label htmlFor={`st-${c.id}`} className="text-slate-400">Internet radio</label>
+        <input id={`st-${c.id}`} className="input max-w-md flex-1 font-mono text-xs" disabled={!admin} value={stream} placeholder="https://radio.example.com/stream.mp3 (optional)" onChange={(e) => setStream(e.target.value.trim())} />
+        {admin && stream !== (c.stream ?? '') && <button type="button" className="btn" onClick={async () => {
+          const e = (await saveSystem({ music: classes.map((x) => x.id === c.id ? { ...x, stream } : x) }, stream ? 'Stream set' : 'Stream removed')) as ApiErrorBody | null | undefined
+          setStreamErr(problemFor(e?.problems, `system.music.${c.id}.stream`) ?? '')
+        }}>Set stream</button>}
+        {c.stream && (st ? (st.live ? <span className="text-emerald-300">playing to {st.listening} on hold</span> : <span className="text-amber-300">{st.error ? `not reachable: ${st.error}` : 'connecting'}</span>)
+          : <span className="text-slate-500">connects when someone is put on hold</span>)}
+      </div>
+      {streamErr && <p className="mt-1 text-sm text-rose-300">{streamErr}</p>}
+      {c.stream && <p className="mt-1 text-xs text-slate-500">The stream plays instead of the tracks; the tracks (or the hold tone) play while it cannot be reached. Music on hold needs a licence for playing to callers: use a stream you are allowed to.</p>}
       {tracks.length > 0 && (
         <ul className="mt-2 space-y-1">
           {tracks.map((t) => (

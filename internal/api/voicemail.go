@@ -164,14 +164,14 @@ func serveWAV(w http.ResponseWriter, r *http.Request, name string, b []byte) {
 	http.ServeContent(w, r, name, time.Time{}, bytes.NewReader(b))
 }
 
-// putAudio stores an uploaded recording (any WAV, converted to 8 kHz) as a greeting or menu prompt.
+// putAudio stores an uploaded recording (any WAV or MP3, converted to 8 kHz) as a greeting or menu prompt.
 func (s *Server) putAudio(w http.ResponseWriter, r *http.Request, u store.User, box, action string) {
 	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 40<<20))
 	if err != nil {
 		writeError(w, http.StatusRequestEntityTooLarge, "the recording is too large")
 		return
 	}
-	pcm, err := media.DecodeWAV(raw)
+	pcm, err := media.DecodeAudio(raw)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return

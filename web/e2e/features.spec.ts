@@ -529,3 +529,31 @@ test('voice bots over AudioSocket', async ({ page }) => {
   const options = await page.getByLabel('Send calls to').locator('option').allTextContents()
   expect(options.some((o) => o.includes('(voice bot)'))).toBe(true)
 })
+
+// MP3 hold music: an MP3 track is added (decoded by the browser, or by BitVoice), an MP3 sent to the
+// API is decoded by BitVoice, and a class can play an internet radio stream.
+test('MP3 hold music and internet radio', async ({ page }) => {
+  const { readFileSync } = await import('node:fs')
+  const mp3 = readFileSync(new URL('../../internal/media/mp3/testdata/m2_22k.mp3', import.meta.url))
+  await signIn(page)
+  await page.goto('/#/sounds')
+  await page.getByLabel('New hold music').fill('Radio')
+  await page.getByRole('button', { name: 'Add', exact: true }).last().click()
+  await expect(page.getByText('Hold music Radio added')).toBeVisible()
+  await page.getByLabel('Radio tracks').setInputFiles({ name: 'jingle.mp3', mimeType: 'audio/mpeg', buffer: mp3 })
+  await expect(page.getByText('jingle', { exact: true })).toBeVisible()
+  // Straight to the API: decoded by BitVoice.
+  const secs = await page.evaluate(async (b64) => {
+    const body = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
+    const r = await fetch('./api/music/radio/raw-mp3', { method: 'PUT', headers: { 'X-BitVoice': '1', 'Content-Type': 'audio/mpeg' }, body })
+    return (await r.json()).seconds
+  }, mp3.toString('base64'))
+  expect(secs).toBe(4)
+  await page.getByLabel('Internet radio').first().fill('ftp://nope')
+  await page.getByRole('button', { name: 'Set stream' }).click()
+  await expect(page.getByText(/enter the stream's http:\/\/ or https:\/\/ address/).first()).toBeVisible()
+  await page.getByLabel('Internet radio').first().fill('https://radio.example.com/live.mp3')
+  await page.getByRole('button', { name: 'Set stream' }).click()
+  await expect(page.getByText('Stream set')).toBeVisible()
+  await expect(page.getByText('connects when someone is put on hold')).toBeVisible()
+})

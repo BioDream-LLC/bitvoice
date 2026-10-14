@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/url"
 	"regexp"
 	"slices"
 	"strings"
@@ -11,6 +12,9 @@ type MusicClass struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
 	Shuffle bool   `json:"shuffle"`
+	// Stream, when set, is an internet radio or Icecast/Shoutcast address (MP3) played instead of the
+	// class's tracks; the tracks (or the hold tone) play while it cannot be reached.
+	Stream string `json:"stream"`
 }
 
 var (
@@ -58,6 +62,12 @@ func (c *Config) validateSounds(p *Problems) {
 		ids[m.ID] = true
 		if m.Name == "" {
 			p.add(f+".name", "give the hold music a name")
+		}
+		m.Stream = strings.TrimSpace(m.Stream)
+		if m.Stream != "" {
+			if u, err := url.Parse(m.Stream); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+				p.add(f+".stream", "enter the stream's http:// or https:// address (an MP3 stream)")
+			}
 		}
 	}
 	music := func(field, v string) {
