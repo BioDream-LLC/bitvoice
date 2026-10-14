@@ -9,9 +9,9 @@ export const parts: { title: string; intro: string; ids: string[] }[] = [
   { title: 'Getting started', intro: 'From a new install to a working phone system: extensions, phones, a phone company, where calls go, emergency calling from your offices, and how to tell everything is ready.',
     ids: ['start', 'extensions', 'phones', 'trunks', 'routes', 'emergency', 'sites', 'health', 'settings'] },
   { title: 'Where calls go', intro: 'The building blocks callers move through: groups and queues, menus and schedules, scripts and the AI receptionist, voicemail, and the diagram that shows it all.',
-    ids: ['flow', 'ringgroups', 'queues', 'sounds', 'menus', 'schedules', 'scripts', 'ai', 'voicemail', 'callbacks', 'calllinks'] },
+    ids: ['flow', 'ringgroups', 'queues', 'sounds', 'menus', 'directory', 'dialin', 'schedules', 'scripts', 'ai', 'voicemail', 'callbacks', 'calllinks'] },
   { title: 'Everyday calling', intro: 'What people do on their phones every day, and what they set for themselves: forwarding, follow-me, pickup, conference rooms, paging, hot desks, faxes and texts.',
-    ids: ['codes', 'portal', 'conferences', 'paging', 'hotdesk', 'contacts', 'calendar', 'mobile', 'video', 'fax', 'texts', 'briefing'] },
+    ids: ['codes', 'portal', 'conferences', 'paging', 'hotdesk', 'hotel', 'contacts', 'calendar', 'mobile', 'video', 'fax', 'texts', 'briefing'] },
   { title: 'Customers and insight', intro: 'Knowing who called and how it went: the live calls and history, the customer timeline, CRMs, recordings and consent, quality, costs and caller ID reputation.',
     ids: ['calls', 'history', 'timeline', 'crm', 'insight', 'recording', 'consent', 'quality', 'costs', 'reputation', 'spam'] },
   { title: 'Running BitVoice', intro: 'Keeping it safe and running: administrators and sign-in, security, changes and updates, several servers, hosted organisations, codecs, Teams, importing, automation and the tools for finding faults.',
@@ -381,6 +381,50 @@ Hold music is grouped in **classes** (Calm, Jazz, Sales offers…), each a list 
 **Default for everyone** can be the hold tone, so nothing changes until you choose music. Choosing **the hold tone** on a queue or extension keeps the tone there.
 
 > Only play music you have the rights to play to callers: most recorded music needs a licence for on-hold use.`,
+  },
+  {
+    id: 'directory', title: 'Dial-by-name directory', route: '/directories', keys: 'directory dial by name company directory spell name keypad 411 staff directory spoken name',
+    body: `A [dial-by-name directory](#/directories) lets callers reach someone without knowing their number: they spell the first letters of the name on the keypad (2 for ABC, 3 for DEF, up to 9 for WXYZ) and are put through.
+
+1. **Add directory**, name it, and give it a number (411, say) or leave the number empty and use it as a menu option.
+2. Choose what callers spell: the **last name** (the usual), the **first name**, or **either**.
+3. Choose **who is listed**, or nobody to list everyone with a phone.
+
+Callers hear "Please enter the first three letters of the person's name". One match is put through at once. Several are read out, eight at a time: each person's name, then "to call this person, press 1", 2 and so on, with 9 for more names. No match: "No one matches", and they try again (three tries).
+
+**Spoken names**: record each person's name on their extension (**Spoken name**: record in the browser or upload a file), and the directory says it; until then it reads out the extension number. The directory's own words come from the directory prompts in [Sounds](#/sounds), in its language.`,
+  },
+  {
+    id: 'dialin', title: 'Dial-in (DISA)', route: '/dial-in', keys: 'disa dial in direct inward system access call in pin call out through the office road warrior mobile caller id',
+    body: `A [dial-in](#/dial-in) (DISA, "direct inward system access") lets someone call in from outside, prove who they are, and call out again through the office: the call goes out with the office's caller ID, its routes and its rates, as if they were at their desk.
+
+1. **Add dial-in**, and set a **PIN** (4 to 10 digits), the numbers allowed to use it (**Only from these numbers**), or both. One of the two is required.
+2. Choose the extension the calls are **made as**: its outside-call permission, caller ID and outgoing routes apply. It must be allowed outside calls.
+3. Give it a number to dial inside, and send a phone number to it on [Call routing](#/routes) (choose the dial-in as the destination).
+
+Callers hear "Please enter your PIN, then press hash", then "Please enter the number to call, then press hash", and are put through. The words come from the dial-in prompts in [Sounds](#/sounds).
+
+> A dial-in is a door to your phone bill. Three wrong PINs end the call, every attempt (refused number, wrong PIN, connected call) is logged and shown in Security, and calls follow the extension's limits. Use a long PIN, list callers' numbers where you can (caller ID can be faked, so keep the PIN too), and keep the extension's outside calls to what is needed.`,
+  },
+  {
+    id: 'hotel', title: 'Hotel and wake-up calls', route: '/hotel', keys: 'hotel wake up wake-up alarm morning call guest room check in check out pms property management fias opera housekeeping room status charges hospitality markup',
+    body: `## Wake-up calls
+Anyone can book a wake-up call: guests, night shifts, people on call. From their own phone they dial \`*62\`: BitVoice says the one set (if any), then they enter the time as four digits (\`0630\`), or press star to cancel it. On [Hotel](#/hotel) an administrator books one for any extension, once or **every day**.
+
+At the time, the phone rings with the system's name; answered, it hears "Good morning. This is your wake-up call." (the wake-up prompt in [Sounds](#/sounds), in the guest's or extension's language). Unanswered, it is tried again (3 tries, 5 minutes apart, both set under Settings on the page), and after the last the **reception** extension can be rung. With several servers, only one makes wake-up calls.
+
+## Guest rooms
+Switch on **Guest room** on the extension of each room's phone. On Hotel each room shows its guest, wake-up call and room status, with **Check in** and **Check out** buttons.
+
+- **Bar vacant rooms**: rooms with nobody checked in call only extensions and emergency numbers. Emergency calls always work.
+- **Clear on check-out**: deletes the room's voicemail and cancels its wake-up call, forwarding and do not disturb, ready for the next guest.
+- A guest's language (from the check-in) is the language the room's prompts are said in.
+- **Room status**: housekeeping dial \`*68\` and a digit from the room's phone (\`*683\`); the hotel system decides what each digit means.
+
+## The hotel system (PMS)
+- **FIAS**: BitVoice connects to the FIAS interface of the hotel system (Oracle Opera and the many systems that speak FIAS) at its address and port. It receives check-ins, room moves, check-outs and wake-up bookings, and sends wake-up results, room status and call charges. While the link is down, what it would send waits and goes when it is back; the page says whether it is linked.
+- **REST API**: the hotel system calls \`POST /api/hotel/rooms/<room>/checkin\` (name, account, language), \`/checkout\`, and \`PUT /api/wakeups/<room>\`, with an API key from Settings, Automation. Charges are posted as JSON to the address you give.
+- **Charge calls**: answered outside calls from occupied rooms go on the guest's bill, at the trunk's rates (from [Costs](#/costs)) plus the **markup**.`,
   },
   {
     id: 'menus', title: 'Menus (auto attendant)', route: '/menus', keys: 'ivr press 1 prompt greeting keypad auto attendant',
@@ -922,6 +966,8 @@ Everyone in a room hears everyone else who is not muted, mixed by BitVoice; each
 | \`**\` and an extension | answer the call ringing that extension |
 | \`*80\` and an extension | intercom: that phone answers on its speaker |
 | \`*0\` and a code | a speed dial |
+| \`*62\` | wake-up call: hear it, book one (four digits, such as 0630) or cancel it (star) |
+| \`*68\` and a digit | room status, for housekeeping in hotels |
 | \`*43\` | the echo test |
 | \`*97\` | your voicemail |
 | \`70\` | park a call (transfer it here); 71 to 79 pick it up |

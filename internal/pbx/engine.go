@@ -75,6 +75,13 @@ type Engine struct {
 	Mail Mailbox
 	// Music stores hold music tracks; nil plays the hold tone everywhere.
 	Music MusicLibrary
+	// WakeUps keeps the wake-up calls; nil switches them off.
+	WakeUps WakeUpBook
+	// SaveGuests keeps the hotel's checked-in guests across restarts.
+	SaveGuests func([]Guest) error
+	// PMSEvent, when set, tells the hotel system what happened (wake-up set and result, room status).
+	PMSEvent func(kind string, data map[string]string)
+	guests   guests
 	// SeenDevice, when set, is told the User-Agent of each phone that registers (the compatibility list).
 	SeenDevice func(userAgent, ext string)
 	// Remote gives remote workers' confirmed addresses, for emergency calls.
@@ -207,6 +214,7 @@ func (e *Engine) Start(ctx context.Context, listen string) error {
 	go e.reg.run(e.ctx)
 	go e.runTrunks(e.ctx)
 	go e.watchdog(e.ctx)
+	go e.wakeUpLoop(e.ctx)
 	rcfg := e.Config()
 	e.applyRadio(rcfg)
 	return nil

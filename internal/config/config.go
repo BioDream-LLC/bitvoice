@@ -32,6 +32,8 @@ type Config struct {
 	Faxes          []FaxBox        `json:"faxes"`
 	PageGroups     []PageGroup     `json:"pageGroups"`
 	Conferences    []Conference    `json:"conferences"`
+	Directories    []Directory     `json:"directories"`
+	DialIns        []DialIn        `json:"dialIns"`
 	Devices        []Device        `json:"devices"`
 	Schedules      []Schedule      `json:"schedules"`
 	Menus          []Menu          `json:"menus"`
@@ -59,6 +61,8 @@ type System struct {
 	// on hold, parked or waiting, unless a queue or extension names another; empty plays the hold tone.
 	Music     []MusicClass `json:"music"`
 	HoldMusic string       `json:"holdMusic"`
+	// Hotel is wake-up calls, guest rooms and the hotel system (PMS) link.
+	Hotel Hotel `json:"hotel"`
 
 	// PublicAddress is advertised in SIP and SDP. Empty means work it out per peer.
 	PublicAddress string `json:"publicAddress"`
@@ -677,6 +681,8 @@ type Extension struct {
 	// HoldMusic is the class callers hear when this person puts them on hold; empty for the system's,
 	// "tone" for the hold tone.
 	HoldMusic string `json:"holdMusic,omitempty"`
+	// GuestRoom makes this a hotel room's phone: the hotel system checks guests in and out of it.
+	GuestRoom bool `json:"guestRoom,omitempty"`
 }
 
 // FollowMe is where else an extension's calls ring when its phones are not answered.
@@ -781,6 +787,8 @@ type FeatureCodes struct {
 	DirectedPickup     string `json:"directedPickup"`     // ** then the extension
 	Intercom           string `json:"intercom"`           // *80 then the extension
 	SpeedDial          string `json:"speedDial"`          // *0 then the code
+	WakeUp             string `json:"wakeUp"`             // *62 books, hears or cancels a wake-up call
+	RoomStatus         string `json:"roomStatus"`         // *68 then a digit: housekeeping reports a room's status
 }
 
 // Door opens a door from a call with a door station: the person answering presses Code, or the button on
@@ -1185,7 +1193,7 @@ func (s *System) Location() *time.Location {
 
 // Destination is where a call goes.
 type Destination struct {
-	Type   string `json:"type"`   // extension, ringgroup, queue, menu, schedule, script, voicemail, echo, hangup, fax, esrp, conference
+	Type   string `json:"type"`   // extension, ringgroup, queue, menu, schedule, script, voicemail, echo, hangup, fax, esrp, conference, directory, dialin
 	Target string `json:"target"` // a number for extension and ringgroup
 	// Via is set only inside the engine: the extension whose own forwarding a "forward" destination is.
 	Via string `json:"via,omitempty"`
@@ -1343,6 +1351,7 @@ func (c *Config) Validate() error {
 	c.validateGitOps(&p)
 	c.validateSites(&p)
 	c.validateSounds(&p)
+	c.validateHotel(&p)
 	if s.PublicAddress != "" {
 		if _, err := netip.ParseAddr(s.PublicAddress); err != nil && !hostRe.MatchString(s.PublicAddress) {
 			p.add("system.publicAddress", "must be an IP address or host name")
@@ -1551,6 +1560,7 @@ func (c *Config) Validate() error {
 			p.add(f+".members", "add at least one phone, or a multicast group")
 		}
 	}
+	c.validateDialIn(&p, claim, checkID)
 	for i := range c.Conferences {
 		r := &c.Conferences[i]
 		f := fmt.Sprintf("conferences[%d]", i)
@@ -1663,6 +1673,8 @@ func (c *Config) Validate() error {
 		{"system.codes.directedPickup", &codes.DirectedPickup, "**", "the directed pickup code", true},
 		{"system.codes.intercom", &codes.Intercom, "*80", "the intercom code", true},
 		{"system.codes.speedDial", &codes.SpeedDial, "*0", "the speed dial code", true},
+		{"system.codes.wakeUp", &codes.WakeUp, "*62", "the wake-up call code", false},
+		{"system.codes.roomStatus", &codes.RoomStatus, "*68", "the room status code", true},
 	} {
 		*fc.v = strings.TrimSpace(*fc.v)
 		if *fc.v == "" {
@@ -2323,6 +2335,14 @@ func (c *Config) Validate() error {
 		case "conference":
 			if c.FindConference(d.Target) == nil {
 				p.add(field, "no conference room %s", d.Target)
+			}
+		case "directory":
+			if c.FindDirectory(d.Target) == nil {
+				p.add(field, "no directory %s", d.Target)
+			}
+		case "dialin":
+			if c.FindDialIn(d.Target) == nil {
+				p.add(field, "no dial-in %s", d.Target)
 			}
 		case "esrp":
 			if len(c.System.Core.PSAPs) == 0 {

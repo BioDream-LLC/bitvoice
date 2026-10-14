@@ -770,7 +770,7 @@ func (s *Store) TouchLogin(username string) {
 }
 
 // stateNames are the small files of live state kept across restarts.
-var stateNames = map[string]bool{"hotdesk": true, "divert": true}
+var stateNames = map[string]bool{"hotdesk": true, "divert": true, "guests": true}
 
 // SaveState keeps a piece of live state (hot desk sign-ins) across restarts.
 func (s *Store) SaveState(name string, v any) error {

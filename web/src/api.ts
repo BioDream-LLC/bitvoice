@@ -5,7 +5,7 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 export type Role = 'admin' | 'viewer' | 'extension'
 export interface Me { username: string; name: string; role: Role; setupComplete: boolean; mfa?: boolean }
 
-export interface Destination { type: 'extension' | 'ringgroup' | 'queue' | 'menu' | 'schedule' | 'script' | 'receptionist' | 'voicemail' | 'fax' | 'esrp' | 'conference' | 'echo' | 'hangup'; target: string }
+export interface Destination { type: 'extension' | 'ringgroup' | 'queue' | 'menu' | 'schedule' | 'script' | 'receptionist' | 'voicemail' | 'fax' | 'esrp' | 'conference' | 'directory' | 'dialin' | 'echo' | 'hangup'; target: string }
 export interface Receptionist { id: string; name: string; greeting: string; knowledge: string; person: Destination; messageBox: string }
 
 export interface Extension {
@@ -17,13 +17,26 @@ export interface Extension {
   calendar?: { secret: string; whenBusy: 'voicemail' | 'forward' | 'ring' | ''; forwardTo: string; ignoreMeetings?: boolean }
   door: { code: string; url: string; method: string; username: string; password: string }
   followMe?: FollowMe; pickupGroup?: string; noIntercom?: boolean; speedDials?: SpeedDial[] | null
-  language?: string; holdMusic?: string
+  language?: string; holdMusic?: string; guestRoom?: boolean
 }
 export interface FollowMe { enabled: boolean; numbers: string[] | null; strategy: 'sequential' | 'together' | ''; ringSeconds: number; confirm: boolean }
 export interface SpeedDial { code: string; number: string; name: string }
 export interface FeatureCodes {
   forwardAll: string; forwardAllOff: string; forwardBusy: string; forwardBusyOff: string; forwardNoAnswer: string; forwardNoAnswerOff: string
   dndOn: string; dndOff: string; dndToggle: string; followMe: string; pickup: string; directedPickup: string; intercom: string; speedDial: string
+  wakeUp?: string; roomStatus?: string
+}
+export interface Directory { id: string; number: string; name: string; match: 'last' | 'first' | 'any'; members: string[] | null; language?: string }
+export interface DialIn { id: string; number: string; name: string; pin: string; allowedCallers: string[] | null; as: string; language?: string }
+export interface Hotel {
+  wakeUpTries: number; wakeUpRetryMinutes: number; notify: string; barVacant: boolean; checkOutClear: boolean
+  pms: { kind: '' | 'fias' | 'api'; host: string; port: number; chargeCalls: boolean; chargeUrl: string; markup: number }
+}
+export interface WakeUp { id: string; extension: string; at: string; daily?: boolean; by: string; tries: number; last?: string; lastAt?: string }
+export interface Guest { room: string; name: string; account?: string; language?: string; since: string; status?: string }
+export interface HotelView {
+  rooms: { extension: string; name: string; guest?: Guest; status?: string; statusAt?: string; wakeUp?: WakeUp }[]
+  wakeUps: WakeUp[]; link?: { up: boolean; lastSeen?: string; waiting: number }
 }
 export interface Conference {
   id: string; number: string; name: string; pin: string; leaderPin: string; waitForLeader: boolean; muteMembers: boolean
@@ -161,7 +174,7 @@ export interface DnsCheck {
 }
 export interface SystemSettings {
   name: string; purpose: 'office' | 'contact-centre' | '911'; country: string; timezone: string; language: string
-  promptLanguages?: string[] | null; music?: MusicClass[] | null; holdMusic?: string
+  promptLanguages?: string[] | null; music?: MusicClass[] | null; holdMusic?: string; hotel?: Hotel
   publicAddress: string; cluster?: ClusterSettings; sipPort: number; rtpMin: number; rtpMax: number; codecs: string[]; echoNumber: string; voicemailNumber: string; parkNumber: string; parkSeconds: number
   codes?: FeatureCodes; speedDials?: SpeedDial[] | null
   callLinks?: CallLink[] | null; brands?: Brand[] | null; texting: Texting; screening: Screening; vips?: VIP[] | null; agentLogin: string; agentPause: string; hotDesk: { login: string; logout: string; signOutAt: string }
@@ -316,7 +329,7 @@ const baseQuery = fetchBaseQuery({
 })
 
 const tags = ['Me', 'Extensions', 'RingGroups', 'Trunks', 'Inbound', 'Outbound', 'Settings', 'Users', 'Calls',
-  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail', 'Tenants', 'System', 'Prompts', 'Music'] as const
+  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail', 'Tenants', 'System', 'Prompts', 'Music', 'Directories', 'DialIns', 'Hotel', 'WakeUps'] as const
 
 export const api = createApi({
   reducerPath: 'api',
@@ -395,6 +408,27 @@ export const api = createApi({
         query: (body) => ({ url: `conferences/${body.id}`, method: 'PUT', body }), invalidatesTags: ['Conferences', 'History'] }),
       deleteConference: b.mutation<void, string>({
         query: (id) => ({ url: `conferences/${id}`, method: 'DELETE' }), invalidatesTags: ['Conferences', 'History'] }),
+      directories: b.query<List<Directory>, void>({ query: () => 'directories', providesTags: ['Directories'] }),
+      createDirectory: b.mutation<Item<Directory>, Partial<Directory>>({ query: (body) => ({ url: 'directories', method: 'POST', body }), invalidatesTags: ['Directories', 'History'] }),
+      updateDirectory: b.mutation<Item<Directory>, Directory>({ query: (body) => ({ url: `directories/${body.id}`, method: 'PUT', body }), invalidatesTags: ['Directories', 'History'] }),
+      deleteDirectory: b.mutation<void, string>({ query: (id) => ({ url: `directories/${id}`, method: 'DELETE' }), invalidatesTags: ['Directories', 'History'] }),
+      dialIns: b.query<List<DialIn>, void>({ query: () => 'dial-ins', providesTags: ['DialIns'] }),
+      createDialIn: b.mutation<Item<DialIn>, Partial<DialIn>>({ query: (body) => ({ url: 'dial-ins', method: 'POST', body }), invalidatesTags: ['DialIns', 'History'] }),
+      updateDialIn: b.mutation<Item<DialIn>, DialIn>({ query: (body) => ({ url: `dial-ins/${body.id}`, method: 'PUT', body }), invalidatesTags: ['DialIns', 'History'] }),
+      deleteDialIn: b.mutation<void, string>({ query: (id) => ({ url: `dial-ins/${id}`, method: 'DELETE' }), invalidatesTags: ['DialIns', 'History'] }),
+      hotel: b.query<HotelView, void>({ query: () => 'hotel', providesTags: ['Hotel', 'WakeUps', 'Extensions'] }),
+      checkIn: b.mutation<void, { room: string; name: string; account: string; language: string }>({
+        query: ({ room, ...body }) => ({ url: `hotel/rooms/${room}/checkin`, method: 'POST', body }), invalidatesTags: ['Hotel'] }),
+      checkOut: b.mutation<void, string>({ query: (room) => ({ url: `hotel/rooms/${room}/checkout`, method: 'POST' }), invalidatesTags: ['Hotel', 'WakeUps'] }),
+      setRoomStatus: b.mutation<void, { room: string; status: string }>({
+        query: ({ room, status }) => ({ url: `hotel/rooms/${room}/status`, method: 'PUT', body: { status } }), invalidatesTags: ['Hotel'] }),
+      wakeUps: b.query<List<WakeUp>, void>({ query: () => 'wakeups', providesTags: ['WakeUps'] }),
+      setWakeUp: b.mutation<WakeUp, { ext: string; at: string; daily: boolean }>({
+        query: ({ ext, ...body }) => ({ url: `wakeups/${ext}`, method: 'PUT', body }), invalidatesTags: ['WakeUps', 'Hotel'] }),
+      cancelWakeUp: b.mutation<void, string>({ query: (ext) => ({ url: `wakeups/${ext}`, method: 'DELETE' }), invalidatesTags: ['WakeUps', 'Hotel'] }),
+      saveNameAudio: b.mutation<{ seconds: number }, { ext: string; wav: Blob }>({
+        query: ({ ext, wav }) => ({ url: `extensions/${ext}/name-audio`, method: 'PUT', body: wav, headers: { 'Content-Type': 'audio/wav' } }), invalidatesTags: ['Voicemail'] }),
+      deleteNameAudio: b.mutation<void, string>({ query: (ext) => ({ url: `extensions/${ext}/name-audio`, method: 'DELETE' }), invalidatesTags: ['Voicemail'] }),
       conferenceLive: b.query<{ items: ConferenceRoom[] }, void>({ query: () => 'conferences/live', providesTags: ['ConferenceLive'] }),
       lockConference: b.mutation<void, { number: string; locked: boolean }>({
         query: ({ number, locked }) => ({ url: `conferences/live/${number}`, method: 'PUT', body: { locked } }), invalidatesTags: ['ConferenceLive'] }),
@@ -668,6 +702,10 @@ export const {
   useTenantsQuery, useCreateTenantMutation, useUpdateTenantMutation, useDeleteTenantMutation, useOpenTenantMutation,
   useQueuesQuery, useCreateQueueMutation, useUpdateQueueMutation, useDeleteQueueMutation, useQueueStatusQuery,
   useVoicemailQuery, useMarkHeardMutation, useDeleteVoicemailMutation, useSaveGreetingMutation, useResetGreetingMutation,
+  useDirectoriesQuery, useCreateDirectoryMutation, useUpdateDirectoryMutation, useDeleteDirectoryMutation,
+  useDialInsQuery, useCreateDialInMutation, useUpdateDialInMutation, useDeleteDialInMutation,
+  useHotelQuery, useCheckInMutation, useCheckOutMutation, useSetRoomStatusMutation, useWakeUpsQuery, useSetWakeUpMutation, useCancelWakeUpMutation,
+  useSaveNameAudioMutation, useDeleteNameAudioMutation,
   usePromptsQuery, useSaveLangPromptMutation, useDeleteLangPromptMutation, useGeneratePromptsMutation, useMusicQuery, useAddMusicMutation, useDeleteMusicMutation,
 } = api
 

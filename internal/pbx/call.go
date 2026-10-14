@@ -994,6 +994,22 @@ func (c *Call) answerLocal(p plan) {
 		if c.answerHere(p.toName) {
 			go c.joinConference(p.box)
 		}
+	case "wakeup":
+		if c.answerHere(p.toName) {
+			go c.wakeUpCode()
+		}
+	case "roomstatus":
+		if c.answerHere(p.toName) {
+			go c.roomStatusCode(p.box)
+		}
+	case "directory":
+		if c.answerHere(p.toName) {
+			go c.runDirectory(p.box)
+		}
+	case "dialin":
+		if c.answerHere(p.toName) {
+			go c.runDialIn(p.box)
+		}
 	case "page":
 		if c.answerHere(p.toName) {
 			if g := c.e.Config().FindPageGroup(p.box); g != nil {

@@ -9,12 +9,12 @@ import {
   useMenusQuery, useQueuesQuery, useScriptsQuery, useRegistrationsQuery, useSchedulesQuery, useRingGroupsQuery, useSystemQuery, useUpdateExtensionMutation, type ApiErrorBody,
   type Destination, type Extension, useReceptionistsQuery, useSitesQuery, useRemoteAddressQuery,
   useConferencesQuery, useDivertQuery, useSetDivertMutation, type Divert, type FollowMe, type SpeedDial,
-  usePromptsQuery, useSettingsQuery,
+  usePromptsQuery, useSettingsQuery, useDirectoriesQuery, useDialInsQuery, useSaveNameAudioMutation, useDeleteNameAudioMutation, useVoicemailQuery,
 } from './api'
 import { MobileDevices } from './Mobile'
 import { useOpenParam } from './useOpenParam'
 import { attempt, DeleteButton, Drawer, Table, useIsAdmin } from './Editor'
-import { Greeting } from './Greeting'
+import { AudioRecording, Greeting } from './Greeting'
 import { Copyable, PhoneHelp } from './Setup'
 import { Badge, Chip, Empty, Field, Page, Toggle, problemFor, relTime } from './ui'
 
@@ -225,6 +225,8 @@ export function DestinationPicker({ label, value, onChange, exclude, required, n
   const { data: receptionists } = useReceptionistsQuery()
   const { data: faxes } = useFaxBoxesQuery()
   const { data: rooms } = useConferencesQuery()
+  const { data: dirs } = useDirectoriesQuery()
+  const { data: dialIns } = useDialInsQuery()
   const key = value ? `${value.type}:${value.target}` : ''
   return (
     <Field label={label} htmlFor={id} error={error}>
@@ -269,6 +271,12 @@ export function DestinationPicker({ label, value, onChange, exclude, required, n
         {(faxes?.items.length ?? 0) > 0 && (
           <optgroup label="Fax">
             {faxes!.items.map((f) => <option key={f.id} value={`fax:${f.number}`}>{f.number} {f.name} (fax to PDF)</option>)}
+          </optgroup>
+        )}
+        {((dirs?.items.length ?? 0) > 0 || (dialIns?.items.length ?? 0) > 0) && (
+          <optgroup label="Directories and dial-in">
+            {dirs?.items.map((d) => <option key={d.id} value={`directory:${d.id}`}>{d.name} (dial by name)</option>)}
+            {dialIns?.items.map((d) => <option key={d.id} value={`dialin:${d.id}`}>{d.name} (dial-in)</option>)}
           </optgroup>
         )}
         {(rooms?.items.length ?? 0) > 0 && (
@@ -360,6 +368,8 @@ export function useDescribe() {
       case 'script': return `Script ${scripts?.items.find((x) => x.id === t)?.name ?? ''}`.trim()
       case 'receptionist': return `AI receptionist ${receptionists?.items.find((x) => x.id === t)?.name ?? ''}`.trim()
       case 'conference': return `Conference room ${t}`
+      case 'directory': return 'Dial-by-name directory'
+      case 'dialin': return 'Dial-in'
       case 'echo': return 'Echo test'
     }
     return 'Hang up'
@@ -443,9 +453,23 @@ function FollowSettings({ x, setX, p }: { x: Extension; setX: Dispatch<SetStateA
 function SoundFields({ x, setX, p }: { x: Extension; setX: Dispatch<SetStateAction<Extension>>; p: (f: string) => string | undefined }) {
   const { data: settings } = useSettingsQuery()
   const { data: langs } = usePromptsQuery()
+  const { data: vm } = useVoicemailQuery()
+  const [saveName, { isLoading }] = useSaveNameAudioMutation()
+  const [deleteName] = useDeleteNameAudioMutation()
   const music = settings?.system.music ?? []
   return (
     <div className="grid gap-3 sm:grid-cols-2">
+      <label className="flex items-center gap-3 text-sm text-slate-300 sm:col-span-2">
+        <Toggle checked={x.guestRoom ?? false} onChange={(v) => setX((x0) => ({ ...x0, guestRoom: v }))} label="Guest room" />
+        Guest room <span className="text-xs text-slate-500">(a hotel room's phone: checked in and out on Hotel, or by the hotel system)</span>
+      </label>
+      {x.id && x.number && (
+        <div className="sm:col-span-2">
+          <AudioRecording label="Spoken name" missing="No name recorded: the directory reads the number out." has={!!vm?.greetings?.includes(`name-${x.number}`)}
+            src={`./api/extensions/${x.number}/name-audio`} busy={isLoading} saved="Name saved"
+            save={(wav) => saveName({ ext: x.number, wav }).unwrap()} reset={() => deleteName(x.number).unwrap()} />
+        </div>
+      )}
       <Field label="Prompt language" htmlFor="xla" error={p('language')} hint="Wake-up calls and other prompts this phone hears.">
         <select id="xla" className="input" value={x.language ?? ''} onChange={(e) => { const v = e.target.value; setX((x0) => ({ ...x0, language: v })) }}>
           <option value="">The system's</option>

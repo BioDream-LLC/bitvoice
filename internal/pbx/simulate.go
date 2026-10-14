@@ -167,6 +167,10 @@ func (s *sim) forwardStep(x *config.Extension, n string, depth int, path []strin
 		return s.walk(config.Destination{Type: "queue", Target: n}, depth+1, path, direction, from, to)
 	case cfg.FindConference(n) != nil:
 		return s.walk(config.Destination{Type: "conference", Target: n}, depth+1, path, direction, from, to)
+	case cfg.FindDirectoryNumber(n) != nil:
+		return s.walk(config.Destination{Type: "directory", Target: cfg.FindDirectoryNumber(n).ID}, depth+1, path, direction, from, to)
+	case cfg.FindDialInNumber(n) != nil:
+		return s.walk(config.Destination{Type: "dialin", Target: cfg.FindDialInNumber(n).ID}, depth+1, path, direction, from, to)
 	}
 	if !x.Outbound {
 		return &SimStep{Kind: "refused", Name: "Forwarding refused", Status: "fail", Says: x.Name + " may not call outside numbers, so the call is not forwarded to " + n + "."}
@@ -422,6 +426,21 @@ func (s *sim) walk(d config.Destination, depth int, path []string, direction, fr
 			says = "The caller is asked for the PIN, then joins the conference room " + r.Name + "."
 		}
 		return &SimStep{Kind: "conference", Target: r.Number, Name: "Conference " + r.Name, Status: "ok", Says: says}
+	case "directory":
+		r := cfg.FindDirectory(d.Target)
+		if r == nil {
+			return missing("directory")
+		}
+		part := map[string]string{"first": "first name", "any": "name", "last": "last name"}[r.Match]
+		return &SimStep{Kind: "directory", Target: r.ID, Name: "Directory " + r.Name, Status: "ok",
+			Says: "The caller spells the first letters of a " + part + " and is put through to who they choose."}
+	case "dialin":
+		r := cfg.FindDialIn(d.Target)
+		if r == nil {
+			return missing("dial-in")
+		}
+		return &SimStep{Kind: "dialin", Target: r.ID, Name: "Dial-in " + r.Name, Status: "ok",
+			Says: "The caller proves who they are (PIN or known number), then dials a number and is put through as extension " + r.As + "."}
 	case "echo":
 		return &SimStep{Kind: "echo", Name: "Echo test", Status: "ok", Says: "The caller hears themselves, to test the sound."}
 	case "hangup":
@@ -457,6 +476,10 @@ func (s *sim) exists(d config.Destination) bool {
 		return c.FindReceptionist(d.Target) != nil
 	case "conference":
 		return c.FindConference(d.Target) != nil
+	case "directory":
+		return c.FindDirectory(d.Target) != nil
+	case "dialin":
+		return c.FindDialIn(d.Target) != nil
 	case "echo", "hangup":
 		return true
 	}

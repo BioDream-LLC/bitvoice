@@ -19,6 +19,8 @@ import (
 // ClusterLink is what the engine needs from the servers it shares a database with.
 type ClusterLink interface {
 	Self() cluster.Node
+	// Leader says whether this server runs the jobs only one server may run, such as wake-up calls.
+	Leader() bool
 	Remote() []cluster.Reg
 	Peer(id string) (cluster.Node, bool)
 	RemoteBusy(ext string) bool

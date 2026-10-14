@@ -80,6 +80,18 @@ func (e *Engine) resolveFor(cfg *config.Config, d config.Destination, depth int,
 			return plan{reject: 404}
 		}
 		return plan{local: "conference", box: r.Number, toName: r.Name}
+	case "directory":
+		r := cfg.FindDirectory(d.Target)
+		if r == nil {
+			return plan{reject: 404}
+		}
+		return plan{local: "directory", box: r.ID, toName: r.Name}
+	case "dialin":
+		r := cfg.FindDialIn(d.Target)
+		if r == nil {
+			return plan{reject: 404}
+		}
+		return plan{local: "dialin", box: r.ID, toName: r.Name}
 	case "hangup":
 		return plan{reject: 480, reason: "Temporarily Unavailable"}
 	case "script":
@@ -294,6 +306,12 @@ func (e *Engine) route(cfg *config.Config, caller *config.Extension, dialled str
 	if r := cfg.FindConference(dialled); r != nil {
 		return plan{local: "conference", box: r.Number, toName: r.Name, direction: "internal"}
 	}
+	if r := cfg.FindDirectoryNumber(dialled); r != nil {
+		return plan{local: "directory", box: r.ID, toName: r.Name, direction: "internal"}
+	}
+	if r := cfg.FindDialInNumber(dialled); r != nil {
+		return plan{local: "dialin", box: r.ID, toName: r.Name, direction: "internal"}
+	}
 	if g := cfg.FindPageGroup(dialled); g != nil {
 		return plan{local: "page", box: g.Number, toName: "Page " + g.Name, direction: "internal"}
 	}
@@ -314,6 +332,9 @@ func (e *Engine) route(cfg *config.Config, caller *config.Extension, dialled str
 	}
 	if caller != nil && !caller.Outbound {
 		return plan{reject: 403, reason: "Outbound Calls Not Allowed", direction: "outbound"}
+	}
+	if e.vacantBarred(cfg, caller) {
+		return plan{reject: 403, reason: "Room Not Checked In", direction: "outbound"}
 	}
 	p := e.outbound(cfg, caller, dialled)
 	p.direction = "outbound"

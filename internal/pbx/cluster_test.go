@@ -46,6 +46,8 @@ func (f *fakeCluster) set(id string, e *Engine) {
 	f.mu.Unlock()
 }
 
+func (l fakeLink) Leader() bool { return true }
+
 func (l fakeLink) Self() cluster.Node {
 	e := l.f.all()[l.id]
 	return cluster.Node{ID: l.id, SIPAddr: "127.0.0.1:" + strconv.Itoa(e.SIPPort()), Self: true, Alive: true}

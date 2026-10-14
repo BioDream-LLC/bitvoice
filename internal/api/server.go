@@ -28,6 +28,7 @@ import (
 
 // Server serves the API and the embedded web interface.
 type Server struct {
+	hotel  hotelLink
 	Store  *store.Store
 	Engine *pbx.Engine
 

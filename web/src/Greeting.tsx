@@ -99,7 +99,7 @@ export function AudioRecording({ label, missing, has, src, busy, saved, save, re
         <div className="flex flex-wrap gap-2">
           {recording
             ? <button type="button" className="btn btn-danger" onClick={stop}><Square size={14} aria-hidden /> Stop <span className="font-mono tabular-nums">{seconds}s / {MAX_SECONDS}s</span></button>
-            : <button type="button" className="btn" onClick={start} disabled={busy}><Mic size={14} className="text-rose-300" aria-hidden /> Record in the browser</button>}
+            : <button type="button" className="btn" aria-label={`Record ${label.toLowerCase()} in the browser`} onClick={start} disabled={busy}><Mic size={14} className="text-rose-300" aria-hidden /> Record in the browser</button>}
           <button type="button" className="btn" onClick={() => file.current?.click()} disabled={recording || busy}><Upload size={14} className="text-sky-300" aria-hidden /> Upload a file</button>
           <input ref={file} type="file" accept="audio/*" className="hidden" aria-label={`${label} file`} onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = '' }} />
           {has && <button type="button" className="btn" onClick={() => attempt(reset, `${label} removed`)}><RotateCcw size={14} className="text-amber-300" aria-hidden /> Remove</button>}

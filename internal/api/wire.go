@@ -14,6 +14,8 @@ func (s *Server) WireEngine() {
 	eng, st := s.Engine, s.Store
 	eng.Mail = st
 	eng.Music = st
+	eng.WakeUps = st
+	eng.PMSEvent = s.pmsEvent
 	eng.Recordings = st
 	eng.SeenDevice = st.NoteDevice
 	eng.Remote = st
@@ -35,6 +37,12 @@ func (s *Server) WireEngine() {
 	}
 	eng.LoadDiverts(div)
 	eng.SaveDiverts = func(d pbx.DivertState) error { return st.SaveState("divert", d) }
+	var guests []pbx.Guest
+	if err := st.LoadState("guests", &guests); err != nil {
+		log.Warn("could not read hotel guests", "err", err)
+	}
+	eng.LoadGuests(guests)
+	eng.SaveGuests = func(g []pbx.Guest) error { return st.SaveState("guests", g) }
 	eng.Mobile = s
 	eng.SetEmergencyMode = s.SetEmergencyMode
 	eng.OnFax = s.FaxReceived
@@ -65,4 +73,5 @@ func (s *Server) RunBackground(ctx context.Context, main bool) {
 	go s.RunRadioCAD(ctx)
 	go s.RunGitOps(ctx)
 	go s.RunEmergencyEmail(ctx)
+	go s.RunHotel(ctx)
 }

@@ -434,6 +434,19 @@ func (c *Cluster) Nodes() []Node {
 	return slices.Clone(c.nodes)
 }
 
+// Leader says whether this server is the one that runs jobs only one server may run (wake-up calls):
+// the alive server whose ID sorts first. When this server sees no other, it is the leader.
+func (c *Cluster) Leader() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, n := range c.nodes {
+		if n.Alive && !n.Self && n.ID < c.self.ID {
+			return false
+		}
+	}
+	return true
+}
+
 // Peer finds another server that is alive.
 func (c *Cluster) Peer(id string) (Node, bool) {
 	c.mu.Lock()

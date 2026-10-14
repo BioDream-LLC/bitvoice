@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/biodream-llc/bitvoice/internal/media"
+	"github.com/biodream-llc/bitvoice/internal/pbx"
 	"github.com/biodream-llc/bitvoice/internal/prompts"
 	"github.com/biodream-llc/bitvoice/internal/store"
 )
@@ -139,6 +140,30 @@ func (s *Server) soundRoutes() {
 		writeJSON(w, 200, map[string]any{"made": made, "skipped": skipped, "failed": failed})
 	})
 
+	// An extension's spoken name, which the dial-by-name directory says.
+	s.handle("GET /api/extensions/{n}/name-audio", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		b, err := s.Store.Greeting(pbx.NameBox(r.PathValue("n")))
+		if err != nil {
+			writeError(w, http.StatusNotFound, "no name recorded")
+			return
+		}
+		serveWAV(w, r, "name.wav", b)
+	})
+	s.handle("PUT /api/extensions/{n}/name-audio", true, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		cfg, _ := s.Store.Config()
+		if cfg.FindExtension(r.PathValue("n")) == nil {
+			writeError(w, http.StatusNotFound, "no extension "+r.PathValue("n"))
+			return
+		}
+		s.putAudio(w, r, u, pbx.NameBox(r.PathValue("n")), "extension.name")
+	})
+	s.handle("DELETE /api/extensions/{n}/name-audio", true, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		if err := s.Store.SetGreeting(pbx.NameBox(r.PathValue("n")), nil); err != nil && !errors.Is(err, store.ErrNotFound) {
+			writeErr(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 	s.handle("GET /api/music", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
 		cfg, _ := s.Store.Config()
 		out := map[string][]store.MusicFile{}

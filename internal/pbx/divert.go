@@ -121,7 +121,7 @@ func checkForward(cfg *config.Config, x *config.Extension, n string) error {
 // dialsInside says whether a number reaches something in this phone system (not a trunk).
 func dialsInside(cfg *config.Config, n string) bool {
 	return cfg.FindExtension(n) != nil || cfg.FindRingGroup(n) != nil || cfg.FindQueue(n) != nil ||
-		cfg.FindMenuNumber(n) != nil || cfg.FindConference(n) != nil
+		cfg.FindMenuNumber(n) != nil || cfg.FindConference(n) != nil || cfg.FindDirectoryNumber(n) != nil
 }
 
 // SetDND switches an extension's do not disturb on or off, as its feature codes do.
@@ -337,6 +337,8 @@ func (e *Engine) featureCode(cfg *config.Config, caller *config.Extension, diall
 		return local("divert", dialled, "Call forwarding")
 	case is(fc.Pickup):
 		return local("grouppickup", "", "Call pickup")
+	case is(fc.WakeUp):
+		return local("wakeup", "", "Wake-up call")
 	}
 	for _, code := range []string{fc.ForwardAll, fc.ForwardBusy, fc.ForwardNoAnswer} {
 		if n, ok := prefixed(code); ok && len(n) >= 2 {
@@ -348,7 +350,7 @@ func (e *Engine) featureCode(cfg *config.Config, caller *config.Extension, diall
 		code string
 		kind string
 	}
-	pres := []pre{{fc.DirectedPickup, "pickup"}, {fc.Intercom, "intercom"}, {fc.SpeedDial, "speed"}}
+	pres := []pre{{fc.DirectedPickup, "pickup"}, {fc.Intercom, "intercom"}, {fc.SpeedDial, "speed"}, {fc.RoomStatus, "room"}}
 	slices.SortFunc(pres, func(a, b pre) int { return len(b.code) - len(a.code) })
 	for _, pr := range pres {
 		rest, ok := prefixed(pr.code)
@@ -360,6 +362,8 @@ func (e *Engine) featureCode(cfg *config.Config, caller *config.Extension, diall
 			return local("directedpickup", rest, "Call pickup")
 		case "intercom":
 			return e.intercomPlan(cfg, caller, rest), true
+		case "room":
+			return local("roomstatus", rest, "Room status")
 		case "speed":
 			n := speedDial(cfg, caller, rest)
 			if n == "" {

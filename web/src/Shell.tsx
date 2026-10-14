@@ -4,7 +4,7 @@ import {
   Activity, BookOpen, BookOpenText, Braces, CloudUpload, Megaphone, Workflow, CalendarClock, FileUp, Grid3x3, ListOrdered, Smartphone, Voicemail, ChevronRight, History, LayoutDashboard, LogOut, Monitor, Moon, Phone, PhoneCall, PhoneForwarded, Signal, Coins, BookUser, MessageSquare, ScrollText, Link2, BadgeCheck, Server as ServerIcon,
   Gauge, MapPin, PackageCheck, Route, Scale, Search, Server, Settings, Shield, Stethoscope, Sun, Users, UserCog, Waypoints,
   Bot, Printer,
-  Siren, Network, RadioTower, Users2, Asterisk, Building2, FlaskConical, AudioLines } from 'lucide-react'
+  Siren, Network, RadioTower, Users2, Asterisk, Building2, FlaskConical, AudioLines, BookA, KeyRound, BedDouble } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { Crash } from './Crash'
@@ -67,6 +67,9 @@ export const nav: NavItem[] = [
   { to: '/menus', label: 'Menus', icon: Grid3x3, color: 'text-sky-300', keys: 'ivr auto attendant press 1 prompt', group: 'Calls' },
   { to: '/receptionists', label: 'AI receptionists', icon: Bot, color: 'text-violet-300', keys: 'ai assistant virtual receptionist answer questions', group: 'Calls' },
   { to: '/sounds', label: 'Sounds', icon: AudioLines, color: 'text-violet-300', keys: 'sounds prompts recordings languages spanish french german translate speech tts music on hold moh hold music queue music announcements', group: 'Calls' },
+  { to: '/directories', label: 'Dial by name', icon: BookA, color: 'text-sky-300', keys: 'directory dial by name company directory spell name 411 staff directory', group: 'Calls' },
+  { to: '/dial-in', label: 'Dial-in', icon: KeyRound, color: 'text-amber-300', keys: 'disa dial in direct inward system access call in pin call out through the office road warrior', group: 'Calls' },
+  { to: '/hotel', label: 'Hotel', icon: BedDouble, color: 'text-violet-300', keys: 'hotel wake up wake-up alarm morning call guest room check in check out pms property management fias opera housekeeping room status minibar charges hospitality', group: 'Calls' },
   { to: '/schedules', label: 'Schedules', icon: CalendarClock, color: 'text-amber-300', keys: 'opening hours holidays time night closed', group: 'Calls' },
   { to: '/scripts', label: 'Scripts', icon: Braces, color: 'text-fuchsia-300', keys: 'javascript lua code route logic', group: 'Calls' },
   { to: '/routes', label: 'Call routing', icon: Route, color: 'text-amber-300', keys: 'inbound outbound did dial plan', group: 'Calls' },

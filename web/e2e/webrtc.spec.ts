@@ -232,7 +232,7 @@ test('a greeting recorded in the browser is saved and plays back', async ({ page
   await page.goto('./#/extensions')
   await page.getByRole('cell', { name: '100', exact: true }).click()
   const d = page.getByRole('dialog')
-  await d.getByRole('button', { name: 'Record in the browser' }).click()
+  await d.getByRole('button', { name: 'Record greeting in the browser' }).click()
   await expect(d.getByRole('button', { name: /Stop/ })).toBeVisible()
   await page.waitForTimeout(1500)
   await d.getByRole('button', { name: /Stop/ }).click()
