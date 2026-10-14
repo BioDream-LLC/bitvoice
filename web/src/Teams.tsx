@@ -1,9 +1,9 @@
-import { Copy, ShieldCheck, Upload } from 'lucide-react'
+import { Copy, RefreshCw, Save, ShieldCheck, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { errorOf, useCertificateQuery, useExtensionsQuery, useInstallCertificateMutation, type Trunk } from './api'
-import { useIsAdmin } from './Editor'
-import { Field } from './ui'
+import { errorOf, useAcmeCheckMutation, useAcmeStatusQuery, useCertificateQuery, useExtensionsQuery, useInstallCertificateMutation, useSaveSettingsMutation, useSettingsQuery, useSystemQuery, type ACME, type ApiErrorBody, type Trunk } from './api'
+import { attempt, useIsAdmin } from './Editor'
+import { Field, ListInput, problemFor, Toggle } from './ui'
 
 /** TeamsSetup: the SBC name, a certificate check, and the PowerShell that adds this server to Teams. */
 export function TeamsSetup({ t, set, p }: { t: Trunk; set: (k: 'sbcName', v: string) => void; p: (f: string) => string | undefined }) {
@@ -74,6 +74,7 @@ export function CertificateSettings() {
         <dt className="text-slate-500">From</dt><dd className={data.selfSigned ? 'text-amber-300' : 'text-slate-200'}>{data.selfSigned ? 'Made by BitVoice (self-signed): fine on your own network, not for Teams' : data.issuer}</dd>
         <dt className="text-slate-500">Ends</dt><dd className={soon ? 'text-rose-300' : 'text-slate-200'}>{ends.toLocaleDateString()}</dd>
       </dl>
+      <LetsEncrypt />
       {admin && (
         <details className="space-y-2">
           <summary className="cursor-pointer text-sm text-sky-300">Install a certificate from an authority</summary>
@@ -83,5 +84,84 @@ export function CertificateSettings() {
         </details>
       )}
     </section>
+  )
+}
+
+const acmeDefaults: ACME = { enabled: false, domains: [], email: '', directory: '', challenge: '', httpPort: 0 }
+
+/** Let's Encrypt: BitVoice gets the certificate for its public name and renews it. */
+function LetsEncrypt() {
+  const admin = useIsAdmin()
+  const { data } = useSettingsQuery()
+  const { data: sys } = useSystemQuery()
+  const { data: st } = useAcmeStatusQuery(undefined, { pollingInterval: 5000 })
+  const [save, { isLoading }] = useSaveSettingsMutation()
+  const [check] = useAcmeCheckMutation()
+  const [edit, setEdit] = useState<ACME | null>(null)
+  const [err, setErr] = useState<ApiErrorBody | null>(null)
+  if (!data) return null
+  const a: ACME = edit ?? { ...acmeDefaults, ...data.system.acme, domains: data.system.acme?.domains ?? [] }
+  const set = (v: Partial<ACME>) => setEdit({ ...a, ...v })
+  const p = (f: string) => problemFor(err?.problems, 'system.acme.' + f)
+  const port = sys?.httpsPort || 8443
+  const kind = a.challenge || (port === 443 ? 'tls-alpn-01' : 'http-01')
+  const submit = async () => {
+    const e = await attempt(() => save({ ...data, system: { ...data.system, acme: a } }).unwrap(), "Let's Encrypt settings saved")
+    setErr(e)
+    if (!e) setEdit(null)
+  }
+  const colour = st?.state === 'ok' ? 'text-emerald-300' : st?.state === 'failed' ? 'text-rose-300' : st?.state === 'working' ? 'text-sky-300' : 'text-slate-400'
+  const said = st?.state === 'ok' ? `Issued; renewed from ${st.nextTry ? new Date(st.nextTry).toLocaleDateString() : 'about 30 days before it ends'}.`
+    : st?.state === 'failed' ? `Failed: ${st.detail}. Tried again ${st.nextTry ? new Date(st.nextTry).toLocaleString() : 'later'}.`
+    : st?.state === 'working' ? `Asking the authority (${st.challenge})…` : 'Off.'
+  return (
+    <div className="space-y-3 rounded-lg border border-slate-800 p-4">
+      <label className="flex items-center gap-3 text-sm text-slate-300">
+        <Toggle checked={a.enabled} disabled={!admin} onChange={(v) => set({ enabled: v })} label="Let's Encrypt" />
+        Get the certificate from Let's Encrypt and renew it <span className="text-xs text-slate-500">(free; the names must reach this server from the internet)</span>
+      </label>
+      {a.enabled && (
+        <fieldset disabled={!admin} className="space-y-3">
+          <p className={`text-sm ${colour}`}>{said}</p>
+          {st?.listening && <p className="text-xs text-slate-500">Answering http-01 on port {st.listening}.</p>}
+          <Field label="Names" htmlFor="acd" error={p('domains')} hint="The names this server is reached by; press Enter after each. They must point here in public DNS.">
+            <ListInput id="acd" mono value={a.domains} onChange={(v) => set({ domains: v })} placeholder="pbx.example.com" />
+          </Field>
+          <Field label="Email" htmlFor="ace" error={p('email')} hint="Optional: the authority writes here about problems.">
+            <input id="ace" className="input max-w-sm" type="email" value={a.email} onChange={(e) => set({ email: e.target.value })} placeholder="admin@example.com" />
+          </Field>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field label="Proof" htmlFor="acc" error={p('challenge')} hint={kind === 'http-01' ? `Let's Encrypt asks for a file on port 80 of each name.` : `Let's Encrypt connects to port 443 of each name.`}>
+              <select id="acc" className="input" value={a.challenge} onChange={(e) => set({ challenge: e.target.value as ACME['challenge'] })}>
+                <option value="">Choose for me ({port === 443 ? 'tls-alpn-01' : 'http-01'})</option>
+                <option value="http-01">http-01 (port 80)</option>
+                <option value="tls-alpn-01">tls-alpn-01 (port 443)</option>
+              </select>
+            </Field>
+            {kind === 'http-01' && (
+              <Field label="Port 80 here" htmlFor="acp" error={p('httpPort')} hint="Where BitVoice answers it; or forward port 80 to the web port.">
+                <input id="acp" type="number" className="input w-28" value={a.httpPort || ''} placeholder="80" onChange={(e) => set({ httpPort: Number(e.target.value) })} />
+              </Field>
+            )}
+            <Field label="Authority" htmlFor="acdir" error={p('directory')}>
+              <select id="acdir" className="input" value={a.directory === '' || a.directory === 'staging' ? a.directory : 'other'} onChange={(e) => set({ directory: e.target.value === 'other' ? 'https://' : e.target.value })}>
+                <option value="">Let's Encrypt</option>
+                <option value="staging">Let's Encrypt staging (test certificates)</option>
+                <option value="other">Another ACME authority</option>
+              </select>
+            </Field>
+          </div>
+          {a.directory !== '' && a.directory !== 'staging' && (
+            <Field label="Directory address" htmlFor="acdu" error={p('directory')}><input id="acdu" className="input font-mono" value={a.directory} onChange={(e) => set({ directory: e.target.value.trim() })} /></Field>
+          )}
+        </fieldset>
+      )}
+      {admin && (
+        <div className="flex gap-2">
+          <button type="button" className="btn btn-primary" disabled={isLoading || !edit} onClick={submit}><Save size={14} aria-hidden /> Apply Let's Encrypt settings</button>
+          {a.enabled && !edit && <button type="button" className="btn" onClick={() => void attempt(() => check().unwrap(), 'Checking now')}><RefreshCw size={14} aria-hidden /> Check now</button>}
+        </div>
+      )}
+    </div>
   )
 }

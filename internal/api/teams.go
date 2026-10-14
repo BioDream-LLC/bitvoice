@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/biodream-llc/bitvoice/internal/acme"
 	"github.com/biodream-llc/bitvoice/internal/store"
 )
 
@@ -14,6 +15,23 @@ func (s *Server) certificateRoutes() {
 			return
 		}
 		writeJSON(w, 200, s.Certs.Info())
+	})
+	// The Let's Encrypt manager: what it last did, and "try now".
+	s.handle("GET /api/certificate/acme", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		st := acme.Status{State: "off"}
+		if s.ACMEStatus != nil {
+			st = s.ACMEStatus()
+		}
+		writeJSON(w, 200, st)
+	})
+	s.handle("POST /api/certificate/acme", true, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		if s.ACMEWake == nil {
+			writeError(w, 404, "this server gets no certificates itself")
+			return
+		}
+		s.ACMEWake()
+		s.audit(r, u.Username, "certificate.acme", "check now")
+		writeJSON(w, 202, map[string]bool{"ok": true})
 	})
 	// Install a certificate from a public authority (with its chain) and its key, used at once for the
 	// web interface, SIP over TLS and connections out (Teams).

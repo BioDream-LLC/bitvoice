@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/biodream-llc/bitvoice/internal/acme"
 	"github.com/biodream-llc/bitvoice/internal/certs"
 	"github.com/biodream-llc/bitvoice/internal/cluster"
 	"log/slog"
@@ -51,6 +52,9 @@ type Server struct {
 	// ARI serves /ari (Asterisk compatibility); AMIAddr reports where AMI listens. Both optional.
 	ARI     http.Handler
 	AMIAddr func() string
+	// ACMEStatus and ACMEWake are the Let's Encrypt manager's state and its "look again now" (set by main).
+	ACMEStatus func() acme.Status
+	ACMEWake   func()
 	// DeskStatus says how Skinny phones and MGCP lines stand (set by main).
 	DeskStatus func() map[string]map[string]string
 	// DataDir, ReleaseKey and Restart make upgrades possible: where versions are kept, the key releases are

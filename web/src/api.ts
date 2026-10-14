@@ -193,6 +193,7 @@ export interface SystemSettings {
   snmp?: { enabled: boolean; listen: string; community: string; allowFrom: string[] | null; baseOid: string; contact: string; location: string; traps: { host: string; community: string }[] | null }
   desk?: DeskProtocols
   cards?: Cards
+  acme?: ACME
   cdrOutputs?: { csv: boolean; syslog: { host: string; port: number; transport: '' | 'udp' | 'tcp' | 'tls'; facility: number }; postgres: { url: string; table: string } }
   publicAddress: string; cluster?: ClusterSettings; sipPort: number; rtpMin: number; rtpMax: number; codecs: string[]; echoNumber: string; voicemailNumber: string; parkNumber: string; parkSeconds: number
   codes?: FeatureCodes; speedDials?: SpeedDial[] | null
@@ -321,6 +322,10 @@ export interface UpgradeStatus {
   running: string; signedBuild: boolean; waiting: '' | 'switch' | 'rollback'; since?: string; calls: number; possible: boolean
   state: { currentVersion: string; previousVersion: string; stagedVersion: string; stagedSigned: boolean; pending: boolean; history: { at: string; what: string }[] }
 }
+/** Let's Encrypt: the web interface's certificate, got and renewed by BitVoice. */
+export interface ACME { enabled: boolean; domains: string[]; email: string; directory: string; challenge: '' | 'http-01' | 'tls-alpn-01'; httpPort: number }
+export interface ACMEStatus { state: 'off' | 'ok' | 'working' | 'failed'; detail?: string; lastTry?: string; nextTry?: string; notAfter?: string; challenge?: string; listening?: string }
+
 /** Telephony cards (DAHDI) on this computer, through bitvoice-dahdi. */
 export interface Cards { enabled: boolean; token: string; linePort: number; alaw: boolean; channels: { channel: number; kind: 'phone' | 'line'; extension: string; number: string }[] }
 
@@ -653,6 +658,8 @@ export const api = createApi({
       insight: b.query<{ days: number; agents: AgentTalk[] }, number>({ query: (d) => `insight?days=${d}`, providesTags: ['Transcripts'] }),
       reputation: b.query<{ days: number; numbers: NumberReputation[] }, number>({ query: (days) => `reputation?days=${days}`, providesTags: ['Reputation', 'Settings'] }),
       certificate: b.query<{ subject: string; issuer: string; names: string[]; notAfter: string; selfSigned: boolean }, void>({ query: () => 'certificate', providesTags: ['Certificate'] }),
+      acmeStatus: b.query<ACMEStatus, void>({ query: () => 'certificate/acme', providesTags: ['Certificate'] }),
+      acmeCheck: b.mutation<{ ok: boolean }, void>({ query: () => ({ url: 'certificate/acme', method: 'POST' }), invalidatesTags: ['Certificate'] }),
       installCertificate: b.mutation<{ subject: string; issuer: string; names: string[]; notAfter: string; selfSigned: boolean }, { cert: string; key: string }>({ query: (body) => ({ url: 'certificate', method: 'PUT', body }), invalidatesTags: ['Certificate', 'Health'] }),
       database: b.query<{ kind: 'sqlite' | 'postgres'; where: string; bytes?: number; fixed: boolean; counts?: Record<string, number> }, void>({ query: () => 'database', providesTags: ['Database'] }),
       testDatabase: b.mutation<{ where: string; empty: boolean }, { url: string }>({ query: (body) => ({ url: 'database/test', method: 'POST', body }) }),
@@ -764,7 +771,7 @@ export const {
   usePinSetsQuery, useCreatePinSetMutation, useUpdatePinSetMutation, useDeletePinSetMutation,
   useLookupsQuery, useCreateLookupMutation, useUpdateLookupMutation, useDeleteLookupMutation, useTestLookupMutation,
   useHotelQuery, useCheckInMutation, useCheckOutMutation, useSetRoomStatusMutation, useWakeUpsQuery, useSetWakeUpMutation, useCancelWakeUpMutation,
-  useSaveNameAudioMutation, useDeleteNameAudioMutation, useSnmpStatusQuery, useDeskStatusQuery, useCardsStatusQuery, useCdrCsvQuery, useTestCdrOutputsMutation, useChatListQuery, useChatMessagesQuery, useSendChatMutation, useSetChatStatusMutation,
+  useSaveNameAudioMutation, useDeleteNameAudioMutation, useSnmpStatusQuery, useDeskStatusQuery, useCardsStatusQuery, useAcmeStatusQuery, useAcmeCheckMutation, useCdrCsvQuery, useTestCdrOutputsMutation, useChatListQuery, useChatMessagesQuery, useSendChatMutation, useSetChatStatusMutation,
   usePromptsQuery, useSaveLangPromptMutation, useDeleteLangPromptMutation, useGeneratePromptsMutation, useMusicQuery, useAddMusicMutation, useDeleteMusicMutation,
 } = api
 

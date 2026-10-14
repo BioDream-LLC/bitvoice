@@ -26,6 +26,7 @@ import (
 	"time"
 	_ "time/tzdata" // time zones for opening hours, whatever the host has installed
 
+	"github.com/biodream-llc/bitvoice/internal/acme"
 	"github.com/biodream-llc/bitvoice/internal/api"
 	"github.com/biodream-llc/bitvoice/internal/certs"
 	"github.com/biodream-llc/bitvoice/internal/cluster"
@@ -296,13 +297,33 @@ func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("web interface: %w", err)
 	}
-	httpsSrv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second,
-		TLSConfig: &tls.Config{GetCertificate: holder.Get, MinVersion: tls.VersionTLS12}}
+	// Let's Encrypt (or another ACME authority): gets and renews the certificate, answering http-01 on
+	// port 80 and on the web port's plain HTTP, and tls-alpn-01 on the web port.
+	acm := &acme.Manager{Dir: filepath.Join(o.data, "tls"), Log: log,
+		Settings: func() acme.Settings {
+			c, _ := st.Config()
+			a := c.System.ACME
+			dir := a.Directory
+			if dir == "staging" {
+				dir = acme.LetsEncryptStaging
+			}
+			return acme.Settings{Enabled: a.Enabled, Domains: a.Domains, Email: a.Email, Directory: dir,
+				Challenge: a.Challenge, HTTPPort: a.HTTPPort, HTTPSPort: int(srv.HTTPSPort.Load())}
+		},
+		Current: func() acme.Current {
+			i := holder.Info()
+			return acme.Current{Names: i.Names, NotAfter: i.NotAfter, SelfSigned: i.SelfSigned}
+		},
+		Install: func(certPEM, keyPEM string) error { _, err := holder.Install(certPEM, keyPEM); return err }}
+	srv.ACMEStatus, srv.ACMEWake = acm.Status, acm.Wake
+	tlsCfg := &tls.Config{GetCertificate: holder.Get, MinVersion: tls.VersionTLS12}
+	tlsCfg.GetConfigForClient = acm.ConfigForClient(tlsCfg)
+	httpsSrv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second, TLSConfig: tlsCfg}
 	webPort := newSplitPort(ln)
-	plainSrv := &http.Server{ReadHeaderTimeout: 10 * time.Second, Handler: plainHandler(handler, func() bool {
+	plainSrv := &http.Server{ReadHeaderTimeout: 10 * time.Second, Handler: acm.Handler(plainHandler(handler, func() bool {
 		c, _ := st.Config()
 		return !c.System.Provisioning.HTTPSOnly
-	})}
+	}))}
 	go func() { _ = httpsSrv.ServeTLS(webPort.tls, "", "") }()
 	go func() { _ = plainSrv.Serve(webPort.plain) }()
 	defer webPort.Close()
@@ -312,6 +333,8 @@ func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 	if n, err := strconv.Atoi(port); err == nil {
 		srv.HTTPSPort.Store(int32(n))
 	}
+	go acm.Run(ctx)
+	st.OnChange(func(config.Config) { acm.Wake() })
 	// The browser on this computer: the loopback address, which the certificate covers.
 	localURL := "https://" + net.JoinHostPort("127.0.0.1", port)
 	var secureURLs []string

@@ -454,3 +454,24 @@ test('toggles, PIN sets and caller ID lookup', async ({ page }) => {
   expect(routes.at(-1).lookup).toBe(lookups[0].id)
   expect(sets[0].pins).toEqual(['7001'])
 })
+
+// Let's Encrypt: the settings are checked, applied, and the manager reports what happened (here an
+// authority that cannot be reached, so it fails plainly and says when it tries again).
+test("Let's Encrypt certificate", async ({ page }) => {
+  await signIn(page)
+  await page.goto('/#/settings')
+  await page.getByRole('switch', { name: "Let's Encrypt" }).click()
+  await page.getByRole('button', { name: "Apply Let's Encrypt settings" }).click()
+  await expect(page.getByText(/enter the name this server is reached by/).first()).toBeVisible()
+  await page.getByLabel('Names').fill('pbx.example.com')
+  await page.getByLabel('Names').press('Enter')
+  await page.getByLabel('Authority').selectOption('other')
+  await page.getByLabel('Directory address').fill('https://127.0.0.1:9/directory')
+  await page.getByLabel('Port 80 here').fill('0')
+  await page.getByRole('button', { name: "Apply Let's Encrypt settings" }).click()
+  await expect(page.getByText("Let's Encrypt settings saved")).toBeVisible()
+  await expect(page.getByText(/^Failed: .*Tried again/)).toBeVisible({ timeout: 15000 })
+  const st = await page.evaluate(async () => (await (await fetch('./api/certificate/acme')).json()))
+  expect(st.state).toBe('failed')
+  expect(st.challenge).toBe('http-01')
+})

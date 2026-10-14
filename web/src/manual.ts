@@ -1798,10 +1798,20 @@ Programs (Terraform, scripts) use API tokens instead of a password: made on this
 | Key vaults | secrets kept in AWS Secrets Manager or Azure Key Vault |
 | Configuration from Git | keep the configuration in step with a file in a repository |
 | Database | SQLite or PostgreSQL ([Database](#database)) |
+| Certificate | the certificate for this interface and SIP over TLS: from Let's Encrypt, installed by hand, or BitVoice's own |
 
 Passwords and keys are never shown again once saved; leave them empty to keep them. Viewers see Settings with every secret removed.
 
-> The public address matters when BitVoice is behind a router: phones and providers outside send sound to the address it advertises. Leave it empty to work it out per phone.`,
+> The public address matters when BitVoice is behind a router: phones and providers outside send sound to the address it advertises. Leave it empty to work it out per phone.
+
+## The certificate and Let's Encrypt
+BitVoice starts with a certificate it made itself, which browsers and phones warn about. For a server with a public name, switch on **Let's Encrypt** under Certificate: enter the names (\`pbx.example.com\`), optionally an email address, and apply. BitVoice gets a free certificate from Let's Encrypt, uses it at once for the web interface, SIP over TLS and Teams, and renews it about 30 days before it ends (Let's Encrypt certificates last 90 days or less). The status line says when it was issued, when it renews and, if it failed, why; it tries again after an hour, then less often, within Let's Encrypt's limits. **Check now** tries at once.
+
+Let's Encrypt must reach the server under each name from the internet, to prove it is yours:
+- **http-01** (the choice unless the web interface is on port 443): a request to port 80. BitVoice answers on port 80 itself (on Linux it needs the right to open low ports, such as \`setcap cap_net_bind_service=+ep bitvoice\`), or forward port 80 on the router to the web interface's port, which answers too. Anything else arriving on port 80 is sent on to HTTPS, for the certificate's names only.
+- **tls-alpn-01**: a TLS connection to port 443, answered on the web interface's own port: for a server whose web interface is on 443.
+
+Other ACME authorities that need no account binding (a company's own step-ca, Let's Encrypt's staging service for tests) are chosen under **Authority**. Wildcard names need DNS proofs, which BitVoice does not do: install those certificates by hand. Each server of a cluster gets its own certificate.`,
   },
 ]
 
