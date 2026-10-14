@@ -25,10 +25,14 @@ var tested = []compatEntry{
 	{"phone", "Grandstream", "GXP, GRP desk phones", true, "Provisioned over HTTPS."},
 	{"adapter", "Grandstream", "HT801, HT802, HT812, HT814 analog adapters", true, "Set the extension's device to Analog adapter port: G.711 only, which faxes need."},
 	{"phone", "Snom", "D7xx desk phones", true, "Provisioned over HTTPS."},
+	{"phone", "Fanvil", "X and V series desk phones", true, "Provisioning file written from Fanvil's documented format; not yet tried on a phone."},
+	{"phone", "Cisco", "6800, 7800, 8800 multiplatform (3PCC) phones, SPA adapters", true, "Provisioning file written from Cisco's documented format; not yet tried on a phone. Enterprise (CUCM) firmware needs the multiplatform firmware first."},
+	{"phone", "Mitel (Aastra)", "6800 and 6900 SIP phones", true, "Provisioning file written from Mitel's documented format; not yet tried on a phone."},
+	{"phone", "Sangoma", "S-series phones", true, "Given the Fanvil-format file; not yet tried on a phone."},
 	{"softphone", "Any SIP softphone", "Linphone, Zoiper, MicroSIP, Bria", false, "UDP, TCP or TLS on the SIP port, with the extension number and SIP password."},
 	{"browser", "Web browsers", "Chrome, Edge, Firefox, Safari", false, "The browser phone and staff phone, with WebRTC (tested in Chromium)."},
 	{"door", "2N, Akuvox, Fanvil", "SIP door stations", false, "Set the extension's device to Door station; open by key code or the controller's HTTP address."},
-	{"adapter", "Algo, CyberData", "SIP paging speakers and adapters", false, "Set the device to Overhead speaker, or listen to a paging group's multicast address."},
+	{"adapter", "Algo, CyberData", "SIP paging speakers and adapters", true, "Set the device to Overhead speaker, or listen to a paging group's multicast address. Provisioning files written from the makers' documented formats; not yet tried on a device."},
 	{"provider", "Any SIP trunk", "Registration or IP authentication", false, "G.711 everywhere; G.722 where the provider offers it. Calls at once can be limited per trunk."},
 	{"provider", "Tools for Asterisk", "AMI and ARI clients", false, "Wallboards, CRM click-to-dial and monitoring that use AMI or ARI."},
 }
@@ -40,6 +44,7 @@ func vendorOf(ua string) string {
 		{"yealink", "Yealink"}, {"poly", "Poly (Polycom)"}, {"grandstream", "Grandstream"}, {"snom", "Snom"},
 		{"linphone", "Linphone"}, {"zoiper", "Zoiper"}, {"microsip", "MicroSIP"}, {"bria", "Bria"}, {"2n", "2N"},
 		{"akuvox", "Akuvox"}, {"fanvil", "Fanvil"}, {"algo", "Algo"}, {"cyberdata", "CyberData"},
+		{"cisco", "Cisco"}, {"mitel", "Mitel (Aastra)"}, {"aastra", "Mitel (Aastra)"}, {"sangoma", "Sangoma"},
 		{"bitvoice web phone", "BitVoice browser phone"}, {"bitvoice call generator", "BitVoice call generator"},
 	} {
 		if strings.Contains(l, v.key) {

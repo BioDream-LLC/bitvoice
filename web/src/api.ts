@@ -103,7 +103,7 @@ export interface Schedule {
   id: string; name: string; hours: { days: number[]; start: string; end: string }[]
   holidays: { date: string; name: string }[]; open: Destination; closed: Destination
 }
-export type Vendor = 'yealink' | 'polycom' | 'grandstream' | 'snom'
+export type Vendor = 'yealink' | 'polycom' | 'grandstream' | 'snom' | 'fanvil' | 'cisco' | 'mitel' | 'sangoma' | 'algo' | 'cyberdata'
 export interface Device { id: string; mac: string; vendor: Vendor; model: string; extension: string; label: string }
 export interface Civic {
   country?: string; state?: string; county?: string; city?: string; number?: string; numberSuffix?: string; preDir?: string; street?: string

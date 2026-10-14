@@ -223,3 +223,23 @@ test('staff chat and presence in the portal', async ({ page, browser }) => {
   await a.ctx.close()
   await b.ctx.close()
 })
+
+// More makes provisioned: a Cisco multiplatform phone, marked untested, gets its file over HTTPS.
+test('provisioning a Cisco phone', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/#/phones')
+  const auto = page.getByRole('switch', { name: 'Automatic set-up' })
+  if ((await auto.getAttribute('aria-checked')) !== 'true') await auto.click()
+  await page.getByRole('button', { name: 'Add phone' }).click()
+  await page.getByRole('button', { name: /Cisco/ }).click()
+  await expect(page.getByText(/has not been tried on one of its phones yet/)).toBeVisible()
+  await page.getByLabel('MAC address').fill('00-1b-54-aa-bb-cc')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('00:1B:54:AA:BB:CC')).toBeVisible()
+  const pv = await page.evaluate(async () => (await (await fetch('./api/settings')).json()).system.provisioning)
+  const r = await page.request.get('/provision/001b54aabbcc.xml', { headers: { Authorization: 'Basic ' + Buffer.from(`${pv.username}:${pv.password}`).toString('base64') } })
+  expect(r.status()).toBe(200)
+  const body = await r.text()
+  expect(body).toContain('<flat-profile>')
+  expect(body).toContain('<Register_1_>Yes</Register_1_>')
+})

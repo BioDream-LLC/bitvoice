@@ -35,7 +35,8 @@ func TestEveryVendor(t *testing.T) {
 			f, _ = Lookup(cfg, "001565aabb01-bitvoice.cfg", "192.0.2.10", 5060, 5061)
 			body = string(f.Body)
 		}
-		if !strings.Contains(body, "192.0.2.10") || !strings.Contains(body, "5061") || !strings.Contains(body, "*97") {
+		speaker := v == "algo" || v == "cyberdata" // paging speakers have no mailbox
+		if !strings.Contains(body, "192.0.2.10") || !strings.Contains(body, "5061") || (!speaker && !strings.Contains(body, "*97")) || !strings.Contains(body, "101") {
 			t.Fatalf("%s: server, TLS port or voicemail missing:\n%s", v, body)
 		}
 		if f.ContentType == "application/xml" {
@@ -58,6 +59,8 @@ func TestEveryVendor(t *testing.T) {
 // With a second server, phones that can hold two are given it to fall back on.
 func TestBackupServer(t *testing.T) {
 	for v, want := range map[string]string{"yealink": "account.1.sip_server.2.address = 192.0.2.11\naccount.1.sip_server.2.port = 5061",
+		"fanvil": "SIP1 Backup Addr        :192.0.2.11\nSIP1 Backup Port        :5061", "cisco": "<Alternate_Proxy_1_>192.0.2.11:5061</Alternate_Proxy_1_>",
+		"mitel": "sip line1 backup proxy ip: 192.0.2.11\nsip line1 backup proxy port: 5061", "algo": "sip.proxy2 = 192.0.2.11:5061",
 		"polycom": `reg.1.server.2.address="192.0.2.11" reg.1.server.2.port="5061"`, "grandstream": "<P2312>192.0.2.11:5061</P2312>"} {
 		cfg := testConfig(v)
 		name := Names(v, "001565aabb01")[0]

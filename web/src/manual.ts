@@ -138,7 +138,7 @@ An extension that is open shows every device signed in as it: the phone's make a
 
 ## Automatic set-up (provisioning)
 1. On [Phones](#/phones) press **Add phone** and enter the phone's **MAC address** (on a sticker underneath) and the **extension** it belongs to.
-2. Choose the make: Yealink, Poly, Grandstream (including the HT analog adapters) or Snom.
+2. Choose the make: Yealink, Poly, Grandstream (including the HT analog adapters), Snom, Fanvil, Cisco, Mitel, Sangoma, Algo or CyberData.
 3. Tell the phone where BitVoice is: in your DHCP server, set **option 66** to the provisioning address shown on the screen, so every phone on the network finds it by itself; or type the same address in the phone's own web page, under auto provisioning.
 4. Restart the phone. It fetches its file over HTTPS, signs in, and its line keys show who is on the phone.
 
@@ -152,6 +152,19 @@ The file carries the extension, its password, the time zone, the codecs, busy la
 | Poly | VVX, Edge E | the same, in Poly's own format |
 | Grandstream | GRP, GXP, HT802/814 | account per port on adapters |
 | Snom | D7xx | account, keys, time |
+
+These makes are provisioned too, with files written from each maker's documented format but **not yet tried on their devices** (the Phones screen marks them untested):
+
+| Make | Models | File the device asks for |
+|---|---|---|
+| Fanvil | X and V series | its MAC address .cfg |
+| Cisco | 6800, 7800, 8800 multiplatform (3PCC), SPA adapters | its MAC address .xml (enterprise firmware needs the multiplatform firmware first) |
+| Mitel (Aastra) | 6800, 6900 SIP | its MAC address .cfg, in capitals |
+| Sangoma | S-series | the Fanvil-format file |
+| Algo | paging speakers, strobes, adapters | algop and its MAC address .conf |
+| CyberData | speakers, intercoms, paging adapters | its MAC address .xml |
+
+Each gets its account, the server (and the backup server, with several servers), the transport and encryption, and the voicemail number where it has one. Set Algo and CyberData speakers' extensions to **Overhead speaker** so calls to them are answered at once.
 
 ## Phones without provisioning
 Softphones and other makes take the same three things: server (this computer's address, port 5060, or 5061 with TLS), user (the extension number) and password (its SIP password). Health lists phones that tried a wrong password; after a few tries the address is banned for a while (see [Security](#security)).

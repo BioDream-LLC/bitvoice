@@ -74,7 +74,7 @@ export const nav: NavItem[] = [
   { to: '/scripts', label: 'Scripts', icon: Braces, color: 'text-fuchsia-300', keys: 'javascript lua code route logic', group: 'Calls' },
   { to: '/routes', label: 'Call routing', icon: Route, color: 'text-amber-300', keys: 'inbound outbound did dial plan', group: 'Calls' },
   { to: '/trunks', label: 'Trunks', icon: Server, color: 'text-teal-300', keys: 'carrier provider line sip', group: 'Calls' },
-  { to: '/phones', label: 'Phones', icon: Smartphone, color: 'text-emerald-300', keys: 'devices provisioning yealink polycom grandstream snom mac', group: 'Calls' },
+  { to: '/phones', label: 'Phones', icon: Smartphone, color: 'text-emerald-300', keys: 'devices provisioning yealink polycom grandstream snom fanvil cisco 3pcc spa mitel aastra sangoma algo cyberdata mac', group: 'Calls' },
   { to: '/sites', label: 'Sites', icon: MapPin, color: 'text-amber-300', keys: 'building office address 911 location remote', group: 'Calls' },
   { to: '/servers', label: 'Servers', icon: ServerIcon, color: 'text-sky-300', keys: 'servers cluster failover high availability redundancy second server backup shared database several servers', group: 'System' , system: true },
   { to: '/health', label: 'Health', icon: Stethoscope, color: 'text-emerald-300', keys: 'check status problems', group: 'System' },

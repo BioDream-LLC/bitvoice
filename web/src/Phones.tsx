@@ -12,11 +12,19 @@ import { attempt, DeleteButton, Drawer, Table, useIsAdmin } from './Editor'
 import { Copyable } from './Setup'
 import { Chip, Empty, Field, Page, Toggle, problemFor, relTime } from './ui'
 
-const vendors: { id: Vendor; name: string; colour: string; hint: string }[] = [
-  { id: 'yealink', name: 'Yealink', colour: 'text-emerald-300', hint: 'T3x, T4x, T5x, W-series' },
-  { id: 'polycom', name: 'Poly (Polycom)', colour: 'text-sky-300', hint: 'VVX, Edge E, CCX' },
-  { id: 'grandstream', name: 'Grandstream', colour: 'text-rose-300', hint: 'GXP, GRP, WP' },
-  { id: 'snom', name: 'Snom', colour: 'text-amber-300', hint: 'D-series' },
+// tested: the file has been tried on the maker's phones; the others follow the maker's documented
+// provisioning format and are marked "untested" until someone tries one.
+const vendors: { id: Vendor; name: string; colour: string; hint: string; tested: boolean }[] = [
+  { id: 'yealink', name: 'Yealink', colour: 'text-emerald-300', hint: 'T3x, T4x, T5x, W-series', tested: true },
+  { id: 'polycom', name: 'Poly (Polycom)', colour: 'text-sky-300', hint: 'VVX, Edge E, CCX', tested: true },
+  { id: 'grandstream', name: 'Grandstream', colour: 'text-rose-300', hint: 'GXP, GRP, WP', tested: true },
+  { id: 'snom', name: 'Snom', colour: 'text-amber-300', hint: 'D-series', tested: true },
+  { id: 'fanvil', name: 'Fanvil', colour: 'text-teal-300', hint: 'X-series, V-series', tested: false },
+  { id: 'cisco', name: 'Cisco', colour: 'text-sky-300', hint: '6800, 7800, 8800 multiplatform (3PCC), SPA', tested: false },
+  { id: 'mitel', name: 'Mitel (Aastra)', colour: 'text-violet-300', hint: '6800, 6900 SIP', tested: false },
+  { id: 'sangoma', name: 'Sangoma', colour: 'text-fuchsia-300', hint: 'S-series', tested: false },
+  { id: 'algo', name: 'Algo', colour: 'text-orange-300', hint: 'Paging speakers, strobes, adapters', tested: false },
+  { id: 'cyberdata', name: 'CyberData', colour: 'text-orange-300', hint: 'Speakers, intercoms, paging adapters', tested: false },
 ]
 const vendorOf = (v: Vendor) => vendors.find((x) => x.id === v)!
 const formatMAC = (m: string) => m.match(/.{1,2}/g)?.join(':').toUpperCase() ?? m
@@ -152,11 +160,12 @@ function DeviceEditor({ d: initial, onClose }: { d: Device; onClose: () => void 
             {vendors.map((v) => (
               <button type="button" key={v.id} aria-pressed={d.vendor === v.id} onClick={() => setD({ ...d, vendor: v.id })}
                 className={`card p-3 text-left ${d.vendor === v.id ? 'ring-2 ring-emerald-400' : ''}`}>
-                <div className={`text-sm font-semibold ${v.colour}`}>{v.name}</div>
+                <div className={`text-sm font-semibold ${v.colour}`}>{v.name}{!v.tested && <span className="ml-2 text-[10px] font-normal uppercase tracking-wide text-amber-300">untested</span>}</div>
                 <div className="text-xs text-slate-500">{v.hint}</div>
               </button>
             ))}
           </div>
+          {!vendorOf(d.vendor).tested && <p className="mt-2 text-xs text-amber-300">This file follows {vendorOf(d.vendor).name}'s documented provisioning format but has not been tried on one of its phones yet. If the phone does not sign in, check its provisioning log and tell us what it says.</p>}
         </div>
         <div className="grid grid-cols-2 gap-4">
           <Field label="MAC address" htmlFor="dm" error={p('mac')} hint="On the sticker under the phone.">

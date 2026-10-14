@@ -574,7 +574,7 @@ type Device struct {
 }
 
 // Vendors BitVoice can provision.
-var Vendors = []string{"yealink", "polycom", "grandstream", "snom"}
+var Vendors = []string{"yealink", "polycom", "grandstream", "snom", "fanvil", "cisco", "mitel", "sangoma", "algo", "cyberdata"}
 
 // NormalizeMAC returns twelve lowercase hex digits, or "" when s is not a MAC address.
 func NormalizeMAC(s string) string {
