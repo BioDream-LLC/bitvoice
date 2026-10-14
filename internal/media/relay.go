@@ -698,6 +698,13 @@ func (e *Endpoint) OnRaw(f func(pkt []byte)) {
 // SendRaw sends a datagram as it is to the far end (BitVoice's own fax).
 func (e *Endpoint) SendRaw(pkt []byte) { e.sendRaw(pkt) }
 
+// Wideband says whether this party's codec carries 16 kHz audio (G.722, Opus).
+func (e *Endpoint) Wideband() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return IsWideband(e.wantPT)
+}
+
 // SendRTP sends a locally generated packet to the far end (tones, prompts).
 func (e *Endpoint) SendRTP(pkt []byte) { e.send(pkt) }
 

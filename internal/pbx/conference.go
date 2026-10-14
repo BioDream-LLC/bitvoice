@@ -56,6 +56,7 @@ type ConferenceRoom struct {
 	Members []ConferenceMember `json:"members"`
 	Waiting int                `json:"waiting"`
 	Records bool               `json:"records"`
+	HD      bool               `json:"hd,omitempty"` // mixed at 16 kHz
 }
 
 // ConferenceMember is one person in a room.
@@ -69,6 +70,7 @@ type ConferenceMember struct {
 	Speaking bool      `json:"speaking"`
 	Waiting  bool      `json:"waiting"`
 	Joined   time.Time `json:"joined"`
+	HD       bool      `json:"hd,omitempty"` // in an HD room on a wideband codec: hears and is heard in HD
 }
 
 // Errors from controlling a room.
@@ -100,10 +102,14 @@ func (e *Engine) Conferences() []ConferenceRoom {
 
 func (r *room) view() ConferenceRoom {
 	r.mu.Lock()
-	v := ConferenceRoom{Number: r.number, Name: r.name, Started: r.started, Locked: r.locked, Waiting: len(r.waiting), Records: r.recOn}
+	v := ConferenceRoom{Number: r.number, Name: r.name, Started: r.started, Locked: r.locked, Waiting: len(r.waiting), Records: r.recOn, HD: r.bridge.Wide()}
 	for _, m := range r.members {
+		hd := false
+		if v.HD && m.call != nil && m.call.caller != nil && m.call.caller.ep != nil {
+			hd = m.call.caller.ep.Wideband()
+		}
 		v.Members = append(v.Members, ConferenceMember{ID: m.id, Number: m.number, Name: m.name, Leader: m.leader,
-			Muted: m.muted, Hand: m.hand, Joined: m.joined})
+			Muted: m.muted, Hand: m.hand, Joined: m.joined, HD: hd})
 	}
 	for _, m := range r.waiting {
 		v.Members = append(v.Members, ConferenceMember{ID: m.id, Number: m.number, Name: m.name, Waiting: true, Joined: m.joined})
@@ -228,7 +234,7 @@ func (c *Call) joinConference(number string) {
 	}
 	r := e.conf.rooms[number]
 	if r == nil {
-		r = &room{number: number, name: rc.Name, id: "conf-" + config.NewID(), bridge: media.NewBridge(nil), started: time.Now(),
+		r = &room{number: number, name: rc.Name, id: "conf-" + config.NewID(), bridge: newRoomBridge(rc.HD), started: time.Now(),
 			opener: num, members: map[string]*member{}, waiting: map[string]*member{}}
 		r.bridge.SetHearing(r.hears)
 		if rc.Record && e.Recordings != nil && shouldRecordRoom(cfg) {
@@ -449,4 +455,12 @@ func (c *Call) onEnded(f func()) {
 	c.mu.Lock()
 	c.onEnd = append(c.onEnd, f)
 	c.mu.Unlock()
+}
+
+// newRoomBridge mixes a conference room, at 16 kHz for an HD room.
+func newRoomBridge(hd bool) *media.Bridge {
+	if hd {
+		return media.NewWideBridge(nil)
+	}
+	return media.NewBridge(nil)
 }

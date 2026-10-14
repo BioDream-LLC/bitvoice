@@ -953,7 +953,10 @@ The page shows each room in use: who is in, who is talking (the green light), wh
 
 Everyone in a room hears everyone else who is not muted, mixed by BitVoice; each person's phone can use its own codec. A call record is kept for each person's call, and one for the room itself with its length and recording.
 
-> Conference sound is mixed at telephone quality (8 kHz), whatever codecs the phones use: it is what every phone can hear, and it keeps a room of fifty cheap to run.`,
+> Conference sound is mixed at telephone quality (8 kHz), whatever codecs the phones use: it is what every phone can hear, and it keeps a room of fifty cheap to run.
+
+## HD audio
+Switch on **HD audio** in a room (new rooms have it on) and it is mixed at 16 kHz instead of 8: people on wideband phones (G.722, Opus, the browser phone) hear each other in HD, with the crispness of a modern call, while people on ordinary phones (G.711, mobiles through a provider) hear the same room as usual. The live view marks the room and each member who is in HD. HD needs G.722 among the codecs the phones use (it is first in the system's list, Settings, Codecs). Recordings of the room stay in telephone quality.`,
   },
   {
     id: 'codes', title: 'Feature codes, forwarding and speed dials', route: '/codes', keys: 'feature codes star codes forward call forwarding do not disturb dnd follow me find me pickup intercom speed dial',

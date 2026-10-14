@@ -17,7 +17,7 @@ export function Conferences() {
   const { data: live } = useConferenceLiveQuery(undefined, { pollingInterval: 2000 })
   const [edit, setEdit] = useState<Conference | null>(null)
   const taken = useTakenNumbers()
-  const add = () => setEdit({ id: '', number: nextFree(taken, 500), name: 'Team room', pin: '', leaderPin: '', waitForLeader: false, muteMembers: false, maxMembers: 50, record: false, quiet: false })
+  const add = () => setEdit({ id: '', number: nextFree(taken, 500), name: 'Team room', pin: '', leaderPin: '', waitForLeader: false, muteMembers: false, maxMembers: 50, record: false, quiet: false, hd: true })
   const inUse = new Map((live?.items ?? []).map((r) => [r.number, r]))
   return (
     <Page icon={Users2} title="Conference rooms" accent="from-teal-400 to-sky-400"
@@ -47,6 +47,7 @@ export function Conferences() {
                   {c.waitForLeader && <span className="text-violet-300">Waits for the leader</span>}
                   {c.muteMembers && <span className="text-sky-300">Members muted</span>}
                   {c.record && <span className="text-rose-300">Recorded</span>}
+                  {c.hd && <span className="text-teal-300">HD</span>}
                   <span className="text-slate-500">Up to {c.maxMembers}</span>
                 </div>
               </button>
@@ -76,6 +77,7 @@ function LiveRoom({ r }: { r: ConferenceRoom }) {
         <span className="font-semibold text-slate-100">{r.name}</span>
         <span className="text-xs text-slate-500">since {relTime(r.started)}</span>
         {r.records && <span className="rounded-full bg-rose-950 px-2 py-0.5 text-xs text-rose-300">Recording</span>}
+        {r.hd && <span className="rounded-full bg-teal-950 px-2 py-0.5 text-xs text-teal-300">HD</span>}
         {r.locked && <span className="rounded-full bg-amber-950 px-2 py-0.5 text-xs text-amber-300">Locked</span>}
         {admin && (
           <button type="button" className="btn btn-ghost ml-auto text-sm" onClick={() => attempt(() => lock({ number: r.number, locked: !r.locked }).unwrap(), r.locked ? 'Room unlocked' : 'Room locked')}>
@@ -90,6 +92,7 @@ function LiveRoom({ r }: { r: ConferenceRoom }) {
             <span className="font-mono text-sky-300">{m.number}</span>
             <span className="text-slate-200">{m.name}</span>
             {m.leader && <span className="flex items-center gap-1 text-xs text-violet-300"><Crown size={12} aria-hidden /> leader</span>}
+            {m.hd && <span className="text-xs text-teal-300" title="On a wideband codec: hears and is heard in HD">HD</span>}
             {m.waiting && <span className="text-xs text-amber-300">waiting for the leader</span>}
             {m.hand && <span className="flex items-center gap-1 text-xs text-amber-300"><Hand size={12} aria-hidden /> asks to speak</span>}
             <span className="ml-auto text-xs text-slate-500">{relTime(m.joined)}</span>
@@ -148,6 +151,7 @@ function ConferenceEditor({ c: initial, onClose }: { c: Conference; onClose: () 
           <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={c.waitForLeader} onChange={(v) => set('waitForLeader', v)} label="Wait for the leader" /> Wait for the leader <span className="text-xs text-slate-500">(others hear the hold tone until a leader joins; the room closes when the last leader leaves)</span></label>
           <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={c.muteMembers} onChange={(v) => set('muteMembers', v)} label="Members join muted" /> Members join muted <span className="text-xs text-slate-500">(a briefing: they press 1 to ask to speak)</span></label>
           <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={c.record} onChange={(v) => set('record', v)} label="Record the room" /> Record the room <span className="text-xs text-slate-500">(one recording in Call history)</span></label>
+          <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={!!c.hd} onChange={(v) => set('hd', v)} label="HD audio" /> HD audio <span className="text-xs text-slate-500">(mixed at 16 kHz: wideband phones and the browser phone hear each other in HD; the others hear the room as usual)</span></label>
           <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={!c.quiet} onChange={(v) => set('quiet', !v)} label="Tones when people join and leave" /> Tones when people join and leave</label>
         </div>
         <Field label="Most people at once" htmlFor="cmax" error={p('maxMembers')}>

@@ -485,3 +485,20 @@ func TestFollowMeConfirm(t *testing.T) {
 		t.Fatal("pressing 1 did not put the call through")
 	}
 }
+
+func TestHDConferenceRoom(t *testing.T) {
+	cfg := testConfig()
+	cfg.Conferences = []config.Conference{{Number: "500", Name: "HD", Quiet: true, HD: true}, {Number: "501", Name: "Plain", Quiet: true}}
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	e, _ := startEngine(t, cfg)
+	ps := registered(t, e, "100", "101")
+	ps[0].dial("500")
+	ps[1].dial("501")
+	waitFor(t, "rooms not open", func() bool { return len(e.Conferences()) == 2 })
+	rs := e.Conferences()
+	if !rs[0].HD || rs[1].HD {
+		t.Fatalf("HD flags %+v %+v", rs[0], rs[1])
+	}
+}

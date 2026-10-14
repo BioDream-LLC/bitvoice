@@ -727,6 +727,9 @@ type Conference struct {
 	Record bool `json:"record"`
 	// Quiet leaves out the tones played when someone joins or leaves.
 	Quiet bool `json:"quiet"`
+	// HD mixes the room at 16 kHz: people on wideband phones (G.722, Opus, the browser phone) hear each
+	// other in HD; the others hear the room as before.
+	HD bool `json:"hd"`
 }
 
 // cleanDial drops the spaces, dashes, dots and brackets people write numbers with.

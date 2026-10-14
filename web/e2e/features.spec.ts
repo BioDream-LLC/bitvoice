@@ -160,3 +160,18 @@ test('a trunk signs its calls (STIR/SHAKEN)', async ({ page }) => {
   const pem = await page.evaluate(async (id) => (await fetch(`./stir/${id}.pem`)).text(), t.id)
   expect(pem).toContain('BEGIN CERTIFICATE')
 })
+
+// HD conference rooms: on for new rooms, shown on the room's card.
+test('HD conference room', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/#/conferences')
+  await page.getByRole('button', { name: 'Add conference room' }).click()
+  await page.getByLabel('Name', { exact: true }).fill('HD huddle')
+  await expect(page.getByRole('switch', { name: 'HD audio' })).toBeChecked()
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByRole('button', { name: /HD huddle/ }).getByText('HD', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: /HD huddle/ }).click()
+  await page.getByRole('switch', { name: 'HD audio' }).click()
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByRole('button', { name: /HD huddle/ }).getByText('HD', { exact: true })).toHaveCount(0)
+})

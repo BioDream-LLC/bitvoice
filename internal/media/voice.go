@@ -266,6 +266,7 @@ func resampleVoice(pcm []int16, from, to int, down *Halver, up *Doubler) []int16
 type Decoders struct {
 	by   map[int]voice
 	down Halver
+	up   Doubler
 }
 
 // Narrowband decodes one payload to 8 kHz linear PCM (nil when the codec is not one BitVoice speaks).
@@ -286,3 +287,26 @@ func (d *Decoders) Narrowband(pt int, payload []byte) []int16 {
 	}
 	return pcm
 }
+
+// Wideband decodes one payload to 16 kHz linear PCM: wideband codecs as they are, narrowband ones
+// upsampled (nil when the codec is not one BitVoice speaks).
+func (d *Decoders) Wideband(pt int, payload []byte) []int16 {
+	if d.by == nil {
+		d.by = map[int]voice{}
+	}
+	v := d.by[pt]
+	if v == nil {
+		if v = newVoice(pt); v == nil {
+			return nil
+		}
+		d.by[pt] = v
+	}
+	pcm := v.decode(payload)
+	if v.rate() == 8000 {
+		return d.up.Double(pcm)
+	}
+	return pcm
+}
+
+// IsWideband says whether a codec carries 16 kHz audio.
+func IsWideband(pt int) bool { return pt == PTG722 || pt == PTOpus }
