@@ -336,3 +336,78 @@ test('browser audio relayed through BitVoice TURN', async ({ page }) => {
     expect(result.relays).toBeGreaterThan(0)
   }
 })
+
+// SIP over WebSocket against JsSIP (an independent SIP stack, MIT, bundled here only for the test):
+// two JsSIP phones register over wss://…/ws, one calls the other, and the sound flows both ways
+// through the gateway's WebRTC endpoints and the call engine.
+test('JsSIP softphones over SIP over WebSocket', async ({ page, context }) => {
+  const { build } = await import('vite')
+  const { resolve } = await import('node:path')
+  const { readFileSync, mkdtempSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const out = mkdtempSync(resolve(tmpdir(), 'jssip-'))
+  await build({ configFile: false, logLevel: 'silent', build: { write: true, outDir: out, emptyOutDir: true, minify: false, copyPublicDir: false,
+    lib: { entry: resolve('node_modules/jssip/lib/JsSIP.js'), name: 'JsSIP', formats: ['iife'], fileName: () => 'jssip.js' } } })
+  const jssip = readFileSync(resolve(out, 'jssip.js'), 'utf8')
+
+  await signIn(page)
+  const secret = 'Softphone-Secret-2468'
+  const setup = await page.evaluate(async (secret) => {
+    const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
+    const s = await (await fetch('./api/settings')).json()
+    s.system.webSocket = { enabled: true }
+    let r = await fetch('./api/settings', { method: 'PUT', headers: H, body: JSON.stringify(s) })
+    if (!r.ok) return (await r.json()).message
+    for (const n of ['271', '272']) {
+      r = await fetch('./api/extensions', { method: 'POST', headers: H, body: JSON.stringify({ number: n, name: 'Softphone ' + n, secret, enabled: true, outbound: true }) })
+      if (!r.ok && r.status !== 409) return (await r.json()).message
+    }
+    return ''
+  }, secret)
+  expect(setup).toBe('')
+  const bitvoice = new URL(page.url())
+
+  // The softphone is a web page of its own, on another origin, as a real WebRTC softphone would be.
+  await context.grantPermissions(['local-network-access']).catch(() => {})
+  const phone = await context.newPage()
+  await phone.route('https://localhost:9/**', (r) => r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>softphone</title><script src="/jssip.js"></script>' }))
+  await phone.route('https://localhost:9/jssip.js', (r) => r.fulfill({ contentType: 'text/javascript', body: jssip }))
+  phone.on('console', (m) => { if (process.env.BV_DEBUG) console.log('PHONE', m.text().slice(0, 400)) })
+  await phone.goto('https://localhost:9/')
+  const result = await phone.evaluate(async ({ secret, host }) => {
+    const J = (window as any).JsSIP
+    J.debug.enable('JsSIP:Transport JsSIP:UA JsSIP:RTCSession JsSIP:WebSocketInterface')
+    const url = `wss://${host}/ws`
+    const name = host.split(':')[0]
+    const ua = (user: string) => new J.UA({ sockets: [new J.WebSocketInterface(url)], uri: `sip:${user}@${name}`, password: secret, register: true })
+    const a = ua('271'), b = ua('272')
+    const registered = (u: any) => new Promise<void>((ok, bad) => { u.on('registered', () => ok()); u.on('registrationFailed', (e: any) => bad(new Error('registration failed: ' + e.cause))) })
+    a.start(); b.start()
+    await Promise.all([registered(a), registered(b)])
+    const mic = await navigator.mediaDevices.getUserMedia({ audio: true })
+    let answered: any = null
+    b.on('newRTCSession', (e: any) => {
+      if (e.originator !== 'remote') return
+      answered = e.session
+      e.session.answer({ mediaStream: mic })
+    })
+    const s = a.call(`sip:272@${name}`, { mediaStream: mic })
+    await new Promise<void>((ok, bad) => { s.on('confirmed', () => ok()); s.on('failed', (e: any) => bad(new Error('call failed: ' + e.cause))) })
+    await new Promise((ok) => setTimeout(ok, 3000))
+    const packets = async (sess: any) => {
+      let n = 0
+      const st = await sess.connection.getStats()
+      st.forEach((x: any) => { if (x.type === 'inbound-rtp' && x.kind === 'audio') n = x.packetsReceived })
+      return n
+    }
+    ;(window as any).end = async () => { s.terminate(); await new Promise((ok) => setTimeout(ok, 500)); a.stop(); b.stop() }
+    return { caller: await packets(s), callee: answered ? await packets(answered) : -1, connected: s.connection.connectionState }
+  }, { secret, host: bitvoice.host })
+  const ws = await page.evaluate(async () => (await (await fetch('./api/websocket')).json()).connected)
+  await phone.evaluate(async () => (window as any).end())
+  console.log(JSON.stringify(result), ws)
+  expect(result.connected).toBe('connected')
+  expect(result.caller).toBeGreaterThan(50)
+  expect(result.callee).toBeGreaterThan(50)
+  expect(ws).toBe(2)
+})

@@ -80,6 +80,8 @@ type System struct {
 	ACME ACME `json:"acme"`
 	// TURN is BitVoice's own TURN server for browser and WebRTC phones.
 	TURN TURN `json:"turn"`
+	// WebSocket is SIP over WebSocket for WebRTC softphones.
+	WebSocket WebSocketSIP `json:"webSocket"`
 
 	// PublicAddress is advertised in SIP and SDP. Empty means work it out per peer.
 	PublicAddress string `json:"publicAddress"`

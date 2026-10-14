@@ -644,10 +644,10 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 		user = e.localUser(user)
 		switch result {
 		case sip.AuthOK:
-			e.bans.succeed(ip)
+			e.bans.succeed(clientIP(in))
 		case sip.AuthBad:
-			if e.bans.fail(ip, "failed call authentication as "+user) {
-				e.publish("security.banned", map[string]any{"ip": ip.String(), "reason": "failed call authentication"})
+			if e.bans.fail(clientIP(in), "failed call authentication as "+user) {
+				e.publish("security.banned", map[string]any{"ip": clientIP(in).String(), "reason": "failed call authentication"})
 			}
 			fallthrough
 		default:

@@ -15,6 +15,12 @@ type TURN struct {
 	Secret string `json:"secret"`
 }
 
+// WebSocketSIP lets WebRTC softphones (JsSIP, SIP.js and the apps built on them) register over SIP
+// over WebSocket (RFC 7118) at wss://<this server>/ws, on the web interface's port.
+type WebSocketSIP struct {
+	Enabled bool `json:"enabled"`
+}
+
 // Default TURN ports.
 const (
 	DefaultTURNPort    = 3478

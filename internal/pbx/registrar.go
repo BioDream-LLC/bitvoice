@@ -70,7 +70,7 @@ func (r *Registrar) handle(tx *sip.ServerTx, in *sip.Incoming) {
 	}
 	result, user := r.e.auth.Verify(m.Get("Authorization"), sip.REGISTER, lookup)
 	user = r.e.localUser(user)
-	ip := in.From.Addr.Addr()
+	ip := clientIP(in)
 	switch result {
 	case sip.AuthOK:
 		if user != number || ext == nil {

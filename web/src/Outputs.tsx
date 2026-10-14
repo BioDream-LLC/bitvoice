@@ -1,6 +1,6 @@
-import { Activity, Download, FileSpreadsheet, Network, Plus, Send, Trash2 } from 'lucide-react'
+import { Activity, Copy, Download, FileSpreadsheet, Network, Plus, Send, Trash2, Webhook } from 'lucide-react'
 import { toast } from 'sonner'
-import { useCdrCsvQuery, useSnmpStatusQuery, useTestCdrOutputsMutation, useTurnStatusQuery, type SystemSettings, type TURN } from './api'
+import { useCdrCsvQuery, useSnmpStatusQuery, useTestCdrOutputsMutation, useTurnStatusQuery, useWebSocketStatusQuery, type SystemSettings, type TURN } from './api'
 import { Field, ListInput, Toggle } from './ui'
 
 type SNMP = NonNullable<SystemSettings['snmp']>
@@ -141,6 +141,31 @@ export function TURNSettings({ turn, onChange, p }: { turn: SystemSettings['turn
         </div>
       )}
       {s.enabled && <p className="text-xs text-slate-500">Browser phones and call links are given short-lived credentials made from a secret BitVoice keeps (<span className="font-mono">secret</span>, never shown again). It relays only to this server&apos;s own addresses, so nobody can use it to reach anything else.</p>}
+    </section>
+  )
+}
+
+/** SIP over WebSocket: WebRTC softphones (JsSIP, SIP.js and apps built on them) register at wss://…/ws. */
+export function WebSocketSettings({ value, onChange }: { value: SystemSettings['webSocket']; onChange: (v: { enabled: boolean }) => void }) {
+  const on = value?.enabled ?? false
+  const { data: status } = useWebSocketStatusQuery(undefined, { pollingInterval: 10000 })
+  const url = `wss://${location.host}/ws`
+  return (
+    <section className="card space-y-3 p-5" aria-labelledby="wss-h">
+      <h2 id="wss-h" className="flex items-center gap-2 font-semibold text-slate-100"><Webhook size={17} className="text-violet-300" aria-hidden /> SIP over WebSocket</h2>
+      <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={on} onChange={(v) => onChange({ enabled: v })} label="SIP over WebSocket" />
+        SIP over WebSocket <span className="text-xs text-slate-500">(for WebRTC softphones made with JsSIP, SIP.js and the like; BitVoice&apos;s own browser phone needs nothing)</span></label>
+      {on && (
+        <>
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-slate-400">Softphones connect to</span>
+            <code className="font-mono text-violet-300">{url}</code>
+            <button type="button" className="btn btn-ghost px-2" aria-label="Copy the WebSocket address" onClick={() => { void navigator.clipboard?.writeText(url); toast.success('Address copied') }}><Copy size={13} aria-hidden /></button>
+          </div>
+          <p className={(status?.connected ?? 0) > 0 ? 'text-sm text-emerald-300' : 'text-sm text-slate-500'}>{status?.connected ?? 0} softphones connected now.</p>
+          <p className="text-xs text-slate-500">They sign in as an extension with its SIP password, like any phone, and the same protection applies (bans after failed sign-ins, calls per extension). Switch on TURN too for softphones on networks that block UDP.</p>
+        </>
+      )}
     </section>
   )
 }

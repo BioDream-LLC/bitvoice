@@ -321,10 +321,23 @@ func (e *Engine) publish(typ string, data any) {
 	}
 }
 
+// clientIP is where a request really comes from: its source, or, for one passed on by a gateway on
+// this computer (the browser phone, SIP over WebSocket), the address the gateway says. Bans and rate
+// limits then count each softphone, never this computer.
+func clientIP(in *sip.Incoming) netip.Addr {
+	ip := in.From.Addr.Addr().Unmap()
+	if ip.IsLoopback() {
+		if a, err := netip.ParseAddr(in.Msg.Get("X-BitVoice-Client")); err == nil {
+			return a.Unmap()
+		}
+	}
+	return ip
+}
+
 // handle receives every new request from the stack.
 func (e *Engine) handle(tx *sip.ServerTx, in *sip.Incoming) {
 	m := in.Msg
-	ip := in.From.Addr.Addr()
+	ip := clientIP(in)
 	if e.bans.banned(ip) {
 		return // silently: a scanner gets nothing to learn from
 	}
@@ -560,6 +573,9 @@ func (e *Engine) Registrations() []Binding { return e.reg.list() }
 
 // Banned returns the addresses currently blocked by fail-to-ban.
 func (e *Engine) Banned() []BanInfo { return e.bans.list() }
+
+// IsBanned says whether an address is banned now.
+func (e *Engine) IsBanned(ip netip.Addr) bool { return e.bans.banned(ip.Unmap()) }
 
 // Unban lifts a ban.
 func (e *Engine) Unban(ip string) {

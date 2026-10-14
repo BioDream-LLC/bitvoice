@@ -195,6 +195,7 @@ export interface SystemSettings {
   cards?: Cards
   acme?: ACME
   turn?: TURN
+  webSocket?: { enabled: boolean }
   cdrOutputs?: { csv: boolean; syslog: { host: string; port: number; transport: '' | 'udp' | 'tcp' | 'tls'; facility: number }; postgres: { url: string; table: string } }
   publicAddress: string; cluster?: ClusterSettings; sipPort: number; rtpMin: number; rtpMax: number; codecs: string[]; echoNumber: string; voicemailNumber: string; parkNumber: string; parkSeconds: number
   codes?: FeatureCodes; speedDials?: SpeedDial[] | null
@@ -662,6 +663,7 @@ export const api = createApi({
       insight: b.query<{ days: number; agents: AgentTalk[] }, number>({ query: (d) => `insight?days=${d}`, providesTags: ['Transcripts'] }),
       reputation: b.query<{ days: number; numbers: NumberReputation[] }, number>({ query: (days) => `reputation?days=${days}`, providesTags: ['Reputation', 'Settings'] }),
       certificate: b.query<{ subject: string; issuer: string; names: string[]; notAfter: string; selfSigned: boolean }, void>({ query: () => 'certificate', providesTags: ['Certificate'] }),
+      webSocketStatus: b.query<{ enabled: boolean; connected: number }, void>({ query: () => 'websocket', providesTags: ['Settings'] }),
       turnStatus: b.query<{ enabled: boolean; running: boolean; port?: number; tlsPort?: number; relays?: number; problems?: string[] }, void>({ query: () => 'turn', providesTags: ['Settings'] }),
       acmeStatus: b.query<ACMEStatus, void>({ query: () => 'certificate/acme', providesTags: ['Certificate'] }),
       acmeCheck: b.mutation<{ ok: boolean }, void>({ query: () => ({ url: 'certificate/acme', method: 'POST' }), invalidatesTags: ['Certificate'] }),
@@ -776,7 +778,7 @@ export const {
   usePinSetsQuery, useCreatePinSetMutation, useUpdatePinSetMutation, useDeletePinSetMutation,
   useLookupsQuery, useCreateLookupMutation, useUpdateLookupMutation, useDeleteLookupMutation, useTestLookupMutation,
   useHotelQuery, useCheckInMutation, useCheckOutMutation, useSetRoomStatusMutation, useWakeUpsQuery, useSetWakeUpMutation, useCancelWakeUpMutation,
-  useSaveNameAudioMutation, useDeleteNameAudioMutation, useSnmpStatusQuery, useDeskStatusQuery, useCardsStatusQuery, useAcmeStatusQuery, useAcmeCheckMutation, useTurnStatusQuery, useCdrCsvQuery, useTestCdrOutputsMutation, useChatListQuery, useChatMessagesQuery, useSendChatMutation, useSetChatStatusMutation,
+  useSaveNameAudioMutation, useDeleteNameAudioMutation, useSnmpStatusQuery, useDeskStatusQuery, useCardsStatusQuery, useAcmeStatusQuery, useAcmeCheckMutation, useTurnStatusQuery, useWebSocketStatusQuery, useCdrCsvQuery, useTestCdrOutputsMutation, useChatListQuery, useChatMessagesQuery, useSendChatMutation, useSetChatStatusMutation,
   usePromptsQuery, useSaveLangPromptMutation, useDeleteLangPromptMutation, useGeneratePromptsMutation, useMusicQuery, useAddMusicMutation, useDeleteMusicMutation,
 } = api
 

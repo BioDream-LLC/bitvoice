@@ -81,6 +81,7 @@ type Session struct {
 	// browser's telephone-event type. OpusPT is the browser's own number for Opus (-1 without it).
 	PT, EventPT, OpusPT int
 	eventClock          int
+	mid                 string
 }
 
 // Errors when a browser offer cannot be answered.
@@ -156,21 +157,75 @@ func Answer(ep *media.Endpoint, offer *sdp.Session, host string) (*Session, *sdp
 	if s.PT < 0 {
 		return nil, nil, ErrNoAudio
 	}
-	wirePT := s.PT
-	if s.OpusPT >= 0 {
-		wirePT = s.OpusPT
-	}
-	formats := []string{fmt.Sprint(wirePT)}
-	if s.EventPT >= 0 {
-		formats = append(formats, fmt.Sprint(s.EventPT))
-	}
 	mid := attr(offer, a, "mid")
 	if mid == "" {
 		mid = "0"
 	}
+	dir := "sendrecv"
+	switch offer.Direction(a) {
+	case "sendonly":
+		dir = "recvonly"
+	case "recvonly":
+		dir = "sendonly"
+	}
+	s.mid = mid
+	ans, err := s.describe(host, mid, "passive", dir, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	ep.SetPayloadType(s.PT)
+	if s.OpusPT >= 0 {
+		ep.MapIncoming(s.OpusPT, media.PTOpus)
+		ep.MapPayloadType(media.PTOpus, s.OpusPT)
+	}
+	ep.OnOther(s.receive)
+	go s.retransmit()
+	return s, ans, nil
+}
+
+// describe writes BitVoice's side: offering every codec it takes (offer) or the one chosen.
+func (s *Session) describe(host, mid, setup, dir string, offer []int) (*sdp.Session, error) {
+	ep := s.ep
 	fam := "IP4"
 	if strings.Contains(host, ":") {
 		fam = "IP6"
+	}
+	var formats []string
+	var maps []string
+	if offer != nil {
+		for _, pt := range offer {
+			switch pt {
+			case media.PTOpus:
+				formats = append(formats, "111")
+				maps = append(maps, "a=rtpmap:111 opus/48000/2", "a=fmtp:111 minptime=10;useinbandfec=1")
+			case 0:
+				formats = append(formats, "0")
+				maps = append(maps, "a=rtpmap:0 PCMU/8000")
+			case 8:
+				formats = append(formats, "8")
+				maps = append(maps, "a=rtpmap:8 PCMA/8000")
+			}
+		}
+		formats = append(formats, "101")
+		maps = append(maps, "a=rtpmap:101 telephone-event/8000", "a=fmtp:101 0-15")
+	} else {
+		wirePT := s.PT
+		if s.OpusPT >= 0 {
+			wirePT = s.OpusPT
+		}
+		formats = []string{fmt.Sprint(wirePT)}
+		switch s.PT {
+		case media.PTOpus:
+			maps = append(maps, fmt.Sprintf("a=rtpmap:%d opus/48000/2", wirePT), fmt.Sprintf("a=fmtp:%d minptime=10;useinbandfec=1", wirePT))
+		case 0:
+			maps = append(maps, "a=rtpmap:0 PCMU/8000")
+		default:
+			maps = append(maps, "a=rtpmap:8 PCMA/8000")
+		}
+		if s.EventPT >= 0 {
+			formats = append(formats, fmt.Sprint(s.EventPT))
+			maps = append(maps, fmt.Sprintf("a=rtpmap:%d telephone-event/%d", s.EventPT, s.eventClock), fmt.Sprintf("a=fmtp:%d 0-15", s.EventPT))
+		}
 	}
 	var b strings.Builder
 	w := func(format string, args ...any) { fmt.Fprintf(&b, format+"\r\n", args...) }
@@ -186,43 +241,89 @@ func Answer(ep *media.Endpoint, offer *sdp.Session, host string) (*Session, *sdp
 	w("a=ice-ufrag:%s", s.ufrag)
 	w("a=ice-pwd:%s", s.pwd)
 	w("a=fingerprint:sha-256 %s", identity.fingerprint)
-	w("a=setup:passive")
+	w("a=setup:%s", setup)
 	w("a=rtcp-mux")
-	switch offer.Direction(a) {
-	case "sendonly":
-		w("a=recvonly")
-	case "recvonly":
-		w("a=sendonly")
-	default:
-		w("a=sendrecv")
-	}
-	switch s.PT {
-	case media.PTOpus:
-		w("a=rtpmap:%d opus/48000/2", wirePT)
-		w("a=fmtp:%d minptime=10;useinbandfec=1", wirePT)
-	case 0:
-		w("a=rtpmap:0 PCMU/8000")
-	default:
-		w("a=rtpmap:8 PCMA/8000")
-	}
-	if s.EventPT >= 0 {
-		w("a=rtpmap:%d telephone-event/%d", s.EventPT, s.eventClock)
-		w("a=fmtp:%d 0-15", s.EventPT)
+	w("a=%s", dir)
+	for _, m := range maps {
+		w("%s", m)
 	}
 	w("a=candidate:1 1 udp 2130706431 %s %d typ host", host, ep.Port())
 	w("a=end-of-candidates")
-	ans, err := sdp.Parse([]byte(b.String()))
+	return sdp.Parse([]byte(b.String()))
+}
+
+// Offer makes a session that offers WebRTC audio to a browser (a SIP-over-WebSocket softphone):
+// Opus, G.711 and key presses, BitVoice as ICE-lite and DTLS server. The browser's answer goes to Accept.
+func Offer(ep *media.Endpoint, host string, pts []int) (*Session, *sdp.Session, error) {
+	if err := loadIdentity(); err != nil {
+		return nil, nil, err
+	}
+	if len(pts) == 0 {
+		return nil, nil, ErrNoAudio
+	}
+	s := &Session{ep: ep, ufrag: randomToken(8), pwd: randomToken(24), PT: -1, EventPT: -1, OpusPT: -1,
+		connected: make(chan struct{}), closed: make(chan struct{})}
+	s.mid = "0"
+	off, err := s.describe(host, "0", "actpass", "sendrecv", pts)
 	if err != nil {
 		return nil, nil, err
 	}
-	ep.SetPayloadType(s.PT)
-	if s.OpusPT >= 0 {
-		ep.MapIncoming(s.OpusPT, media.PTOpus)
-		ep.MapPayloadType(media.PTOpus, s.OpusPT)
-	}
 	ep.OnOther(s.receive)
+	return s, off, nil
+}
+
+// Describe writes BitVoice's answer again with another direction (for a re-INVITE): same keys, same codec.
+func (s *Session) Describe(host, dir string) (*sdp.Session, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.describe(host, s.mid, "passive", dir, nil)
+}
+
+// ErrDTLSRole is returned when the browser's answer wants BitVoice to open the DTLS connection.
+var ErrDTLSRole = errors.New("webrtc: the answer asks BitVoice to be the DTLS client, which it is not")
+
+// Accept takes the browser's answer to Offer: its fingerprint, the codec it chose, its key-press type.
+func (s *Session) Accept(answer *sdp.Session) error {
+	a := answer.Audio()
+	if a == nil || a.Port == 0 {
+		return ErrNoAudio
+	}
+	if setup := attr(answer, a, "setup"); setup == "passive" {
+		return ErrDTLSRole
+	}
+	fp := attr(answer, a, "fingerprint")
+	alg, val, _ := strings.Cut(fp, " ")
+	peerFP, err := hex.DecodeString(strings.ReplaceAll(strings.TrimSpace(val), ":", ""))
+	if !strings.EqualFold(alg, "sha-256") || err != nil || len(peerFP) != 32 {
+		return ErrNoKeys
+	}
+	pt, opus, ev := -1, -1, -1
+	for _, c := range a.Codecs() {
+		switch {
+		case pt < 0 && strings.EqualFold(c.Name, "opus") && c.ClockRate == 48000:
+			pt, opus = media.PTOpus, c.PT
+		case pt < 0 && strings.EqualFold(c.Name, "PCMU"):
+			pt = 0
+		case pt < 0 && strings.EqualFold(c.Name, "PCMA"):
+			pt = 8
+		case ev < 0 && strings.EqualFold(c.Name, "telephone-event") && c.ClockRate == 8000:
+			ev = c.PT
+		}
+	}
+	if pt < 0 {
+		return ErrNoAudio
+	}
+	s.mu.Lock()
+	s.PT, s.OpusPT, s.EventPT, s.eventClock = pt, opus, ev, 8000
+	s.dtls = dtls.NewServer(identity.der, identity.key, peerFP)
+	s.mu.Unlock()
+	s.ep.SetPayloadType(pt)
+	if opus >= 0 {
+		s.ep.MapIncoming(opus, media.PTOpus)
+		s.ep.MapPayloadType(media.PTOpus, opus)
+	}
 	go s.retransmit()
-	return s, ans, nil
+	return nil
 }
 
 // Connected is closed once DTLS has finished and SRTP is running.
@@ -257,19 +358,20 @@ func (s *Session) receive(pkt []byte, from netip.AddrPort) {
 	}
 	s.mu.Lock()
 	ok := s.remote.IsValid() && from == s.remote
+	d := s.dtls
 	s.mu.Unlock()
-	if !ok {
-		return // DTLS only from the address ICE checked
+	if !ok || d == nil {
+		return // DTLS only from the address ICE checked, and once the answer is known (the browser resends)
 	}
-	out, err := s.dtls.Handle(pkt)
+	out, err := d.Handle(pkt)
 	for _, d := range out {
 		s.ep.WriteTo(d, from)
 	}
-	if err != nil || !s.dtls.Done() {
+	if err != nil || !d.Done() {
 		return
 	}
 	s.once.Do(func() {
-		ck, cs, sk, ss := s.dtls.SRTPKeys()
+		ck, cs, sk, ss := d.SRTPKeys()
 		in, err1 := srtp.New(srtp.AES128SHA80, ck, cs)
 		out, err2 := srtp.New(srtp.AES128SHA80, sk, ss)
 		if err1 != nil || err2 != nil {
@@ -293,12 +395,12 @@ func (s *Session) retransmit() {
 		case <-t.C:
 		}
 		s.mu.Lock()
-		to := s.remote
+		to, dt := s.remote, s.dtls
 		s.mu.Unlock()
-		if !to.IsValid() {
+		if !to.IsValid() || dt == nil {
 			continue
 		}
-		for _, d := range s.dtls.Retransmit() {
+		for _, d := range dt.Retransmit() {
 			s.ep.WriteTo(d, to)
 		}
 	}

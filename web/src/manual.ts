@@ -216,6 +216,11 @@ Softphones and other makes take the same three things: server (this computer's a
 ## The browser phone
 The phone icon at the bottom of every screen makes this browser a phone for an extension, with your microphone and speakers. It uses WebRTC: the sound is encrypted end to end, and it works through most firewalls without any setting.
 
+## Other WebRTC softphones (SIP over WebSocket)
+Softphones and web apps built on JsSIP, SIP.js and similar libraries speak SIP over WebSocket (RFC 7118). Switch on **SIP over WebSocket** in [Settings](#/settings) and point them at \`wss://<this server's name>:<web port>/ws\`, with the extension number as the user and its SIP password. BitVoice ends their WebRTC sound itself (ICE, DTLS-SRTP, Opus or G.711), so they reach every phone, trunk and feature as desk phones do: calls both ways, keys pressed, hold, transfers by the other party, busy lamps and message-waiting. Settings shows how many are connected.
+
+The WebSocket needs no sign-in of its own: the softphone signs in with SIP, and failed sign-ins and too many requests are counted for its own address, as for any phone. A softphone page served from another site must trust this server's certificate (use Let's Encrypt), and current Chrome asks the user before a public web page may reach a server on the local network.
+
 ## TURN, for networks that block UDP
 Some networks (hotels, guest Wi-Fi, strict company firewalls) let no UDP out, or hide computers behind NATs WebRTC cannot get through. For those, switch on **TURN server** in [Settings](#/settings): BitVoice then runs its own TURN server (RFC 8656) on port 3478 (UDP and TCP) and, with this server's certificate, on port 5349 over TLS. Browser phones, the staff phone and call links are given short-lived credentials for it, and use it when they cannot reach the media ports directly; the sound is still encrypted end to end, and BitVoice relays it only to its own addresses, so nobody can use it to reach anything else.
 

@@ -181,6 +181,7 @@ func (s *Server) Handler() http.Handler {
 	if s.ARI != nil {
 		m.Handle("/ari/", s.ARI)
 	}
+	s.wsRoutes(m)
 
 	// An unknown API path is a JSON 404, never the web page (which a script would fail to parse).
 	m.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

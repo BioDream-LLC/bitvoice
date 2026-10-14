@@ -54,7 +54,7 @@ func (e *Engine) subscribe(tx *sip.ServerTx, in *sip.Incoming) {
 	}
 	result, user := e.auth.Verify(m.Get("Authorization"), sip.SUBSCRIBE, lookup)
 	user = e.localUser(user)
-	ip := in.From.Addr.Addr()
+	ip := clientIP(in)
 	switch result {
 	case sip.AuthOK:
 		e.bans.succeed(ip)

@@ -496,3 +496,16 @@ test('TURN server setting', async ({ page }) => {
   const s = await page.evaluate(async () => (await (await fetch('./api/settings')).json()).system.turn)
   expect(s.secret.length).toBeGreaterThanOrEqual(24) // administrators see it; viewers never
 })
+
+// SIP over WebSocket: switched on in Settings, it shows the address softphones use.
+test('SIP over WebSocket setting', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/#/settings')
+  await page.getByRole('switch', { name: 'SIP over WebSocket' }).click()
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText('Settings saved')).toBeVisible()
+  await expect(page.getByText(/^wss:\/\/127\.0\.0\.1:\d+\/ws$/)).toBeVisible()
+  await expect(page.getByText('0 softphones connected now.')).toBeVisible()
+  const st = await page.evaluate(async () => (await (await fetch('./api/websocket')).json()))
+  expect(st.enabled).toBe(true)
+})
