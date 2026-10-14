@@ -1234,7 +1234,7 @@ Stasis media applications are not offered: use [Scripts](#scripts) for call logi
 Each login has a **Username** and **Secret**. Logins are **read only** unless marked **Can change calls**. Keep AMI on this computer unless the tool runs elsewhere: AMI is plain, unencrypted TCP.`,
   },
   {
-    id: 'codecs', title: 'Codecs and sound', keys: 'g722 hd voice g711 pcmu pcma opus g729 g726 g726-24 g726-40 adpcm amr amr-wb g.722.2 volte mobile ilbc speex codec noise clean',
+    id: 'codecs', title: 'Codecs and sound', keys: 'g722 hd voice g711 pcmu pcma opus g729 g726 g726-24 g726-40 adpcm amr amr-wb g.722.2 volte mobile ilbc speex g723 g.723.1 codec noise clean',
     body: `A codec is how sound is turned into data on a call. Phones, browsers and carriers each support some; BitVoice converts between any two of its codecs when two parties differ, so everyone can talk to everyone. When both use the same codec the sound passes through untouched.
 
 ::figure codecs
@@ -1256,10 +1256,11 @@ Each login has a **Username** and **Secret**. Logins are **read only** unless ma
 | iLBC | telephone, copes with loss | 13.3 or 15.2 kbit/s | older softphones and apps |
 | Speex | telephone | 15 kbit/s (2.15 to 24.6) | older softphones, links to other Asterisk systems |
 | GSM | rougher | 13 kbit/s | older softphones and gateways |
+| G.723.1 | rough, pass-through only | 5.3 or 6.3 kbit/s | very old video phones and gateways |
 
 Settings lists the codecs phones may use, best first; each trunk may have its own list. Analog adapter ports always use G.711, which faxes, modems and alarm panels need.
 
-> BitVoice's G.726 is bit-exact with the ITU-T's own reference implementation at all four rates (ffmpeg's differs at 24 and 40 kbit/s, so equipment built on ffmpeg may sound slightly different there). G.726 comes in two packings: RFC 3551's (G726-32) and the older AAL2 order. iLBC is bit-exact with the RFC 3951 reference (its enhancer and concealment included); BitVoice offers 20 ms frames and follows a phone that sends 30 ms ones. Speex is narrowband (8 kHz, RFC 5574) and bit-exact with libspeex 1.2.1; BitVoice sends Speex's mode 5 (15 kbit/s) or the mode the other side's mode= asks for, and conceals lost packets with Speex's own concealment. AMR and AMR-WB follow RFC 4867: BitVoice offers octet-aligned framing, answers in whichever framing the other side asked for, and sends the highest mode the other side's mode-set allows (12.2 and 23.85 kbit/s when it gives none). Most equipment uses the first; choose **G.726 (AAL2 order)** only for equipment that sounds garbled with it.
+> BitVoice's G.726 is bit-exact with the ITU-T's own reference implementation at all four rates (ffmpeg's differs at 24 and 40 kbit/s, so equipment built on ffmpeg may sound slightly different there). G.726 comes in two packings: RFC 3551's (G726-32) and the older AAL2 order. iLBC is bit-exact with the RFC 3951 reference (its enhancer and concealment included); BitVoice offers 20 ms frames and follows a phone that sends 30 ms ones. Speex is narrowband (8 kHz, RFC 5574) and bit-exact with libspeex 1.2.1; BitVoice sends Speex's mode 5 (15 kbit/s) or the mode the other side's mode= asks for, and conceals lost packets with Speex's own concealment. G.723.1 is passed through untouched between two parties that both use it but never converted: it is offered only to parties whose caller offered it, and a call between a G.723.1-only phone and one without it does not connect. (Its ITU reference code carries no licence that lets BitVoice include a converter.) AMR and AMR-WB follow RFC 4867: BitVoice offers octet-aligned framing, answers in whichever framing the other side asked for, and sends the highest mode the other side's mode-set allows (12.2 and 23.85 kbit/s when it gives none). Most equipment uses the first; choose **G.726 (AAL2 order)** only for equipment that sounds garbled with it.
 
 ## What converting costs
 Converting takes processor time, only on calls where the two sides differ. Per call, about 0.3 ms of one core every 20 ms for Opus and 0.12 ms for G.729 (some 60 and 170 converted calls per core); G.726 and GSM cost less than G.729; G.711 and G.722 almost nothing. G.729 is sent without Annex B (no silence frames).

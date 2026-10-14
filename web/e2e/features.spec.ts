@@ -283,15 +283,16 @@ test('video conversion setting', async ({ page }) => {
 })
 
 // The newer codecs can be chosen in Settings and are saved in the order shown.
-test('codecs: iLBC and Speex', async ({ page }) => {
+test('codecs: iLBC, Speex and G.723.1', async ({ page }) => {
   await signIn(page)
   await page.goto('/#/settings')
-  for (const name of ['iLBC', 'Speex']) {
+  await expect(page.getByText('(pass-through only)').first()).toBeVisible()
+  for (const name of ['iLBC', 'Speex', 'G.723.1']) {
     const sw = page.getByRole('switch', { name: `Use ${name}` }).first()
     if ((await sw.getAttribute('aria-checked')) !== 'true') await sw.click()
   }
   await page.getByRole('button', { name: 'Save' }).first().click()
   await expect(page.getByText('Settings saved')).toBeVisible()
   const s = await page.evaluate(async () => (await (await fetch('./api/settings')).json()).system)
-  expect(s.codecs).toEqual(expect.arrayContaining(['ILBC', 'SPEEX']))
+  expect(s.codecs).toEqual(expect.arrayContaining(['ILBC', 'SPEEX', 'G723']))
 })

@@ -258,7 +258,7 @@ export function Settings() {
             <Field label="Media from" htmlFor="rm" error={p('system.rtpMin')}><input id="rm" type="number" className="input" value={sys.rtpMin} onChange={(e) => setSys({ rtpMin: Number(e.target.value) })} /></Field>
             <Field label="Media to" htmlFor="rx" error={p('system.rtpMax')}><input id="rx" type="number" className="input" value={sys.rtpMax} onChange={(e) => setSys({ rtpMax: Number(e.target.value) })} /></Field>
           </div>
-          <Field label="Codecs" htmlFor="codecs" error={p('system.codecs')} hint="What phones may use, best first. BitVoice converts between any two of them when two parties differ.">
+          <Field label="Codecs" htmlFor="codecs" error={p('system.codecs')} hint="What phones may use, best first. BitVoice converts between any two of them when two parties differ (G.723.1 only passes through).">
             <CodecList id="codecs" value={sys.codecs ?? []} onChange={(v) => setSys({ codecs: v })} error={p('system.codecs')} />
           </Field>
           <div className="space-y-1">
