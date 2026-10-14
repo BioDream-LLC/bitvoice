@@ -250,4 +250,3 @@ func (s *Server) forPortal(ev events.Event, ext string) bool {
 	}
 	return false
 }
-
