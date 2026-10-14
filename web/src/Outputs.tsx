@@ -94,7 +94,8 @@ export function CDROutputSettings({ out, onChange, p }: { out: SystemSettings['c
         </Field>
         <Field label="Table" htmlFor="pgt" error={p('system.cdrOutputs.postgres.table')}><input id="pgt" className="input font-mono" value={o.postgres.table} onChange={(e) => onChange({ ...o, postgres: { ...o.postgres, table: e.target.value.trim() } })} placeholder="cdr" /></Field>
       </div>
-      <button type="button" className="btn" disabled={isLoading} onClick={run}><Send size={14} className="text-emerald-300" aria-hidden /> Send a test record (save first)</button>
+      <button type="button" className="btn" disabled={isLoading} onClick={run}><Send size={14} className="text-emerald-300" aria-hidden /> Send a test record</button>
+      <span className="ml-2 text-xs text-slate-500">(to the outputs as already saved)</span>
     </section>
   )
 }
