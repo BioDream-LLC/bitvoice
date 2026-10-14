@@ -1,0 +1,32 @@
+This package is a Go translation of the iLBC reference implementation in Appendix A of RFC 3951,
+"Internet Low Bit Rate Codec (iLBC)", December 2004, by S. Andersen, A. Duric, H. Astrom, R. Hagen,
+W. Kleijn and J. Linden (https://www.rfc-editor.org/rfc/rfc3951.html).
+
+The reference source code is:
+
+    Copyright (C) The Internet Society (2004).
+    All Rights Reserved.
+
+Licensing basis. RFC 3951 is subject to BCP 78, which at its publication was RFC 3667. Section
+3.3(a)(E) of RFC 3667 grants the right to extract, use, modify, distribute and incorporate the
+executable code of an RFC into other works, for any purpose, with the notices of its Section 5. Those
+notices follow. The rest of BitVoice, including this package's own additions (the public Encoder and
+Decoder), is under the Apache License 2.0; the RFC-derived code is not represented as originally under
+that licence. Patents are a separate matter: Google's 2011 IETF IPR disclosure #1649 grants patent
+licences for the iLBC specification and its reference implementation, under the conditions it states.
+
+Full Copyright Statement
+
+   Copyright (C) The Internet Society (2004).
+
+   This document is subject to the rights, licenses and restrictions
+   contained in BCP 78, and except as set forth therein, the authors
+   retain all their rights.
+
+   This document and the information contained herein are provided on an
+   "AS IS" basis and THE CONTRIBUTOR, THE ORGANIZATION HE/SHE REPRESENTS
+   OR IS SPONSORED BY (IF ANY), THE INTERNET SOCIETY AND THE INTERNET
+   ENGINEERING TASK FORCE DISCLAIM ALL WARRANTIES, EXPRESS OR IMPLIED,
+   INCLUDING BUT NOT LIMITED TO ANY WARRANTY THAT THE USE OF THE
+   INFORMATION HEREIN WILL NOT INFRINGE ANY RIGHTS OR ANY IMPLIED
+   WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE.

@@ -276,6 +276,13 @@ func (c Codec) Attributes() []Line {
 		return []Line{{'a', fmt.Sprintf("rtpmap:%d opus/48000/2", c.PT)}, {'a', fmt.Sprintf("fmtp:%d minptime=10;useinbandfec=1", c.PT)}}
 	case "G729":
 		return []Line{{'a', fmt.Sprintf("rtpmap:%d G729/8000", c.PT)}, {'a', fmt.Sprintf("fmtp:%d annexb=no", c.PT)}}
+	case "ILBC":
+		// RFC 3952: BitVoice offers 20 ms frames; an answer keeps the mode offered.
+		f := c.Fmtp
+		if f == "" {
+			f = "mode=20"
+		}
+		return []Line{{'a', fmt.Sprintf("rtpmap:%d iLBC/8000", c.PT)}, {'a', fmt.Sprintf("fmtp:%d %s", c.PT, f)}}
 	case "AMR", "AMR-WB":
 		// RFC 4867: octet-aligned unless the other side asked for bandwidth-efficient framing.
 		f := c.Fmtp

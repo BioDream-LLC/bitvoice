@@ -21,7 +21,7 @@ func Transcodable(pt int) bool {
 	case PTPCMU, PTPCMA, PTG722, PTG729, PTOpus, PTG726_32, PTG726_16, PTAAL2G726_32, PTGSM, PTG726_24, PTG726_40:
 		return true
 	}
-	if isAMR(pt) {
+	if isAMR(pt) || isILBC(pt) {
 		return true
 	}
 	return false
@@ -50,6 +50,8 @@ func CodecPT(name string) int {
 		return PTG726_40
 	case "AMR":
 		return PTAMR
+	case "ILBC":
+		return PTILBC30 // the mode comes from fmtp: CodecPTFmtp
 	case "AMR-WB":
 		return PTAMRWB
 	case "AAL2-G726-32":

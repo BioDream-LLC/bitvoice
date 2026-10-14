@@ -135,3 +135,12 @@ func TestFmtpAndAMR(t *testing.T) {
 		t.Fatalf("an answer keeps the offered fmtp %+v", l)
 	}
 }
+
+func TestILBCOffer(t *testing.T) {
+	if l := (Codec{PT: 97, Name: "ILBC"}).Attributes(); l[0].Value != "rtpmap:97 iLBC/8000" || l[1].Value != "fmtp:97 mode=20" {
+		t.Fatalf("%+v", l)
+	}
+	if l := (Codec{PT: 97, Name: "iLBC", Fmtp: "mode=30"}).Attributes(); l[1].Value != "fmtp:97 mode=30" {
+		t.Fatalf("answer keeps the mode %+v", l)
+	}
+}

@@ -23,6 +23,9 @@ func isAMR(pt int) bool { return pt >= PTAMR && pt <= PTAMRWBBE }
 // CodecPTFmtp is CodecPT knowing the codec's fmtp line, which picks AMR's framing.
 func CodecPTFmtp(name, fmtp string) int {
 	pt := CodecPT(name)
+	if pt == PTILBC30 {
+		return ilbcPT(fmtp)
+	}
 	if (pt == PTAMR || pt == PTAMRWB) && !strings.Contains(strings.ReplaceAll(strings.ToLower(fmtp), " ", ""), "octet-align=1") {
 		pt++ // the bandwidth-efficient twin
 	}

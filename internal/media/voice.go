@@ -28,7 +28,7 @@ func Dynamic(pt int) bool {
 	case PTOpus, PTG726_32, PTG726_16, PTAAL2G726_32, PTG726_24, PTG726_40:
 		return true
 	}
-	return isAMR(pt)
+	return isAMR(pt) || isILBC(pt)
 }
 
 // voice is one codec's encoder or decoder, holding the state that carries from packet to packet.
@@ -70,6 +70,10 @@ func newVoice(pt int) voice {
 		return &gsmv{enc: NewGSMEncoder(), dec: NewGSMDecoder()}
 	case PTAMR, PTAMRBE, PTAMRWB, PTAMRWBBE:
 		return newVoiceFmtp(pt, "")
+	case PTILBC20:
+		return newILBC(20)
+	case PTILBC30:
+		return newILBC(30)
 	}
 	return nil
 }
