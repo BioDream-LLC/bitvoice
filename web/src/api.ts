@@ -185,6 +185,7 @@ export interface SystemSettings {
   promptLanguages?: string[] | null; music?: MusicClass[] | null; holdMusic?: string; hotel?: Hotel
   chat?: { off: boolean; keepDays: number; rooms: { id: string; name: string; members: string[] | null }[] | null }
   snmp?: { enabled: boolean; listen: string; community: string; allowFrom: string[] | null; baseOid: string; contact: string; location: string; traps: { host: string; community: string }[] | null }
+  desk?: DeskProtocols
   cdrOutputs?: { csv: boolean; syslog: { host: string; port: number; transport: '' | 'udp' | 'tcp' | 'tls'; facility: number }; postgres: { url: string; table: string } }
   publicAddress: string; cluster?: ClusterSettings; sipPort: number; rtpMin: number; rtpMax: number; codecs: string[]; echoNumber: string; voicemailNumber: string; parkNumber: string; parkSeconds: number
   codes?: FeatureCodes; speedDials?: SpeedDial[] | null
@@ -312,6 +313,11 @@ export interface LoadStatus { run: LoadRun | null; limits: { calls: number; conc
 export interface UpgradeStatus {
   running: string; signedBuild: boolean; waiting: '' | 'switch' | 'rollback'; since?: string; calls: number; possible: boolean
   state: { currentVersion: string; previousVersion: string; stagedVersion: string; stagedSigned: boolean; pending: boolean; history: { at: string; what: string }[] }
+}
+/** Skinny (SCCP) phones and MGCP gateways: older protocols beside SIP. */
+export interface DeskProtocols {
+  sccp: { enabled: boolean; port: number; phones: { device: string; extension: string }[] }
+  mgcp: { enabled: boolean; port: number; gateways: { name: string; host: string; port: number; lines: { endpoint: string; extension: string }[] }[] }
 }
 export interface SystemInfo { version: string; name: string; rev: number; addresses: string[]; sipPort: number; tlsPort: number; httpsPort: number; ffmpeg?: boolean; amiAddress: string; uptimeSeconds: number; tenant?: Tenant | null; hosts?: boolean; publicSafety?: boolean; publicSafetyInUse?: string }
 export interface TenantLimits { extensions: number; calls: number; storageMB: number; aiPerDay: number }
@@ -449,6 +455,7 @@ export const api = createApi({
           dispatch(api.util.updateQueryData('chatMessages', key, (d) => { if (!d.items.some((m) => m.id === data.id)) d.items.push(data) }))
         } }),
       setChatStatus: b.mutation<void, string>({ query: (status) => ({ url: 'me/chat-status', method: 'PUT', body: { status } }), invalidatesTags: ['Chat'] }),
+      deskStatus: b.query<{ sccp: Record<string, string>; mgcp: Record<string, string> }, void>({ query: () => 'desk', providesTags: ['Settings'] }),
       snmpStatus: b.query<{ running: boolean; listen: string; address: string; error: string }, void>({ query: () => 'snmp', providesTags: ['Settings'] }),
       cdrCsv: b.query<{ items: { day: string; bytes: number }[] }, void>({ query: () => 'cdr/csv', providesTags: ['CDR'] }),
       testCdrOutputs: b.mutation<Record<string, string>, void>({ query: () => ({ url: 'cdr/outputs/test', method: 'POST' }) }),
@@ -728,7 +735,7 @@ export const {
   useDirectoriesQuery, useCreateDirectoryMutation, useUpdateDirectoryMutation, useDeleteDirectoryMutation,
   useDialInsQuery, useCreateDialInMutation, useUpdateDialInMutation, useDeleteDialInMutation,
   useHotelQuery, useCheckInMutation, useCheckOutMutation, useSetRoomStatusMutation, useWakeUpsQuery, useSetWakeUpMutation, useCancelWakeUpMutation,
-  useSaveNameAudioMutation, useDeleteNameAudioMutation, useSnmpStatusQuery, useCdrCsvQuery, useTestCdrOutputsMutation, useChatListQuery, useChatMessagesQuery, useSendChatMutation, useSetChatStatusMutation,
+  useSaveNameAudioMutation, useDeleteNameAudioMutation, useSnmpStatusQuery, useDeskStatusQuery, useCdrCsvQuery, useTestCdrOutputsMutation, useChatListQuery, useChatMessagesQuery, useSendChatMutation, useSetChatStatusMutation,
   usePromptsQuery, useSaveLangPromptMutation, useDeleteLangPromptMutation, useGeneratePromptsMutation, useMusicQuery, useAddMusicMutation, useDeleteMusicMutation,
 } = api
 

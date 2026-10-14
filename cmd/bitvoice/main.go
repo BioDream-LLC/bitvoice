@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"sync/atomic"
 	"syscall"
 	"time"
 	_ "time/tzdata" // time zones for opening hours, whatever the host has installed
@@ -32,10 +33,13 @@ import (
 	"github.com/biodream-llc/bitvoice/internal/config"
 	"github.com/biodream-llc/bitvoice/internal/events"
 	"github.com/biodream-llc/bitvoice/internal/iax"
+	"github.com/biodream-llc/bitvoice/internal/mgcp"
 	"github.com/biodream-llc/bitvoice/internal/pbx"
+	"github.com/biodream-llc/bitvoice/internal/sccp"
 	"github.com/biodream-llc/bitvoice/internal/store"
 	"github.com/biodream-llc/bitvoice/internal/upgrade"
 	"github.com/biodream-llc/bitvoice/internal/web"
+	"github.com/biodream-llc/bitvoice/internal/webphone"
 )
 
 // version is set at build time by the Makefile (-X main.version=...).
@@ -234,6 +238,36 @@ func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 	applyIAX(cfg)
 	st.OnChange(applyIAX)
 	defer iaxSvc.Close()
+	// Skinny (SCCP) desk phones and MGCP gateway ports: each is a device of its extension, bridged
+	// through loopback SIP as browser phones are.
+	if desk, err := webphone.New(ctx, eng.SIPPort(), eng); err != nil {
+		log.Error("desk phones: no loopback bridge", "err", err)
+	} else {
+		var resolved atomic.Pointer[config.Config]
+		secret := func(ext string) string {
+			if c := resolved.Load(); c != nil {
+				if e := c.FindExtension(ext); e != nil {
+					return e.Secret
+				}
+			}
+			return ""
+		}
+		mg := mgcp.New(ctx, desk, eng, secret, log)
+		sc := sccp.New(ctx, desk, eng, secret, log)
+		applyDesk := func(c config.Config) {
+			r := srv.Resolved(c)
+			resolved.Store(&r)
+			mg.Apply(r.System.Desk.MGCP)
+			sc.Apply(r.System.Desk.SCCP, "")
+		}
+		applyDesk(cfg)
+		st.OnChange(applyDesk)
+		srv.DeskStatus = func() map[string]map[string]string {
+			return map[string]map[string]string{"sccp": sc.Status(), "mgcp": mg.Status()}
+		}
+		defer mg.Close()
+		defer sc.Close()
+	}
 	// Other organisations hosted here, each with its own data, sharing the SIP and media ports.
 	ty := &api.Tenancy{Root: srv, Switch: sw, DataDir: o.data, DBSpec: spec, Log: log, Version: version, Web: srv.Web}
 	srv.Tenancy = ty

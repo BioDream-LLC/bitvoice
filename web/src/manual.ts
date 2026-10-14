@@ -7,7 +7,7 @@ export interface Article { id: string; title: string; route?: string; keys: stri
  * its chapters through them. Every article is in exactly one part. */
 export const parts: { title: string; intro: string; ids: string[] }[] = [
   { title: 'Getting started', intro: 'From a new install to a working phone system: extensions, phones, a phone company, where calls go, emergency calling from your offices, and how to tell everything is ready.',
-    ids: ['start', 'extensions', 'phones', 'trunks', 'routes', 'emergency', 'sites', 'health', 'settings'] },
+    ids: ['start', 'extensions', 'phones', 'deskphones', 'trunks', 'routes', 'emergency', 'sites', 'health', 'settings'] },
   { title: 'Where calls go', intro: 'The building blocks callers move through: groups and queues, menus and schedules, scripts and the AI receptionist, voicemail, and the diagram that shows it all.',
     ids: ['flow', 'ringgroups', 'queues', 'sounds', 'menus', 'directory', 'dialin', 'schedules', 'scripts', 'ai', 'voicemail', 'callbacks', 'calllinks'] },
   { title: 'Everyday calling', intro: 'What people do on their phones every day, and what they set for themselves: forwarding, follow-me, pickup, conference rooms, paging, hot desks, faxes and texts.',
@@ -129,6 +129,27 @@ Below the settings, **Forwarding right now** shows and changes what the person s
 
 ## Connected devices
 An extension that is open shows every device signed in as it: the phone's make and model, how it connects (UDP, TCP, TLS or the browser) and since when. The address and port to give a phone are shown there too.`,
+  },
+  {
+    id: 'deskphones', title: 'Skinny phones and MGCP gateways', route: '/desk-phones', keys: 'skinny sccp cisco 7940 7960 7941 7942 7945 7961 7962 7965 7970 8945 mgcp gateway call agent ata analogue analog fxs aaln line card chan_skinny chan_mgcp',
+    body: `Phones and gateways that do not speak SIP can still be used. **Skinny phones and MGCP gateways** (under Calls) takes two older protocols:
+
+- **Skinny (SCCP)**: Cisco desk phones running SCCP firmware (79xx, 69xx, 89xx). Add each phone by its MAC address and choose its extension; switch on **Accept Skinny phones** and point the phone at BitVoice (TCP port 2000) in its TFTP settings file or menu.
+- **MGCP** (RFC 3435): gateways whose ports BitVoice drives one by one, such as analogue telephone adapters and line cards. Add the gateway by the domain name it uses in its endpoint names (aaln/1@name), its address, and the extension of each line; set the gateway's call agent to BitVoice (UDP port 2727).
+
+Each Skinny phone or MGCP line is one more device of its extension: it rings with the extension's other phones, calls out as the extension, and shows in the extension's devices. The page shows each one's state.
+
+## What works
+- Skinny: registration, the line and its number on the display, dial tone, dialling (the number goes after a pause or #, or at once from the phone's dial pad when lifted after dialling), ringback, ringing with caller ID, answer and hang up by handset, speaker or soft keys (NewCall, Redial, Answer, EndCall), busy and reorder tones.
+- MGCP: dial tone, digits collected by the gateway with a digit map, ringing with caller ID (rung without it when the gateway refuses caller ID), ringback, busy and reorder tones, and the audio connection (CRCX, DLCX). A gateway that restarts (RSIP) has its ports set up again.
+- Audio is G.711 µ-law on both; BitVoice converts to whatever the other party uses.
+
+Hold, transfer and conference are done from the extension's other phones for now, and a Skinny phone's second line is not used.
+
+## Security
+Neither protocol has passwords. Skinny phones are accepted only from the local network and only when listed; MGCP commands are obeyed only from the gateway's address (or, without one, from the local network). Keep both ports off the internet.
+
+> Both are tested against BitVoice's own test phone and test gateway, which follow the protocols, but not yet against Cisco phones or gateway hardware.`,
   },
   {
     id: 'phones', title: 'Connecting phones', route: '/phones', keys: 'provisioning yealink polycom poly grandstream snom mac auto configure softphone',

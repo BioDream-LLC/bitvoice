@@ -72,7 +72,8 @@ type Phone struct {
 	Client string
 	// Headers go on every call this phone places (a call link's pass).
 	Headers map[string]string
-	guest   bool // a caller from a call link: not registered, places calls only
+	guest   bool   // a caller from a call link: not registered, places calls only
+	agent   string // User-Agent: "BitVoice web phone", or the desk-phone protocol bridged
 
 	mu    sync.Mutex
 	calls map[string]*Call
@@ -101,8 +102,14 @@ type Call struct {
 
 // Open registers a browser phone for an extension and keeps the registration fresh until Close.
 func (g *Gateway) Open(id, ext, secret, client string) (*Phone, error) {
-	p := &Phone{g: g, ID: id, Ext: ext, secret: secret, Client: client, Events: make(chan Event, 32), user: ext + "-web-" + id,
-		calls: map[string]*Call{}, stop: make(chan struct{})}
+	return g.OpenAs("web", "BitVoice web phone", id, ext, secret, client)
+}
+
+// OpenAs is Open for a phone that is not a browser: a desk phone speaking SCCP or a line of an MGCP
+// gateway, bridged the same way. kind names it in its contact; agent is its User-Agent.
+func (g *Gateway) OpenAs(kind, agent, id, ext, secret, client string) (*Phone, error) {
+	p := &Phone{g: g, ID: id, Ext: ext, secret: secret, Client: client, Events: make(chan Event, 32), user: ext + "-" + kind + "-" + id,
+		agent: agent, calls: map[string]*Call{}, stop: make(chan struct{})}
 	if err := p.register(300); err != nil {
 		return nil, err
 	}
@@ -129,7 +136,7 @@ func (g *Gateway) Open(id, ext, secret, client string) (*Phone, error) {
 // Guest makes a phone that places calls without registering: for a caller who came by a call link.
 // headers carry the pass BitVoice checks instead of a password.
 func (g *Gateway) Guest(id, user, client string, headers map[string]string) *Phone {
-	p := &Phone{g: g, ID: id, Ext: user, Client: client, Headers: headers, guest: true, Events: make(chan Event, 32),
+	p := &Phone{g: g, ID: id, Ext: user, Client: client, Headers: headers, guest: true, agent: "BitVoice web phone", Events: make(chan Event, 32),
 		user: user + "-guest-" + id, calls: map[string]*Call{}, stop: make(chan struct{})}
 	g.mu.Lock()
 	g.phones[p.user] = p
@@ -222,7 +229,7 @@ func (p *Phone) register(expires int) error {
 	m.Set("CSeq", strconv.FormatInt(time.Now().Unix()%1000000*2, 10)+" REGISTER")
 	m.Set("Contact", p.contact())
 	m.Set("Expires", strconv.Itoa(expires))
-	m.Set("User-Agent", "BitVoice web phone")
+	m.Set("User-Agent", p.agent)
 	if p.Client != "" {
 		m.Set("X-BitVoice-Client", p.Client)
 	}
@@ -293,7 +300,7 @@ func (p *Phone) Dial(number string, browser *media.Endpoint, pt, eventPT int) (*
 	inv.Set("Call-ID", c.ID)
 	inv.Set("CSeq", "1 INVITE")
 	inv.Set("Contact", p.contact())
-	inv.Set("User-Agent", "BitVoice web phone")
+	inv.Set("User-Agent", p.agent)
 	if p.Client != "" {
 		inv.Set("X-BitVoice-Client", p.Client) // trusted by BitVoice only from this computer
 	}

@@ -50,6 +50,8 @@ type Server struct {
 	// ARI serves /ari (Asterisk compatibility); AMIAddr reports where AMI listens. Both optional.
 	ARI     http.Handler
 	AMIAddr func() string
+	// DeskStatus says how Skinny phones and MGCP lines stand (set by main).
+	DeskStatus func() map[string]map[string]string
 	// DataDir, ReleaseKey and Restart make upgrades possible: where versions are kept, the key releases are
 	// signed with (empty in development builds), and how to start again.
 	DataDir    string
