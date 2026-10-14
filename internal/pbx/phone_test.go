@@ -38,10 +38,10 @@ type phone struct {
 	codecs []sdp.Codec
 	// video, when set, makes the phone offer and accept H.264 video at this socket, as payload type
 	// videoPT (96 by default).
-	video   *net.UDPConn
-	videoPT int
-	videoCodec string // H264 when empty
-	vmu     sync.Mutex // video may change during a call
+	video      *net.UDPConn
+	videoPT    int
+	videoCodec string     // H264 when empty
+	vmu        sync.Mutex // video may change during a call
 	// t38, when set, makes the phone take T.38 fax at this socket when offered it.
 	t38 *net.UDPConn
 }

@@ -59,7 +59,7 @@ type Call struct {
 
 	direction, from, fromName, to, toName, trunk string
 	callerExt                                    string
-	signed                                       string // the SHAKEN attestation this call was signed with
+	signed                                       string           // the SHAKEN attestation this call was signed with
 	vconv                                        *videoConverters // video converted between the two parties' codecs (under vmu)
 	vmu                                          sync.Mutex
 	deskExt                                      string // the hot desk the call was made from, when it was
