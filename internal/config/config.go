@@ -63,6 +63,8 @@ type System struct {
 	HoldMusic string       `json:"holdMusic"`
 	// Hotel is wake-up calls, guest rooms and the hotel system (PMS) link.
 	Hotel Hotel `json:"hotel"`
+	// Chat is the staff portal's chat and presence.
+	Chat Chat `json:"chat"`
 
 	// PublicAddress is advertised in SIP and SDP. Empty means work it out per peer.
 	PublicAddress string `json:"publicAddress"`
@@ -1377,6 +1379,7 @@ func (c *Config) Validate() error {
 	c.validateSounds(&p)
 	c.validateHotel(&p)
 	c.validateShaken(&p)
+	c.validateChat(&p)
 	if s.PublicAddress != "" {
 		if _, err := netip.ParseAddr(s.PublicAddress); err != nil && !hostRe.MatchString(s.PublicAddress) {
 			p.add("system.publicAddress", "must be an IP address or host name")

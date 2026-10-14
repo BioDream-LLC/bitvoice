@@ -272,6 +272,9 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, u store.User) {
 		case <-ping.C:
 			fmt.Fprint(w, ": ping\n\n")
 		case ev := <-sub.C:
+			if ev.Type == "chat.message" {
+				continue // people's messages go to them alone, never to the administrators' screens
+			}
 			if sub.Dropped() {
 				fmt.Fprint(w, "event: resync\ndata: {}\n\n")
 			}

@@ -32,6 +32,12 @@ export interface Hotel {
   wakeUpTries: number; wakeUpRetryMinutes: number; notify: string; barVacant: boolean; checkOutClear: boolean
   pms: { kind: '' | 'fias' | 'api'; host: string; port: number; chargeCalls: boolean; chargeUrl: string; markup: number }
 }
+export interface ChatMessage { id: string; from: string; text: string; at: string }
+export interface ChatList {
+  me: string; status?: string
+  people: { extension: string; name: string; department?: string; state: 'available' | 'on-call' | 'ringing' | 'away' | 'offline'; reason?: string; status?: string; unread: number }[]
+  rooms: { id: string; key: string; name: string; members: number; unread: number }[]
+}
 export interface WakeUp { id: string; extension: string; at: string; daily?: boolean; by: string; tries: number; last?: string; lastAt?: string }
 export interface Guest { room: string; name: string; account?: string; language?: string; since: string; status?: string }
 export interface HotelView {
@@ -177,6 +183,7 @@ export interface DnsCheck {
 export interface SystemSettings {
   name: string; purpose: 'office' | 'contact-centre' | '911'; country: string; timezone: string; language: string
   promptLanguages?: string[] | null; music?: MusicClass[] | null; holdMusic?: string; hotel?: Hotel
+  chat?: { off: boolean; keepDays: number; rooms: { id: string; name: string; members: string[] | null }[] | null }
   publicAddress: string; cluster?: ClusterSettings; sipPort: number; rtpMin: number; rtpMax: number; codecs: string[]; echoNumber: string; voicemailNumber: string; parkNumber: string; parkSeconds: number
   codes?: FeatureCodes; speedDials?: SpeedDial[] | null
   callLinks?: CallLink[] | null; brands?: Brand[] | null; texting: Texting; screening: Screening; vips?: VIP[] | null; agentLogin: string; agentPause: string; hotDesk: { login: string; logout: string; signOutAt: string }
@@ -331,7 +338,7 @@ const baseQuery = fetchBaseQuery({
 })
 
 const tags = ['Me', 'Extensions', 'RingGroups', 'Trunks', 'Inbound', 'Outbound', 'Settings', 'Users', 'Calls',
-  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail', 'Tenants', 'System', 'Prompts', 'Music', 'Directories', 'DialIns', 'Hotel', 'WakeUps'] as const
+  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail', 'Tenants', 'System', 'Prompts', 'Music', 'Directories', 'DialIns', 'Hotel', 'WakeUps', 'Chat'] as const
 
 export const api = createApi({
   reducerPath: 'api',
@@ -431,6 +438,15 @@ export const api = createApi({
       saveNameAudio: b.mutation<{ seconds: number }, { ext: string; wav: Blob }>({
         query: ({ ext, wav }) => ({ url: `extensions/${ext}/name-audio`, method: 'PUT', body: wav, headers: { 'Content-Type': 'audio/wav' } }), invalidatesTags: ['Voicemail'] }),
       deleteNameAudio: b.mutation<void, string>({ query: (ext) => ({ url: `extensions/${ext}/name-audio`, method: 'DELETE' }), invalidatesTags: ['Voicemail'] }),
+      chatList: b.query<ChatList, void>({ query: () => 'me/chat', providesTags: ['Chat'] }),
+      chatMessages: b.query<{ items: ChatMessage[] }, string>({ query: (key) => `me/chat/${key}` }),
+      sendChat: b.mutation<ChatMessage, { key: string; text: string }>({
+        query: ({ key, text }) => ({ url: `me/chat/${key}`, method: 'POST', body: { text } }),
+        async onQueryStarted({ key }, { dispatch, queryFulfilled }) {
+          const { data } = await queryFulfilled
+          dispatch(api.util.updateQueryData('chatMessages', key, (d) => { if (!d.items.some((m) => m.id === data.id)) d.items.push(data) }))
+        } }),
+      setChatStatus: b.mutation<void, string>({ query: (status) => ({ url: 'me/chat-status', method: 'PUT', body: { status } }), invalidatesTags: ['Chat'] }),
       conferenceLive: b.query<{ items: ConferenceRoom[] }, void>({ query: () => 'conferences/live', providesTags: ['ConferenceLive'] }),
       lockConference: b.mutation<void, { number: string; locked: boolean }>({
         query: ({ number, locked }) => ({ url: `conferences/live/${number}`, method: 'PUT', body: { locked } }), invalidatesTags: ['ConferenceLive'] }),
@@ -707,7 +723,7 @@ export const {
   useDirectoriesQuery, useCreateDirectoryMutation, useUpdateDirectoryMutation, useDeleteDirectoryMutation,
   useDialInsQuery, useCreateDialInMutation, useUpdateDialInMutation, useDeleteDialInMutation,
   useHotelQuery, useCheckInMutation, useCheckOutMutation, useSetRoomStatusMutation, useWakeUpsQuery, useSetWakeUpMutation, useCancelWakeUpMutation,
-  useSaveNameAudioMutation, useDeleteNameAudioMutation,
+  useSaveNameAudioMutation, useDeleteNameAudioMutation, useChatListQuery, useChatMessagesQuery, useSendChatMutation, useSetChatStatusMutation,
   usePromptsQuery, useSaveLangPromptMutation, useDeleteLangPromptMutation, useGeneratePromptsMutation, useMusicQuery, useAddMusicMutation, useDeleteMusicMutation,
 } = api
 

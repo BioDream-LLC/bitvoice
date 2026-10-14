@@ -199,3 +199,52 @@ func NameKeys(name, match string) []string {
 	}
 	return []string{Keypad(words[len(words)-1])}
 }
+
+// Chat is the staff portal's chat: messages between people, and team rooms.
+type Chat struct {
+	// Off switches chat off (it is on unless this is set).
+	Off bool `json:"off"`
+	// KeepDays deletes messages older than this; 0 keeps the newest thousand of each conversation.
+	KeepDays int        `json:"keepDays"`
+	Rooms    []ChatRoom `json:"rooms"`
+}
+
+// ChatRoom is a team conversation: its members, or everyone when empty.
+type ChatRoom struct {
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	Members []string `json:"members"`
+}
+
+// InRoom says whether an extension may read and write in a room.
+func (r ChatRoom) InRoom(ext string) bool {
+	return len(r.Members) == 0 || slices.Contains(r.Members, ext)
+}
+
+func (c *Config) validateChat(p *Problems) {
+	ch := &c.System.Chat
+	if ch.KeepDays < 0 || ch.KeepDays > 3650 {
+		p.add("system.chat.keepDays", "keep messages 0 (the newest thousand) to 3650 days")
+	}
+	ids := map[string]bool{}
+	for i := range ch.Rooms {
+		r := &ch.Rooms[i]
+		f := fmt.Sprintf("system.chat.rooms[%d]", i)
+		if r.ID == "" {
+			r.ID = NewID()
+		}
+		if !idRe.MatchString(r.ID) || ids[r.ID] {
+			p.add(f+".id", "each room needs its own ID")
+		}
+		ids[r.ID] = true
+		r.Name = strings.TrimSpace(r.Name)
+		if r.Name == "" {
+			p.add(f+".name", "give the room a name")
+		}
+		for _, m := range r.Members {
+			if c.FindExtension(m) == nil {
+				p.add(f+".members", "no extension %s", m)
+			}
+		}
+	}
+}

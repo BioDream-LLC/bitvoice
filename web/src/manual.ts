@@ -900,7 +900,7 @@ On [Legal holds](#/holds), press **Add**:
 **Release** makes what the hold kept subject to the retention settings again: things older than the retention are deleted at the next clean-up. Released holds stay listed, with when and by whom, and adding and releasing holds is in the audit log.`,
   },
   {
-    id: 'portal', title: 'The staff portal', keys: 'staff portal self service my phone forwarding do not disturb follow me voicemail greeting pin ucp user control panel',
+    id: 'portal', title: 'The staff portal', keys: 'chat presence message colleague team room status staff portal self service my phone forwarding do not disturb follow me voicemail greeting pin ucp user control panel',
     body: `The staff portal lets everyone look after their own calls without an administrator: do not disturb, forwarding, follow-me, speed dials, voicemail and its greeting, their PIN, and a list of their own calls. It is at \`#/me\` on this server's address, and linked from the sign-in page.
 
 ::figure portal
@@ -920,7 +920,12 @@ Repeated wrong tries from one address lock it out for ten minutes. A portal sess
 
 Forwarding and do not disturb set here are the same as those set from the phone with feature codes ([Feature codes](#codes)): whichever was set last is in force. Follow-me numbers and speed dials are part of the extension's configuration, so changing them makes a revision on [Changes](#/changes), recorded as the person's own.
 
-> Forwarding to an outside number works only for extensions allowed to call outside numbers. The portal says so rather than saving a forward that could never ring.`,
+> Forwarding to an outside number works only for extensions allowed to call outside numbers. The portal says so rather than saving a forward that could never ring.
+
+## Chat and presence
+The portal's **Chat** tab lists colleagues with how they are right now: **available**, **on a call**, **ringing**, **away** (do not disturb, a meeting or time off from their calendar, with the reason) or **offline** (no phone connected), and the status they typed ("At lunch, back at 2"). Choose someone to message them; messages arrive at once, and a number beside a name counts the unread ones. **Team rooms** (Settings, Staff chat) are conversations for a group, or for everyone when a room lists no members.
+
+Messages are only ever seen by the people in the conversation: administrators manage the rooms, never read them. Settings, **Staff chat** switches chat off, and sets how long messages are kept (0 keeps the newest thousand of each conversation).`,
   },
   {
     id: 'conferences', title: 'Conference rooms', route: '/conferences', keys: 'conference meeting bridge confbridge meetme dial-in pin leader moderator mute lock room record',

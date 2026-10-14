@@ -175,3 +175,51 @@ test('HD conference room', async ({ page }) => {
   await page.getByRole('button', { name: 'Save' }).click()
   await expect(page.getByRole('button', { name: /HD huddle/ }).getByText('HD', { exact: true })).toHaveCount(0)
 })
+
+// Staff chat: two people signed in to the portal in two browsers; a message arrives live.
+test('staff chat and presence in the portal', async ({ page, browser }) => {
+  await signIn(page)
+  await page.evaluate(async () => {
+    const list = (await (await fetch('./api/extensions')).json()).items as { id: string; number: string; voicemail: object }[]
+    for (const x of list.filter((x) => x.number === '100' || x.number === '202')) {
+      await fetch(`./api/extensions/${x.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-BitVoice': '1' },
+        body: JSON.stringify({ ...x, voicemail: { ...x.voicemail, enabled: true, pin: '4826' } }) })
+    }
+  })
+  await page.goto('/#/settings')
+  await page.getByRole('button', { name: 'Add a room' }).click()
+  await page.getByLabel('Room 1 name').fill('Front desk')
+  await page.getByRole('button', { name: 'Save' }).first().click()
+  await expect(page.getByText('Settings saved')).toBeVisible()
+
+  const portal = async (ext: string) => {
+    const ctx = await browser.newContext({ ignoreHTTPSErrors: true })
+    const p = await ctx.newPage()
+    await p.goto('/#/me')
+    await p.getByLabel('Your extension').fill(ext)
+    await p.getByLabel('Voicemail PIN').fill('4826')
+    await p.getByRole('button', { name: 'Sign in' }).click()
+    await p.getByRole('button', { name: 'Chat' }).click()
+    return { ctx, p }
+  }
+  const a = await portal('100')
+  const b = await portal('202')
+  await expect(a.p.getByRole('button', { name: /Front desk/ })).toBeVisible()
+  await b.p.getByLabel('Your status').fill('At lunch')
+  await b.p.getByLabel('Your status').blur()
+  await a.p.getByRole('button', { name: /Agent 202/ }).click()
+  await expect(a.p.getByRole('button', { name: /Agent 202/ }).getByText('At lunch')).toBeVisible()
+  await expect(a.p.getByRole('button', { name: /Agent 202/ }).getByRole('img', { name: 'Offline' })).toBeVisible()
+  await a.p.getByLabel('Message').fill('Can you cover the front desk?')
+  await a.p.getByLabel('Message').press('Enter')
+  await expect(a.p.getByText('Can you cover the front desk?')).toBeVisible()
+  // 202 sees it counted as unread, live, then opens it.
+  await expect(b.p.getByRole('button', { name: /Reception 100/ }).getByText('1', { exact: true })).toBeVisible()
+  await b.p.getByRole('button', { name: /Reception 100/ }).click()
+  await expect(b.p.getByText('Can you cover the front desk?')).toBeVisible()
+  await b.p.getByLabel('Message').fill('Yes, on my way')
+  await b.p.getByRole('button', { name: 'Send' }).click()
+  await expect(a.p.getByText('Yes, on my way')).toBeVisible()
+  await a.ctx.close()
+  await b.ctx.close()
+})

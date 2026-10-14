@@ -1,5 +1,5 @@
 import { clsx } from 'clsx'
-import { BellOff, History, KeyRound, LogIn, LogOut, PhoneForwarded, Play, Plus, Trash2, Voicemail as VoicemailIcon, X } from 'lucide-react'
+import { BellOff, History, KeyRound, MessageCircle, LogIn, LogOut, PhoneForwarded, Play, Plus, Trash2, Voicemail as VoicemailIcon, X } from 'lucide-react'
 import { useState } from 'react'
 import { Toaster } from 'sonner'
 import {
@@ -9,6 +9,7 @@ import {
 } from './api'
 import { attempt } from './Editor'
 import { AudioRecording } from './Greeting'
+import { PortalChat } from './Chat'
 import { Logo, useTheme } from './Shell'
 import { ErrorBox, Field, Toggle, problemFor, relTime } from './ui'
 
@@ -47,12 +48,13 @@ function PortalLogin() {
 function PortalHome() {
   const { data: me } = useMyselfQuery()
   const [logout] = useLogoutMutation()
-  const [tab, setTab] = useState<'calls' | 'voicemail' | 'history' | 'pin'>('calls')
+  const [tab, setTab] = useState<'calls' | 'voicemail' | 'history' | 'chat' | 'pin'>('calls')
   if (!me) return null
   const tabs = [
     { id: 'calls', label: 'Where calls go', icon: PhoneForwarded, color: 'text-teal-300' },
     { id: 'voicemail', label: `Voicemail${me.messages.new ? ` (${me.messages.new} new)` : ''}`, icon: VoicemailIcon, color: 'text-violet-300' },
     { id: 'history', label: 'Your calls', icon: History, color: 'text-fuchsia-300' },
+    { id: 'chat', label: 'Chat', icon: MessageCircle, color: 'text-sky-300' },
     { id: 'pin', label: 'PIN', icon: KeyRound, color: 'text-amber-300' },
   ] as const
   return (
@@ -78,6 +80,7 @@ function PortalHome() {
       <main className="mx-auto max-w-4xl space-y-5 p-6">
         {tab === 'calls' && <CallsGo me={me} />}
         {tab === 'voicemail' && <MyVoicemail me={me} />}
+        {tab === 'chat' && <PortalChat />}
         {tab === 'history' && <MyCalls />}
         {tab === 'pin' && <MyPin />}
       </main>

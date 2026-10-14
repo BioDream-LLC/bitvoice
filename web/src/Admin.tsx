@@ -21,6 +21,7 @@ import { ConsentSettings } from './Consent'
 import { ScreeningSettings } from './Screening'
 import { GitSettings, Tokens, VaultSettings } from './Automation'
 import { Ask } from './Ask'
+import { ChatSettings } from './Chat'
 import { CodecList } from './Codecs'
 import { attempt, DeleteButton, Drawer, Table, useIsAdmin } from './Editor'
 import { createColumnHelper } from '@tanstack/react-table'
@@ -331,6 +332,7 @@ export function Settings() {
           <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={sys.sendLocation ?? false} onChange={(v) => setSys({ sendLocation: v })} label="Send the caller's address" />
             <span>Send the caller's address with the call <span className="text-xs text-slate-500">(PIDF-LO, from <Link to="/sites" className="text-sky-300 underline">Sites</Link>; for providers that take it)</span></span></label>
         </section>
+        <ChatSettings chat={sys.chat} onChange={(v) => setSys({ chat: v })} p={p} />
         <EmailSettings email={sys.email} onChange={(v) => setS((s0) => ({ ...s0, system: { ...s0.system, email: { ...s0.system.email, ...v } } }))} error={p} admin={admin} />
         <EmergencySettings value={sys.emergencyMode} onChange={(v) => setS((s0) => ({ ...s0, system: { ...s0.system, emergencyMode: { ...s0.system.emergencyMode, ...v } } }))} error={p} />
         <VaultSettings value={sys.vault} onChange={(v) => setS((s0) => ({ ...s0, system: { ...s0.system, vault: { ...s0.system.vault, ...v } } }))} />
