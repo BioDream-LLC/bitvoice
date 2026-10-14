@@ -17,10 +17,12 @@ type Leg struct {
 	call *Call
 
 	inbound bool // created from an INVITE BitVoice received
-	Number  string
-	Name    string
-	Ext     string // extension number when the party is an extension
-	TrunkID string
+	// videoCodec, when set, is the only video codec this leg's answers take (a video conference room).
+	videoCodec string
+	Number     string
+	Name       string
+	Ext        string // extension number when the party is an extension
+	TrunkID    string
 
 	callID       string
 	localTag     string
@@ -164,6 +166,15 @@ func (l *Leg) receive(tx *sip.ServerTx, in *sip.Incoming) {
 		l.call.refer(l, tx, m)
 	case sip.INFO:
 		ok()
+		if strings.Contains(string(m.Body), "picture_fast_update") {
+			l.call.mu.Lock()
+			kf := l.call.keyframe
+			l.call.mu.Unlock()
+			if kf != nil {
+				go kf() // a video room member asks for a full picture
+				return
+			}
+		}
 		// DTMF by SIP INFO goes to the other party unchanged.
 		if other := l.call.other(l); other != nil && len(m.Body) > 0 {
 			fwd := other.newRequest(sip.INFO)
@@ -297,6 +308,20 @@ func (l *Leg) answerFor(offer *sdp.Session) *sdp.Session {
 			continue
 		}
 		if m.Type == "video" && m.Port != 0 && !carried && l.videoEP() != nil {
+			if l.videoCodec != "" {
+				var keep []string
+				for _, c := range m.Codecs() {
+					if strings.EqualFold(c.Name, l.videoCodec) {
+						keep = append(keep, strconv.Itoa(c.PT))
+						break
+					}
+				}
+				if len(keep) == 0 {
+					m.Port = 0
+					continue
+				}
+				filterFormats(m, keep)
+			}
 			carried = l.describeVideo(m, offer.Media[i], a.Secure() || offer.Audio().Secure())
 			continue
 		}

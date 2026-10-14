@@ -1,5 +1,5 @@
 import { clsx } from 'clsx'
-import { Crown, Hand, Lock, LockOpen, Mic, MicOff, PhoneOff, Plus, Radio, Users2 } from 'lucide-react'
+import { Crown, Hand, Lock, LockOpen, Mic, MicOff, PhoneOff, Plus, Radio, Users2, Video } from 'lucide-react'
 import { useState } from 'react'
 import {
   useConferenceLiveQuery, useConferencesQuery, useCreateConferenceMutation, useDeleteConferenceMutation, useLockConferenceMutation,
@@ -48,6 +48,7 @@ export function Conferences() {
                   {c.muteMembers && <span className="text-sky-300">Members muted</span>}
                   {c.record && <span className="text-rose-300">Recorded</span>}
                   {c.hd && <span className="text-teal-300">HD</span>}
+                  {c.video && <span className="flex items-center gap-1 text-fuchsia-300"><Video size={12} aria-hidden /> video</span>}
                   <span className="text-slate-500">Up to {c.maxMembers}</span>
                 </div>
               </button>
@@ -78,6 +79,7 @@ function LiveRoom({ r }: { r: ConferenceRoom }) {
         <span className="text-xs text-slate-500">since {relTime(r.started)}</span>
         {r.records && <span className="rounded-full bg-rose-950 px-2 py-0.5 text-xs text-rose-300">Recording</span>}
         {r.hd && <span className="rounded-full bg-teal-950 px-2 py-0.5 text-xs text-teal-300">HD</span>}
+        {r.video && <span className="flex items-center gap-1 rounded-full bg-fuchsia-950 px-2 py-0.5 text-xs text-fuchsia-300"><Video size={12} aria-hidden /> {r.video === 'leader' ? 'showing the leader' : 'following the speaker'}</span>}
         {r.locked && <span className="rounded-full bg-amber-950 px-2 py-0.5 text-xs text-amber-300">Locked</span>}
         {admin && (
           <button type="button" className="btn btn-ghost ml-auto text-sm" onClick={() => attempt(() => lock({ number: r.number, locked: !r.locked }).unwrap(), r.locked ? 'Room unlocked' : 'Room locked')}>
@@ -93,6 +95,7 @@ function LiveRoom({ r }: { r: ConferenceRoom }) {
             <span className="text-slate-200">{m.name}</span>
             {m.leader && <span className="flex items-center gap-1 text-xs text-violet-300"><Crown size={12} aria-hidden /> leader</span>}
             {m.hd && <span className="text-xs text-teal-300" title="On a wideband codec: hears and is heard in HD">HD</span>}
+            {m.video && <span className={clsx('flex items-center gap-1 text-xs', r.showing === m.id ? 'text-fuchsia-300' : 'text-slate-500')} title={r.showing === m.id ? 'Everyone sees this picture' : 'Sends and receives video'}><Video size={12} aria-hidden />{r.showing === m.id ? ' on screen' : ''}</span>}
             {m.waiting && <span className="text-xs text-amber-300">waiting for the leader</span>}
             {m.hand && <span className="flex items-center gap-1 text-xs text-amber-300"><Hand size={12} aria-hidden /> asks to speak</span>}
             <span className="ml-auto text-xs text-slate-500">{relTime(m.joined)}</span>
@@ -153,6 +156,23 @@ function ConferenceEditor({ c: initial, onClose }: { c: Conference; onClose: () 
           <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={c.record} onChange={(v) => set('record', v)} label="Record the room" /> Record the room <span className="text-xs text-slate-500">(one recording in Call history)</span></label>
           <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={!!c.hd} onChange={(v) => set('hd', v)} label="HD audio" /> HD audio <span className="text-xs text-slate-500">(mixed at 16 kHz: wideband phones and the browser phone hear each other in HD; the others hear the room as usual)</span></label>
           <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={!c.quiet} onChange={(v) => set('quiet', !v)} label="Tones when people join and leave" /> Tones when people join and leave</label>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-[1fr_9rem]">
+          <Field label="Video" htmlFor="cvid" error={p('video')} hint="Video phones see one picture, switched as people talk. Nothing is decoded, so every member's video uses one codec.">
+            <select id="cvid" className="input" value={c.video ?? ''} onChange={(e) => set('video', e.target.value as Conference['video'])}>
+              <option value="">Sound only</option>
+              <option value="talker">Follow the speaker (the speaker sees the one before)</option>
+              <option value="leader">Show the leader (the leader sees whoever speaks)</option>
+            </select>
+          </Field>
+          {c.video && (
+            <Field label="Video codec" htmlFor="cvc" error={p('videoCodec')}>
+              <select id="cvc" className="input" value={c.videoCodec || 'H264'} onChange={(e) => set('videoCodec', e.target.value)}>
+                <option value="H264">H.264</option>
+                <option value="VP8">VP8</option>
+              </select>
+            </Field>
+          )}
         </div>
         <Field label="Most people at once" htmlFor="cmax" error={p('maxMembers')}>
           <input id="cmax" type="number" min={2} max={200} className="input w-32" value={c.maxMembers} onChange={(e) => set('maxMembers', Number(e.target.value))} />

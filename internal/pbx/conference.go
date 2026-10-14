@@ -33,6 +33,8 @@ type room struct {
 	seq     int
 	rec     []int16 // the room's recording so far (8 kHz), when it records
 	recOn   bool
+	video   *videoSwitch // a video room's picture switching
+	vcodec  string
 }
 
 type member struct {
@@ -57,6 +59,9 @@ type ConferenceRoom struct {
 	Waiting int                `json:"waiting"`
 	Records bool               `json:"records"`
 	HD      bool               `json:"hd,omitempty"` // mixed at 16 kHz
+	// Video is the room's video mode (talker or leader), Showing the member everyone sees.
+	Video   string `json:"video,omitempty"`
+	Showing string `json:"showing,omitempty"`
 }
 
 // ConferenceMember is one person in a room.
@@ -70,7 +75,8 @@ type ConferenceMember struct {
 	Speaking bool      `json:"speaking"`
 	Waiting  bool      `json:"waiting"`
 	Joined   time.Time `json:"joined"`
-	HD       bool      `json:"hd,omitempty"` // in an HD room on a wideband codec: hears and is heard in HD
+	HD       bool      `json:"hd,omitempty"`    // in an HD room on a wideband codec: hears and is heard in HD
+	Video    bool      `json:"video,omitempty"` // sends and receives pictures in a video room
 }
 
 // Errors from controlling a room.
@@ -120,6 +126,13 @@ func (r *room) view() ConferenceRoom {
 	for i := range v.Members {
 		if !v.Members[i].Waiting {
 			v.Members[i].Speaking = r.bridge.Speaking(v.Members[i].ID)
+		}
+	}
+	if r.video != nil {
+		sp, sees := r.video.watching()
+		v.Video, v.Showing = r.video.mode, sp
+		for i := range v.Members {
+			_, v.Members[i].Video = sees[v.Members[i].ID]
 		}
 	}
 	slices.SortFunc(v.Members, func(a, b ConferenceMember) int { return a.Joined.Compare(b.Joined) })
@@ -237,6 +250,9 @@ func (c *Call) joinConference(number string) {
 		r = &room{number: number, name: rc.Name, id: "conf-" + config.NewID(), bridge: newRoomBridge(rc.HD), started: time.Now(),
 			opener: num, members: map[string]*member{}, waiting: map[string]*member{}}
 		r.bridge.SetHearing(r.hears)
+		if rc.Video != "" {
+			r.video, r.vcodec = newVideoSwitch(r, rc.Video), rc.VideoCodec
+		}
 		if rc.Record && e.Recordings != nil && shouldRecordRoom(cfg) {
 			r.recOn = true
 			r.bridge.OnMix(func(f []int16) {
@@ -326,6 +342,9 @@ func (r *room) enter(m *member, tone bool) {
 	}
 	connect(m.call.caller, nil)
 	r.bridge.Add(m.id, m.call.caller.ep)
+	if r.video != nil {
+		r.video.add(m, r.vcodec)
+	}
 }
 
 // admitWaiting lets everyone waiting for a leader in.
@@ -393,6 +412,9 @@ func (e *Engine) leaveConference(r *room, m *member) {
 	if m.player != nil {
 		m.player.Stop()
 	}
+	if r.video != nil {
+		r.video.remove(m.id)
+	}
 	if in {
 		r.bridge.Remove(m.id)
 		if rc := e.Config().FindConference(r.number); rc == nil || !rc.Quiet {
@@ -425,6 +447,9 @@ func (e *Engine) closeRoomIfEmpty(r *room) {
 	e.conf.mu.Unlock()
 	r.bridge.OnMix(nil)
 	r.bridge.Close()
+	if r.video != nil {
+		r.video.close()
+	}
 	r.mu.Lock()
 	pcm := r.rec
 	r.rec = nil

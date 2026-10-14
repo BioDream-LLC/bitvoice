@@ -63,6 +63,7 @@ type Call struct {
 	signed                                       string           // the SHAKEN attestation this call was signed with
 	vconv                                        *videoConverters // video converted between the two parties' codecs (under vmu)
 	vmu                                          sync.Mutex
+	keyframe                                     func() // a video room's request for a full picture for this caller
 	deskExt                                      string // the hot desk the call was made from, when it was
 	notice                                       string // a recording notice still to give: announce or beep
 	noticeLeg                                    *Leg
@@ -1003,6 +1004,10 @@ func (c *Call) answerLocal(p plan) {
 			go c.divertCode(p.box)
 		}
 	case "conference":
+		if rc := c.e.Config().FindConference(p.box); rc != nil && rc.Video != "" && c.offer != nil && videoMedia(c.offer) != nil && c.e.videoAllowed() {
+			c.caller.videoCodec = rc.VideoCodec
+			c.caller.videoEndpoint()
+		}
 		if c.answerHere(p.toName) {
 			go c.joinConference(p.box)
 		}

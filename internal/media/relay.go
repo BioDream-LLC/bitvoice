@@ -136,6 +136,8 @@ type Endpoint struct {
 	other func(pkt []byte, from netip.AddrPort)
 	// tap, when set, sees every audio packet this party sends (a mixing bridge).
 	tap func(pkt []byte)
+	// onRTCP takes this party's RTCP instead of relaying it (a video conference's keyframe requests).
+	onRTCP func(pkt []byte)
 	// cleaner, when set, cleans the audio this party sends (G.711 only) before it goes on.
 	cleaner *Cleaner
 	// dtmf hears each key this party presses (RFC 4733 events), once per press; lastEv dedupes.
@@ -750,8 +752,12 @@ func (e *Endpoint) readRTCP() {
 		}
 		e.mu.Lock()
 		e.remoteRC = from
-		peer := e.peer
+		peer, h := e.peer, e.onRTCP
 		e.mu.Unlock()
+		if h != nil {
+			h(append([]byte(nil), pkt...))
+			continue
+		}
 		if peer != nil {
 			peer.mu.Lock()
 			to, out := peer.remoteRC, peer.srtpOut
@@ -818,4 +824,33 @@ func ListenAt(host string, port int) (*Endpoint, error) {
 	}
 	_ = rtp.SetReadBuffer(1 << 20)
 	return newEndpoint(rtp, rtcp), nil
+}
+
+// OnRTCP sets a function that takes the RTCP this party sends (it is then not relayed); nil relays again.
+func (e *Endpoint) OnRTCP(f func(pkt []byte)) {
+	e.mu.Lock()
+	e.onRTCP = f
+	e.mu.Unlock()
+}
+
+// SendRTCP sends an RTCP packet to this party: to where its RTCP comes from, else the port after its
+// RTP, encrypted when the leg is.
+func (e *Endpoint) SendRTCP(pkt []byte) {
+	e.mu.Lock()
+	to, out, remote := e.remoteRC, e.srtpOut, e.remote
+	e.mu.Unlock()
+	if !to.IsValid() && remote.IsValid() {
+		to = netip.AddrPortFrom(remote.Addr(), remote.Port()+1)
+	}
+	if !to.IsValid() {
+		return
+	}
+	if out != nil {
+		sp, err := out.ProtectRTCP(pkt)
+		if err != nil {
+			return
+		}
+		pkt = sp
+	}
+	_, _ = e.rtcp.WriteToUDPAddrPort(pkt, to)
 }

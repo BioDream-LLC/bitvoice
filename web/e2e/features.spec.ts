@@ -557,3 +557,23 @@ test('MP3 hold music and internet radio', async ({ page }) => {
   await expect(page.getByText('Stream set')).toBeVisible()
   await expect(page.getByText('connects when someone is put on hold')).toBeVisible()
 })
+
+// A video room: following the speaker, or showing the leader (which needs a leader PIN).
+test('video conference room', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/#/conferences')
+  await page.getByRole('button', { name: 'Add conference room' }).click()
+  await page.getByLabel('Name', { exact: true }).fill('Video huddle')
+  await page.getByLabel('Video', { exact: true }).selectOption('leader')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText(/showing the leader needs a leader PIN/).first()).toBeVisible()
+  await page.getByLabel('Video', { exact: true }).selectOption('talker')
+  await expect(page.getByLabel('Video codec')).toHaveValue('H264')
+  await page.getByLabel('Video codec').selectOption('VP8')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByRole('button', { name: /Video huddle/ }).getByText('video', { exact: true })).toBeVisible()
+  const rooms = await page.evaluate(async () => (await (await fetch('./api/conferences')).json()).items)
+  const r = rooms.find((x: { name: string }) => x.name === 'Video huddle')
+  expect(r.video).toBe('talker')
+  expect(r.videoCodec).toBe('VP8')
+})

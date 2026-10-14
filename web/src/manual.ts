@@ -1041,7 +1041,7 @@ The portal's **Chat** tab lists colleagues with how they are right now: **availa
 Messages are only ever seen by the people in the conversation: administrators manage the rooms, never read them. Settings, **Staff chat** switches chat off, and sets how long messages are kept (0 keeps the newest thousand of each conversation).`,
   },
   {
-    id: 'conferences', title: 'Conference rooms', route: '/conferences', keys: 'conference meeting bridge confbridge meetme dial-in pin leader moderator mute lock room record',
+    id: 'conferences', title: 'Conference rooms', route: '/conferences', keys: 'conference meeting bridge confbridge meetme dial-in pin leader moderator mute lock room record video conference camera follow the talker speaker',
     body: `A conference room is a number people dial to all talk together. Staff dial it from their desks; outside callers reach it through an incoming route or a menu option that points at the room.
 
 ::figure conference
@@ -1074,7 +1074,16 @@ Everyone in a room hears everyone else who is not muted, mixed by BitVoice; each
 > Conference sound is mixed at telephone quality (8 kHz), whatever codecs the phones use: it is what every phone can hear, and it keeps a room of fifty cheap to run.
 
 ## HD audio
-Switch on **HD audio** in a room (new rooms have it on) and it is mixed at 16 kHz instead of 8: people on wideband phones (G.722, Opus, the browser phone) hear each other in HD, with the crispness of a modern call, while people on ordinary phones (G.711, mobiles through a provider) hear the same room as usual. The live view marks the room and each member who is in HD. HD needs G.722 among the codecs the phones use (it is first in the system's list, Settings, Codecs). Recordings of the room stay in telephone quality.`,
+Switch on **HD audio** in a room (new rooms have it on) and it is mixed at 16 kHz instead of 8: people on wideband phones (G.722, Opus, the browser phone) hear each other in HD, with the crispness of a modern call, while people on ordinary phones (G.711, mobiles through a provider) hear the same room as usual. The live view marks the room and each member who is in HD. HD needs G.722 among the codecs the phones use (it is first in the system's list, Settings, Codecs). Recordings of the room stay in telephone quality.
+
+## Video rooms
+Set **Video** on a room and video phones (and softphones) that join it send their camera and see one picture, switched as people talk, as in Asterisk's ConfBridge:
+- **Follow the speaker**: everyone sees whoever has been talking for a second, once the one on screen has been quiet for a second; the person on screen sees the one before.
+- **Show the leader**: everyone sees the leader (who joins with the leader PIN); the leader sees whoever spoke last.
+
+BitVoice switches the pictures without decoding them, so it costs next to nothing, and it asks each new picture's phone for a full frame (RTCP PLI and FIR, and the SIP INFO picture-fast-update most desk phones answer) so the switch shows at once. Every member's video uses the room's **video codec** (H.264 unless you choose VP8); a phone without it joins with sound only. Each viewer gets one steady stream (one source, its own payload type), whoever is on screen. The live view marks who has video and who is **on screen**.
+
+Not offered: a grid of everyone at once (that needs decoding and re-encoding every picture).`,
   },
   {
     id: 'codes', title: 'Feature codes, forwarding and speed dials', route: '/codes', keys: 'feature codes star codes forward call forwarding do not disturb dnd follow me find me pickup intercom speed dial',

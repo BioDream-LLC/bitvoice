@@ -772,6 +772,11 @@ type Conference struct {
 	// HD mixes the room at 16 kHz: people on wideband phones (G.722, Opus, the browser phone) hear each
 	// other in HD; the others hear the room as before.
 	HD bool `json:"hd"`
+	// Video makes it a video room: "talker" shows everyone whoever is speaking (and the speaker the one
+	// before), "leader" shows everyone the leader; "" is sound only. Phones send and receive one picture,
+	// switched without being decoded, so every member's video uses VideoCodec (H264 unless set: H264 or VP8).
+	Video      string `json:"video"`
+	VideoCodec string `json:"videoCodec"`
 }
 
 // cleanDial drops the spaces, dashes, dots and brackets people write numbers with.
@@ -1669,6 +1674,26 @@ func (c *Config) Validate() error {
 		}
 		if r.MaxMembers < 2 || r.MaxMembers > 200 {
 			p.add(f+".maxMembers", "a room holds 2 to 200 people")
+		}
+		switch r.Video {
+		case "":
+			r.VideoCodec = ""
+		case "talker", "leader":
+			r.VideoCodec = strings.ToUpper(strings.TrimSpace(r.VideoCodec))
+			if r.VideoCodec == "" {
+				r.VideoCodec = "H264"
+			}
+			if r.VideoCodec != "H264" && r.VideoCodec != "VP8" {
+				p.add(f+".videoCodec", "choose H264 or VP8")
+			}
+			if r.Video == "leader" && r.LeaderPIN == "" {
+				p.add(f+".video", "showing the leader needs a leader PIN, so a leader can join")
+			}
+			if c.System.VideoOff {
+				p.add(f+".video", "video is switched off for the whole system (Settings)")
+			}
+		default:
+			p.add(f+".video", "choose sound only, follow the speaker or show the leader")
 		}
 	}
 	checkSpeedDials := func(field string, list []SpeedDial) {
