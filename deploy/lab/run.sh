@@ -19,10 +19,10 @@ say() { printf '\n== %s\n' "$*"; }
 cookie=$(mktemp)
 trap 'rm -f "$cookie"' EXIT
 api() { # api PORT METHOD PATH [JSON]
-	curl -s -b "$cookie" -c "$cookie" -H 'X-BitVoice: 1' -H 'Content-Type: application/json' -X "$2" ${4:+-d "$4"} "http://127.0.0.1:$1$3"
+	curl -sk -b "$cookie" -c "$cookie" -H 'X-BitVoice: 1' -H 'Content-Type: application/json' -X "$2" ${4:+-d "$4"} "https://127.0.0.1:$1$3"
 }
 login() { api "$1" POST /api/auth/login "{\"username\":\"admin\",\"password\":\"$PW\"}" >/dev/null; }
-alive() { for _ in $(seq 60); do curl -sf "http://127.0.0.1:$1/api/health/live" >/dev/null && return 0; sleep 1; done; echo "server on $1 did not start"; exit 1; }
+alive() { for _ in $(seq 60); do curl -skf "https://127.0.0.1:$1/api/health/live" >/dev/null && return 0; sleep 1; done; echo "server on $1 did not start"; exit 1; }
 secret() { login 18501; api 18501 GET /api/extensions | python3 -c "import json,sys; print([x['secret'] for x in json.load(sys.stdin)['items'] if x['number']=='$1'][0])"; }
 phone() { # phone NAME IP EXT SERVER MODE [NUMBER SECONDS]
 	docker rm -f "$1" >/dev/null 2>&1 || true
@@ -44,9 +44,9 @@ up)
 	if [ "$(api 18501 GET /api/setup/status | python3 -c 'import json,sys; print(json.load(sys.stdin)["complete"])')" = False ]; then
 		say "Setting up (organisation Lab, extensions 100-102)"
 		code=$(docker compose logs bv1 | grep -o 'another computer: [0-9]*' | tail -1 | grep -o '[0-9]*$')
-		curl -s -o /dev/null -H 'X-BitVoice: 1' -H "X-Setup-Code: $code" -H 'Content-Type: application/json' \
+		curl -sk -o /dev/null -H 'X-BitVoice: 1' -H "X-Setup-Code: $code" -H 'Content-Type: application/json' \
 			-d "{\"organisation\":\"Lab\",\"purpose\":\"office\",\"country\":\"us\",\"admin\":{\"username\":\"admin\",\"name\":\"Admin\",\"password\":\"$PW\"},\"extensions\":[{\"number\":\"100\",\"name\":\"Front desk\"},{\"number\":\"101\",\"name\":\"Dr Lee\"},{\"number\":\"102\",\"name\":\"Sam\"}],\"inbound\":\"all\"}" \
-			http://127.0.0.1:18501/api/setup/complete
+			https://127.0.0.1:18501/api/setup/complete
 	fi
 	login 18501
 	say "Shared address $SHARED"

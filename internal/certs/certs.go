@@ -1,8 +1,8 @@
 // Package certs gives BitVoice a TLS certificate on first start so the web interface is encrypted from
 // the first minute, with no certificate to buy or install.
 //
-// The certificate is self-signed, so a browser on another computer warns once. The local browser opened at
-// startup uses plain HTTP on the loopback address, where there is nothing to intercept.
+// The certificate is self-signed, so a browser warns once until a certificate from an authority is
+// installed (Settings > Certificate). The web interface is HTTPS only, on this computer too.
 package certs
 
 import (

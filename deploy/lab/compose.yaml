@@ -1,6 +1,6 @@
 # BitVoice cluster lab: two servers on their own addresses, sharing one PostgreSQL, on a network of
 # their own (172.30.0.0/24). Phones and the provider are started by run.sh as needed.
-# Start with ./run.sh up; the servers' web pages are http://127.0.0.1:18501 and :18502.
+# Start with ./run.sh up; the servers' web pages are https://127.0.0.1:18501 and :18502.
 name: bvlab
 networks:
   lab:
@@ -20,14 +20,14 @@ services:
     image: bitvoice-lab
     # The shared address is added to the interface and announced by ARP: these two capabilities.
     cap_add: [NET_ADMIN, NET_RAW]
-    command: [-data, /data, -no-browser, -http, "0.0.0.0:8280", -https, "0.0.0.0:8443", -sip, "0.0.0.0:5060",
+    command: [-data, /data, -no-browser, -https, "0.0.0.0:8443", -sip, "0.0.0.0:5060",
               -database, "postgres://bv:labpass@172.30.0.5:5432/bitvoice?sslmode=disable"]
     volumes: [bv1:/data]
-    ports: ["127.0.0.1:18501:8280"]
+    ports: ["127.0.0.1:18501:8443"]
     networks: { lab: { ipv4_address: 172.30.0.11 } }
     depends_on: { db: { condition: service_healthy } }
   bv2:
     <<: *bv
     volumes: [bv2:/data]
-    ports: ["127.0.0.1:18502:8280"]
+    ports: ["127.0.0.1:18502:8443"]
     networks: { lab: { ipv4_address: 172.30.0.12 } }

@@ -13,7 +13,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 1200,
   },
   server: {
-    proxy: { '/api': { target: 'http://127.0.0.1:8280', changeOrigin: false } },
+    proxy: { '/api': { target: 'https://127.0.0.1:8443', changeOrigin: false, secure: false } },
   },
   test: { environment: 'happy-dom', exclude: ['e2e/**', 'node_modules/**'] },
 })

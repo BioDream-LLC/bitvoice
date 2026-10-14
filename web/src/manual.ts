@@ -33,7 +33,7 @@ export const manual: Article[] = [
 - **A trunk** (an account with a phone company) to call outside numbers and be called. You can start without one: extensions call each other and the echo test.
 
 ## The first start
-Start BitVoice and open the address it prints (on a desktop it opens the browser itself). The **setup wizard** asks four things: the organisation's name and country, the first administrator's password, the first extensions, and your phone company if you have one. The country sets the emergency numbers, the tones callers hear and the way phone numbers are written.
+Start BitVoice and open the address it prints (on a desktop it opens the browser itself). The web interface is **HTTPS only**, on this computer too. Until you install a certificate of your own (Settings, Certificate), BitVoice uses one it made itself, so the browser warns once: choose to continue to the site. The **setup wizard** asks four things: the organisation's name and country, the first administrator's password, the first extensions, and your phone company if you have one. The country sets the emergency numbers, the tones callers hear and the way phone numbers are written.
 
 > Choose the country carefully. It decides which numbers are emergency numbers (911 and 933 in the US, 112 and 999 elsewhere), and emergency numbers always work from every extension.
 
@@ -57,7 +57,7 @@ BitVoice runs on Linux, macOS and Windows.
 | macOS | \`./bitvoice\` | \`~/Library/Application Support/BitVoice\` |
 | Windows | double-click \`bitvoice.exe\` | \`%APPDATA%\\BitVoice\` |
 
-On Windows, keep the window it opens while you use BitVoice (closing it stops BitVoice), and when Windows asks whether it may use the network, allow private networks so phones can connect. \`-data\` puts the data anywhere else; \`-http\`, \`-https\` and \`-sip\` choose the addresses and ports.
+On Windows, keep the window it opens while you use BitVoice (closing it stops BitVoice), and when Windows asks whether it may use the network, allow private networks so phones can connect. \`-data\` puts the data anywhere else; \`-https\` and \`-sip\` choose the addresses and ports.
 
 ## The ports it uses
 | Port | What for |
@@ -66,7 +66,7 @@ On Windows, keep the window it opens while you use BitVoice (closing it stops Bi
 | 5061 TCP | SIP over TLS (encrypted signalling) |
 | 4569 UDP | IAX2 trunks, only once one is set up |
 | 10000–20000 UDP | the sound of calls (RTP), set in Settings |
-| 8280 TCP (this computer only), 8443 TCP | this web interface: plain on this computer, HTTPS from others |
+| 8443 TCP | this web interface, HTTPS only (plain HTTP to it is sent on to HTTPS) |
 
 If another phone system already has 5060, BitVoice takes the next free port and Health says so.
 
@@ -554,7 +554,7 @@ Set **Call log address** and **Signing secret**, and every call is sent there as
 
 **Between servers.** The servers reach each other at their SIP port over TCP, or TLS when they have a certificate (each accepts only the certificate the other published, and the sound between them is then encrypted with SRTP), and send sound to each other's media ports (UDP, the range in Settings). Calls between servers are signed with a secret they share in the database, and only accepted from a running member at its own address. A firewall between them must let those ports through.
 
-**Try it first: the lab.** BitVoice comes with a lab that runs two servers, their database and test phones on one computer with Docker, each on an address of its own: \`deploy/lab/run.sh up\` builds and starts it and sets the shared address; \`run.sh call\` calls between phones on different servers; \`run.sh failover\` kills the server carrying a call through the shared address and checks the call carries on (the sound comes back in about five seconds); \`run.sh impaired\` calls from a phone on a bad link (delay, jitter and 5% loss) and checks the call quality BitVoice reports; \`run.sh down\` removes it. The servers' pages are at http://127.0.0.1:18501 and :18502 (user admin).`,
+**Try it first: the lab.** BitVoice comes with a lab that runs two servers, their database and test phones on one computer with Docker, each on an address of its own: \`deploy/lab/run.sh up\` builds and starts it and sets the shared address; \`run.sh call\` calls between phones on different servers; \`run.sh failover\` kills the server carrying a call through the shared address and checks the call carries on (the sound comes back in about five seconds); \`run.sh impaired\` calls from a phone on a bad link (delay, jitter and 5% loss) and checks the call quality BitVoice reports; \`run.sh down\` removes it. The servers' pages are at https://127.0.0.1:18501 and :18502 (user admin).`,
   },
   {
     id: 'database', title: 'Where the data is kept (SQLite or PostgreSQL)', route: '/settings', keys: 'database sqlite postgresql postgres backup data storage failover several servers reporting power bi grafana move',

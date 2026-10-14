@@ -186,6 +186,11 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "same-origin")
+		if r.TLS != nil && s.Certs != nil && s.Certs.Installed() {
+			// With a certificate from an authority, browsers keep to HTTPS for this name. Never with the
+			// self-signed one: HSTS would turn its one-time warning into a page that cannot be opened.
+			h.Set("Strict-Transport-Security", "max-age=31536000")
+		}
 		h.Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; connect-src 'self'; media-src 'self' blob:; frame-ancestors 'none'")
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			h.Set("Cache-Control", "no-store")

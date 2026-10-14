@@ -68,8 +68,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	var o options
 	showVersion := fs.Bool("version", false, "print the version and exit")
 	fs.StringVar(&o.data, "data", defaultDataDir(), "directory for configuration, call records and certificates")
-	fs.StringVar(&o.local, "http", "127.0.0.1:8280", "plain HTTP address for the browser on this computer")
-	fs.StringVar(&o.secure, "https", ":8443", "HTTPS address for the web interface from other computers")
+	fs.StringVar(&o.local, "http", "", "no longer used: the web interface is HTTPS only (see -https)")
+	fs.StringVar(&o.secure, "https", ":8443", "HTTPS address of the web interface")
 	fs.StringVar(&o.sip, "sip", "", "SIP listen address (default: all addresses, port from settings)")
 	fs.BoolVar(&o.noBrowser, "no-browser", false, "do not open a browser at startup")
 	fs.StringVar(&o.database, "database", os.Getenv("BITVOICE_DATABASE"), "PostgreSQL address (postgres://user:password@host/db); default: the SQLite file in the data directory, or the database chosen in Settings")
@@ -242,48 +242,47 @@ func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 	defer ty.Stop()
 	srv.RunBackground(ctx, true)
 
-	localLn, err := listenFirstFree(o.local, 20)
+	// The web interface is HTTPS only, on this computer too. Plain HTTP to the port is answered with
+	// a redirect to HTTPS and nothing else.
+	if certErr != nil {
+		return fmt.Errorf("web interface: no certificate for HTTPS: %w", certErr)
+	}
+	if o.local != "" {
+		log.Warn("-http is no longer used: the web interface is HTTPS only", "https", o.secure)
+	}
+	ln, err := listenFirstFree(o.secure, 20)
 	if err != nil {
 		return fmt.Errorf("web interface: %w", err)
 	}
-	localURL := "http://" + localLn.Addr().String()
-	httpLocal := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}
-	go func() { _ = httpLocal.Serve(localLn) }()
-
+	httpsSrv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second,
+		TLSConfig: &tls.Config{GetCertificate: holder.Get, MinVersion: tls.VersionTLS12}}
+	go func() { _ = httpsSrv.ServeTLS(redirectPlain{ln}, "", "") }()
+	defer httpsSrv.Close()
+	host, port, _ := net.SplitHostPort(ln.Addr().String())
+	if n, err := strconv.Atoi(port); err == nil {
+		srv.HTTPSPort.Store(int32(n))
+	}
+	// The browser on this computer: the loopback address, which the certificate covers.
+	localURL := "https://" + net.JoinHostPort("127.0.0.1", port)
 	var secureURLs []string
-	secureLabel := "From your network: "
-	if certErr != nil {
-		log.Warn("no HTTPS: could not create a certificate", "err", certErr)
-	} else if ln, err := listenFirstFree(o.secure, 20); err != nil {
-		log.Warn("no HTTPS: port unavailable", "addr", o.secure, "err", err)
-	} else {
-		httpsSrv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second,
-			TLSConfig: &tls.Config{GetCertificate: holder.Get, MinVersion: tls.VersionTLS12}}
-		go func() { _ = httpsSrv.ServeTLS(ln, "", "") }()
-		defer httpsSrv.Close()
-		host, port, _ := net.SplitHostPort(ln.Addr().String())
-		if n, err := strconv.Atoi(port); err == nil {
-			srv.HTTPSPort.Store(int32(n))
-		}
-		// Listening on one address (-https 10.0.0.5:8443) is reachable only there; list every address
-		// only when listening on all of them.
-		reach := addresses
-		if ip := net.ParseIP(host); ip != nil && !ip.IsUnspecified() {
+	// Listening on one address (-https 10.0.0.5:8443) is reachable only there; list every address
+	// only when listening on all of them.
+	reach := addresses
+	if ip := net.ParseIP(host); ip != nil && !ip.IsUnspecified() {
+		reach = nil
+		if !ip.IsLoopback() {
 			reach = []string{host}
-			if ip.IsLoopback() {
-				secureLabel = "Also, with HTTPS:  "
-			}
-		}
-		for _, a := range reach {
-			secureURLs = append(secureURLs, "https://"+net.JoinHostPort(a, port))
+			localURL = "https://" + net.JoinHostPort(host, port)
 		}
 	}
-	defer httpLocal.Close()
+	for _, a := range reach {
+		secureURLs = append(secureURLs, "https://"+net.JoinHostPort(a, port))
+	}
 
 	fmt.Fprintf(stdout, "BitVoice %s is running.\n", version)
 	fmt.Fprintf(stdout, "  On this computer:   %s\n", localURL)
 	for _, u := range secureURLs {
-		fmt.Fprintf(stdout, "  %s %s\n", secureLabel, u)
+		fmt.Fprintf(stdout, "  From your network:  %s\n", u)
 	}
 	fmt.Fprintf(stdout, "  Phones connect to port %d (SIP, UDP and TCP).\n", eng.SIPPort())
 	if !st.State().SetupComplete {
@@ -312,7 +311,7 @@ func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 	fmt.Fprintln(stdout, "BitVoice is stopping.")
 	shut, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_ = httpLocal.Shutdown(shut)
+	_ = httpsSrv.Shutdown(shut)
 	if restarting {
 		return errRestart
 	}

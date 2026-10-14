@@ -133,3 +133,20 @@ func (h *Holder) Pin() string {
 	sum := sha256.Sum256(c.Certificate[0])
 	return hex.EncodeToString(sum[:])
 }
+
+// Installed says whether the certificate in use was issued by an authority (not BitVoice's own
+// self-signed one): only then may browsers be told to insist on it (HSTS).
+func (h *Holder) Installed() bool {
+	c := h.cur.Load()
+	if c == nil || len(c.Certificate) == 0 {
+		return false
+	}
+	leaf := c.Leaf
+	if leaf == nil {
+		var err error
+		if leaf, err = x509.ParseCertificate(c.Certificate[0]); err != nil {
+			return false
+		}
+	}
+	return !bytes.Equal(leaf.RawIssuer, leaf.RawSubject)
+}

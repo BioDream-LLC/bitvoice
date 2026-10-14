@@ -14,10 +14,12 @@ export default defineConfig({
     { name: 'features', testMatch: ['calls.spec.ts'], dependencies: ['main'] },
     { name: 'profiles', testMatch: ['profiles.spec.ts'], dependencies: ['features'] },
   ],
-  use: { baseURL: `http://127.0.0.1:${port}` },
+  // HTTPS only; the fresh server's certificate is its own self-signed one.
+  use: { baseURL: `https://127.0.0.1:${port}`, ignoreHTTPSErrors: true },
   webServer: {
-    command: `rm -rf /tmp/bitvoice-e2e && ../bin/bitvoice -data /tmp/bitvoice-e2e -no-browser -http 127.0.0.1:${port} -https 127.0.0.1:18443 -sip 127.0.0.1:25060`,
-    url: `http://127.0.0.1:${port}/api/health/live`,
+    command: `rm -rf /tmp/bitvoice-e2e && ../bin/bitvoice -data /tmp/bitvoice-e2e -no-browser -https 127.0.0.1:${port} -sip 127.0.0.1:25060`,
+    url: `https://127.0.0.1:${port}/api/health/live`,
+    ignoreHTTPSErrors: true,
     reuseExistingServer: false,
   },
 })

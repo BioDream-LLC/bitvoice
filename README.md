@@ -333,7 +333,8 @@ phone system in Docker on one computer.
 # 1. Start it. The web interface is inside the binary.
 ./bitvoice
 
-# 2. A browser opens on the setup wizard (or open http://127.0.0.1:8280).
+# 2. A browser opens on the setup wizard (or open https://127.0.0.1:8443). HTTPS only: until you install
+#    your own certificate, the browser warns once about BitVoice's self-signed one; continue to the site.
 #    Name your organisation, choose the administrator's password, add your first phone.
 
 # 3. Point a SIP phone at this computer, port 5060, with the extension's number and password.

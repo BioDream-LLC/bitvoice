@@ -545,7 +545,7 @@ export const figures: Record<string, Figure> = {
   },
   compat: {
     title: 'Asterisk compatibility: tools written for Asterisk drive BitVoice',
-    svg: frame(820, 180, 'CRMs, wallboards and click-to-dial tools speak AMI on TCP 5038 or ARI over HTTP and WebSocket; BitVoice answers as Asterisk would, with calls as PJSIP channels.',
+    svg: frame(820, 180, 'CRMs, wallboards and click-to-dial tools speak AMI on TCP 5038 or ARI over HTTPS and secure WebSocket; BitVoice answers as Asterisk would, with calls as PJSIP channels.',
       box(30, 40, 200, 40, 'Click to dial', 'Originate', 'sky') + box(30, 92, 200, 40, 'Wallboard', 'QueueStatus, events', 'amber') +
       arrow('M230 60 H320', 'sky') + arrow('M230 112 H320', 'amber') +
       box(322, 50, 170, 72, 'AMI · TCP 5038', 'ARI · /ari/', 'teal') + arrow('M492 86 H560', 'teal') +
