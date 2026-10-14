@@ -17,6 +17,7 @@ export interface Extension {
   calendar?: { secret: string; whenBusy: 'voicemail' | 'forward' | 'ring' | ''; forwardTo: string; ignoreMeetings?: boolean }
   door: { code: string; url: string; method: string; username: string; password: string }
   followMe?: FollowMe; pickupGroup?: string; noIntercom?: boolean; speedDials?: SpeedDial[] | null
+  language?: string; holdMusic?: string
 }
 export interface FollowMe { enabled: boolean; numbers: string[] | null; strategy: 'sequential' | 'together' | ''; ringSeconds: number; confirm: boolean }
 export interface SpeedDial { code: string; number: string; name: string }
@@ -53,8 +54,17 @@ export interface FaxRecord {
 }
 export interface PageGroup { id: string; number: string; name: string; members: string[]; multicast: string }
 export interface Queue {
-  id: string; number: string; name: string; agents: string[]; strategy: 'longest-idle' | 'round-robin' | 'ring-all'
+  id: string; number: string; name: string; agents: string[]; strategy: QueueStrategy
   ringSeconds: number; wrapUpSeconds: number; maxWaitSeconds: number; timeout?: Destination | null; sticky?: boolean; stickyDays?: number
+  language?: string; music?: string; announceSeconds?: number; announcePosition?: boolean; announceWait?: boolean
+  penalties?: Record<string, number> | null; weight?: number
+}
+export type QueueStrategy = 'longest-idle' | 'round-robin' | 'ring-all' | 'fewest-calls' | 'linear' | 'random' | 'weighted-random'
+export interface MusicClass { id: string; name: string; shuffle: boolean }
+export interface PromptInfo { key: string; group: string; text: Record<string, string> }
+export interface PromptsList {
+  language: string; languages: { code: string; name: string; shipped: boolean }[]; prompts: PromptInfo[]
+  recorded: Record<string, string[]>; speech: boolean
 }
 export type AgentState = 'available' | 'ringing' | 'busy' | 'wrap-up' | 'paused' | 'away' | 'logged-out' | 'offline'
 export interface QueueStatus {
@@ -151,6 +161,7 @@ export interface DnsCheck {
 }
 export interface SystemSettings {
   name: string; purpose: 'office' | 'contact-centre' | '911'; country: string; timezone: string; language: string
+  promptLanguages?: string[] | null; music?: MusicClass[] | null; holdMusic?: string
   publicAddress: string; cluster?: ClusterSettings; sipPort: number; rtpMin: number; rtpMax: number; codecs: string[]; echoNumber: string; voicemailNumber: string; parkNumber: string; parkSeconds: number
   codes?: FeatureCodes; speedDials?: SpeedDial[] | null
   callLinks?: CallLink[] | null; brands?: Brand[] | null; texting: Texting; screening: Screening; vips?: VIP[] | null; agentLogin: string; agentPause: string; hotDesk: { login: string; logout: string; signOutAt: string }
@@ -305,7 +316,7 @@ const baseQuery = fetchBaseQuery({
 })
 
 const tags = ['Me', 'Extensions', 'RingGroups', 'Trunks', 'Inbound', 'Outbound', 'Settings', 'Users', 'Calls',
-  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail', 'Tenants', 'System'] as const
+  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail', 'Tenants', 'System', 'Prompts', 'Music'] as const
 
 export const api = createApi({
   reducerPath: 'api',
@@ -591,6 +602,21 @@ export const api = createApi({
       saveGreeting: b.mutation<{ seconds: number }, { box: string; wav: Blob }>({
         query: ({ box, wav }) => ({ url: `voicemail/${box}/greeting`, method: 'PUT', body: wav, headers: { 'Content-Type': 'audio/wav' } }),
         invalidatesTags: ['Voicemail'] }),
+      prompts: b.query<PromptsList, void>({ query: () => 'prompts', providesTags: ['Prompts', 'Settings'] }),
+      // music lists the tracks of the classes in the settings, so a saved class shows at once
+      saveLangPrompt: b.mutation<{ seconds: number }, { lang: string; key: string; wav: Blob }>({
+        query: ({ lang, key, wav }) => ({ url: `prompts/${lang}/${key}`, method: 'PUT', body: wav, headers: { 'Content-Type': 'audio/wav' } }),
+        invalidatesTags: ['Prompts'] }),
+      deleteLangPrompt: b.mutation<void, { lang: string; key: string }>({
+        query: ({ lang, key }) => ({ url: `prompts/${lang}/${key}`, method: 'DELETE' }), invalidatesTags: ['Prompts'] }),
+      generatePrompts: b.mutation<{ made: number; skipped: number; failed: string[] | null }, { lang: string; overwrite: boolean }>({
+        query: ({ lang, overwrite }) => ({ url: `prompts/${lang}/generate`, method: 'POST', body: { overwrite } }), invalidatesTags: ['Prompts'] }),
+      music: b.query<Record<string, { name: string; seconds: number }[]>, void>({ query: () => 'music', providesTags: ['Music', 'Settings'] }),
+      addMusic: b.mutation<{ seconds: number }, { cls: string; name: string; wav: Blob }>({
+        query: ({ cls, name, wav }) => ({ url: `music/${cls}/${name}`, method: 'PUT', body: wav, headers: { 'Content-Type': 'audio/wav' } }),
+        invalidatesTags: ['Music'] }),
+      deleteMusic: b.mutation<void, { cls: string; name: string }>({
+        query: ({ cls, name }) => ({ url: `music/${cls}/${name}`, method: 'DELETE' }), invalidatesTags: ['Music'] }),
       resetGreeting: b.mutation<void, string>({
         query: (box) => ({ url: `voicemail/${box}/greeting`, method: 'DELETE' }), invalidatesTags: ['Voicemail'] }),
       portalLogin: b.mutation<Me, { extension: string; pin: string }>({
@@ -642,6 +668,7 @@ export const {
   useTenantsQuery, useCreateTenantMutation, useUpdateTenantMutation, useDeleteTenantMutation, useOpenTenantMutation,
   useQueuesQuery, useCreateQueueMutation, useUpdateQueueMutation, useDeleteQueueMutation, useQueueStatusQuery,
   useVoicemailQuery, useMarkHeardMutation, useDeleteVoicemailMutation, useSaveGreetingMutation, useResetGreetingMutation,
+  usePromptsQuery, useSaveLangPromptMutation, useDeleteLangPromptMutation, useGeneratePromptsMutation, useMusicQuery, useAddMusicMutation, useDeleteMusicMutation,
 } = api
 
 /** Pulls the message and field problems out of whatever an RTK Query call rejected with. */

@@ -279,6 +279,7 @@ func (s *Server) routes() {
 
 	s.liveRoutes()
 	s.voicemailRoutes()
+	s.soundRoutes()
 	s.importRoutes()
 	s.phoneRoutes()
 	s.browserPhoneRoutes()

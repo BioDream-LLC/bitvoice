@@ -9,6 +9,7 @@ import {
   useMenusQuery, useQueuesQuery, useScriptsQuery, useRegistrationsQuery, useSchedulesQuery, useRingGroupsQuery, useSystemQuery, useUpdateExtensionMutation, type ApiErrorBody,
   type Destination, type Extension, useReceptionistsQuery, useSitesQuery, useRemoteAddressQuery,
   useConferencesQuery, useDivertQuery, useSetDivertMutation, type Divert, type FollowMe, type SpeedDial,
+  usePromptsQuery, useSettingsQuery,
 } from './api'
 import { MobileDevices } from './Mobile'
 import { useOpenParam } from './useOpenParam'
@@ -432,8 +433,33 @@ function FollowSettings({ x, setX, p }: { x: Extension; setX: Dispatch<SetStateA
           Allow intercom <span className="text-xs text-slate-500">(*80 then this number answers on the speaker)</span>
         </label>
       </div>
+      <SoundFields x={x} setX={setX} p={p} />
       <SpeedDialList label="Own speed dials" hint="Dialled after the speed dial code (*0). They win over the company's with the same code." field="speedDials" list={sds} onChange={setSds} p={p} />
     </section>
+  )
+}
+
+/** The language this person hears prompts in, and the music they play to someone they put on hold. */
+function SoundFields({ x, setX, p }: { x: Extension; setX: Dispatch<SetStateAction<Extension>>; p: (f: string) => string | undefined }) {
+  const { data: settings } = useSettingsQuery()
+  const { data: langs } = usePromptsQuery()
+  const music = settings?.system.music ?? []
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <Field label="Prompt language" htmlFor="xla" error={p('language')} hint="Wake-up calls and other prompts this phone hears.">
+        <select id="xla" className="input" value={x.language ?? ''} onChange={(e) => { const v = e.target.value; setX((x0) => ({ ...x0, language: v })) }}>
+          <option value="">The system's</option>
+          {langs?.languages.map((l) => <option key={l.code} value={l.code}>{l.name}</option>)}
+        </select>
+      </Field>
+      <Field label="Hold music" htmlFor="xhm" error={p('holdMusic')} hint="What someone hears when this person puts them on hold or parks them.">
+        <select id="xhm" className="input" value={x.holdMusic ?? ''} onChange={(e) => { const v = e.target.value; setX((x0) => ({ ...x0, holdMusic: v })) }}>
+          <option value="">The system's ({music.find((m) => m.id === settings?.system.holdMusic)?.name ?? 'tone'})</option>
+          <option value="tone">The hold tone</option>
+          {music.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+        </select>
+      </Field>
+    </div>
   )
 }
 

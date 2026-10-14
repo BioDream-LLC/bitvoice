@@ -13,6 +13,7 @@ import (
 func (s *Server) WireEngine() {
 	eng, st := s.Engine, s.Store
 	eng.Mail = st
+	eng.Music = st
 	eng.Recordings = st
 	eng.SeenDevice = st.NoteDevice
 	eng.Remote = st

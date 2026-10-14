@@ -1,13 +1,16 @@
 package pbx
 
 import (
+	"math/rand/v2"
 	"slices"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/biodream-llc/bitvoice/internal/config"
 	"github.com/biodream-llc/bitvoice/internal/media"
+	"github.com/biodream-llc/bitvoice/internal/prompts"
 )
 
 // queueState is what BitVoice knows about one queue between calls.
@@ -17,6 +20,12 @@ type queueState struct {
 	lastEnd map[string]time.Time // when each agent's last queue call ended (longest-idle, wrap-up)
 	next    int                  // round-robin position
 	stats   QueueTotals
+	// taken counts each agent's answered calls on day (fewest-calls); waitSum and waitN make the
+	// average wait of answered callers, for the expected-wait announcement.
+	taken   map[string]int
+	day     string
+	waitSum time.Duration
+	waitN   int
 }
 
 // QueueTotals counts a queue's calls since BitVoice started.
@@ -62,7 +71,7 @@ func (e *Engine) queue(number string) *queueState {
 	defer e.mu.Unlock()
 	q := e.queues[number]
 	if q == nil {
-		q = &queueState{lastEnd: map[string]time.Time{}}
+		q = &queueState{lastEnd: map[string]time.Time{}, taken: map[string]int{}}
 		e.queues[number] = q
 	}
 	return q
@@ -151,16 +160,24 @@ func (e *Engine) agentStates(cfg *config.Config, qc *config.Queue, q *queueState
 	return out
 }
 
-// pickAgents chooses whom to ring next under the queue's strategy.
+// pickAgents chooses whom to ring next under the queue's strategy, among available agents with the
+// lowest penalty, leaving out agents a queue of higher weight with callers waiting has first call on.
 func (e *Engine) pickAgents(cfg *config.Config, qc *config.Queue, q *queueState) []string {
 	var free []AgentStatus
 	for _, a := range e.agentStates(cfg, qc, q) {
-		if a.State == "available" {
+		if a.State == "available" && !e.claimedElsewhere(cfg, qc, a.Extension) {
 			free = append(free, a)
 		}
 	}
 	if len(free) == 0 {
 		return nil
+	}
+	if qc.Strategy != "weighted-random" {
+		low := qc.Penalties[free[0].Extension]
+		for _, a := range free {
+			low = min(low, qc.Penalties[a.Extension])
+		}
+		free = slices.DeleteFunc(free, func(a AgentStatus) bool { return qc.Penalties[a.Extension] != low })
 	}
 	switch qc.Strategy {
 	case "ring-all":
@@ -180,10 +197,110 @@ func (e *Engine) pickAgents(cfg *config.Config, qc *config.Queue, q *queueState)
 			}
 		}
 		return nil
+	case "linear": // always from the top of the list: free is in list order
+		return []string{free[0].Extension}
+	case "random":
+		return []string{free[rand.IntN(len(free))].Extension}
+	case "weighted-random": // penalty 0 is 101 times as likely as penalty 100
+		total := 0
+		for _, a := range free {
+			total += 101 - qc.Penalties[a.Extension]
+		}
+		r := rand.IntN(total)
+		for _, a := range free {
+			if r -= 101 - qc.Penalties[a.Extension]; r < 0 {
+				return []string{a.Extension}
+			}
+		}
+		return []string{free[len(free)-1].Extension}
+	case "fewest-calls":
+		q.mu.Lock()
+		q.rollDay()
+		sort.SliceStable(free, func(i, j int) bool {
+			ti, tj := q.taken[free[i].Extension], q.taken[free[j].Extension]
+			if ti != tj {
+				return ti < tj
+			}
+			return free[i].LastCall.Before(free[j].LastCall)
+		})
+		q.mu.Unlock()
+		return []string{free[0].Extension}
 	default: // longest-idle: never-used agents first, then the oldest last call
 		sort.SliceStable(free, func(i, j int) bool { return free[i].LastCall.Before(free[j].LastCall) })
 		return []string{free[0].Extension}
 	}
+}
+
+// claimedElsewhere says whether an agent of this queue is also in a queue of higher weight that has
+// a caller waiting: that queue gets the agent first.
+func (e *Engine) claimedElsewhere(cfg *config.Config, qc *config.Queue, ext string) bool {
+	for i := range cfg.Queues {
+		o := &cfg.Queues[i]
+		if o.Number == qc.Number || o.Weight <= qc.Weight || !slices.Contains(o.Agents, ext) {
+			continue
+		}
+		oq := e.queue(o.Number)
+		oq.mu.Lock()
+		waiting := len(oq.waiting) > 0
+		oq.mu.Unlock()
+		if waiting {
+			return true
+		}
+	}
+	return false
+}
+
+// rollDay starts the fewest-calls counts again each day. q.mu must be held.
+func (q *queueState) rollDay() {
+	if d := time.Now().Format(time.DateOnly); d != q.day {
+		q.day, q.taken = d, map[string]int{}
+	}
+}
+
+// expectedWait is the average wait of answered callers, rounded up to whole minutes (0: no history).
+func (q *queueState) expectedWait() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.waitN == 0 {
+		return 0
+	}
+	avg := q.waitSum / time.Duration(q.waitN)
+	return int((avg + time.Minute - 1) / time.Minute)
+}
+
+// position is a waiting caller's place in line, from 1 (0: not waiting).
+func (q *queueState) position(c *Call) int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return slices.Index(q.waiting, c) + 1
+}
+
+// announce tells a waiting caller their place in line and the expected wait, then the music goes on.
+func (c *Call) announce(qc *config.Queue, q *queueState, music func()) bool {
+	var keys []string
+	if qc.AnnouncePosition {
+		if n := q.position(c); n > 0 {
+			keys = append(append(keys, "queue-position"), prompts.Digits(strconv.Itoa(n))...)
+		}
+	}
+	if qc.AnnounceWait {
+		if m := q.expectedWait(); m > 0 {
+			keys = append(append(keys, "queue-wait"), prompts.Digits(strconv.Itoa(m))...)
+		}
+	}
+	if len(keys) == 0 {
+		return false
+	}
+	cfg := c.e.Config()
+	pcm, ok := c.e.promptSamples(cfg, promptLang(cfg, qc.Language), append([]string{"please-hold"}, keys...)...)
+	if !ok {
+		return false // nothing recorded: keep the music
+	}
+	_, ended := c.play(pcm, nil)
+	if !ended {
+		music()
+	}
+	return ended
 }
 
 // waitInQueue answers the caller, plays the queue tone, and offers the call to agents in turn until one
@@ -227,17 +344,24 @@ func (c *Call) waitInQueue(number string) {
 	}
 	e.publish("queue.changed", map[string]any{"queue": number})
 
-	c.mu.Lock()
-	pt := 0
-	if c.caller.codecName() == "PCMA" {
-		pt = 8
+	music := func() {
+		cfg := e.Config()
+		class := ""
+		if qc := cfg.FindQueue(number); qc != nil {
+			class = holdClass(cfg, qc.Music)
+		}
+		c.mu.Lock()
+		if c.player != nil {
+			c.player.Stop()
+		}
+		c.player = e.startHold(cfg, c.caller, class, toneQueue)
+		c.mu.Unlock()
 	}
-	c.player = media.NewPlayer(c.caller.ep, pt)
-	c.player.Play(toneQueue)
-	c.mu.Unlock()
+	music()
 
 	tick := time.NewTicker(500 * time.Millisecond)
 	defer tick.Stop()
+	lastAnnounce := time.Now()
 	for {
 		cfg := e.Config()
 		qc := cfg.FindQueue(number)
@@ -267,6 +391,17 @@ func (c *Call) waitInQueue(number string) {
 		if first && len(agents) == 0 {
 			agents = e.pickAgents(cfg, qc, q)
 		}
+		if len(agents) == 0 && qc.AnnounceSeconds > 0 && time.Since(lastAnnounce) >= time.Duration(qc.AnnounceSeconds)*time.Second {
+			lastAnnounce = time.Now()
+			if c.announce(qc, q, music) {
+				leave()
+				q.mu.Lock()
+				q.stats.Abandoned++
+				q.mu.Unlock()
+				return
+			}
+			continue
+		}
 		if len(agents) == 0 {
 			select {
 			case <-c.cancelled:
@@ -289,6 +424,10 @@ func (c *Call) waitInQueue(number string) {
 			q.mu.Lock()
 			q.stats.Answered++
 			q.stats.LongestWait = max(q.stats.LongestWait, waited)
+			q.waitSum += time.Since(joined)
+			q.waitN++
+			q.rollDay()
+			q.taken[agent]++
 			q.mu.Unlock()
 			<-c.cancelled // the call ends
 			q.mu.Lock()

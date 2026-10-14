@@ -82,12 +82,8 @@ func (c *Call) park(transferor, stay *Leg) bool {
 	c.localAnswer = true
 	c.parkSlot, c.parkedBy, c.parkedAt = slot, transferor.Ext, time.Now()
 	connect(stay, nil)
-	pt := 0
-	if stay.codecName() == "PCMA" {
-		pt = 8
-	}
-	c.player = media.NewPlayer(stay.ep, pt)
-	c.player.Play(media.ToneHold)
+	cfg = c.e.Config()
+	c.player = c.e.startHold(cfg, stay, holdClassOf(cfg, transferor.Ext), media.ToneHold)
 	c.mu.Unlock()
 	notifyRefer(transferor, "200 OK", true)
 	transferor.bye()

@@ -1262,12 +1262,8 @@ func (c *Call) holdChanged(l *Leg, hold bool) {
 	if hold {
 		connect(l, nil)
 		connect(other, nil)
-		pt := 0
-		if strings.EqualFold(other.codecName(), "PCMA") {
-			pt = 8
-		}
-		c.player = media.NewPlayer(other.ep, pt)
-		c.player.Play(media.ToneHold)
+		cfg := c.e.Config()
+		c.player = c.e.startHold(cfg, other, holdClassOf(cfg, l.Ext), media.ToneHold)
 	} else {
 		connect(l, other)
 	}

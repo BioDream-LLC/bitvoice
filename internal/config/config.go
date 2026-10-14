@@ -50,7 +50,15 @@ type System struct {
 	Purpose  string `json:"purpose"` // office, contact-centre, 911
 	Country  string `json:"country"` // ISO 3166 alpha-2, drives tones and emergency numbers
 	Timezone string `json:"timezone"`
+	// Language is the language callers hear prompts in, unless an extension or queue says otherwise.
 	Language string `json:"language"`
+	// PromptLanguages are languages added beside the ones BitVoice ships the words of; their prompts
+	// are recorded or uploaded.
+	PromptLanguages []string `json:"promptLanguages"`
+	// Music is the hold music: named classes of uploaded tracks. HoldMusic is the class callers hear
+	// on hold, parked or waiting, unless a queue or extension names another; empty plays the hold tone.
+	Music     []MusicClass `json:"music"`
+	HoldMusic string       `json:"holdMusic"`
 
 	// PublicAddress is advertised in SIP and SDP. Empty means work it out per peer.
 	PublicAddress string `json:"publicAddress"`
@@ -664,6 +672,11 @@ type Extension struct {
 	// SpeedDials are this person's own short codes, dialled after the speed dial code (*0). They win
 	// over the company's speed dials with the same code.
 	SpeedDials []SpeedDial `json:"speedDials,omitempty"`
+	// Language this person's phone hears prompts in (wake-up calls, voicemail); empty for the system's.
+	Language string `json:"language,omitempty"`
+	// HoldMusic is the class callers hear when this person puts them on hold; empty for the system's,
+	// "tone" for the hold tone.
+	HoldMusic string `json:"holdMusic,omitempty"`
 }
 
 // FollowMe is where else an extension's calls ring when its phones are not answered.
@@ -899,7 +912,10 @@ type Queue struct {
 	Number string   `json:"number"`
 	Name   string   `json:"name"`
 	Agents []string `json:"agents"` // extension numbers
-	// Strategy picks who rings: longest-idle (the agent free longest), round-robin, or ring-all.
+	// Strategy picks who rings: longest-idle (the agent free longest), round-robin (turns, carrying on
+	// from the last one), ring-all, fewest-calls (the agent who took fewest calls today), linear (always
+	// from the top of the list), random, or weighted-random (random, agents with a lower penalty
+	// more often).
 	Strategy string `json:"strategy"`
 	// RingSeconds is how long one agent is rung before the next is tried.
 	RingSeconds int `json:"ringSeconds"`
@@ -913,6 +929,22 @@ type Queue struct {
 	// 30 when unset), if that agent is free; if they do not answer, the queue goes on as usual.
 	Sticky     bool `json:"sticky"`
 	StickyDays int  `json:"stickyDays"`
+	// Language callers hear the queue's announcements in; empty for the system's.
+	Language string `json:"language,omitempty"`
+	// Music is the hold music class callers hear while they wait; empty for the system's, "tone" for
+	// the queue tone.
+	Music string `json:"music,omitempty"`
+	// AnnounceSeconds tells waiting callers their place in line (AnnouncePosition) and the expected
+	// wait (AnnounceWait) every so many seconds; 0 never.
+	AnnounceSeconds  int  `json:"announceSeconds,omitempty"`
+	AnnouncePosition bool `json:"announcePosition,omitempty"`
+	AnnounceWait     bool `json:"announceWait,omitempty"`
+	// Penalties rank agents: agents with a lower penalty are offered calls first, and an agent with a
+	// higher one only when no one with a lower one is free. Missing means 0.
+	Penalties map[string]int `json:"penalties,omitempty"`
+	// Weight ranks queues that share agents: a free agent takes a caller from the queue with the
+	// higher weight first. 0 when unset.
+	Weight int `json:"weight,omitempty"`
 }
 
 // CallLink is a web address (and QR code, and website button) that calls a destination from a
@@ -1310,6 +1342,7 @@ func (c *Config) Validate() error {
 	c.validateMobile(&p)
 	c.validateGitOps(&p)
 	c.validateSites(&p)
+	c.validateSounds(&p)
 	if s.PublicAddress != "" {
 		if _, err := netip.ParseAddr(s.PublicAddress); err != nil && !hostRe.MatchString(s.PublicAddress) {
 			p.add("system.publicAddress", "must be an IP address or host name")
@@ -1976,9 +2009,22 @@ func (c *Config) Validate() error {
 		switch q.Strategy {
 		case "":
 			q.Strategy = "longest-idle"
-		case "longest-idle", "round-robin", "ring-all":
+		case "longest-idle", "round-robin", "ring-all", "fewest-calls", "linear", "random", "weighted-random":
 		default:
-			p.add(f+".strategy", "choose longest-idle, round-robin or ring-all")
+			p.add(f+".strategy", "choose longest-idle, round-robin, ring-all, fewest-calls, linear, random or weighted-random")
+		}
+		for a, pen := range q.Penalties {
+			if !slices.Contains(q.Agents, a) {
+				delete(q.Penalties, a) // an agent taken out of the queue
+			} else if pen < 0 || pen > 100 {
+				p.add(f+".penalties", "penalties are 0 to 100 (agent %s)", a)
+			}
+		}
+		if q.Weight < 0 || q.Weight > 100 {
+			p.add(f+".weight", "weight is 0 to 100")
+		}
+		if q.AnnounceSeconds != 0 && (q.AnnounceSeconds < 15 || q.AnnounceSeconds > 600) {
+			p.add(f+".announceSeconds", "announce every 15 to 600 seconds, or 0 for never")
 		}
 		if q.RingSeconds == 0 {
 			q.RingSeconds = 15

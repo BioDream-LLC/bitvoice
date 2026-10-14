@@ -4,7 +4,6 @@ import (
 	"errors"
 	"slices"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -275,12 +274,8 @@ func (c *Call) joinConference(number string) {
 		r.mu.Lock()
 		r.waiting[m.id] = m
 		r.mu.Unlock()
-		pt := 0
-		if strings.EqualFold(c.caller.codecName(), "PCMA") {
-			pt = 8
-		}
-		m.player = media.NewPlayer(c.caller.ep, pt)
-		m.player.Play(media.ToneHold)
+		cfg := e.Config()
+		m.player = e.startHold(cfg, c.caller, holdClass(cfg), media.ToneHold)
 	} else {
 		r.enter(m, !rc.Quiet)
 		if leader && rc.WaitForLeader {

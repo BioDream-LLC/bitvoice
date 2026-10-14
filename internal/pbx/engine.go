@@ -73,6 +73,8 @@ type Engine struct {
 	radio     *radio
 	// Mail stores voicemail; nil switches voicemail off.
 	Mail Mailbox
+	// Music stores hold music tracks; nil plays the hold tone everywhere.
+	Music MusicLibrary
 	// SeenDevice, when set, is told the User-Agent of each phone that registers (the compatibility list).
 	SeenDevice func(userAgent, ext string)
 	// Remote gives remote workers' confirmed addresses, for emergency calls.

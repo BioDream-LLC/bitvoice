@@ -36,6 +36,7 @@ import { RadioConsole } from './Radio'
 import { Phones } from './Phones'
 import { Queues } from './Queues'
 import { Schedules } from './Schedules'
+import { Sounds } from './Sounds'
 import { RingGroups } from './RingGroups'
 import { Conferences } from './Conferences'
 import { Portal } from './Portal'
@@ -104,6 +105,7 @@ function Admin() {
         <Route path="/servers" element={<Servers />} />
         <Route path="/scripts" element={<Scripts />} />
         <Route path="/schedules" element={<Schedules />} />
+        <Route path="/sounds" element={<Sounds />} />
         <Route path="/paging" element={<Paging />} />
         <Route path="/conferences" element={<Conferences />} />
         <Route path="/codes" element={<FeatureCodesPage />} />

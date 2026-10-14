@@ -11,7 +11,7 @@ export default defineConfig({
   projects: [
     { name: 'main', testMatch: ['shots.spec.ts', 'sweep.spec.ts', 'two-step.spec.ts', 'webrtc.spec.ts'] },
     // After the sweep, which must meet the setup wizard on a fresh server.
-    { name: 'features', testMatch: ['calls.spec.ts'], dependencies: ['main'] },
+    { name: 'features', testMatch: ['calls.spec.ts', 'features.spec.ts'], dependencies: ['main'] },
     { name: 'profiles', testMatch: ['profiles.spec.ts'], dependencies: ['features'] },
   ],
   // HTTPS only; the fresh server's certificate is its own self-signed one.

@@ -9,7 +9,7 @@ export const parts: { title: string; intro: string; ids: string[] }[] = [
   { title: 'Getting started', intro: 'From a new install to a working phone system: extensions, phones, a phone company, where calls go, emergency calling from your offices, and how to tell everything is ready.',
     ids: ['start', 'extensions', 'phones', 'trunks', 'routes', 'emergency', 'sites', 'health', 'settings'] },
   { title: 'Where calls go', intro: 'The building blocks callers move through: groups and queues, menus and schedules, scripts and the AI receptionist, voicemail, and the diagram that shows it all.',
-    ids: ['flow', 'ringgroups', 'queues', 'menus', 'schedules', 'scripts', 'ai', 'voicemail', 'callbacks', 'calllinks'] },
+    ids: ['flow', 'ringgroups', 'queues', 'sounds', 'menus', 'schedules', 'scripts', 'ai', 'voicemail', 'callbacks', 'calllinks'] },
   { title: 'Everyday calling', intro: 'What people do on their phones every day, and what they set for themselves: forwarding, follow-me, pickup, conference rooms, paging, hot desks, faxes and texts.',
     ids: ['codes', 'portal', 'conferences', 'paging', 'hotdesk', 'contacts', 'calendar', 'mobile', 'video', 'fax', 'texts', 'briefing'] },
   { title: 'Customers and insight', intro: 'Knowing who called and how it went: the live calls and history, the customer timeline, CRMs, recordings and consent, quality, costs and caller ID reputation.',
@@ -311,7 +311,7 @@ When nobody answers within the ring time, the call goes to **If nobody answers**
 | A pickup group | each person has their own calls, but colleagues may answer for them |`,
   },
   {
-    id: 'queues', title: 'Queues', route: '/queues', keys: 'sticky vip priority returning caller acd contact centre agents waiting longest idle wallboard',
+    id: 'queues', title: 'Queues', route: '/queues', keys: 'sticky vip priority returning caller acd contact centre agents waiting longest idle wallboard fewest calls linear random weighted penalty penalties position order weight announce place in line expected wait',
     body: `A queue holds callers in order, with music, and rings the next free agent. It is the heart of a contact centre, and useful in any office where calls come faster than people can take them.
 
 ::figure queue
@@ -320,12 +320,20 @@ When nobody answers within the ring time, the call goes to **If nobody answers**
 | Strategy | Who is rung |
 |---|---|
 | Longest idle | the free agent who has waited longest since their last call |
-| Round robin | each free agent in turn |
+| Round robin | each free agent in turn, carrying on from the last one |
 | Ring all | every free agent at once |
+| Fewest calls | the free agent who took the fewest calls today |
+| In order (linear) | always from the top of the list: the first free agent |
+| Random | any free agent, by chance |
+| Weighted random | by chance, agents with a lower penalty much more often |
 
+- **Order**: the agents' list is in order; move them up and down. In order and Round robin follow it.
+- **Penalties** rank agents (0 to 100, 0 when empty): calls are offered to the free agents with the lowest penalty, and an agent with a higher one is rung only when nobody with a lower one is free. Use them for a first line and an overflow line in one queue.
+- **Weight** ranks queues that share agents: while a queue with a higher weight has someone waiting, its agents take its callers first.
 - **Wrap-up** gives an agent time after a call before the next.
 - **Longest wait**: callers who wait longer go to the queue's timeout destination. 0 waits for ever.
-- Callers hear music, and their place in line.
+- **Hold music**: callers hear the queue's music (any class from [Sounds](#/sounds)), the system's, or the queue tone.
+- **Tell waiting callers** their place in line and the expected wait (the average wait of answered callers today, in minutes), every so many seconds, in the queue's language. The words come from the queue prompts in [Sounds](#/sounds); until those are recorded, nothing is said.
 
 The **Queues** screen is a live wallboard: who is waiting, for how long, and each agent's state.
 
@@ -347,6 +355,32 @@ On [Live calls](#/calls), **Supervise** rings a supervisor's phone; when they an
 
 ## Sticky queues and VIPs
 Switch on **Sticky** in a queue and a returning caller (one answered in the last 30 days, or as many as you set) is offered first to the agent who answered them last time, if that agent is free; if they do not answer, the queue goes on as usual. **VIP callers**, at the foot of Queues, go to the front of every queue they call, after any VIP already waiting, and are marked VIP on the board.`,
+  },
+  {
+    id: 'sounds', title: 'Sounds: prompts, languages and hold music', route: '/sounds', keys: 'sounds prompts recordings language languages spanish french german italian portuguese dutch polish translate speech text to speech tts music on hold moh hold music track shuffle class',
+    body: `[Sounds](#/sounds) holds everything BitVoice says or plays to callers, apart from greetings and menu prompts, which are recorded where they are used.
+
+## Prompts, in every language
+A **prompt** is one thing BitVoice says: "Please enter your PIN", "Your place in line is", the digits it reads out. The dial-by-name directory, dial-in (DISA), wake-up calls and queue announcements speak with them. BitVoice has the words of every prompt in English, Spanish, French, German, Italian, Portuguese, Dutch and Polish; numbers are read digit by digit, which sounds the same way in each.
+
+- **Callers hear** sets the language for everyone. A queue, a dial-in number, a directory or an extension can choose another.
+- Each prompt can be **recorded in the browser**, **uploaded** (any audio file; it is turned into telephone audio) or **made by the speech service**: with a speech model set in Settings, AI, one button makes every prompt of a language from its words. Prompts already recorded are kept unless you ask to replace them.
+- **Add a language** for any other language (a code such as sv, ja or pt-BR); its prompts are recorded or uploaded, with the English words shown as a guide.
+- A prompt missing in a language is played in the default language, then in English; with none recorded at all, callers hear a short tone, so every feature works before a single prompt is recorded.
+
+## Hold music
+Hold music is grouped in **classes** (Calm, Jazz, Sales offers…), each a list of tracks played one after another, from the start or **shuffled**. Upload tracks of up to fifteen minutes in any format the browser reads.
+
+| Who hears it | Which music |
+|---|---|
+| someone put on hold | the music chosen on the extension of the person holding, else the default |
+| a parked caller | the music of the person who parked them, else the default |
+| a caller waiting in a queue | the queue's music, else the default |
+| a caller waiting for a conference leader | the default |
+
+**Default for everyone** can be the hold tone, so nothing changes until you choose music. Choosing **the hold tone** on a queue or extension keeps the tone there.
+
+> Only play music you have the rights to play to callers: most recorded music needs a licence for on-hold use.`,
   },
   {
     id: 'menus', title: 'Menus (auto attendant)', route: '/menus', keys: 'ivr press 1 prompt greeting keypad auto attendant',

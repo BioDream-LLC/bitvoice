@@ -224,6 +224,42 @@ func (p *Player) PlayPCM(pcm []int16) {
 	}()
 }
 
+// PlayStream plays 8 kHz audio from next, one piece after another without a gap, until stopped:
+// hold music, track after track. When next has nothing (nil), the fallback tone plays instead.
+func (p *Player) PlayStream(next func() []int16, fallback Tone) {
+	go func() {
+		defer close(p.doneC)
+		const frame = 160
+		tick := time.NewTicker(20 * time.Millisecond)
+		defer tick.Stop()
+		var cur []int16
+		tone := ToneSamples(Tone{Freqs: fallback.Freqs, Level: fallback.Level, On: fallback.On, Off: fallback.Off, Repeat: 1})
+		pkt := make([]byte, 12+frame)
+		for {
+			select {
+			case <-p.stop:
+				return
+			case <-tick.C:
+			}
+			for j := range frame {
+				for len(cur) == 0 {
+					if cur = next(); len(cur) == 0 {
+						cur = tone
+					}
+				}
+				s := cur[0]
+				cur = cur[1:]
+				if p.alaw {
+					pkt[12+j] = LinearToAlaw(s)
+				} else {
+					pkt[12+j] = LinearToUlaw(s)
+				}
+			}
+			p.packet(pkt)
+		}
+	}()
+}
+
 // ToneSamples renders a tone with a finite Repeat as 8 kHz audio, for joining to other audio.
 func ToneSamples(t Tone) []int16 {
 	_, cycle := t.onAt(0)
