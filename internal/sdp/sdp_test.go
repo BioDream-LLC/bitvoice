@@ -58,7 +58,7 @@ func TestParseAndRewrite(t *testing.T) {
 }
 
 func TestNew(t *testing.T) {
-	s := New("10.0.0.1", 30000, 7, []Codec{{0, "PCMU", 8000, 1}}, 101)
+	s := New("10.0.0.1", 30000, 7, []Codec{{PT: 0, Name: "PCMU", ClockRate: 8000, Channels: 1}}, 101)
 	again, err := Parse(s.Bytes())
 	if err != nil {
 		t.Fatal(err)
@@ -114,5 +114,24 @@ func TestCrypto(t *testing.T) {
 	again, _ := Parse(s.Bytes())
 	if got := again.Audio().Cryptos(); len(got) != 1 || got[0].Tag != 3 || string(got[0].Key) != string(cs[0].Key) {
 		t.Fatalf("%+v", got)
+	}
+}
+
+func TestFmtpAndAMR(t *testing.T) {
+	raw := "v=0\r\no=- 1 1 IN IP4 10.0.0.2\r\ns=-\r\nc=IN IP4 10.0.0.2\r\nt=0 0\r\nm=audio 4000 RTP/AVP 97 98 101\r\n" +
+		"a=rtpmap:97 AMR-WB/16000\r\na=fmtp:97 octet-align=1; mode-set=0,1,2\r\na=rtpmap:98 AMR/8000\r\na=rtpmap:101 telephone-event/8000\r\n"
+	s, err := Parse([]byte(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs := s.Audio().Codecs()
+	if cs[0].Name != "AMR-WB" || cs[0].ClockRate != 16000 || cs[0].Fmtp != "octet-align=1; mode-set=0,1,2" || cs[1].Fmtp != "" {
+		t.Fatalf("%+v", cs)
+	}
+	if l := (Codec{PT: 98, Name: "AMR"}).Attributes(); len(l) != 2 || l[1].Value != "fmtp:98 octet-align=1" {
+		t.Fatalf("our AMR offer %+v", l)
+	}
+	if l := cs[0].Attributes(); l[0].Value != "rtpmap:97 AMR-WB/16000" || l[1].Value != "fmtp:97 octet-align=1; mode-set=0,1,2" {
+		t.Fatalf("an answer keeps the offered fmtp %+v", l)
 	}
 }

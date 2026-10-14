@@ -17,6 +17,10 @@ BitVoice includes these third-party Go modules, each under its own licence:
   github.com/jackc/puddle/v2 (MIT)
 - github.com/darui3018823/opus (BSD-2-Clause), Copyright (c) 2026 darui3018823: the Opus codec
 - github.com/hunydev/g729 (MIT): the G.729 Annex A codec
+- github.com/VoiceBlender/goamr-nb and github.com/VoiceBlender/goamr-wb (Apache-2.0), Copyright 2026
+  the goamr-nb and goamr-wb authors: the AMR and AMR-WB codecs, pure-Go ports of opencore-amrnb,
+  opencore-amrwb and vo-amrwbenc (Apache-2.0; Copyright (C) 2009 Martin Storsjo, Copyright (C) The
+  Android Open Source Project, Copyright (C) 2004-2010 VisualOn)
 - internal/p25/imbe, internal/p25/mbe and internal/p25/dsp/biquad.go: the IMBE voice decoder,
   from GopherTrunk (github.com/MattCheramie/GopherTrunk), Apache License 2.0
   (internal/p25/mbe/LICENSE.GopherTrunk)

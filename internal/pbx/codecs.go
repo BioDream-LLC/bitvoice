@@ -132,7 +132,9 @@ func fitAnswer(ans, offer *sdp.Media) bool {
 		pt := strconv.Itoa(c.PT)
 		if !slices.Contains(ans.Formats, pt) {
 			ans.Formats = append([]string{pt}, ans.Formats...)
-			ans.Lines = append(codecNamed(strings.ToUpper(c.Name), c.PT).Attributes(), ans.Lines...)
+			named := codecNamed(strings.ToUpper(c.Name), c.PT)
+			named.Fmtp = c.Fmtp // AMR's answer keeps the framing and modes offered
+			ans.Lines = append(named.Attributes(), ans.Lines...)
 		}
 		filterFormats(ans, []string{pt})
 		return true
@@ -153,7 +155,8 @@ func (l *Leg) sendCodec(s *sdp.Session) {
 func applyCodec(ep *media.Endpoint, cs []sdp.Codec) {
 	for _, c := range cs {
 		if !isAux(c.Name) {
-			pt := media.CodecPT(c.Name)
+			pt := media.CodecPTFmtp(c.Name, c.Fmtp)
+			ep.SetFmtp(c.Fmtp)
 			ep.SetPayloadType(pt)
 			ep.SetEventPT(eventFor(cs, c.ClockRate))
 			if media.Dynamic(pt) {

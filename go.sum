@@ -1,5 +1,9 @@
 github.com/Masterminds/semver/v3 v3.5.0 h1:kQceYJfbupGfZOKZQg0kou0DgAKhzDg2NZPAwZ/2OOE=
 github.com/Masterminds/semver/v3 v3.5.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
+github.com/VoiceBlender/goamr-nb v1.0.0 h1:DxtRZHssxKhM2PfacSYO1L7JVzrggwfmqIaU+jgxk2E=
+github.com/VoiceBlender/goamr-nb v1.0.0/go.mod h1:Eb6MpLAXDAC2TvwdEzNL6rXfcNmIJll8NBUjoAqpRaY=
+github.com/VoiceBlender/goamr-wb v1.1.1 h1:wnJefp4APio7FOavNaIhxY4zq8Tb56Cwl74Ilnn4YV8=
+github.com/VoiceBlender/goamr-wb v1.1.1/go.mod h1:0WslyibUmJYuCGw1RU/RlJXK7Z9cIIuOE3RdFPOryXw=
 github.com/darui3018823/opus v1.5.0 h1:4NzD8wBCGeXx7ZH5MyhaUx2xLzQDtnwhdN2sIG5Vc/4=
 github.com/darui3018823/opus v1.5.0/go.mod h1:YHD24DJs1HzqHm0jUyM6p4Ev2GWas1t+5HmfUPA1oq4=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

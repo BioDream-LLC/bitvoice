@@ -21,6 +21,9 @@ func Transcodable(pt int) bool {
 	case PTPCMU, PTPCMA, PTG722, PTG729, PTOpus, PTG726_32, PTG726_16, PTAAL2G726_32, PTGSM, PTG726_24, PTG726_40:
 		return true
 	}
+	if isAMR(pt) {
+		return true
+	}
 	return false
 }
 
@@ -45,6 +48,10 @@ func CodecPT(name string) int {
 		return PTG726_24
 	case "G726-40":
 		return PTG726_40
+	case "AMR":
+		return PTAMR
+	case "AMR-WB":
+		return PTAMRWB
 	case "AAL2-G726-32":
 		return PTAAL2G726_32
 	case "GSM":
@@ -142,8 +149,11 @@ type Transcoder struct {
 	mapped        bool
 }
 
-func NewTranscoder(from, to int) *Transcoder {
-	return &Transcoder{from: from, to: to, dec: newVoice(from), enc: newVoice(to)}
+func NewTranscoder(from, to int) *Transcoder { return NewTranscoderFmtp(from, to, "") }
+
+// NewTranscoderFmtp is NewTranscoder with the receiving party's format parameters (AMR's mode-set).
+func NewTranscoderFmtp(from, to int, fmtp string) *Transcoder {
+	return &Transcoder{from: from, to: to, dec: newVoiceFmtp(from, ""), enc: newVoiceFmtp(to, fmtp)}
 }
 
 // scale converts a count of from-clock ticks into to-clock ticks.

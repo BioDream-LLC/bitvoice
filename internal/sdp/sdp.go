@@ -258,6 +258,8 @@ type Codec struct {
 	Name      string
 	ClockRate int
 	Channels  int
+	// Fmtp is the codec's format parameters (octet-align=1;mode-set=...), from its a=fmtp line.
+	Fmtp string
 }
 
 // Attributes are the rtpmap line for a codec and the fmtp line some need: G.729 without Annex B
@@ -274,6 +276,17 @@ func (c Codec) Attributes() []Line {
 		return []Line{{'a', fmt.Sprintf("rtpmap:%d opus/48000/2", c.PT)}, {'a', fmt.Sprintf("fmtp:%d minptime=10;useinbandfec=1", c.PT)}}
 	case "G729":
 		return []Line{{'a', fmt.Sprintf("rtpmap:%d G729/8000", c.PT)}, {'a', fmt.Sprintf("fmtp:%d annexb=no", c.PT)}}
+	case "AMR", "AMR-WB":
+		// RFC 4867: octet-aligned unless the other side asked for bandwidth-efficient framing.
+		f := c.Fmtp
+		if f == "" {
+			f = "octet-align=1"
+		}
+		r := 8000
+		if strings.EqualFold(name, "AMR-WB") {
+			r = 16000
+		}
+		return []Line{{'a', fmt.Sprintf("rtpmap:%d %s/%d", c.PT, strings.ToUpper(name), r)}, {'a', fmt.Sprintf("fmtp:%d %s", c.PT, f)}}
 	}
 	if c.Channels > 1 {
 		return []Line{{'a', fmt.Sprintf("rtpmap:%d %s/%d/%d", c.PT, name, rate, c.Channels)}}
@@ -283,8 +296,8 @@ func (c Codec) Attributes() []Line {
 
 // static payload types that need no rtpmap (RFC 3551).
 var static = map[int]Codec{
-	0: {0, "PCMU", 8000, 1}, 3: {3, "GSM", 8000, 1}, 8: {8, "PCMA", 8000, 1}, 9: {9, "G722", 8000, 1},
-	18: {18, "G729", 8000, 1}, 13: {13, "CN", 8000, 1},
+	0: {PT: 0, Name: "PCMU", ClockRate: 8000, Channels: 1}, 3: {PT: 3, Name: "GSM", ClockRate: 8000, Channels: 1}, 8: {PT: 8, Name: "PCMA", ClockRate: 8000, Channels: 1}, 9: {PT: 9, Name: "G722", ClockRate: 8000, Channels: 1},
+	18: {PT: 18, Name: "G729", ClockRate: 8000, Channels: 1}, 13: {PT: 13, Name: "CN", ClockRate: 8000, Channels: 1},
 }
 
 // Codecs returns the codecs a media section offers, in preference order.
@@ -311,6 +324,19 @@ func (m *Media) Codecs() []Codec {
 			c.Channels, _ = strconv.Atoi(parts[2])
 		}
 		maps[pt] = c
+	}
+	for _, l := range m.Lines {
+		v, ok := strings.CutPrefix(l.Value, "fmtp:")
+		if l.Type != 'a' || !ok {
+			continue
+		}
+		ptS, params, _ := strings.Cut(v, " ")
+		if pt, err := strconv.Atoi(ptS); err == nil {
+			if c, ok := maps[pt]; ok {
+				c.Fmtp = strings.TrimSpace(params)
+				maps[pt] = c
+			}
+		}
 	}
 	var out []Codec
 	for _, f := range m.Formats {

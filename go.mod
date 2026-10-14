@@ -3,6 +3,8 @@ module github.com/biodream-llc/bitvoice
 go 1.26.0
 
 require (
+	github.com/VoiceBlender/goamr-nb v1.0.0
+	github.com/VoiceBlender/goamr-wb v1.1.1
 	github.com/darui3018823/opus v1.5.0
 	github.com/dop251/goja v0.0.0-20260806115107-493f22071ef6
 	github.com/hunydev/g729 v0.2.3-rc5

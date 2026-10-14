@@ -28,7 +28,7 @@ func Dynamic(pt int) bool {
 	case PTOpus, PTG726_32, PTG726_16, PTAAL2G726_32, PTG726_24, PTG726_40:
 		return true
 	}
-	return false
+	return isAMR(pt)
 }
 
 // voice is one codec's encoder or decoder, holding the state that carries from packet to packet.
@@ -68,6 +68,8 @@ func newVoice(pt int) voice {
 		return &g726v{enc: NewG726Encoder(32).MSBFirst(), dec: NewG726Decoder(32).MSBFirst()}
 	case PTGSM:
 		return &gsmv{enc: NewGSMEncoder(), dec: NewGSMDecoder()}
+	case PTAMR, PTAMRBE, PTAMRWB, PTAMRWBBE:
+		return newVoiceFmtp(pt, "")
 	}
 	return nil
 }
@@ -315,4 +317,4 @@ func (d *Decoders) Wideband(pt int, payload []byte) []int16 {
 }
 
 // IsWideband says whether a codec carries 16 kHz audio.
-func IsWideband(pt int) bool { return pt == PTG722 || pt == PTOpus }
+func IsWideband(pt int) bool { return pt == PTG722 || pt == PTOpus || pt == PTAMRWB || pt == PTAMRWBBE }

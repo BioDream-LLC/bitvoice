@@ -142,6 +142,7 @@ type Endpoint struct {
 	dtmf   func(key byte)
 	lastEv uint32
 	haveEv bool
+	fmtp string // the format parameters this party agreed (AMR's mode-set)
 }
 
 // SetTap sets a function that sees every packet this party sends, after clean-up; nil removes it. It
@@ -310,6 +311,20 @@ func (e *Endpoint) SetRemote(addr string, port int) {
 }
 
 // SetPayloadType records the payload type this party expects (0 PCMU, 8 PCMA, 9 G.722, -1 unknown).
+// SetFmtp gives the format parameters this party agreed for its codec (AMR's mode-set), used by the
+// encoder BitVoice converts to it with.
+func (e *Endpoint) SetFmtp(f string) {
+	e.mu.Lock()
+	changed := e.fmtp != f
+	e.fmtp = f
+	e.mu.Unlock()
+	if changed {
+		e.xmu.Lock()
+		e.xcode, e.lastX = nil, nil
+		e.xmu.Unlock()
+	}
+}
+
 func (e *Endpoint) SetPayloadType(pt int) {
 	e.mu.Lock()
 	changed := e.wantPT != pt
@@ -580,6 +595,8 @@ func (e *Endpoint) account(pkt []byte, now time.Time) {
 	}
 	if st.ClockRate = 8000; st.PT == PTOpus {
 		st.ClockRate = 48000
+	} else if st.PT == PTAMRWB || st.PT == PTAMRWBBE {
+		st.ClockRate = 16000
 	}
 	seq := binary.BigEndian.Uint16(pkt[2:4])
 	ts := binary.BigEndian.Uint32(pkt[4:8])
@@ -620,7 +637,7 @@ func (e *Endpoint) account(pkt []byte, now time.Time) {
 
 func (e *Endpoint) send(pkt []byte) {
 	e.mu.Lock()
-	to, want, out, pmap, sent := e.remote, e.wantPT, e.srtpOut, e.ptMap, e.sent
+	to, want, out, pmap, sent, fmtp := e.remote, e.wantPT, e.srtpOut, e.ptMap, e.sent, e.fmtp
 	e.mu.Unlock()
 
 	if Transcodable(want) && len(pkt) >= 12 {
@@ -631,7 +648,7 @@ func (e *Endpoint) send(pkt []byte) {
 				if e.xcode == nil {
 					e.xcode = map[int]*Transcoder{}
 				}
-				x = NewTranscoder(pt, want)
+				x = NewTranscoderFmtp(pt, want, fmtp)
 				e.xcode[pt] = x
 			}
 			e.lastX = x
