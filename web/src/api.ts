@@ -195,7 +195,7 @@ export interface SystemSettings {
   audio: { voicemail: boolean; calls: boolean }
   gitops: { url: string; token: string; everyMinutes: number; apply: boolean }
   vault: { awsAccessKey: string; awsSecretKey: string; azureTenant: string; azureClientId: string; azureClientSecret: string }
-  emergencyEmail: string[]; sendLocation: boolean; videoOff?: boolean; publicSafety?: boolean
+  emergencyEmail: string[]; sendLocation: boolean; videoOff?: boolean; videoTranscode?: boolean; ffmpeg?: string; publicSafety?: boolean
   faxMail?: FaxMail; faxPaper?: '' | 'letter' | 'a4'; psap?: PSAPSettings; core?: CoreSettings; radio?: RadioSettings
   emergencyMode: { on: boolean; destination: Destination; code: string; allowed: string[]; since?: string; by?: string }
   mobile: { push: '' | 'relay' | 'direct'; relayUrl: string; relayKey: string; relaySecret: string; serverUrl: string; fcm: string
@@ -313,7 +313,7 @@ export interface UpgradeStatus {
   running: string; signedBuild: boolean; waiting: '' | 'switch' | 'rollback'; since?: string; calls: number; possible: boolean
   state: { currentVersion: string; previousVersion: string; stagedVersion: string; stagedSigned: boolean; pending: boolean; history: { at: string; what: string }[] }
 }
-export interface SystemInfo { version: string; name: string; rev: number; addresses: string[]; sipPort: number; tlsPort: number; httpsPort: number; amiAddress: string; uptimeSeconds: number; tenant?: Tenant | null; hosts?: boolean; publicSafety?: boolean; publicSafetyInUse?: string }
+export interface SystemInfo { version: string; name: string; rev: number; addresses: string[]; sipPort: number; tlsPort: number; httpsPort: number; ffmpeg?: boolean; amiAddress: string; uptimeSeconds: number; tenant?: Tenant | null; hosts?: boolean; publicSafety?: boolean; publicSafetyInUse?: string }
 export interface TenantLimits { extensions: number; calls: number; storageMB: number; aiPerDay: number }
 export interface Tenant { id: string; name: string; domain: string; suspended: boolean; limits: TenantLimits; note: string; created?: string }
 export interface TenantView extends Tenant { running: boolean; extensions: number; phones: number; calls: number; storageBytes: number; url: string; sipUser: string; admins: number }

@@ -60,6 +60,8 @@ type Call struct {
 	direction, from, fromName, to, toName, trunk string
 	callerExt                                    string
 	signed                                       string // the SHAKEN attestation this call was signed with
+	vconv                                        *videoConverters // video converted between the two parties' codecs (under vmu)
+	vmu                                          sync.Mutex
 	deskExt                                      string // the hot desk the call was made from, when it was
 	notice                                       string // a recording notice still to give: announce or beep
 	noticeLeg                                    *Leg
@@ -812,6 +814,9 @@ func (c *Call) acceptFork(l *Leg, answer *sdp.Session) {
 	}
 	resp := a.describeFor(answer)
 	fitAnswer(resp.Audio(), c.offer.Audio())
+	if c.e.videoTranscodeOn() {
+		fitVideoAnswer(videoMedia(resp), videoMedia(c.offer))
+	}
 	a.mu.Lock()
 	a.localSDP = resp
 	a.answered = true

@@ -162,6 +162,11 @@ type System struct {
 	// VideoOff refuses video in calls (audio only). By default video passes between phones that both
 	// offer it, as it is, without conversion.
 	VideoOff bool `json:"videoOff,omitempty"`
+	// VideoTranscode converts video between H.264 and VP8 when two parties have no codec in common,
+	// with ffmpeg (FFmpeg names its program; empty finds ffmpeg on the path). It costs a processor
+	// core or so per call, so it is off by default.
+	VideoTranscode bool   `json:"videoTranscode,omitempty"`
+	FFmpeg         string `json:"ffmpeg,omitempty"`
 	// PublicSafety shows the 911 profile, the radio console and NG911 Core Services in the menu. They
 	// are a lab and design-partner track, not certified for live 911 or radio dispatch, so a phone
 	// system shows only its own screens until someone switches them on. Office 911 (emergency calls,

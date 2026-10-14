@@ -228,6 +228,7 @@ export function Settings() {
   const admin = useIsAdmin()
   const { data } = useSettingsQuery()
   const { data: exts } = useExtensionsQuery()
+  const { data: sysInfo } = useSystemQuery()
   const [save, { isLoading }] = useSaveSettingsMutation()
   const { draft: s, setDraft: setS, reset, stale } = useDraft<SettingsT>(data)
   const [err, setErr] = useState<ApiErrorBody | null>(null)
@@ -262,7 +263,21 @@ export function Settings() {
           </Field>
           <div className="space-y-1">
             <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={!sys.videoOff} onChange={(v) => setSys({ videoOff: !v })} label="Video calls" /><span>Video calls</span></label>
-            <p className="text-xs text-slate-500">Video passes between phones (and video apps) that both send it, as it is: BitVoice does not convert video, so both need a codec in common (most use H.264). A phone without video gets sound only.</p>
+            <p className="text-xs text-slate-500">Video passes between phones (and video apps) that both send it, as it is, when they have a codec in common (most use H.264). A phone without video gets sound only.</p>
+            {!sys.videoOff && (
+              <div className="space-y-2 pt-1">
+                <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={!!sys.videoTranscode} onChange={(v) => setSys({ videoTranscode: v })} label="Convert video" />
+                  <span>Convert video between H.264 and VP8 <span className="text-xs text-slate-500">(when two parties have no codec in common; about a processor core per call)</span></span></label>
+                {sys.videoTranscode && (
+                  <Field label="ffmpeg program" htmlFor="sff" error={p('system.ffmpeg')} hint="Empty finds ffmpeg on the path.">
+                    <input id="sff" className="input font-mono" value={sys.ffmpeg ?? ''} onChange={(e) => setSys({ ffmpeg: e.target.value.trim() })} placeholder="/usr/bin/ffmpeg" />
+                  </Field>
+                )}
+                {sys.videoTranscode && sysInfo && (sysInfo.ffmpeg
+                  ? <p className="text-xs text-emerald-300">ffmpeg is installed: video is converted when needed.</p>
+                  : <p className="text-xs text-amber-300">ffmpeg is not installed here, so video is not converted. Install it (apt install ffmpeg, brew install ffmpeg) or give its path.</p>)}
+              </div>
+            )}
           </div>
           <PublicSafetySwitch on={!!sys.publicSafety} set={(v) => setSys({ publicSafety: v })} />
           <Field label="Country" htmlFor="sc" hint="Sets the tones callers hear.">

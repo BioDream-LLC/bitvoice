@@ -172,6 +172,7 @@ func (l *Leg) videoRemote(s *sdp.Session, isAnswer bool) {
 // connect joins two legs' sound, and their video when both carry it; b nil leaves a alone (hold,
 // music, a prompt).
 func connect(a, b *Leg) {
+	stopVideoConversion(a)
 	if b == nil {
 		media.Connect(a.ep, nil)
 		if v := a.videoEP(); v != nil {
@@ -179,16 +180,41 @@ func connect(a, b *Leg) {
 		}
 		return
 	}
+	stopVideoConversion(b)
 	media.Connect(a.ep, b.ep)
 	av, bv := a.videoEP(), b.videoEP()
 	switch {
 	case av != nil && bv != nil:
+		if a.call != nil && a.call.convertVideo(a, b) {
+			break
+		}
 		media.Connect(av, bv)
 		mapVideoTypes(a, b)
 	case av != nil:
 		media.Connect(av, nil)
 	case bv != nil:
 		media.Connect(bv, nil)
+	}
+}
+
+// stopVideoConversion stops the converters of a leg's call and takes their taps off its video.
+func stopVideoConversion(l *Leg) {
+	if l == nil || l.call == nil {
+		return
+	}
+	c := l.call
+	c.vmu.Lock()
+	v := c.vconv
+	c.vconv = nil
+	c.vmu.Unlock()
+	if v == nil {
+		return
+	}
+	v.stop()
+	for _, x := range []*Leg{v.a, v.b} {
+		if ep := x.videoEP(); ep != nil {
+			ep.SetTap(nil)
+		}
 	}
 }
 

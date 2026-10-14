@@ -40,6 +40,7 @@ type phone struct {
 	// videoPT (96 by default).
 	video   *net.UDPConn
 	videoPT int
+	videoCodec string // H264 when empty
 	vmu     sync.Mutex // video may change during a call
 	// t38, when set, makes the phone take T.38 fax at this socket when offered it.
 	t38 *net.UDPConn
@@ -152,8 +153,12 @@ func (p *phone) offer(dir string) []byte {
 			pt = 96
 		}
 		n := strconv.Itoa(pt)
+		vc := p.videoCodec
+		if vc == "" {
+			vc = "H264"
+		}
 		s.Media = append(s.Media, &sdp.Media{Type: "video", Port: video.LocalAddr().(*net.UDPAddr).Port, Proto: "RTP/AVP", Formats: []string{n},
-			Lines: []sdp.Line{{Type: 'a', Value: "rtpmap:" + n + " H264/90000"}, {Type: 'a', Value: "fmtp:" + n + " profile-level-id=42e01f"}, {Type: 'a', Value: "sendrecv"}}})
+			Lines: []sdp.Line{{Type: 'a', Value: "rtpmap:" + n + " " + vc + "/90000"}, {Type: 'a', Value: "fmtp:" + n + " profile-level-id=42e01f"}, {Type: 'a', Value: "sendrecv"}}})
 	}
 	return s.Bytes()
 }

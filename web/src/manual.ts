@@ -1546,17 +1546,20 @@ Trunks come in switched off and without passwords, as exports do not carry them.
 These exports hold no SIP passwords, so each extension gets a new one; voicemail PINs, names and email addresses come over when the export has them. Cisco, Avaya H.323/DCP and Mitel phones run their maker's own software and cannot be set up by BitVoice: the import says how many were listed. Cisco phones can be re-flashed with Cisco's multiplatform (SIP) firmware; Avaya J100 and Mitel 6800/6900 phones can register to BitVoice by hand in SIP mode.`,
   },
   {
-    id: 'video', title: 'Video calls', route: '/settings', keys: 'video calls camera h264 h.264 vp8 video phone face to face picture',
+    id: 'video', title: 'Video calls', route: '/settings', keys: 'video calls camera h264 h.264 vp8 video phone face to face picture convert transcode transcoding ffmpeg',
     body: `When both phones in a call send video (video desk phones, softphones, video doorbells), the picture passes between them through BitVoice. Nothing to set up: it is on unless **Settings → Video calls** is switched off.
 
 ::figure video
 
-- BitVoice relays the video as it is, on a port of its own for each phone, so the phones never learn each other's addresses. It never converts video: the two need a codec in common (nearly every video phone has H.264). When they number the same codec differently, BitVoice renumbers it on the way.
+- BitVoice relays the video as it is, on a port of its own for each phone, so the phones never learn each other's addresses. With a codec in common (nearly every video phone has H.264) it never decodes the video; without one, it can convert (below). When they number the same codec differently, BitVoice renumbers it on the way.
 - The picture is encrypted (SRTP) to each phone that encrypts its sound.
 - A phone's request for a fresh picture (after lost packets) reaches the other phone, so the picture recovers in a moment.
 - A camera switched on during a call (a softphone's video button) works too: the other phone is asked first, and the picture starts when it says yes.
 - A phone without video, or a call to an outside number, gets sound only. On hold or while parked the picture pauses, and comes back when the call does. After a transfer it carries on only when the new party sends video too.
-- Video uses far more of the network than sound (about 0.5 to 2 Mbit/s each way per call): allow for it on slow links and in the media port range.`,
+- Video uses far more of the network than sound (about 0.5 to 2 Mbit/s each way per call): allow for it on slow links and in the media port range.
+
+## Converting video
+Phones and apps that share a video codec (most use H.264) get each other's video as it is. When two parties have none in common (a desk phone with only H.264 and a browser with only VP8), switch on **Convert video between H.264 and VP8** in Settings: BitVoice then offers both codecs, answers each party in its own, and converts each way with **ffmpeg**, which must be installed on the server (apt install ffmpeg, brew install ffmpeg; or give its path). Conversion costs about a processor core per call and adds a little delay, so it is off by default and used only when needed. Settings says whether ffmpeg was found.`,
   },
   {
     id: 'psap', title: '911 calls (the 911 profile)', route: '/psap', keys: '911 psap ng911 i3 esinet location pidf-lo held rebid ali spill eido cad nena log answer time call-taker',

@@ -266,3 +266,18 @@ test('SNMP monitoring and call records elsewhere', async ({ page }) => {
   await page.getByRole('button', { name: 'Save' }).first().click()
   await expect(page.getByText('Settings saved')).toBeVisible()
 })
+
+// Video conversion: switched on in Settings, which says whether ffmpeg is installed.
+test('video conversion setting', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/#/settings')
+  await page.getByRole('switch', { name: 'Convert video' }).click()
+  await expect(page.getByText(/ffmpeg is (installed|not installed)/)).toBeVisible()
+  await page.getByRole('button', { name: 'Save' }).first().click()
+  await expect(page.getByText('Settings saved')).toBeVisible()
+  const s = await page.evaluate(async () => (await (await fetch('./api/settings')).json()).system)
+  expect(s.videoTranscode).toBe(true)
+  await page.getByRole('switch', { name: 'Convert video' }).click()
+  await page.getByRole('button', { name: 'Save' }).first().click()
+  await expect(page.getByText('Settings saved')).toBeVisible()
+})

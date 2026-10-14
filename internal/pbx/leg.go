@@ -128,6 +128,7 @@ func (l *Leg) close() {
 	if ep != nil {
 		ep.Close()
 	}
+	stopVideoConversion(l)
 	l.closeVideo()
 	l.closeImage()
 }
@@ -467,7 +468,9 @@ func (l *Leg) describeFor(from *sdp.Session) *sdp.Session {
 				answering = &sdp.Media{} // the party offered no video: refuse it
 			}
 		}
-		l.describeVideo(video, answering, s.Audio() != nil && s.Audio().Secure())
+		if l.describeVideo(video, answering, s.Audio() != nil && s.Audio().Secure()) && offer == nil && l.e.videoTranscodeOn() {
+			offerVideoAlternatives(video) // a party with the other codec can still be shown
+		}
 	}
 	return s
 }
