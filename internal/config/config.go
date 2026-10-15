@@ -382,6 +382,24 @@ type Radio struct {
 	// each finished transmission (radio.transmission).
 	CADURL    string `json:"cadUrl"`
 	CADSecret string `json:"cadSecret"`
+	// Aliases name radios: the console shows "Engine 5" rather than unit 1205.
+	Aliases []UnitAlias `json:"aliases"`
+}
+
+// UnitAlias is a radio's name on the console, by its P25 unit ID.
+type UnitAlias struct {
+	Unit int    `json:"unit"` // 1-16777215
+	Name string `json:"name"`
+}
+
+// AliasFor is a radio unit's name, or "" when it has none.
+func (r Radio) AliasFor(unit int) string {
+	for _, a := range r.Aliases {
+		if a.Unit == unit {
+			return a.Name
+		}
+	}
+	return ""
 }
 
 // P25Console names the console subsystem on the P25 system: the system's WACN and system ID,
@@ -1872,6 +1890,22 @@ func (c *Config) Validate() error {
 	}
 	{
 		r := &c.System.Radio
+		seenUnit := map[int]bool{}
+		for i := range r.Aliases {
+			a := &r.Aliases[i]
+			a.Name = strings.TrimSpace(a.Name)
+			f := fmt.Sprintf("system.radio.aliases[%d]", i)
+			switch {
+			case a.Unit < 1 || a.Unit > 0xFFFFFF:
+				p.add(f+".unit", "a P25 unit ID, 1 to 16777215")
+			case seenUnit[a.Unit]:
+				p.add(f+".unit", "this radio is named twice")
+			}
+			seenUnit[a.Unit] = true
+			if a.Name == "" || len(a.Name) > 40 {
+				p.add(f+".name", "a name of up to 40 characters")
+			}
+		}
 		sipPort := c.System.SIPPort
 		if r.CADURL = strings.TrimSpace(r.CADURL); r.CADURL != "" && !strings.HasPrefix(r.CADURL, "https://") && !strings.HasPrefix(r.CADURL, "http://") {
 			p.add("system.radio.cadUrl", "CAD's https address that takes the radio events")

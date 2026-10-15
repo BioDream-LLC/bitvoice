@@ -1,11 +1,11 @@
 import { clsx } from 'clsx'
 import {
-  BellRing, Headphones, KeyRound, Link2, Lock, LockOpen, Mic, Phone, PhoneOff, Plus, Radio as RadioIcon, Save, Search, Siren, Trash2, Volume2, VolumeX,
+  BellRing, CheckCheck, Headphones, KeyRound, Link2, Lock, LockOpen, Mic, Phone, PhoneOff, Plus, Radio as RadioIcon, Save, Search, Siren, Trash2, Volume2, VolumeX,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import {
-  errorOf, useAlertToneMutation, useHangUpMutation, useMonitorMutation, usePatchMutation, usePttMutation, useRadioLogQuery, useRadioQuery,
+  errorOf, useAckEmergencyMutation, useAlertToneMutation, useHangUpMutation, useMonitorMutation, usePatchMutation, usePttMutation, useRadioLogQuery, useRadioQuery, useSimulSelectMutation,
   useSaveSettingsMutation, useSettingsQuery, useUnitCallMutation,
   type ApiErrorBody, type ConsoleState, type P25Key, type RadioSettings,
 } from './api'
@@ -78,8 +78,16 @@ function Channels({ st, pos, admin }: { st: ConsoleState; pos?: Position; admin:
   const [patch] = usePatchMutation()
   const [alert] = useAlertToneMutation()
   const [hangUp] = useHangUpMutation()
+  const [simul] = useSimulSelectMutation()
+  const [ack] = useAckEmergencyMutation()
   const [patching, setPatching] = useState<string | null>(null)
+  const [picked, setPicked] = useState<string[]>([]) // channels chosen for simulselect
   if (!st.channels.length) return null
+  const simulKey = (on: boolean) => {
+    if (!pos) return toast.info('Join the console first')
+    simul({ call: pos.call, channels: picked, on }).unwrap().catch((e) => toast.error(errorOf(e).message))
+  }
+  const doAck = (id: string) => ack(id).unwrap().then(() => toast.success('Emergency acknowledged')).catch((e) => toast.error(errorOf(e).message))
   const heard = (id: string) => !pos || !pos.monitor.length || pos.monitor.includes(id)
   const key = (channel: string, on: boolean) => {
     if (!pos) return toast.info('Join the console first')
@@ -104,11 +112,25 @@ function Channels({ st, pos, admin }: { st: ConsoleState; pos?: Position; admin:
     setPatching(null)
   }
   const nameOf = (id: string) => st.channels.find((c) => c.id === id)?.name ?? id
+  const simulOn = picked.length > 1 && picked.every((id) => pos?.ptt.includes(id))
   return (
+    <>
+    {admin && pos && (
+      <section aria-label="Simulselect" className="card mt-6 flex flex-wrap items-center gap-3 p-3">
+        <RadioIcon size={16} className="text-rose-300" aria-hidden />
+        <span className="text-sm text-slate-300">Simulselect: tick channels below, then hold to talk on all of them at once.</span>
+        <button className={clsx('btn ml-auto justify-center px-6', simulOn && 'bg-rose-600 text-white')} disabled={picked.length < 2} aria-pressed={simulOn} aria-label={`Talk on ${picked.length} channels`}
+          onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); simulKey(true) }} onPointerUp={() => simulKey(false)} onPointerCancel={() => simulKey(false)}
+          onKeyDown={(e) => { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); simulKey(true) } }}
+          onKeyUp={(e) => { if (e.key === ' ' || e.key === 'Enter') simulKey(false) }}>
+          <Mic size={16} aria-hidden /> {simulOn ? 'Talking on all' : `Hold to talk on ${picked.length || 'the ticked'} channels`}
+        </button>
+      </section>
+    )}
     <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="Channels">
       {st.channels.map((c) => {
         const mineTx = pos?.ptt.includes(c.id)
-        const emergency = c.emergency || c.talker?.includes('EMERGENCY')
+        const emergency = c.emergency || c.talker?.includes('EMERGENCY') || !!c.emergencyUnit
         return (
           <article key={c.id} aria-label={c.name} className={clsx('card space-y-3 border-2 p-4', emergency ? 'border-rose-500' : border[c.color] ?? 'border-slate-800',
             mineTx && 'ring-2 ring-rose-500', patching === c.id && 'ring-2 ring-violet-400')}>
@@ -120,10 +142,24 @@ function Channels({ st, pos, admin }: { st: ConsoleState; pos?: Position; admin:
               {emergency && <span className="flex items-center gap-1 rounded bg-rose-700 px-1.5 text-[10px] font-bold text-white"><Siren size={11} aria-hidden /> EMERGENCY</span>}
               {c.txEncryption && <span className="flex items-center gap-1 rounded bg-sky-900/60 px-1.5 text-[10px] font-semibold text-sky-200" title="Dispatchers transmit encrypted"><Lock size={10} aria-hidden /> TX {c.txEncryption}</span>}
               {c.txBy && <span className="ml-auto rounded bg-rose-900/60 px-1.5 text-xs font-semibold text-rose-200">{c.tone ? 'tone' : c.waiting ? 'asking' : 'TX'} {c.txBy}</span>}
+              {admin && pos && !c.private && (
+                <label className="ml-auto flex items-center gap-1 text-xs text-slate-400">
+                  <input type="checkbox" checked={picked.includes(c.id)} onChange={(e) => setPicked((p) => e.target.checked ? [...p, c.id] : p.filter((x) => x !== c.id))} aria-label={`Simulselect ${c.name}`} /> select
+                </label>
+              )}
             </header>
+            {c.emergencyUnit && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg bg-rose-950/70 p-2 text-sm" role="alert">
+                <Siren size={14} className="animate-pulse text-rose-300" aria-hidden />
+                <span className="font-semibold text-rose-200">Emergency from {c.emergencyAlias || `unit ${c.emergencyUnit}`}</span>
+                {c.emergencyAt && <span className="text-xs text-rose-300/80">since {new Date(c.emergencyAt).toLocaleTimeString()}</span>}
+                {admin && <button className="btn ml-auto py-1" onClick={() => doAck(c.id)}><CheckCheck size={14} className="text-emerald-300" aria-hidden /> Acknowledge</button>}
+              </div>
+            )}
+            {!c.emergencyUnit && c.ackBy && c.ackAt && <p className="text-xs text-slate-500">Emergency acknowledged by {c.ackBy} at {new Date(c.ackAt).toLocaleTimeString()}</p>}
             {c.talker && (
               <p className={clsx('flex items-center gap-1 text-xs', emergency ? 'font-semibold text-rose-300' : 'text-emerald-300')}>
-                Unit {c.talker.replace(' EMERGENCY', '')}
+                {c.talkerName ? <><span className="font-semibold">{c.talkerName}</span> <span className="font-mono text-slate-500">({c.talker.replace(' EMERGENCY', '')})</span></> : <>Unit {c.talker.replace(' EMERGENCY', '')}</>}
                 {c.encryption && (c.noKey
                   ? <span className="ml-1 flex items-center gap-1 text-amber-300"><LockOpen size={11} aria-hidden /> {c.encryption}, no key: muted</span>
                   : <span className="ml-1 flex items-center gap-1 text-sky-300"><Lock size={11} aria-hidden /> {c.encryption}</span>)}
@@ -164,6 +200,7 @@ function Channels({ st, pos, admin }: { st: ConsoleState; pos?: Position; admin:
         )
       })}
     </section>
+    </>
   )
 }
 
@@ -193,7 +230,7 @@ function RadioLog() {
                   <td className="py-1.5 pr-3 font-mono text-xs text-slate-300">{new Date(x.start).toLocaleString()}</td>
                   <td className="pr-3 text-slate-200">{x.channelName}</td>
                   <td className="pr-3">{x.direction === 'rx'
-                    ? <span className="text-emerald-300">{x.unit ? `Unit ${x.unit}` : 'A radio'}</span>
+                    ? <span className="text-emerald-300">{x.unitName ? `${x.unitName} (${x.unit})` : x.unit ? `Unit ${x.unit}` : 'A radio'}</span>
                     : <span className="text-rose-300">Dispatcher {x.dispatcher ?? ''}</span>}</td>
                   <td className="pr-3 font-mono text-xs text-slate-300">{x.seconds.toFixed(1)} s</td>
                   <td className="pr-3 text-xs">
@@ -216,13 +253,14 @@ function RadioLog() {
 }
 
 const blankP25: RadioSettings['p25'] = { wacn: '', system: '', rfss: 0, unit: 0, sipPort: 5062, console: true, priority: 4, keys: [], unitHome: '', unitHomeRfss: 0, unitTxKey: '' }
-const blankRadio: RadioSettings = { console: '', channels: [], p25: blankP25, record: false, cadUrl: '', cadSecret: '' }
+const blankRadio: RadioSettings = { console: '', channels: [], p25: blankP25, record: false, cadUrl: '', cadSecret: '', aliases: [] }
 
 function fromServer(r?: Partial<RadioSettings>): RadioSettings {
   return {
     ...blankRadio, ...(r ?? {}),
     channels: (r?.channels ?? []).map((c) => ({ ...c, kind: c.kind || 'roip', txKey: c.txKey ?? '' })),
     p25: { ...blankP25, ...(r?.p25 ?? {}), keys: r?.p25?.keys ?? [] },
+    aliases: r?.aliases ?? [],
   }
 }
 
@@ -285,6 +323,18 @@ function RadioSetup() {
       </div>
       {usesP25 && <P25Identity v={draft.p25} set={(v) => setDraft((d) => ({ ...d, p25: { ...d.p25, ...v } }))} p={p} />}
       {usesP25 && <P25Keys keys={keys} set={(k) => setDraft((d) => ({ ...d, p25: { ...d.p25, keys: k } }))} p={p} />}
+      <fieldset className="space-y-3 rounded-lg border border-slate-800 p-3">
+        <legend className="px-1 text-sm font-semibold text-violet-300">Radio names</legend>
+        <p className="text-sm text-slate-400">Name radios by their P25 unit ID: the console, the radio log and CAD show "Engine 5" rather than a number.</p>
+        {draft.aliases.map((a, i) => (
+          <div key={i} className="grid items-end gap-3 md:grid-cols-[10rem_1fr_auto]">
+            <Field label="Unit ID" htmlFor={`rau${i}`} error={p(`aliases[${i}].unit`)}><input id={`rau${i}`} className="input font-mono" inputMode="numeric" value={a.unit || ''} onChange={(e) => setDraft((d) => ({ ...d, aliases: d.aliases.map((x, j) => j === i ? { ...x, unit: Number(e.target.value.replace(/\D/g, '')) || 0 } : x) }))} /></Field>
+            <Field label="Name" htmlFor={`ran${i}`} error={p(`aliases[${i}].name`)}><input id={`ran${i}`} className="input" value={a.name} onChange={(e) => setDraft((d) => ({ ...d, aliases: d.aliases.map((x, j) => j === i ? { ...x, name: e.target.value } : x) }))} /></Field>
+            <button className="btn-ghost p-2" aria-label={`Remove the name for unit ${a.unit || i + 1}`} onClick={() => setDraft((d) => ({ ...d, aliases: d.aliases.filter((_, j) => j !== i) }))}><Trash2 size={15} className="text-rose-300" aria-hidden /></button>
+          </div>
+        ))}
+        <button className="btn" onClick={() => setDraft((d) => ({ ...d, aliases: [...d.aliases, { unit: 0, name: '' }] }))}><Plus size={14} className="text-emerald-300" aria-hidden /> Name a radio</button>
+      </fieldset>
       <fieldset className="space-y-3 rounded-lg border border-slate-800 p-3">
         <legend className="px-1 text-sm font-semibold text-violet-300">Recording and CAD</legend>
         <Toggle checked={draft.record} onChange={(c) => setDraft((d) => ({ ...d, record: c }))} label="Record every transmission (heard and sent) in the radio log" />

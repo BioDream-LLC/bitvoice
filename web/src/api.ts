@@ -140,19 +140,21 @@ export interface P25Console {
   wacn: string; system: string; rfss: number; unit: number; sipPort: number; console: boolean; priority: number
   keys: P25Key[]; unitHome: string; unitHomeRfss: number; unitTxKey: string
 }
-export interface RadioSettings { console: string; channels: RadioChannel[]; p25: P25Console; record: boolean; cadUrl: string; cadSecret: string }
+export interface UnitAlias { unit: number; name: string }
+export interface RadioSettings { console: string; channels: RadioChannel[]; p25: P25Console; record: boolean; cadUrl: string; cadSecret: string; aliases: UnitAlias[] }
 export interface ConsoleState {
   channels: {
     id: string; name: string; color: string; receive: boolean; lastRx?: string; txBy?: string; patched: string[]; problem?: string; kind: 'roip' | 'p25'
     linked: boolean; talker?: string; waiting?: boolean; notice?: string; encryption?: string; noKey?: boolean; txEncryption?: string
     private?: boolean; unit?: number; incoming?: boolean; emergency?: boolean; tone?: boolean
+    talkerName?: string; emergencyUnit?: string; emergencyAlias?: string; emergencyAt?: string; ackBy?: string; ackAt?: string
   }[]
   positions: { call: string; ext: string; name: string; monitor: string[]; ptt: string[] }[]
   tones: Record<string, string>
 }
 export interface Transmission {
   id: string; channel: string; channelName: string; direction: 'rx' | 'tx'; start: string; end: string; seconds: number
-  unit?: string; dispatcher?: string; tone?: string; emergency?: boolean; encryption?: string; private?: boolean; recording?: string
+  unit?: string; unitName?: string; dispatcher?: string; tone?: string; emergency?: boolean; encryption?: string; private?: boolean; recording?: string
 }
 export interface PSAPSettings { agencyId: string; elementId: string; aliAddress: string; eidoUrl: string; eidoToken: string; answerTarget: number; ttyOff: boolean }
 export interface AnswerReport {
@@ -460,6 +462,8 @@ export const api = createApi({
       findArea: b.query<{ found: boolean; why?: string; area?: Boundary }, Record<string, string>>({ query: (q) => `core/find?${new URLSearchParams(q)}` }),
       radio: b.query<ConsoleState, void>({ query: () => 'radio', providesTags: ['Calls'] }),
       ptt: b.mutation<void, { call: string; channel: string; on: boolean }>({ query: (body) => ({ url: 'radio/ptt', method: 'POST', body }) }),
+      simulSelect: b.mutation<void, { call: string; channels: string[]; on: boolean }>({ query: (body) => ({ url: 'radio/simulselect', method: 'POST', body }) }),
+      ackEmergency: b.mutation<unknown, string>({ query: (id) => ({ url: `radio/channels/${id}/ack`, method: 'POST' }), invalidatesTags: ['Calls'] }),
       monitor: b.mutation<void, { call: string; channels: string[] | null }>({ query: (body) => ({ url: 'radio/monitor', method: 'POST', body }) }),
       patch: b.mutation<void, { a: string; b: string; on: boolean }>({ query: (body) => ({ url: 'radio/patch', method: 'POST', body }) }),
       alertTone: b.mutation<void, { call: string; channel: string; tone: string }>({ query: (body) => ({ url: 'radio/tone', method: 'POST', body }) }),
@@ -809,7 +813,7 @@ export const api = createApi({
 })
 
 export const {
-  useFaxBoxesQuery, useCreateFaxBoxMutation, useUpdateFaxBoxMutation, useDeleteFaxBoxMutation, useFaxesQuery, useDeleteFaxMutation, useFaxKindsQuery, useSendFaxMutation, useRetryFaxMutation, useTestFaxMailMutation, usePsapReportQuery, usePsapLogQuery, useRebidMutation, useSendCallTextMutation, useTakeTextCallMutation, useEndTextCallMutation, useBoundariesQuery, useSaveBoundaryMutation, useDeleteBoundaryMutation, useLazyFindAreaQuery, useAddressDataQuery, useDeleteAddressesMutation, useValidateAddressMutation, useBcfLogQuery, useRadioQuery, usePttMutation, useMonitorMutation, usePatchMutation, useAlertToneMutation, useUnitCallMutation, useHangUpMutation, useRadioLogQuery,
+  useFaxBoxesQuery, useCreateFaxBoxMutation, useUpdateFaxBoxMutation, useDeleteFaxBoxMutation, useFaxesQuery, useDeleteFaxMutation, useFaxKindsQuery, useSendFaxMutation, useRetryFaxMutation, useTestFaxMailMutation, usePsapReportQuery, usePsapLogQuery, useRebidMutation, useSendCallTextMutation, useTakeTextCallMutation, useEndTextCallMutation, useBoundariesQuery, useSaveBoundaryMutation, useDeleteBoundaryMutation, useLazyFindAreaQuery, useAddressDataQuery, useDeleteAddressesMutation, useValidateAddressMutation, useBcfLogQuery, useRadioQuery, usePttMutation, useSimulSelectMutation, useAckEmergencyMutation, useMonitorMutation, usePatchMutation, useAlertToneMutation, useUnitCallMutation, useHangUpMutation, useRadioLogQuery,
   useTextingKindsQuery,
   useMeQuery, useAuthOptionsQuery, useLoginMutation, useLogoutMutation, useSetupStatusQuery, useCompleteSetupMutation,
   useExtensionsQuery, useCreateExtensionMutation, useUpdateExtensionMutation, useDeleteExtensionMutation, useLazyNextExtensionQuery,

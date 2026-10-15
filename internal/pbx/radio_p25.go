@@ -23,16 +23,17 @@ import (
 // audio for the channel goes out as IMBE while a dispatcher's push-to-talk is granted.
 
 type p25Channel struct {
-	group  *p25.Group
-	rtp    *net.UDPConn // the ISSI's RTP
-	gw     *net.UDPConn // the in-process gateway's side of the bridge party
-	cancel context.CancelFunc
-	up     bool
-	why    string
-	talker string
-	enc    string // the talker's encryption ("AES-256"); empty when clear
-	noKey  bool   // encrypted with a key this console does not have
-	txEnc  string // what dispatchers transmit with ("AES-256"; empty: clear)
+	group      *p25.Group
+	rtp        *net.UDPConn // the ISSI's RTP
+	gw         *net.UDPConn // the in-process gateway's side of the bridge party
+	cancel     context.CancelFunc
+	up         bool
+	why        string
+	talker     string
+	talkerName string // its alias
+	enc        string // the talker's encryption ("AES-256"); empty when clear
+	noKey      bool   // encrypted with a key this console does not have
+	txEnc      string // what dispatchers transmit with ("AES-256"; empty: clear)
 }
 
 // p25Keys turns the console's traffic keys into the p25 package's, with the channel's transmit key.
@@ -165,7 +166,7 @@ func (e *Engine) openP25(r *radio, ch *radioChannel, cfg *config.Config) error {
 			var ev *RadioUnitEvent
 			if c := r.channels[id]; c != nil && c.p25 != nil && t != nil && (c.p25.talker == "" || !strings.HasPrefix(c.p25.talker, t.Unit.String()) ||
 				t.Emergency && !strings.HasSuffix(c.p25.talker, " EMERGENCY")) {
-				ev = &RadioUnitEvent{Channel: id, ChannelName: c.cfg.Name, Unit: t.Unit.String(), UnitID: int(t.Unit.ID),
+				ev = &RadioUnitEvent{Channel: id, ChannelName: c.cfg.Name, Unit: t.Unit.String(), UnitID: int(t.Unit.ID), Alias: e.Config().System.Radio.AliasFor(int(t.Unit.ID)),
 					WACN: fmt.Sprintf("%05X", t.Unit.WACN), System: fmt.Sprintf("%03X", t.Unit.System), Emergency: t.Emergency,
 					Private: c.private, At: time.Now().UTC()}
 				if t.Alg != p25.AlgClear {
@@ -179,8 +180,12 @@ func (e *Engine) openP25(r *radio, ch *radioChannel, cfg *config.Config) error {
 						c.p25.enc, c.p25.noKey = p25.AlgName(t.Alg), t.NoKey
 					}
 					c.p25.talker = t.Unit.String()
+					c.p25.talkerName = e.Config().System.Radio.AliasFor(int(t.Unit.ID))
 					if t.Emergency {
 						c.p25.talker += " EMERGENCY"
+						if c.emUnit != t.Unit.String() || c.emAt.IsZero() {
+							c.emUnit, c.emAlias, c.emAt = t.Unit.String(), c.p25.talkerName, time.Now()
+						}
 					}
 				}
 			}
@@ -327,6 +332,7 @@ type RadioUnitEvent struct {
 	WACN        string    `json:"wacn"`
 	System      string    `json:"system"`
 	Emergency   bool      `json:"emergency"`
+	Alias       string    `json:"alias,omitempty"` // the radio's name on the console
 	Encryption  string    `json:"encryption,omitempty"`
 	Private     bool      `json:"private,omitempty"` // a unit-to-unit call to the console
 	At          time.Time `json:"at"`
@@ -364,6 +370,9 @@ func (e *Engine) incomingUnitCall(r *radio, tx *sip.ServerTx, in *sip.Incoming) 
 	ch := &radioChannel{cfg: config.RadioChannel{ID: id, Name: "Unit " + strconv.FormatUint(unit, 10), Kind: "p25", Home: home, HomeRFSS: homeRFSS,
 		TxKey: pc.UnitTxKey, Color: "violet"}, private: true, unit: uint32(unit), incoming: true,
 		emergency: strings.HasSuffix(strings.TrimSpace(in.Msg.Get("Priority")), ";e")}
+	if ch.emergency {
+		ch.emUnit, ch.emAlias, ch.emAt = fmt.Sprintf("%s.%s.%06x", strings.ToLower(pc.WACN), strings.ToLower(pc.System), unit), cfg.System.Radio.AliasFor(int(unit)), time.Now()
+	}
 	r.mu.Lock()
 	r.channels[id] = ch
 	for _, p := range r.positions {
@@ -385,7 +394,8 @@ func (e *Engine) incomingUnitCall(r *radio, tx *sip.ServerTx, in *sip.Incoming) 
 	ch.p25.group.Start(e.ctx)
 	e.Log.Info("private call from a radio", "unit", unit, "emergency", ch.emergency)
 	ev := RadioUnitEvent{Channel: id, ChannelName: ch.cfg.Name, Unit: fmt.Sprintf("%s.%s.%06x", strings.ToLower(pc.WACN), strings.ToLower(pc.System), unit),
-		UnitID: int(unit), WACN: strings.ToUpper(pc.WACN), System: strings.ToUpper(pc.System), Emergency: ch.emergency, Private: true, At: time.Now().UTC()}
+		UnitID: int(unit), WACN: strings.ToUpper(pc.WACN), System: strings.ToUpper(pc.System), Emergency: ch.emergency, Private: true, At: time.Now().UTC(),
+		Alias: e.Config().System.Radio.AliasFor(int(unit))}
 	e.publish("radio.unit", ev)
 	if ev.Emergency {
 		e.publish("radio.emergency", ev)

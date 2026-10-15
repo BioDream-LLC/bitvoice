@@ -113,6 +113,7 @@ func (e *Engine) radioAudio(r *radio, id string, sent bool, pkt []byte, dec *med
 func (r *radio) noteTransmission(ch *radioChannel, x *xmit) {
 	if c := ch.p25; c != nil && x.t.Direction == "rx" && c.talker != "" {
 		x.t.Unit = strings.TrimSuffix(c.talker, " EMERGENCY")
+		x.t.UnitName = c.talkerName
 		x.t.Emergency = x.t.Emergency || strings.HasSuffix(c.talker, " EMERGENCY")
 		x.t.Encryption = c.enc
 	}

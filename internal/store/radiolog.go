@@ -17,6 +17,7 @@ type Transmission struct {
 	End         time.Time `json:"end"`
 	Seconds     float64   `json:"seconds"`
 	Unit        string    `json:"unit,omitempty"`       // the radio's unit, when the system says (P25)
+	UnitName    string    `json:"unitName,omitempty"`   // its alias on the console
 	Dispatcher  string    `json:"dispatcher,omitempty"` // the extension that sent it
 	Tone        string    `json:"tone,omitempty"`       // an alert tone, when that is what was sent
 	Emergency   bool      `json:"emergency,omitempty"`

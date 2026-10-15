@@ -50,6 +50,13 @@ type radioChannel struct {
 	incoming  bool
 	emergency bool
 	notice    string // the last thing to tell the dispatcher (a push-to-talk not granted)
+	// An emergency stays raised on the console, after the radio stops talking, until a dispatcher
+	// acknowledges it.
+	emUnit  string
+	emAlias string
+	emAt    time.Time
+	ackBy   string
+	ackAt   time.Time
 }
 
 type position struct {
@@ -85,9 +92,18 @@ type ChannelState struct {
 	Notice  string `json:"notice,omitempty"`
 	// Encryption: of the transmission heard now (and whether this console lacks its key), and of
 	// what dispatchers send.
-	Encryption string `json:"encryption,omitempty"`
-	NoKey      bool   `json:"noKey,omitempty"`
-	TxEncrypt  string `json:"txEncryption,omitempty"`
+	// TalkerName is the talking radio's alias, when it has one.
+	TalkerName string `json:"talkerName,omitempty"`
+	// EmergencyUnit is a radio's emergency still waiting to be acknowledged (since EmergencyAt);
+	// AckBy and AckAt say who acknowledged the last one, and when.
+	EmergencyUnit  string    `json:"emergencyUnit,omitempty"`
+	EmergencyAlias string    `json:"emergencyAlias,omitempty"`
+	EmergencyAt    time.Time `json:"emergencyAt,omitzero"`
+	AckBy          string    `json:"ackBy,omitempty"`
+	AckAt          time.Time `json:"ackAt,omitzero"`
+	Encryption     string    `json:"encryption,omitempty"`
+	NoKey          bool      `json:"noKey,omitempty"`
+	TxEncrypt      string    `json:"txEncryption,omitempty"`
 }
 
 // PositionState is a dispatcher joined to the console.
@@ -377,8 +393,10 @@ func (e *Engine) Console() ConsoleState {
 		if s.Kind == "" {
 			s.Kind = "roip"
 		}
+		s.EmergencyUnit, s.EmergencyAlias, s.EmergencyAt, s.AckBy, s.AckAt = ch.emUnit, ch.emAlias, ch.emAt, ch.ackBy, ch.ackAt
 		if c := ch.p25; c != nil {
 			s.Linked, s.Talker = c.up, c.talker
+			s.TalkerName = c.talkerName
 			s.Encryption, s.NoKey, s.TxEncrypt = c.enc, c.noKey, c.txEnc
 			s.Waiting = ch.tx != "" && !c.group.Transmitting()
 			if !c.up && c.why != "" && s.Problem == "" {
@@ -433,4 +451,82 @@ func (e *Engine) stopRadio() {
 		r.issi.Close()
 		r.issi = nil
 	}
+}
+
+// RadioAck is an emergency a dispatcher acknowledged (radio.emergency.ack, for CAD and the log).
+type RadioAck struct {
+	Channel     string    `json:"channel"`
+	ChannelName string    `json:"channelName"`
+	Unit        string    `json:"unit"`
+	Alias       string    `json:"alias,omitempty"`
+	RaisedAt    time.Time `json:"raisedAt"`
+	By          string    `json:"by"` // the dispatcher's extension or name
+	At          time.Time `json:"at"`
+}
+
+// AckEmergency acknowledges the emergency raised on a channel: it stops flashing on every
+// console, and who acknowledged it is kept.
+func (e *Engine) AckEmergency(channel, by string) (RadioAck, error) {
+	r := e.radioSys()
+	r.mu.Lock()
+	ch := r.channels[channel]
+	if ch == nil {
+		r.mu.Unlock()
+		return RadioAck{}, errors.New("no such channel")
+	}
+	if ch.emUnit == "" {
+		r.mu.Unlock()
+		return RadioAck{}, errors.New("there is no emergency on " + ch.cfg.Name + " to acknowledge")
+	}
+	a := RadioAck{Channel: channel, ChannelName: ch.cfg.Name, Unit: ch.emUnit, Alias: ch.emAlias, RaisedAt: ch.emAt, By: by, At: time.Now().UTC()}
+	ch.emUnit, ch.emAlias, ch.emAt = "", "", time.Time{}
+	ch.ackBy, ch.ackAt = by, a.At
+	r.mu.Unlock()
+	e.Log.Info("radio emergency acknowledged", "channel", a.ChannelName, "unit", a.Unit, "by", by)
+	e.publish("radio.emergency.ack", a)
+	e.publish("radio.updated", nil)
+	return a, nil
+}
+
+// SimulSelect keys (or unkeys) several channels at once for a dispatcher, so one transmission goes
+// out on all of them. It is all or nothing: when any channel is in use by another dispatcher, none
+// is keyed.
+func (e *Engine) SimulSelect(call string, channels []string, on bool) error {
+	if len(channels) == 0 {
+		return errors.New("choose the channels to transmit on")
+	}
+	if !on {
+		for _, ch := range channels {
+			_ = e.PTT(call, ch, false)
+		}
+		return nil
+	}
+	r := e.radioSys()
+	r.mu.Lock()
+	for _, id := range channels {
+		ch := r.channels[id]
+		switch {
+		case r.positions[call] == nil:
+			r.mu.Unlock()
+			return ErrNoPosition
+		case ch == nil:
+			r.mu.Unlock()
+			return errors.New("no such channel")
+		case ch.tx != "" && ch.tx != call:
+			r.mu.Unlock()
+			return errors.New(ch.cfg.Name + " is in use by another dispatcher")
+		}
+	}
+	r.mu.Unlock()
+	var done []string
+	for _, id := range channels {
+		if err := e.PTT(call, id, true); err != nil {
+			for _, d := range done {
+				_ = e.PTT(call, d, false)
+			}
+			return err
+		}
+		done = append(done, id)
+	}
+	return nil
 }

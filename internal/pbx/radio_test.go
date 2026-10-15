@@ -152,4 +152,30 @@ func TestRadioConsole(t *testing.T) {
 	if !receivedLoud(gwB, 2*time.Second) {
 		t.Fatal("the patch did not carry Fire dispatch to Police 1")
 	}
+	e.Patch("a", "b", false)
+
+	// Simulselect: one transmission on both channels at once.
+	if err := e.SimulSelect(call, []string{"a", "b"}, true); err != nil {
+		t.Fatal(err)
+	}
+	if !receivedLoud(gwA, 2*time.Second) || !receivedLoud(gwB, 2*time.Second) {
+		t.Fatal("simulselect did not reach both gateways")
+	}
+	if st := e.Console(); st.Channels[0].TxBy != "100" || st.Channels[1].TxBy != "100" {
+		t.Fatalf("simulselect not shown: %+v", st.Channels)
+	}
+	if err := e.SimulSelect(call, []string{"a", "b"}, false); err != nil {
+		t.Fatal(err)
+	}
+	// All or nothing: with one channel in another dispatcher's hands, neither is keyed.
+	r := e.radioSys()
+	r.mu.Lock()
+	r.channels["a"].tx = "another-dispatcher"
+	r.mu.Unlock()
+	if err := e.SimulSelect(call, []string{"b", "a"}, true); err == nil {
+		t.Fatal("simulselect keyed a channel in use")
+	}
+	if st := e.Console(); st.Channels[1].TxBy != "" {
+		t.Fatalf("Police 1 was keyed although Fire dispatch was busy: %+v", st.Channels[1])
+	}
 }

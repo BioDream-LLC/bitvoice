@@ -29,6 +29,31 @@ func (s *Server) radioRoutes() {
 		}
 		w.WriteHeader(204)
 	})
+	s.handle("POST /api/radio/simulselect", true, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		var in struct {
+			Call     string   `json:"call"`
+			Channels []string `json:"channels"`
+			On       bool     `json:"on"`
+		}
+		if err := readJSON(r, &in); err != nil {
+			writeErr(w, err)
+			return
+		}
+		if err := s.Engine.SimulSelect(in.Call, in.Channels, in.On); err != nil {
+			writeError(w, 409, err.Error())
+			return
+		}
+		w.WriteHeader(204)
+	})
+	s.handle("POST /api/radio/channels/{id}/ack", true, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		a, err := s.Engine.AckEmergency(r.PathValue("id"), firstNonEmpty(u.Name, u.Username))
+		if err != nil {
+			writeError(w, 409, err.Error())
+			return
+		}
+		s.audit(r, u.Username, "radio.emergency.ack", a.ChannelName+" "+a.Unit)
+		writeJSON(w, 200, a)
+	})
 	s.handle("POST /api/radio/monitor", true, func(w http.ResponseWriter, r *http.Request, u store.User) {
 		var in struct {
 			Call     string   `json:"call"`

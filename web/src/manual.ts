@@ -1873,7 +1873,11 @@ Dispatchers talk on radio channels from the same headset as their phone calls. B
 
 **Alert tones.** **Send an alert tone…** on a channel sends one of: **Alert 1**, a steady 1000 Hz tone for 3 seconds; **Alert 2**, a warble between 1000 and 1500 Hz; **Alert 3**, 1000 Hz pulses; or a short **Beep**. The tone holds the channel while it plays (the tile shows **tone** and your extension), every dispatcher monitoring the channel hears it go out, and on a P25 talkgroup it goes once the home RFSS grants the channel.
 
-**Emergencies.** When a radio transmits as an emergency (its emergency button), its tile turns red with **EMERGENCY** and the unit ID, the server log notes it, and CAD is told at once (below).
+**Emergencies.** When a radio transmits as an emergency (its emergency button), its tile turns red with **EMERGENCY** and the unit ID, the server log notes it, and CAD is told at once (below). The emergency stays raised on every console after the radio stops talking, until a dispatcher presses **Acknowledge**: the tile then says who acknowledged it and when, and CAD gets a \`radio.emergency.ack\` event.
+
+**Simulselect.** To say one thing on several channels at once, tick **select** on each channel, then hold **Talk on N channels** in the bar above the tiles. It is all or nothing: if another dispatcher is talking on one of them, none is keyed and you are told which.
+
+**Radio names.** Under **Radio names**, name radios by their P25 unit ID (1205 is "Engine 5", say): the tile shows the name beside the unit while it talks, and the radio log and CAD's events carry it.
 
 **Radio log and recording.** Turn on **Record every transmission** under **Recording and CAD**: each transmission on each channel, heard or sent, is kept as a recording with a line in the **Radio log**: when, the channel, who (the radio's unit, or the dispatcher's extension), how long, and whether it was an emergency, an alert tone, encrypted or a private call. A heard transmission starts with the first speech and ends 1.5 seconds after the last word. Find a unit, dispatcher or channel with the search box, and press **Play** to listen. Recordings are kept as long as call recordings are (Settings, Recording).
 

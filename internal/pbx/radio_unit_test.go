@@ -20,7 +20,8 @@ func TestRadioConsolePrivateCalls(t *testing.T) {
 	cfg := testConfig()
 	cfg.System.Radio = config.Radio{Console: "800",
 		P25: config.P25Console{WACN: "BEE07", System: "AD5", RFSS: 2, Unit: 0x1001, SIPPort: sipPort,
-			UnitHome: "127.0.0.1:" + strconv.Itoa(h.stack.Port()), UnitHomeRFSS: 3}}
+			UnitHome: "127.0.0.1:" + strconv.Itoa(h.stack.Port()), UnitHomeRFSS: 3},
+		Aliases: []config.UnitAlias{{Unit: 300, Name: "Engine 5"}}}
 	if err := cfg.Validate(); err != nil {
 		t.Fatal(err)
 	}
@@ -114,6 +115,19 @@ func TestRadioConsolePrivateCalls(t *testing.T) {
 	id = "unit-300"
 	if c := tile(); c == nil || !c.Incoming || !c.Emergency || c.Unit != 300 {
 		t.Fatalf("incoming private call tile %+v", c)
+	}
+	// The emergency stays raised, with the radio's alias, until a dispatcher acknowledges it.
+	if c := tile(); c.EmergencyUnit == "" || c.EmergencyAlias != "Engine 5" || c.EmergencyAt.IsZero() {
+		t.Fatalf("emergency not raised: %+v", c)
+	}
+	if a, err := e.AckEmergency(id, "Pat"); err != nil || a.Alias != "Engine 5" || a.By != "Pat" {
+		t.Fatalf("ack %+v %v", a, err)
+	}
+	if c := tile(); c.EmergencyUnit != "" || c.AckBy != "Pat" || c.AckAt.IsZero() {
+		t.Fatalf("after the ack %+v", c)
+	}
+	if _, err := e.AckEmergency(id, "Pat"); err == nil {
+		t.Fatal("acknowledged twice")
 	}
 	// The radio talks; the dispatcher hears it. The call's first RTP (a heartbeat) says where to send.
 	disp.drainRTP()

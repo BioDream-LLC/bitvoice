@@ -190,14 +190,26 @@ test('radio console: a P25 talkgroup over the ISSI', async ({ page }) => {
     await expect(tile.getByText('TX AES-256')).toBeVisible({ timeout: 10_000 })
     await expect(tile.getByText('P25', { exact: true })).toBeVisible({ timeout: 10_000 })
 
-    // A radio talks: its unit ID shows while it does, and goes when it stops.
+    // Radio 197 (0xc5) gets a name; a second name for it is refused.
+    await setup.getByRole('button', { name: 'Name a radio' }).click()
+    await page.locator('#rau0').fill('197'); await page.locator('#ran0').fill('Engine 5')
+    await setup.getByRole('button', { name: 'Name a radio' }).click()
+    await page.locator('#rau1').fill('197'); await page.locator('#ran1').fill('Engine 6')
+    await setup.getByRole('button', { name: 'Save' }).click()
+    await expect(page.getByText('this radio is named twice')).toBeVisible()
+    await setup.getByRole('button', { name: 'Remove the name for unit 197' }).last().click()
+    await setup.getByRole('button', { name: 'Save' }).click()
+    await expect(page.getByText('Radio console saved').last()).toBeVisible()
+
+    // A radio talks: its name and unit ID show while it does, and go when it stops.
     const replay = rfss.replay()
-    await expect(tile.getByText('Unit bee07.ad5.0000c5')).toBeVisible({ timeout: 5_000 })
+    await expect(tile.getByText('Engine 5')).toBeVisible({ timeout: 5_000 })
+    await expect(tile.getByText('(bee07.ad5.0000c5)')).toBeVisible()
     await replay
-    await expect(tile.getByText(/Unit bee07/)).toBeHidden({ timeout: 5_000 })
-    // ... and is in the radio log, recorded.
+    await expect(tile.getByText('Engine 5')).toBeHidden({ timeout: 5_000 })
+    // ... and is in the radio log, recorded, by name.
     const log = page.getByRole('region', { name: 'Radio log' })
-    await expect(log.getByText('Unit bee07.ad5.0000c5')).toBeVisible({ timeout: 10_000 })
+    await expect(log.getByText('Engine 5 (bee07.ad5.0000c5)')).toBeVisible({ timeout: 10_000 })
     await log.getByRole('button', { name: 'Play' }).first().click()
     await expect(log.getByLabel(/Recording of County fire/)).toBeVisible()
 
@@ -207,6 +219,13 @@ test('radio console: a P25 talkgroup over the ISSI', async ({ page }) => {
     await expect(page.getByText(/^Extension/).first()).toBeVisible()
     await page.getByRole('button', { name: 'Join with the browser phone' }).click()
     await expect(page.getByText(/On the console:/)).toBeVisible({ timeout: 10_000 })
+    // Simulselect needs two channels ticked.
+    const simul = page.getByRole('region', { name: 'Simulselect' })
+    await expect(simul.getByRole('button', { name: /Talk on 0 channels/ })).toBeDisabled()
+    const picks = page.getByRole('region', { name: 'Channels' }).getByRole('checkbox', { name: /^Simulselect / })
+    await picks.nth(0).check(); await picks.nth(1).check()
+    await expect(simul.getByRole('button', { name: 'Talk on 2 channels' })).toBeEnabled()
+    await picks.nth(0).uncheck(); await picks.nth(1).uncheck()
     const before = rfss.requests()
     await tile.getByLabel('Alert tone on County fire').selectOption('beep')
     await expect.poll(rfss.requests, { timeout: 5_000 }).toBeGreaterThan(before)

@@ -25,7 +25,7 @@ func (s *Server) RunRadioCAD(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case ev := <-sub.C:
-			if ev.Type != "radio.unit" && ev.Type != "radio.emergency" && ev.Type != "radio.transmission" {
+			if ev.Type != "radio.unit" && ev.Type != "radio.emergency" && ev.Type != "radio.emergency.ack" && ev.Type != "radio.transmission" {
 				continue
 			}
 			cfg := s.config()
