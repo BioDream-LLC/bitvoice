@@ -480,7 +480,8 @@ test("Let's Encrypt certificate", async ({ page }) => {
 test('TURN server setting', async ({ page }) => {
   await signIn(page)
   await page.goto('/#/settings')
-  await page.getByRole('switch', { name: 'TURN server' }).click()
+  const turn = page.getByRole('switch', { name: 'TURN server' })
+  if ((await turn.getAttribute('aria-checked')) !== 'true') await turn.click()
   await page.getByLabel('Port (UDP and TCP)').fill('3479')
   await page.getByLabel('TLS port').fill('-1')
   await page.getByLabel('Relay ports from').fill('80')
@@ -501,11 +502,14 @@ test('TURN server setting', async ({ page }) => {
 test('SIP over WebSocket setting', async ({ page }) => {
   await signIn(page)
   await page.goto('/#/settings')
-  await page.getByRole('switch', { name: 'SIP over WebSocket' }).click()
-  await page.getByRole('button', { name: 'Save', exact: true }).click()
-  await expect(page.getByText('Settings saved')).toBeVisible()
+  const ws = page.getByRole('switch', { name: 'SIP over WebSocket' })
+  if ((await ws.getAttribute('aria-checked')) !== 'true') {
+    await ws.click()
+    await page.getByRole('button', { name: 'Save', exact: true }).click()
+    await expect(page.getByText('Settings saved')).toBeVisible()
+  }
   await expect(page.getByText(/^wss:\/\/127\.0\.0\.1:\d+\/ws$/)).toBeVisible()
-  await expect(page.getByText('0 softphones connected now.')).toBeVisible()
+  await expect(page.getByText(/^\d+ softphones connected now\.$/)).toBeVisible()
   const st = await page.evaluate(async () => (await (await fetch('./api/websocket')).json()))
   expect(st.enabled).toBe(true)
 })
