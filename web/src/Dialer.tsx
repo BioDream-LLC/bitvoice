@@ -3,7 +3,7 @@ import { Ban, Megaphone, Pause, PhoneCall, PhoneForwarded, Play, Plus, SkipForwa
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
-  useAddDncMutation, useCampaignContactsQuery, useCampaignsQuery, useClearContactsMutation, useCreateCampaignMutation, useDeleteCampaignMessageMutation,
+  useAddDncMutation, useDncCountQuery, useImportDncMutation, useCampaignContactsQuery, useCampaignsQuery, useClearContactsMutation, useCreateCampaignMutation, useDeleteCampaignMessageMutation,
   useDeleteCampaignMutation, useDialerQuery, useDncQuery, useExtensionsQuery, usePreviewCallMutation, usePreviewNextMutation, usePutCampaignMessageMutation,
   useQueuesQuery, useRemoveDncMutation, useUpdateCampaignMutation, useUploadContactsMutation, useVoicemailQuery,
   type ApiErrorBody, type Campaign, type DialContact, type DialerRow,
@@ -172,6 +172,10 @@ function DoNotCall() {
   const [add] = useAddDncMutation()
   const [remove] = useRemoveDncMutation()
   const [nums, setNums] = useState<string[]>([])
+  const { data: count } = useDncCountQuery()
+  const [importFile, { isLoading: importing }] = useImportDncMutation()
+  const [replace, setReplace] = useState(true)
+  const [file, setFile] = useState<File | null>(null)
   return (
     <section className="card mt-6 space-y-3 p-5" aria-labelledby="dnc-h">
       <h2 id="dnc-h" className="flex items-center gap-2 font-semibold text-slate-100"><Ban size={17} className="text-rose-300" aria-hidden /> Do-not-call list</h2>
@@ -182,6 +186,25 @@ function DoNotCall() {
             <ListInput id="dncadd" mono value={nums} onChange={setNums} placeholder="+1 312 555 0100" />
           </Field>
           <button type="button" className="btn" disabled={!nums.length} onClick={async () => { if (!await attempt(() => add(nums).unwrap(), `${nums.length} added`)) setNums([]) }}>Add</button>
+        </div>
+      )}
+      {count && <p className="text-sm text-slate-300"><span className="font-semibold text-rose-300">{count.total.toLocaleString()}</span> numbers on the list{count.national ? <>, <span className="text-amber-300">{count.national.toLocaleString()}</span> from the national registry</> : ''}.</p>}
+      {admin && (
+        <div className="space-y-2 rounded-lg border border-slate-800 p-3">
+          <p className="text-sm text-slate-300">National registry</p>
+          <p className="text-xs text-slate-500">The file the registry gives you (the FTC's download is one "area code,number" a line; any file with one number a line works). Large files take a minute.</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <input aria-label="Registry file" type="file" accept=".txt,.csv,text/plain,text/csv" className="text-sm text-slate-300" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+            <label className="flex items-center gap-2 text-sm text-slate-300"><Toggle checked={replace} onChange={setReplace} label="Replace the last import" /> Replace the last import <span className="text-xs text-slate-500">(numbers that left the registry are callable again; your own stay)</span></label>
+            <button type="button" className="btn" disabled={!file || importing} onClick={async () => {
+              if (!file) return
+              try {
+                const r = await importFile({ file, replace }).unwrap()
+                toast.success(`${r.read.toLocaleString()} numbers read${r.skipped ? `, ${r.skipped} lines skipped` : ''}`)
+                setFile(null)
+              } catch (e) { toast.error((e as { data?: { message?: string } }).data?.message ?? 'The file was not read') }
+            }}><Upload size={14} aria-hidden /> {importing ? 'Reading…' : 'Import'}</button>
+          </div>
         </div>
       )}
       {!data?.length ? <p className="text-sm text-slate-500">The list is empty.</p> : (

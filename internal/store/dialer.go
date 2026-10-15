@@ -1,10 +1,14 @@
 package store
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
+	"io"
 	"strings"
 	"time"
+
+	"github.com/biodream-llc/bitvoice/internal/db"
 )
 
 // DialContact is one number a campaign calls, and where it stands.
@@ -222,4 +226,78 @@ func (s *Store) DNC(limit int) ([]DNCEntry, error) {
 		}
 	}
 	return out, rows.Err()
+}
+
+// NationalDNC is the reason the national registry's numbers carry, so a new download replaces them.
+const NationalDNC = "national registry"
+
+// ImportDNC reads a do-not-call file, one number a line (the FTC's download is "312,5550100": every
+// digit on a line makes the number), and puts its numbers on the list in batches. replace takes the
+// last import's numbers off first, so numbers that left the registry are callable again (numbers
+// added by hand or by pressing 9 stay). It reports how many numbers were read and how many lines
+// were skipped.
+func (s *Store) ImportDNC(r io.Reader, source string, replace bool) (added, skipped int, err error) {
+	now := time.Now().UTC()
+	reason := NationalDNC + " " + now.Format("2006-01-02")
+	if source != "" {
+		reason += " (" + source + ")"
+	}
+	if replace {
+		if _, err := s.db.Exec(s.ctx(), `DELETE FROM dnc WHERE body LIKE ?`, `%"reason":"`+NationalDNC+`%`); err != nil {
+			return 0, 0, err
+		}
+	}
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 4096), 4096)
+	batch := make([]string, 0, 5000)
+	flush := func() error {
+		if len(batch) == 0 {
+			return nil
+		}
+		err := s.db.Tx(s.ctx(), func(tx *db.Tx) error {
+			for _, n := range batch {
+				b, _ := json.Marshal(DNCEntry{Number: n, Added: now, Reason: reason})
+				if _, err := tx.Exec(s.ctx(), `INSERT INTO dnc (number, at_ms, body) VALUES (?, ?, ?) ON CONFLICT (number) DO NOTHING`, n, now.UnixMilli(), string(b)); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		batch = batch[:0]
+		return err
+	}
+	for sc.Scan() {
+		var d []byte
+		for _, c := range sc.Bytes() {
+			if c >= '0' && c <= '9' {
+				d = append(d, c)
+			}
+		}
+		n := NormalNumber(string(d))
+		if len(d) == 0 {
+			continue // a blank or heading line
+		}
+		if len(n) < 7 || len(n) > 15 {
+			skipped++
+			continue
+		}
+		batch = append(batch, n)
+		added++
+		if len(batch) == cap(batch) {
+			if err := flush(); err != nil {
+				return added, skipped, err
+			}
+		}
+	}
+	if err := sc.Err(); err != nil {
+		return added, skipped, err
+	}
+	return added, skipped, flush()
+}
+
+// DNCCount counts the do-not-call list, and how many of it came from the national registry.
+func (s *Store) DNCCount() (total, national int) {
+	_ = s.db.QueryRow(s.ctx(), `SELECT COUNT(*) FROM dnc`).Scan(&total)
+	_ = s.db.QueryRow(s.ctx(), `SELECT COUNT(*) FROM dnc WHERE body LIKE ?`, `%"reason":"`+NationalDNC+`%`).Scan(&national)
+	return
 }

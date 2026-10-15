@@ -656,6 +656,14 @@ test('outbound dialer campaign', async ({ page }) => {
   const st = await page.evaluate(async () => (await (await fetch('./api/dialer')).json()))
   expect(st[0].states.dnc).toBe(1)
   expect(st[0].states.pending).toBe(1)
+  // The national registry's download.
+  await page.getByLabel('Registry file').setInputFiles({ name: 'ftc-212.txt', mimeType: 'text/plain',
+    buffer: Buffer.from('AREA CODE,PHONE NUMBER\n212,5550100\n212,5550101\n212,55\n') })
+  await page.getByRole('button', { name: 'Import' }).click()
+  await expect(page.getByText('2 numbers read, 1 lines skipped')).toBeVisible()
+  await expect(page.getByText(/from the national registry/)).toContainText('2')
+  const listed = await page.evaluate(async () => (await (await fetch('./api/dnc?number=2125550101')).json()).listed)
+  expect(listed).toBe(true)
 })
 
 // The inbox: the web chat is switched on, a visitor on another site (a page with the script tag) writes,

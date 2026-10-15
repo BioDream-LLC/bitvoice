@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/csv"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -265,6 +266,28 @@ func (s *Server) dialerRoutes() {
 		}
 		s.audit(r, u.Username, "dnc.add", strconv.Itoa(len(in.Numbers))+" numbers")
 		writeJSON(w, 200, map[string]any{"added": len(in.Numbers), "at": time.Now().UTC()})
+	})
+	// How long the list is, and how much of it is the national registry.
+	s.handle("GET /api/dnc/count", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		total, national := s.Store.DNCCount()
+		writeJSON(w, 200, map[string]int{"total": total, "national": national})
+	})
+	// The national registry's download (the FTC's for the US, or a country's equivalent): the file
+	// itself as the body, up to 1 GB; ?replace=1 takes the last import's numbers off first.
+	s.handle("POST /api/dnc/import", true, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		body := http.MaxBytesReader(w, r.Body, 1<<30)
+		src := strings.TrimSpace(r.URL.Query().Get("source"))
+		if len(src) > 80 {
+			src = src[:80]
+		}
+		added, skipped, err := s.Store.ImportDNC(body, src, r.URL.Query().Get("replace") == "1")
+		if err != nil {
+			writeError(w, 400, "the file could not be read: "+err.Error())
+			return
+		}
+		s.audit(r, u.Username, "dnc.import", fmt.Sprintf("%d numbers, %d lines skipped", added, skipped))
+		total, national := s.Store.DNCCount()
+		writeJSON(w, 200, map[string]int{"read": added, "skipped": skipped, "total": total, "national": national})
 	})
 	s.handle("DELETE /api/dnc/{number}", true, func(w http.ResponseWriter, r *http.Request, u store.User) {
 		if err := s.Store.RemoveDNC(r.PathValue("number")); err != nil {
