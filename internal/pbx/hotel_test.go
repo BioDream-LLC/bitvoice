@@ -39,6 +39,7 @@ func TestGuestRoomsAndWakeUps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { st.Close() }) // after the engine stops, before the directory goes (Windows cannot remove an open file)
 	e, _ := startEngine(t, hotelConfig(), func(e *Engine) { e.WakeUps = st; e.Mail = st })
 	ps := registered(t, e, "100", "101")
 	cfg := e.Config()
@@ -115,6 +116,7 @@ func TestWakeUpRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { st.Close() }) // after the engine stops, before the directory goes (Windows cannot remove an open file)
 	e, _ := startEngine(t, hotelConfig(), func(e *Engine) { e.WakeUps = st })
 	w, _ := st.PutWakeUp(store.WakeUp{Extension: "102", At: time.Now()}) // no phone registered: no answer
 	e.ringWakeUp(w)

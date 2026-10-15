@@ -112,7 +112,7 @@ func TestCallAudioCleanup(t *testing.T) {
 			defer close(done)
 			buf := make([]byte, 2048)
 			for {
-				_ = ps[1].rtp.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+				_ = ps[1].rtp.SetReadDeadline(time.Now().Add(time.Second))
 				n, _, err := ps[1].rtp.ReadFromUDP(buf)
 				if err != nil {
 					return
@@ -124,7 +124,9 @@ func TestCallAudioCleanup(t *testing.T) {
 				}
 			}
 		}()
-		for i := 0; i < 150; i++ { // three seconds of hiss
+		next := time.Now()
+		for i := 0; i < 150; i++ { // three seconds of hiss, sent at the pace a phone sends it (a burst faster than
+			// real time overruns the jitter buffer whenever the machine is busy, as under the whole race suite)
 			pkt := make([]byte, 12, 172)
 			pkt[0] = 0x80
 			binary.BigEndian.PutUint16(pkt[2:], uint16(i))
@@ -133,7 +135,8 @@ func TestCallAudioCleanup(t *testing.T) {
 				pkt = append(pkt, media.LinearToUlaw(int16(300*rng.NormFloat64())))
 			}
 			_, _ = ps[0].rtp.WriteToUDPAddrPort(pkt, a.media)
-			time.Sleep(10 * time.Millisecond)
+			next = next.Add(20 * time.Millisecond)
+			time.Sleep(time.Until(next))
 		}
 		<-done
 		if len(got) < 8000*2 {
