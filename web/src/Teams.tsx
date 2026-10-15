@@ -1,7 +1,7 @@
 import { Copy, RefreshCw, Save, ShieldCheck, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { errorOf, useAcmeCheckMutation, useAcmeStatusQuery, useCertificateQuery, useExtensionsQuery, useInstallCertificateMutation, useSaveSettingsMutation, useSettingsQuery, useSystemQuery, type ACME, type ApiErrorBody, type Trunk } from './api'
+import { errorOf, useAcmeCheckMutation, useAcmeReachMutation, useAcmeStatusQuery, useCertificateQuery, useExtensionsQuery, useInstallCertificateMutation, useSaveSettingsMutation, useSettingsQuery, useSystemQuery, type ACME, type ApiErrorBody, type Trunk } from './api'
 import { attempt, useIsAdmin } from './Editor'
 import { Field, ListInput, problemFor, Toggle } from './ui'
 
@@ -97,6 +97,8 @@ function LetsEncrypt() {
   const { data: st } = useAcmeStatusQuery(undefined, { pollingInterval: 5000 })
   const [save, { isLoading }] = useSaveSettingsMutation()
   const [check] = useAcmeCheckMutation()
+  const [reach, { isLoading: reaching }] = useAcmeReachMutation()
+  const [reachOut, setReachOut] = useState<{ name: string; ok: boolean; detail: string }[] | null>(null)
   const [edit, setEdit] = useState<ACME | null>(null)
   const [err, setErr] = useState<ApiErrorBody | null>(null)
   if (!data) return null
@@ -124,6 +126,7 @@ function LetsEncrypt() {
         <fieldset disabled={!admin} className="space-y-3">
           <p className={`text-sm ${colour}`}>{said}</p>
           {st?.listening && <p className="text-xs text-slate-500">Answering http-01 on port {st.listening}.</p>}
+          {st?.portProblem && <p className="text-xs text-amber-300">{st.portProblem}.</p>}
           <Field label="Names" htmlFor="acd" error={p('domains')} hint="The names this server is reached by; press Enter after each. They must point here in public DNS.">
             <ListInput id="acd" mono value={a.domains} onChange={(v) => set({ domains: v })} placeholder="pbx.example.com" />
           </Field>
@@ -160,7 +163,17 @@ function LetsEncrypt() {
         <div className="flex gap-2">
           <button type="button" className="btn btn-primary" disabled={isLoading || !edit} onClick={submit}><Save size={14} aria-hidden /> Apply Let's Encrypt settings</button>
           {a.enabled && !edit && <button type="button" className="btn" onClick={() => void attempt(() => check().unwrap(), 'Checking now')}><RefreshCw size={14} aria-hidden /> Check now</button>}
+          {a.enabled && kind === 'http-01' && a.domains.length > 0 && (
+            <button type="button" className="btn" disabled={reaching} onClick={async () => { try { setReachOut((await reach(a.domains).unwrap()).names) } catch { toast.error('The check could not run') } }}>
+              <ShieldCheck size={14} aria-hidden /> {reaching ? 'Checking…' : 'Test the names'}
+            </button>
+          )}
         </div>
+      )}
+      {reachOut && (
+        <ul className="space-y-1 text-xs" aria-label="Name test results">
+          {reachOut.map((r) => <li key={r.name} className={r.ok ? 'text-emerald-300' : 'text-amber-300'}><span className="font-mono">{r.name}</span>: {r.detail}</li>)}
+        </ul>
       )}
     </div>
   )

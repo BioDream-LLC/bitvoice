@@ -135,7 +135,7 @@ export function TURNSettings({ turn, onChange, p }: { turn: SystemSettings['turn
       {s.enabled && (
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Port (UDP and TCP)" htmlFor="tup" error={p('system.turn.port')}><input id="tup" type="number" className="input w-32" value={s.port || ''} onChange={(e) => set({ port: Number(e.target.value) })} /></Field>
-          <Field label="TLS port" htmlFor="tut" error={p('system.turn.tlsPort')} hint="With this server's certificate; -1 for none. 443 gets through almost any firewall."><input id="tut" type="number" className="input w-32" value={s.tlsPort || ''} onChange={(e) => set({ tlsPort: Number(e.target.value) })} /></Field>
+          <Field label="TLS port" htmlFor="tut" error={p('system.turn.tlsPort')} hint="With this server's certificate; -1 for none. 443 gets through almost any firewall. Browsers are offered it only once the certificate is a trusted one for the name they use (Let's Encrypt, below)."><input id="tut" type="number" className="input w-32" value={s.tlsPort || ''} onChange={(e) => set({ tlsPort: Number(e.target.value) })} /></Field>
           <Field label="Relay ports from" htmlFor="tur" error={p('system.turn.relayMin')} hint="UDP; open them in the firewall."><input id="tur" type="number" className="input w-32" value={s.relayMin || ''} onChange={(e) => set({ relayMin: Number(e.target.value) })} /></Field>
           <Field label="to" htmlFor="tur2" error={p('system.turn.relayMax')}><input id="tur2" type="number" className="input w-32" value={s.relayMax || ''} onChange={(e) => set({ relayMax: Number(e.target.value) })} /></Field>
         </div>

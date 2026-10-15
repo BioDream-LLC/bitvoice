@@ -3,6 +3,7 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
@@ -59,6 +60,7 @@ type Server struct {
 	TURNStatus func() map[string]any
 	// ACMEStatus and ACMEWake are the Let's Encrypt manager's state and its "look again now" (set by main).
 	ACMEStatus func() acme.Status
+	ACMECheck  func(ctx context.Context, names []string) []acme.Reach
 	ACMEWake   func()
 	// DeskStatus says how Skinny phones and MGCP lines stand (set by main).
 	DeskStatus func() map[string]map[string]string

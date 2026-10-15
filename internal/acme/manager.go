@@ -3,17 +3,22 @@ package acme
 import (
 	"context"
 	"crypto/ecdsa"
+	"crypto/rand"
 	"crypto/tls"
+	"encoding/hex"
 	"errors"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -46,6 +51,8 @@ type Status struct {
 	NotAfter  time.Time `json:"notAfter,omitzero"`
 	Challenge string    `json:"challenge,omitempty"`
 	Listening string    `json:"listening,omitempty"` // the http-01 port it answers on, when it could open it
+	// PortProblem says why the http-01 port could not be opened, and how to allow it.
+	PortProblem string `json:"portProblem,omitempty"`
 }
 
 // Manager keeps a certificate from an ACME authority: it gets one when the names change or the one
@@ -95,8 +102,11 @@ func (m *Manager) Status() Status {
 	if m.ln != nil {
 		s.Listening = strconv.Itoa(m.lnPort)
 	}
-	if m.lnError != "" && s.Detail == "" {
-		s.Detail = m.lnError
+	if m.lnError != "" {
+		s.PortProblem = m.lnError
+		if s.Detail == "" {
+			s.Detail = m.lnError
+		}
 	}
 	return s
 }
@@ -355,7 +365,7 @@ func (m *Manager) syncListener(s Settings) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if err != nil {
-		m.lnError = "port " + strconv.Itoa(want) + " could not be opened for the http-01 challenge (" + err.Error() + "): forward it to the web interface's port, or let BitVoice use it"
+		m.lnError = portAdvice(want, err)
 		m.lnPort = want
 		return
 	}
@@ -387,4 +397,82 @@ func (m *Manager) closeListener() {
 	if ln != nil {
 		ln.Close()
 	}
+}
+
+// portAdvice says, in plain words, why the http-01 port would not open and what allows it.
+func portAdvice(port int, err error) string {
+	p := strconv.Itoa(port)
+	if errors.Is(err, os.ErrPermission) || errors.Is(err, syscall.EACCES) {
+		exe, _ := os.Executable()
+		if exe == "" {
+			exe = "bitvoice"
+		}
+		if runtime.GOOS == "linux" {
+			return "port " + p + " is below 1024 and BitVoice may not open it: run `sudo setcap cap_net_bind_service=+ep " + exe +
+				"` (again after each upgrade), or under systemd add AmbientCapabilities=CAP_NET_BIND_SERVICE; or forward port " + p + " on the router to the web interface's port"
+		}
+		return "port " + p + " may not be opened by BitVoice (" + err.Error() + "): run it with the right to open low ports, or forward port " + p + " on the router to the web interface's port"
+	}
+	if errors.Is(err, syscall.EADDRINUSE) {
+		return "port " + p + " is used by another program (a web server?): stop it, or have it pass /.well-known/acme-challenge/ to BitVoice's web interface"
+	}
+	return "port " + p + " could not be opened for the http-01 challenge (" + err.Error() + "): forward it to the web interface's port"
+}
+
+// Reach is what a check of one name found: whether a request for a test file, sent to the name
+// from this server, came back to BitVoice.
+type Reach struct {
+	Name   string `json:"name"`
+	OK     bool   `json:"ok"`
+	Detail string `json:"detail"`
+}
+
+// CheckReach asks each name for a test challenge file, through public DNS and the network, the way
+// the authority will (http-01, port 80), and says whether this server answered. A router that does
+// not loop its own public address back (no "hairpin NAT") makes a working setup fail from inside, so
+// a failure is a warning, not a verdict.
+func (m *Manager) CheckReach(ctx context.Context, names []string) []Reach {
+	tok := make([]byte, 16)
+	_, _ = rand.Read(tok)
+	token := "bitvoice-check-" + hex.EncodeToString(tok)
+	want := "check." + hex.EncodeToString(tok)
+	m.mu.Lock()
+	if m.tokens == nil {
+		m.tokens = map[string]string{}
+	}
+	m.tokens[token] = want
+	m.mu.Unlock()
+	defer func() { m.mu.Lock(); delete(m.tokens, token); m.mu.Unlock() }()
+	port := "80"
+	if m.Settings != nil {
+		if s := m.Settings(); s.HTTPPort > 0 {
+			port = strconv.Itoa(s.HTTPPort) // a test's port; the authority always uses 80
+		}
+	}
+	cl := &http.Client{Timeout: 8 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	var out []Reach
+	for _, n := range names {
+		r := Reach{Name: n}
+		addrs, err := net.DefaultResolver.LookupHost(ctx, n)
+		switch {
+		case err != nil:
+			r.Detail = "not in DNS: " + err.Error()
+		default:
+			req, _ := http.NewRequestWithContext(ctx, "GET", "http://"+net.JoinHostPort(n, port)+challengePath+token, nil)
+			resp, err := cl.Do(req)
+			if err != nil {
+				r.Detail = "points at " + strings.Join(addrs, ", ") + ", but port 80 did not answer (" + err.Error() + "); a router without hairpin NAT fails this check from inside even when it works from outside"
+				break
+			}
+			b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+			resp.Body.Close()
+			if resp.StatusCode == 200 && string(b) == want {
+				r.OK, r.Detail = true, "points at "+strings.Join(addrs, ", ")+" and reached BitVoice on port 80"
+			} else {
+				r.Detail = "port 80 at " + strings.Join(addrs, ", ") + " answered, but not as BitVoice (status " + strconv.Itoa(resp.StatusCode) + "): another server or the router answers there"
+			}
+		}
+		out = append(out, r)
+	}
+	return out
 }

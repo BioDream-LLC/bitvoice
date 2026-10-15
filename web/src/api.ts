@@ -351,7 +351,7 @@ export interface TURN { enabled: boolean; port: number; tlsPort: number; relayMi
 
 /** Let's Encrypt: the web interface's certificate, got and renewed by BitVoice. */
 export interface ACME { enabled: boolean; domains: string[]; email: string; directory: string; challenge: '' | 'http-01' | 'tls-alpn-01'; httpPort: number }
-export interface ACMEStatus { state: 'off' | 'ok' | 'working' | 'failed'; detail?: string; lastTry?: string; nextTry?: string; notAfter?: string; challenge?: string; listening?: string }
+export interface ACMEStatus { state: 'off' | 'ok' | 'working' | 'failed'; detail?: string; lastTry?: string; nextTry?: string; notAfter?: string; challenge?: string; listening?: string; portProblem?: string }
 
 /** Telephony cards (DAHDI) on this computer, through bitvoice-dahdi. */
 export interface Cards { enabled: boolean; token: string; linePort: number; alaw: boolean; channels: { channel: number; kind: 'phone' | 'line'; extension: string; number: string }[]; spans?: CardSpan[] | null }
@@ -714,6 +714,7 @@ export const api = createApi({
       turnStatus: b.query<{ enabled: boolean; running: boolean; port?: number; tlsPort?: number; relays?: number; problems?: string[] }, void>({ query: () => 'turn', providesTags: ['Settings'] }),
       acmeStatus: b.query<ACMEStatus, void>({ query: () => 'certificate/acme', providesTags: ['Certificate'] }),
       acmeCheck: b.mutation<{ ok: boolean }, void>({ query: () => ({ url: 'certificate/acme', method: 'POST' }), invalidatesTags: ['Certificate'] }),
+      acmeReach: b.mutation<{ names: { name: string; ok: boolean; detail: string }[] }, string[]>({ query: (names) => ({ url: 'certificate/acme/check', method: 'POST', body: { names } }) }),
       installCertificate: b.mutation<{ subject: string; issuer: string; names: string[]; notAfter: string; selfSigned: boolean }, { cert: string; key: string }>({ query: (body) => ({ url: 'certificate', method: 'PUT', body }), invalidatesTags: ['Certificate', 'Health'] }),
       database: b.query<{ kind: 'sqlite' | 'postgres'; where: string; bytes?: number; fixed: boolean; counts?: Record<string, number> }, void>({ query: () => 'database', providesTags: ['Database'] }),
       testDatabase: b.mutation<{ where: string; empty: boolean }, { url: string }>({ query: (body) => ({ url: 'database/test', method: 'POST', body }) }),
@@ -831,7 +832,7 @@ export const {
   usePinSetsQuery, useCreatePinSetMutation, useUpdatePinSetMutation, useDeletePinSetMutation,
   useLookupsQuery, useCreateLookupMutation, useUpdateLookupMutation, useDeleteLookupMutation, useTestLookupMutation,
   useHotelQuery, useCheckInMutation, useCheckOutMutation, useSetRoomStatusMutation, useWakeUpsQuery, useSetWakeUpMutation, useCancelWakeUpMutation,
-  useSaveNameAudioMutation, useDeleteNameAudioMutation, useSnmpStatusQuery, useDeskStatusQuery, useCardsStatusQuery, useAcmeStatusQuery, useAcmeCheckMutation, useMusicStreamsQuery, useTurnStatusQuery, useWebSocketStatusQuery, useCdrCsvQuery, useTestCdrOutputsMutation, useChatListQuery, useChatMessagesQuery, useSendChatMutation, useSetChatStatusMutation,
+  useSaveNameAudioMutation, useDeleteNameAudioMutation, useSnmpStatusQuery, useDeskStatusQuery, useCardsStatusQuery, useAcmeStatusQuery, useAcmeCheckMutation, useAcmeReachMutation, useMusicStreamsQuery, useTurnStatusQuery, useWebSocketStatusQuery, useCdrCsvQuery, useTestCdrOutputsMutation, useChatListQuery, useChatMessagesQuery, useSendChatMutation, useSetChatStatusMutation,
   usePromptsQuery, useSaveLangPromptMutation, useDeleteLangPromptMutation, useGeneratePromptsMutation, useMusicQuery, useAddMusicMutation, useDeleteMusicMutation,
 } = api
 

@@ -11,11 +11,14 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -167,4 +170,36 @@ func mustSelfSigned(t *testing.T) tls.Certificate {
 		t.Fatal(err)
 	}
 	return c
+}
+
+// The names check: a name reaching this server's challenge answer passes, one that does not is
+// explained; the port advice names the fix.
+func TestCheckReach(t *testing.T) {
+	m := &Manager{}
+	srv := httptest.NewServer(m.Handler(http.NotFoundHandler()))
+	defer srv.Close()
+	_, port, _ := net.SplitHostPort(srv.Listener.Addr().String())
+	p, _ := strconv.Atoi(port)
+	m.Settings = func() Settings { return Settings{HTTPPort: p} }
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("hello")) }))
+	defer other.Close()
+	got := m.CheckReach(context.Background(), []string{"localhost", "no-such-name.invalid"})
+	if !got[0].OK || got[1].OK || !strings.Contains(got[1].Detail, "not in DNS") {
+		t.Fatalf("%+v", got)
+	}
+	if len(m.tokens) != 0 {
+		t.Fatal("the test token was left behind")
+	}
+	_, oport, _ := net.SplitHostPort(other.Listener.Addr().String())
+	op, _ := strconv.Atoi(oport)
+	m.Settings = func() Settings { return Settings{HTTPPort: op} }
+	if got := m.CheckReach(context.Background(), []string{"localhost"}); got[0].OK || !strings.Contains(got[0].Detail, "not as BitVoice") {
+		t.Fatalf("another server: %+v", got)
+	}
+	if a := portAdvice(80, &net.OpError{Op: "listen", Err: os.NewSyscallError("bind", syscall.EACCES)}); !strings.Contains(a, "1024") && !strings.Contains(a, "low ports") {
+		t.Fatal(a)
+	}
+	if a := portAdvice(80, &net.OpError{Op: "listen", Err: os.NewSyscallError("bind", syscall.EADDRINUSE)}); !strings.Contains(a, "another program") {
+		t.Fatal(a)
+	}
 }

@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/biodream-llc/bitvoice/internal/acme"
@@ -32,6 +34,33 @@ func (s *Server) certificateRoutes() {
 		s.ACMEWake()
 		s.audit(r, u.Username, "certificate.acme", "check now")
 		writeJSON(w, 202, map[string]bool{"ok": true})
+	})
+	// Do the names reach this server on port 80, as the authority will try?
+	s.handle("POST /api/certificate/acme/check", true, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		var in struct {
+			Names []string `json:"names"`
+		}
+		if err := readJSON(r, &in); err != nil {
+			writeError(w, 400, err.Error())
+			return
+		}
+		if s.ACMECheck == nil {
+			writeError(w, 404, "this server gets no certificates itself")
+			return
+		}
+		if len(in.Names) == 0 || len(in.Names) > 20 {
+			writeError(w, 400, "give between 1 and 20 names")
+			return
+		}
+		for _, n := range in.Names {
+			if len(n) > 253 || !strings.Contains(n, ".") || strings.Trim(n, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-") != "" {
+				writeError(w, 400, n+" is not a host name")
+				return
+			}
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		defer cancel()
+		writeJSON(w, 200, map[string]any{"names": s.ACMECheck(ctx, in.Names)})
 	})
 	// Install a certificate from a public authority (with its chain) and its key, used at once for the
 	// web interface, SIP over TLS and connections out (Teams).

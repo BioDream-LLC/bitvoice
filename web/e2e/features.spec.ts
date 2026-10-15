@@ -474,6 +474,8 @@ test("Let's Encrypt certificate", async ({ page }) => {
   const st = await page.evaluate(async () => (await (await fetch('./api/certificate/acme')).json()))
   expect(st.state).toBe('failed')
   expect(st.challenge).toBe('http-01')
+  await page.getByRole('button', { name: 'Test the names' }).click()
+  await expect(page.getByRole('list', { name: 'Name test results' }).getByText(/pbx\.example\.com/)).toBeVisible({ timeout: 30000 })
 })
 
 // TURN for browser phones: switched on in Settings, it reports its ports.

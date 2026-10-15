@@ -317,7 +317,7 @@ func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 			return acme.Current{Names: i.Names, NotAfter: i.NotAfter, SelfSigned: i.SelfSigned}
 		},
 		Install: func(certPEM, keyPEM string) error { _, err := holder.Install(certPEM, keyPEM); return err }}
-	srv.ACMEStatus, srv.ACMEWake = acm.Status, acm.Wake
+	srv.ACMEStatus, srv.ACMEWake, srv.ACMECheck = acm.Status, acm.Wake, acm.CheckReach
 	tlsCfg := &tls.Config{GetCertificate: holder.Get, MinVersion: tls.VersionTLS12}
 	tlsCfg.GetConfigForClient = acm.ConfigForClient(tlsCfg)
 	httpsSrv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second, TLSConfig: tlsCfg}
@@ -370,7 +370,9 @@ func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 		user, pass := turn.Credentials([]byte(tc.Secret), "web", 12*time.Hour)
 		hp := net.JoinHostPort(host, strconv.Itoa(tc.Port))
 		urls := []string{"turn:" + hp + "?transport=udp", "turn:" + hp + "?transport=tcp"}
-		if tc.TLSPort > 0 {
+		// TURN over TLS only with a certificate browsers can trust for this name: otherwise they
+		// try it, fail quietly and wait.
+		if tc.TLSPort > 0 && holder != nil && !holder.Info().SelfSigned && holder.Covers(host) {
 			urls = append(urls, "turns:"+net.JoinHostPort(host, strconv.Itoa(tc.TLSPort))+"?transport=tcp")
 		}
 		return []api.ICEServer{{URLs: urls, Username: user, Credential: pass}}
