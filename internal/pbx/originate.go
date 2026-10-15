@@ -20,6 +20,11 @@ var ErrNoAnswer = errors.New("the extension did not answer")
 // as the extension answers; the second half proceeds in the background, with ringback on the extension.
 // ring is how long the extension may ring (default 30 s).
 func (e *Engine) Originate(ext, number string, ring time.Duration) (string, error) {
+	return e.originate(ext, number, ring, "")
+}
+
+// originate is Originate with the caller ID the number is shown (a campaign's), "" for the usual.
+func (e *Engine) originate(ext, number string, ring time.Duration, cid string) (string, error) {
 	cfg := e.Config()
 	x := cfg.FindExtension(ext)
 	if x == nil || !x.Enabled {
@@ -57,7 +62,7 @@ func (e *Engine) Originate(ext, number string, ring time.Duration) (string, erro
 	c := &Call{e: e, ID: config.NewID(), start: time.Now(), answered: make(chan struct{}),
 		cancelled: make(chan struct{}), results: make(chan forkResult, 64),
 		from: x.Number, fromName: x.Name, callerExt: x.Number, to: number,
-		direction: onward.direction, toName: onward.toName, trunk: onward.trunk}
+		direction: onward.direction, toName: onward.toName, trunk: onward.trunk, cidOverride: cid}
 	leg.call = c
 	leg.Number, leg.Name, leg.Ext = x.Number, x.Name, x.Number
 	c.caller = leg

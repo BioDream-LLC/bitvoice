@@ -14,6 +14,7 @@ func (s *Server) WireEngine() {
 	eng, st := s.Engine, s.Store
 	eng.Mail = st
 	eng.Music = st
+	eng.Dialer = st
 	eng.WakeUps = st
 	eng.PMSEvent = s.pmsEvent
 	eng.WebBase = s.WebBase

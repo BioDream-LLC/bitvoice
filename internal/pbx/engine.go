@@ -73,6 +73,8 @@ type Engine struct {
 	radio     *radio
 	// Mail stores voicemail; nil switches voicemail off.
 	Mail Mailbox
+	// Dialer keeps the outbound dialer's contacts; nil switches the dialer off.
+	Dialer DialerStore
 	// Music stores hold music tracks; nil plays the hold tone everywhere.
 	Music MusicLibrary
 	// WakeUps keeps the wake-up calls; nil switches them off.
@@ -111,6 +113,7 @@ type Engine struct {
 	hot      hotDesks
 	div      diverts
 	tog      toggles
+	dial     dialers
 	streamMu sync.Mutex
 	streams  map[string]*musicStream
 	lookups  lookupCache
@@ -223,6 +226,7 @@ func (e *Engine) Start(ctx context.Context, listen string) error {
 	go e.runTrunks(e.ctx)
 	go e.watchdog(e.ctx)
 	go e.wakeUpLoop(e.ctx)
+	go e.dialerLoop(e.ctx)
 	rcfg := e.Config()
 	e.applyRadio(rcfg)
 	return nil

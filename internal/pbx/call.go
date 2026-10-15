@@ -64,6 +64,7 @@ type Call struct {
 	vconv                                        *videoConverters // video converted between the two parties' codecs (under vmu)
 	vmu                                          sync.Mutex
 	keyframe                                     func() // a video room's request for a full picture for this caller
+	cidOverride                                  string // the caller ID calls out present instead (a campaign's)
 	deskExt                                      string // the hot desk the call was made from, when it was
 	notice                                       string // a recording notice still to give: announce or beep
 	noticeLeg                                    *Leg
@@ -348,6 +349,9 @@ func (c *Call) startFork(t target, stageNo int) bool {
 		cid := t.trunk.CallerID
 		if x := cfg.FindExtension(c.callerExt); x != nil && x.CallerID != "" {
 			cid = x.CallerID
+		}
+		if c.cidOverride != "" {
+			cid = c.cidOverride
 		}
 		if cid == "" {
 			cid = fromNum

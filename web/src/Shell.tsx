@@ -70,6 +70,7 @@ export const nav: NavItem[] = [
   { to: '/directories', label: 'Dial by name', icon: BookA, color: 'text-sky-300', keys: 'directory dial by name company directory spell name 411 staff directory', group: 'Calls' },
   { to: '/dial-in', label: 'Dial-in', icon: KeyRound, color: 'text-amber-300', keys: 'disa dial in direct inward system access call in pin call out through the office road warrior', group: 'Calls' },
   { to: '/hotel', label: 'Hotel', icon: BedDouble, color: 'text-violet-300', keys: 'hotel wake up wake-up alarm morning call guest room check in check out pms property management fias opera housekeeping room status minibar charges hospitality', group: 'Calls' },
+  { to: '/dialer', label: 'Outbound dialer', icon: PhoneForwarded, color: 'text-emerald-300', keys: 'outbound dialer campaign predictive power progressive preview autodialer vicidial telemarketing collections do not call dnc list amd answering machine', group: 'Calls' },
   { to: '/voice-bots', label: 'Voice bots', icon: AudioLines, color: 'text-fuchsia-300', keys: 'voice bot audiosocket ai agent speech stream external media ari llm conversational ivr asterisk', group: 'Calls' },
   { to: '/toggles', label: 'Day/night toggles', icon: ToggleRight, color: 'text-indigo-300', keys: 'day night toggle call flow control switch override night service closed early holiday *28 busy lamp blf', group: 'Calls' },
   { to: '/schedules', label: 'Schedules', icon: CalendarClock, color: 'text-amber-300', keys: 'opening hours holidays time night closed', group: 'Calls' },

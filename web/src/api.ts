@@ -169,6 +169,15 @@ export interface Trunk {
 export interface Shaken { sign: boolean; cert: string; key: string; x5u: string; attest: '' | 'A' | 'B' | 'C'; origId: string }
 export interface Rate { prefix: string; name: string; perMinute: number; setup: number; increment: number; minimum: number }
 export interface InboundRoute { id: string; name: string; did: string; trunk: string; destination: Destination; lookup?: string }
+/** An outbound calling campaign for a queue's agents. */
+export interface Campaign {
+  id: string; name: string; mode: 'preview' | 'progressive' | 'power' | 'predictive'; queue: string; active: boolean; callerId: string; as: string
+  ratio: number; maxAbandon: number; hours: { days: number[]; start: string; end: string }[]; timezone: string
+  ringSeconds: number; attempts: number; retryMinutes: number; machine: 'hangup' | 'message' | 'agent'
+}
+export interface DialContact { id: string; campaign: string; number: string; name?: string; fields?: Record<string, string>; state: string; next?: string; attempts: number; result?: string; agent?: string; lastCall?: string; callId?: string }
+export interface DialerRow { id: string; states: Record<string, number>; results: Record<string, number>; ringing: number; ratio: number; abandonRate: number; open: boolean; freeAgents: number }
+
 /** A voice bot reached over AudioSocket (Asterisk's protocol); fallback takes the caller if it fails. */
 export interface AudioStream { id: string; name: string; number: string; address: string; fallback: Destination }
 /** A day/night switch: calls go to normal, or to override while switched over. */
@@ -370,7 +379,7 @@ const baseQuery = fetchBaseQuery({
 })
 
 const tags = ['Me', 'Extensions', 'RingGroups', 'Trunks', 'Inbound', 'Outbound', 'Settings', 'Users', 'Calls',
-  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail', 'Tenants', 'System', 'Prompts', 'Music', 'Directories', 'DialIns', 'AudioStreams', 'Toggles', 'ToggleState', 'PINSets', 'Lookups', 'Hotel', 'WakeUps', 'Chat'] as const
+  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail', 'Tenants', 'System', 'Prompts', 'Music', 'Directories', 'DialIns', 'AudioStreams', 'Campaigns', 'Dialer', 'DNC', 'Toggles', 'ToggleState', 'PINSets', 'Lookups', 'Hotel', 'WakeUps', 'Chat'] as const
 
 export const api = createApi({
   reducerPath: 'api',
@@ -453,6 +462,21 @@ export const api = createApi({
       createDirectory: b.mutation<Item<Directory>, Partial<Directory>>({ query: (body) => ({ url: 'directories', method: 'POST', body }), invalidatesTags: ['Directories', 'History'] }),
       updateDirectory: b.mutation<Item<Directory>, Directory>({ query: (body) => ({ url: `directories/${body.id}`, method: 'PUT', body }), invalidatesTags: ['Directories', 'History'] }),
       deleteDirectory: b.mutation<void, string>({ query: (id) => ({ url: `directories/${id}`, method: 'DELETE' }), invalidatesTags: ['Directories', 'History'] }),
+      campaigns: b.query<List<Campaign>, void>({ query: () => 'campaigns', providesTags: ['Campaigns'] }),
+      createCampaign: b.mutation<Item<Campaign>, Partial<Campaign>>({ query: (body) => ({ url: 'campaigns', method: 'POST', body }), invalidatesTags: ['Campaigns', 'Dialer', 'History'] }),
+      updateCampaign: b.mutation<Item<Campaign>, Campaign>({ query: (body) => ({ url: `campaigns/${body.id}`, method: 'PUT', body }), invalidatesTags: ['Campaigns', 'Dialer', 'History'] }),
+      deleteCampaign: b.mutation<void, string>({ query: (id) => ({ url: `campaigns/${id}`, method: 'DELETE' }), invalidatesTags: ['Campaigns', 'Dialer', 'History'] }),
+      dialer: b.query<DialerRow[], void>({ query: () => 'dialer', providesTags: ['Dialer'] }),
+      campaignContacts: b.query<DialContact[], { id: string; state?: string }>({ query: ({ id, state }) => `campaigns/${id}/contacts?limit=200${state ? `&state=${state}` : ''}`, providesTags: ['Dialer'] }),
+      uploadContacts: b.mutation<{ added: number; skipped: number; doNotCall: number }, { id: string; csv: string }>({ query: ({ id, csv }) => ({ url: `campaigns/${id}/contacts`, method: 'POST', body: csv, headers: { 'Content-Type': 'text/csv' } }), invalidatesTags: ['Dialer'] }),
+      clearContacts: b.mutation<void, { id: string; state?: string }>({ query: ({ id, state }) => ({ url: `campaigns/${id}/contacts${state ? `?state=${state}` : ''}`, method: 'DELETE' }), invalidatesTags: ['Dialer'] }),
+      previewNext: b.mutation<DialContact, { id: string; agent: string }>({ query: ({ id, agent }) => ({ url: `campaigns/${id}/next`, method: 'POST', body: { agent } }), invalidatesTags: ['Dialer'] }),
+      previewCall: b.mutation<{ callId: string }, { id: string; contact: string; agent: string; skip?: boolean }>({ query: ({ id, contact, agent, skip }) => ({ url: `campaigns/${id}/contacts/${contact}/call`, method: 'POST', body: { agent, skip: !!skip } }), invalidatesTags: ['Dialer'] }),
+      putCampaignMessage: b.mutation<{ seconds: number }, { id: string; wav: Blob }>({ query: ({ id, wav }) => ({ url: `campaigns/${id}/message`, method: 'PUT', body: wav, headers: { 'Content-Type': 'audio/wav' } }), invalidatesTags: ['Campaigns'] }),
+      deleteCampaignMessage: b.mutation<void, string>({ query: (id) => ({ url: `campaigns/${id}/message`, method: 'DELETE' }), invalidatesTags: ['Campaigns'] }),
+      dnc: b.query<{ number: string; added: string; reason?: string }[], void>({ query: () => 'dnc', providesTags: ['DNC'] }),
+      addDnc: b.mutation<{ added: number }, string[]>({ query: (numbers) => ({ url: 'dnc', method: 'POST', body: { numbers } }), invalidatesTags: ['DNC', 'Dialer'] }),
+      removeDnc: b.mutation<void, string>({ query: (n) => ({ url: `dnc/${encodeURIComponent(n)}`, method: 'DELETE' }), invalidatesTags: ['DNC'] }),
       audioStreams: b.query<List<AudioStream>, void>({ query: () => 'audio-streams', providesTags: ['AudioStreams'] }),
       createAudioStream: b.mutation<Item<AudioStream>, Partial<AudioStream>>({ query: (body) => ({ url: 'audio-streams', method: 'POST', body }), invalidatesTags: ['AudioStreams', 'History'] }),
       updateAudioStream: b.mutation<Item<AudioStream>, AudioStream>({ query: (body) => ({ url: `audio-streams/${body.id}`, method: 'PUT', body }), invalidatesTags: ['AudioStreams', 'History'] }),
@@ -783,6 +807,9 @@ export const {
   useVoicemailQuery, useMarkHeardMutation, useDeleteVoicemailMutation, useSaveGreetingMutation, useResetGreetingMutation,
   useDirectoriesQuery, useCreateDirectoryMutation, useUpdateDirectoryMutation, useDeleteDirectoryMutation,
   useDialInsQuery, useCreateDialInMutation, useUpdateDialInMutation, useDeleteDialInMutation,
+  useCampaignsQuery, useCreateCampaignMutation, useUpdateCampaignMutation, useDeleteCampaignMutation, useDialerQuery, useCampaignContactsQuery,
+  useUploadContactsMutation, useClearContactsMutation, usePreviewNextMutation, usePreviewCallMutation, usePutCampaignMessageMutation,
+  useDeleteCampaignMessageMutation, useDncQuery, useAddDncMutation, useRemoveDncMutation,
   useAudioStreamsQuery, useCreateAudioStreamMutation, useUpdateAudioStreamMutation, useDeleteAudioStreamMutation,
   useTogglesQuery, useCreateToggleMutation, useUpdateToggleMutation, useDeleteToggleMutation, useToggleStateQuery, useSwitchToggleMutation,
   usePinSetsQuery, useCreatePinSetMutation, useUpdatePinSetMutation, useDeletePinSetMutation,

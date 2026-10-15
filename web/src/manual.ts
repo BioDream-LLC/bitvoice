@@ -9,7 +9,7 @@ export const parts: { title: string; intro: string; ids: string[] }[] = [
   { title: 'Getting started', intro: 'From a new install to a working phone system: extensions, phones, a phone company, where calls go, emergency calling from your offices, and how to tell everything is ready.',
     ids: ['start', 'extensions', 'phones', 'deskphones', 'cards', 'trunks', 'routes', 'pinsets', 'lookups', 'emergency', 'sites', 'health', 'settings'] },
   { title: 'Where calls go', intro: 'The building blocks callers move through: groups and queues, menus and schedules, scripts and the AI receptionist, voicemail, and the diagram that shows it all.',
-    ids: ['flow', 'ringgroups', 'queues', 'sounds', 'menus', 'directory', 'dialin', 'voicebots', 'toggles', 'schedules', 'scripts', 'ai', 'voicemail', 'callbacks', 'calllinks'] },
+    ids: ['flow', 'ringgroups', 'queues', 'dialer', 'sounds', 'menus', 'directory', 'dialin', 'voicebots', 'toggles', 'schedules', 'scripts', 'ai', 'voicemail', 'callbacks', 'calllinks'] },
   { title: 'Everyday calling', intro: 'What people do on their phones every day, and what they set for themselves: forwarding, follow-me, pickup, conference rooms, paging, hot desks, faxes and texts.',
     ids: ['codes', 'portal', 'conferences', 'paging', 'hotdesk', 'hotel', 'contacts', 'calendar', 'mobile', 'video', 'fax', 'texts', 'briefing'] },
   { title: 'Customers and insight', intro: 'Knowing who called and how it went: the live calls and history, the customer timeline, CRMs, recordings and consent, quality, costs and caller ID reputation.',
@@ -490,6 +490,30 @@ Callers hear "Please enter the first three letters of the person's name". One ma
 Callers hear "Please enter your PIN, then press hash", then "Please enter the number to call, then press hash", and are put through. The words come from the dial-in prompts in [Sounds](#/sounds).
 
 > A dial-in is a door to your phone bill. Three wrong PINs end the call, every attempt (refused number, wrong PIN, connected call) is logged and shown in Security, and calls follow the extension's limits. Use a long PIN, list callers' numbers where you can (caller ID can be faked, so keep the PIN too), and keep the extension's outside calls to what is needed.`,
+  },
+  {
+    id: 'dialer', title: 'Outbound dialer', route: '/dialer', keys: 'outbound dialer campaign predictive power progressive preview autodialer vicidial telemarketing collections do not call dnc list amd answering machine tcpa abandon rate',
+    body: `The [outbound dialer](#/dialer) calls lists of contacts for a [queue](#/queues)'s agents: renewals, appointment reminders, collections, surveys. Each **campaign** has its queue, its list and its way of calling:
+
+| Mode | How it calls |
+|---|---|
+| Preview | an agent asks for the next contact, sees its details, then calls it (their phone rings first) or skips it |
+| Progressive | one call for each free agent |
+| Power | a set number of calls for each free agent (1 to 3) |
+| Predictive | BitVoice adjusts the calls per agent, leaning in while few calls are abandoned and backing off as the abandon rate nears the limit |
+
+1. **Add campaign**: its queue, its caller ID (the number contacts see), the hours calls may be made in a time zone, how long a contact's phone rings, how many tries and how far apart.
+2. Open **Contacts** and **Add a list**: a CSV file with a header row and a column called \`number\` (or \`phone\`); \`name\` and any other columns are shown to the agent in preview. Duplicate and malformed numbers are skipped.
+3. Record the **message** (in the campaign): who is calling and why, and "press 9 if you do not want these calls". It plays to a person answered when no agent is free, and, if you choose, after an answering machine's greeting.
+4. **Start** it. It calls only within its hours, and stops calling when it is paused or nothing is due.
+
+**People and machines.** BitVoice listens to the first seconds after an answer: a long, unbroken greeting is an answering machine; a short "hello?" and a pause is a person. A machine can be hung up on (and tried again), left the message, or passed to an agent like anyone else. When in doubt, it takes the answer for a person.
+
+**Abandoned calls.** A person answered when no agent is free in two seconds hears the message and counts as **abandoned**. With power and predictive dialling, if the share of abandoned calls over the last hundred answers goes over the campaign's limit (3% unless you change it, the US rule), the campaign dials one call per free agent until it is back under. The campaign shows its abandon rate, calls ringing and free agents live.
+
+**Do-not-call.** No campaign calls a number on the **do-not-call list**, whatever list it came in on; anyone who presses 9 during the message is added at once. Add numbers by hand or through the API (\`POST /api/dnc\`), for instance from the national registry for the area codes you call.
+
+> Outbound calling is regulated (in the US the TCPA and the Telemarketing Sales Rule; in the UK Ofcom's rules on silent and abandoned calls; elsewhere the local law). BitVoice gives you the tools (hours, do-not-call, abandon limits, caller ID, the message); you remain responsible for consent, the lists you call and the rules where your contacts are.`,
   },
   {
     id: 'voicebots', title: 'Voice bots (AudioSocket)', route: '/voice-bots', keys: 'voice bot audiosocket ai agent speech stream external media llm conversational ivr asterisk deepgram openai realtime',

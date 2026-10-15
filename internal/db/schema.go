@@ -41,6 +41,11 @@ var migrations = []string{
 	`CREATE TABLE radio_log (id TEXT PRIMARY KEY, start_ms BIGINT NOT NULL, channel TEXT NOT NULL, unit TEXT NOT NULL, body TEXT NOT NULL);
 	CREATE INDEX radio_log_start ON radio_log (start_ms);
 	CREATE INDEX radio_log_channel ON radio_log (channel, start_ms);`,
+	// The outbound dialer: each campaign's contacts and where each stands, and the do-not-call list.
+	`CREATE TABLE dialer_contacts (campaign TEXT NOT NULL, id TEXT NOT NULL, state TEXT NOT NULL, next_ms BIGINT NOT NULL,
+		number TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY (campaign, id));
+	CREATE INDEX dialer_due ON dialer_contacts (campaign, state, next_ms);
+	CREATE TABLE dnc (number TEXT PRIMARY KEY, at_ms BIGINT NOT NULL, body TEXT NOT NULL);`,
 }
 
 func (d *DB) migrate(ctx context.Context) error {

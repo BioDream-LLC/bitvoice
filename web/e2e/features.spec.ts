@@ -600,3 +600,42 @@ test('T1 and E1 PRI on a telephony card', async ({ page }) => {
   expect(cfg.spans[0].b).toHaveLength(30)
   expect(cfg.spans[0].q931[15]).toBe(17) // timeslot 16 is the D-channel
 })
+
+// The outbound dialer: a campaign is made for a queue, a CSV list is loaded (one number on the
+// do-not-call list), preview hands out the next contact, and the do-not-call list takes numbers.
+test('outbound dialer campaign', async ({ page }) => {
+  await signIn(page)
+  const qs = await page.evaluate(async () => {
+    const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
+    let q = (await (await fetch('./api/queues')).json()).items
+    if (!q.length) {
+      const exts = (await (await fetch('./api/extensions')).json()).items
+      await fetch('./api/queues', { method: 'POST', headers: H, body: JSON.stringify({ number: '760', name: 'Outbound', agents: [exts[0].number], strategy: 'ring-all', ringSeconds: 15 }) })
+      q = (await (await fetch('./api/queues')).json()).items
+    }
+    return q
+  })
+  expect(qs.length).toBeGreaterThan(0)
+  await page.goto('/#/dialer')
+  await page.getByRole('textbox', { name: 'Add numbers' }).fill('3125550199')
+  await page.getByRole('textbox', { name: 'Add numbers' }).press('Enter')
+  await page.getByRole('button', { name: 'Add', exact: true }).click()
+  await expect(page.getByText('3125550199')).toBeVisible()
+  await page.getByRole('button', { name: 'Add campaign' }).click()
+  await page.getByLabel('Name', { exact: true }).fill('Renewals')
+  await page.getByRole('radio', { name: /Preview/ }).click()
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Renewals' })).toBeVisible()
+  await page.getByRole('button', { name: 'Contacts' }).click()
+  await page.getByLabel('Renewals contact list').setInputFiles({ name: 'list.csv', mimeType: 'text/csv',
+    buffer: Buffer.from('name,number,plan\nAnn Smith,(312) 555-0101,Gold\nBob Jones,312-555-0199,Silver\nBad,12,x\n') })
+  await expect(page.getByText(/2 contacts added, 1 on the do-not-call list, 1 lines skipped/)).toBeVisible()
+  await page.getByRole('button', { name: 'Next contact' }).click()
+  await expect(page.getByText('Ann Smith', { exact: true })).toBeVisible()
+  await expect(page.getByText('Gold')).toBeVisible()
+  await page.getByRole('button', { name: 'Skip' }).click()
+  await expect(page.getByText('Skipped')).toBeVisible()
+  const st = await page.evaluate(async () => (await (await fetch('./api/dialer')).json()))
+  expect(st[0].states.dnc).toBe(1)
+  expect(st[0].states.pending).toBe(1)
+})

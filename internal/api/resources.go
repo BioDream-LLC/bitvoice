@@ -199,6 +199,7 @@ func (s *Server) routes() {
 		id:    func(x *config.Directory) *string { return &x.ID },
 		label: func(x *config.Directory) string { return x.Name }})
 	registerFlow(s)
+	registerCampaigns(s)
 	register(s, collection[config.DialIn]{path: "dial-ins", noun: "dial-in",
 		list:  func(c *config.Config) *[]config.DialIn { return &c.DialIns },
 		id:    func(x *config.DialIn) *string { return &x.ID },
@@ -307,6 +308,7 @@ func (s *Server) routes() {
 	s.snmpRoutes()
 	s.deskRoutes()
 	s.flowRoutes()
+	s.dialerRoutes()
 	s.iceRoutes()
 	s.cardsRoutes()
 	s.cdrOutputRoutes()
@@ -651,6 +653,8 @@ func ownerName(cfg *config.Config, field string) string {
 		return pick(len(cfg.PageGroups), func(i int) string { return "paging group " + cfg.PageGroups[i].Name })
 	case "directories":
 		return pick(len(cfg.Directories), func(i int) string { return "directory " + cfg.Directories[i].Name })
+	case "campaigns":
+		return pick(len(cfg.Campaigns), func(i int) string { return "campaign " + cfg.Campaigns[i].Name })
 	case "audioStreams":
 		return pick(len(cfg.AudioStreams), func(i int) string { return "audio stream " + cfg.AudioStreams[i].Name })
 	case "toggles":

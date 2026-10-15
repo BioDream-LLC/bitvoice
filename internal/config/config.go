@@ -49,7 +49,9 @@ type Config struct {
 	Lookups []CallerIDLookup `json:"lookups"`
 	// AudioStreams send calls to voice bots over AudioSocket.
 	AudioStreams []AudioStream `json:"audioStreams"`
-	Security     Security      `json:"security"`
+	// Campaigns are outbound calling campaigns for queues' agents.
+	Campaigns []Campaign `json:"campaigns"`
+	Security  Security   `json:"security"`
 }
 
 // System holds settings for the whole installation.
@@ -2677,6 +2679,7 @@ func (c *Config) Validate() error {
 	}
 	c.validateFlow(&p, checkID, checkDest)
 	c.validateStreams(&p, claim, checkID, checkDest)
+	c.validateCampaigns(&p, checkID)
 	c.validateACME(&p)
 	c.validateTURN(&p)
 	for i := range c.System.CallLinks {
