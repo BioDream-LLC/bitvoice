@@ -105,8 +105,13 @@ func TestInbox(t *testing.T) {
 		t.Fatalf("conversation %v", conv)
 	}
 	id := conv["id"].(string)
-	_, thread := admin.do("GET", "/api/inbox/"+id, nil)
-	msgs := thread["messages"].([]any)
+	var msgs []any
+	for end := time.Now().Add(3 * time.Second); time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
+		_, thread := admin.do("GET", "/api/inbox/"+id, nil)
+		if msgs = thread["messages"].([]any); len(msgs) >= 2 {
+			break // the greeting is kept once Meta has taken it
+		}
+	}
 	if len(msgs) != 2 || msgs[0].(map[string]any)["text"] != "Open on Sunday?" || msgs[1].(map[string]any)["by"] != "auto" {
 		t.Fatalf("messages (the repeat kept once, the greeting sent) %v", msgs)
 	}

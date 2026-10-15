@@ -686,3 +686,59 @@ test('inbox: the web chat box on a website', async ({ page, context }) => {
   await page.getByRole('button', { name: 'Close' }).click()
   await expect(page.getByText('Closed', { exact: true })).toBeVisible()
 })
+
+// WhatsApp after the 24-hour window: a stand-in for Meta's Graph API lists one template; a signed
+// webhook brings a day-old message; the agent fills the template's values and sends it.
+test('inbox: a WhatsApp template after 24 hours', async ({ page }) => {
+  const { createServer } = await import('node:http')
+  const { createHmac } = await import('node:crypto')
+  const sent: Record<string, unknown>[] = []
+  const graph = createServer((req, res) => {
+    let b = ''
+    req.on('data', (c) => (b += c))
+    req.on('end', () => {
+      if (req.method === 'GET') {
+        res.end(JSON.stringify({ data: [{ name: 'order_ready', language: 'en_US', status: 'APPROVED', category: 'UTILITY', components: [{ type: 'BODY', text: 'Hi {{1}}, order {{2}} is ready.' }] },
+          { name: 'promo', language: 'en_US', status: 'APPROVED', category: 'MARKETING', components: [{ type: 'HEADER', format: 'IMAGE' }, { type: 'BODY', text: 'Sale' }] }] }))
+        return
+      }
+      sent.push(JSON.parse(b))
+      res.end(JSON.stringify({ messages: [{ id: 'wamid.out' }] }))
+    })
+  })
+  await new Promise<void>((r) => graph.listen(18399, '127.0.0.1', r))
+  try {
+    await signIn(page)
+    await page.goto('/#/inbox')
+    await page.getByRole('button', { name: 'Channels' }).click()
+    const wa = page.getByRole('switch', { name: 'WhatsApp' })
+    if ((await wa.getAttribute('aria-checked')) !== 'true') await wa.click()
+    await page.getByLabel('Phone number ID').fill('106540352242922')
+    await page.getByLabel('Business account ID').fill('102290129340398')
+    await page.getByLabel('Access token').fill('TOKEN')
+    await page.locator('#was').fill('appsecret')
+    await page.getByRole('button', { name: 'Save channels' }).click()
+    await expect(page.getByText('Inbox channels saved')).toBeVisible()
+    const day = Math.floor(Date.now() / 1000) - 30 * 3600
+    const hook = JSON.stringify({ entry: [{ changes: [{ value: { contacts: [{ profile: { name: 'Carla Ruiz' }, wa_id: '34600111222' }],
+      messages: [{ from: '34600111222', id: 'wamid.e2e', timestamp: String(day), type: 'text', text: { body: 'Is order A-17 ready?' } }] } }] }] })
+    const sig = 'sha256=' + createHmac('sha256', 'appsecret').update(hook).digest('hex')
+    const r = await page.request.post('/hooks/whatsapp', { data: hook, headers: { 'Content-Type': 'application/json', 'X-Hub-Signature-256': sig } })
+    expect(r.status()).toBe(200)
+    await page.getByRole('button', { name: 'Back to the inbox' }).click()
+    await page.getByRole('list', { name: 'Conversations list' }).getByText('Carla Ruiz').click()
+    await expect(page.getByText('WhatsApp takes only an approved template now.')).toBeVisible()
+    await expect(page.getByLabel('Template').locator('option', { hasText: 'its header is a picture' })).toBeDisabled()
+    await page.getByLabel('Template').selectOption('order_ready|en_US')
+    await page.getByLabel('Value 1').fill('Carla')
+    await page.getByLabel('Value 2').fill('A-17')
+    await expect(page.getByLabel('Template preview')).toContainText('Hi Carla, order A-17 is ready.')
+    await page.getByRole('button', { name: 'Send template' }).click()
+    await expect(page.locator('p', { hasText: 'Hi Carla, order A-17 is ready.' }).first()).toBeVisible()
+    const t = sent.find((m) => m.type === 'template') as { to: string; template: { name: string } }
+    expect(t.to).toBe('34600111222')
+    expect(t.template.name).toBe('order_ready')
+  } finally {
+    graph.close()
+  }
+})

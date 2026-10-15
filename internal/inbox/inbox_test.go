@@ -86,3 +86,52 @@ func FuzzParse(f *testing.F) {
 	f.Add([]byte(`{"entry":[{"changes":[{"value":{"messages":[{"from":"1","type":"text","text":{"body":"x"}}]}}]}]}`))
 	f.Fuzz(func(t *testing.T, b []byte) { ParseWhatsApp(b); ParseMessenger(b) })
 }
+
+// Templates as the Graph API lists them: which can be sent from the inbox, how many values each
+// needs, and the message they make.
+func TestTemplates(t *testing.T) {
+	var sent map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			if r.URL.Query().Get("after") == "" {
+				w.Write([]byte(`{"data":[
+				{"name":"order_ready","language":"en_US","status":"APPROVED","category":"UTILITY","components":[
+					{"type":"HEADER","format":"TEXT","text":"Your order"},{"type":"BODY","text":"Hi {{1}}, order {{2}} is ready."},{"type":"FOOTER","text":"Reply STOP to opt out"}]},
+				{"name":"promo","language":"en_US","status":"APPROVED","category":"MARKETING","components":[{"type":"HEADER","format":"IMAGE"},{"type":"BODY","text":"Sale!"}]},
+				{"name":"draft","language":"es","status":"PENDING","category":"UTILITY","components":[{"type":"BODY","text":"Hola"}]}],
+				"paging":{"next":"` + GraphBase + `/123/message_templates?after=x"}}`))
+				return
+			}
+			w.Write([]byte(`{"data":[{"name":"named","language":"en","status":"APPROVED","components":[{"type":"BODY","text":"Hi {{first_name}}"}]}],"paging":{"next":"https://evil.example.org/x"}}`))
+			return
+		}
+		b, _ := io.ReadAll(r.Body)
+		sent = map[string]any{}
+		json.Unmarshal(b, &sent)
+		w.Write([]byte(`{"messages":[{"id":"wamid.t"}]}`))
+	}))
+	defer srv.Close()
+	GraphBase = srv.URL
+	ts, err := WhatsAppTemplates(context.Background(), "123", "TOKEN")
+	if err != nil || len(ts) != 4 {
+		t.Fatalf("%v %+v", err, ts)
+	}
+	if !ts[0].Usable || ts[0].Params != 2 || ts[1].Usable || ts[1].Why != "its header is a picture" || ts[2].Usable || ts[3].Usable {
+		t.Fatalf("%+v", ts)
+	}
+	if got := ts[0].Fill([]string{"Ann", "A-17"}); got != "Your order\n\nHi Ann, order A-17 is ready.\n\nReply STOP to opt out" {
+		t.Fatalf("%q", got)
+	}
+	id, err := SendWhatsAppTemplate(context.Background(), "1065", "TOKEN", "+447700900123", ts[0], []string{"Ann", "A-17"})
+	tpl, _ := sent["template"].(map[string]any)
+	if err != nil || id != "wamid.t" || sent["type"] != "template" || tpl["name"] != "order_ready" || tpl["language"].(map[string]any)["code"] != "en_US" {
+		t.Fatalf("%v %v", err, sent)
+	}
+	ps := tpl["components"].([]any)[0].(map[string]any)["parameters"].([]any)
+	if len(ps) != 2 || ps[1].(map[string]any)["text"] != "A-17" {
+		t.Fatalf("%v", ps)
+	}
+	if _, err := WhatsAppTemplates(context.Background(), "", "TOKEN"); err == nil {
+		t.Fatal("no account ID")
+	}
+}

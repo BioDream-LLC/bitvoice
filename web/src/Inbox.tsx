@@ -3,8 +3,8 @@ import { CheckCheck, Copy, Globe, Inbox as InboxIcon, MessageCircle, MessageSqua
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
-  useInboxQuery, useInboxReplyMutation, useInboxSetMutation, useInboxThreadQuery, useMeQuery, useSaveSettingsMutation, useSettingsQuery, useUsersQuery,
-  type ApiErrorBody, type InboxConv, type InboxSettings,
+  useInboxQuery, useInboxReplyMutation, useInboxSendTemplateMutation, useInboxSetMutation, useInboxTemplatesQuery, useInboxThreadQuery, useMeQuery, useSaveSettingsMutation, useSettingsQuery, useUsersQuery,
+  type ApiErrorBody, type InboxConv, type InboxSettings, type WhatsAppTemplate,
 } from './api'
 import { attempt, useIsAdmin } from './Editor'
 import { Empty, Field, ListInput, Page, problemFor, relTime, Toggle } from './ui'
@@ -118,13 +118,51 @@ function Thread({ id }: { id: string }) {
         ))}
         <div ref={end} />
       </div>
-      {data.windowOpen === false && <p className="px-4 pb-1 text-xs text-amber-300">Their last message was over 24 hours ago: {ch.label} accepts only approved templates now, so a free reply may be refused.</p>}
+      {data.window === 'agent' && <p className="px-4 pb-1 text-xs text-amber-300">Their last message was over 24 hours ago: Messenger takes replies written by a person for 7 days (your Meta app needs the Human Agent permission).</p>}
+      {data.window === 'shut' && <p className="px-4 pb-1 text-xs text-rose-300">Their last message was over 7 days ago: Messenger takes no reply until they write again.</p>}
       {data.optedOut && <p className="px-4 pb-1 text-xs text-rose-300">They replied STOP: no texts can be sent until they reply START.</p>}
-      <form className="flex gap-2 border-t border-slate-800 p-3" onSubmit={(e) => { e.preventDefault(); void send() }}>
+      {data.window === 'template' ? <TemplateReply id={id} /> : data.window !== 'shut' && <form className="flex gap-2 border-t border-slate-800 p-3" onSubmit={(e) => { e.preventDefault(); void send() }}>
         <textarea aria-label="Reply" className="input h-16 flex-1 resize-none" value={text} placeholder={`Reply on ${ch.label}${me ? ` as ${me.name || me.username}` : ''}…`}
           onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }} />
         <button type="submit" className="btn btn-primary self-end" disabled={isLoading || !text.trim()}><Send size={14} aria-hidden /> Send</button>
-      </form>
+      </form>}
+    </div>
+  )
+}
+
+/** WhatsApp after 24 hours: an approved template, its values filled in, previewed as the customer reads it. */
+function TemplateReply({ id }: { id: string }) {
+  const { data, error } = useInboxTemplatesQuery()
+  const [send, { isLoading }] = useInboxSendTemplateMutation()
+  const [pick, setPick] = useState('')
+  const [vals, setVals] = useState<string[]>([])
+  const list = data ?? []
+  const tpl: WhatsAppTemplate | undefined = list.find((t) => `${t.name}|${t.language}` === pick)
+  const fill = (s: string) => s.replace(/\{\{\s*(\d+)\s*\}\}/g, (m, n) => vals[Number(n) - 1] || m)
+  const ready = tpl && tpl.usable && vals.length === tpl.params && vals.every((v) => v.trim())
+  return (
+    <div className="space-y-2 border-t border-slate-800 p-3">
+      <p className="text-xs text-amber-300">Their last message was over 24 hours ago: WhatsApp takes only an approved template now.</p>
+      {error ? <p className="text-xs text-rose-300">{(error as { data?: { message?: string } }).data?.message ?? 'The templates could not be read'} (give the business account ID under Channels).</p> : (
+        <>
+          <select aria-label="Template" className="input" value={pick} onChange={(e) => { setPick(e.target.value); const t = list.find((x) => `${x.name}|${x.language}` === e.target.value); setVals(Array(t?.params ?? 0).fill('')) }}>
+            <option value="">Choose a template…</option>
+            {list.map((t) => <option key={`${t.name}|${t.language}`} value={`${t.name}|${t.language}`} disabled={!t.usable}>{t.name} ({t.language}, {t.category.toLowerCase()}){t.usable ? '' : ` — ${t.why}`}</option>)}
+          </select>
+          {tpl && (
+            <>
+              {vals.map((v, i) => <input key={i} aria-label={`Value ${i + 1}`} className="input" placeholder={`{{${i + 1}}}`} value={v} onChange={(e) => setVals(vals.map((x, j) => (j === i ? e.target.value : x)))} />)}
+              <div className="whitespace-pre-wrap rounded-lg bg-slate-800 p-2 text-sm text-slate-200" aria-label="Template preview">
+                {tpl.header && <p className="font-semibold">{tpl.header}</p>}<p>{fill(tpl.body)}</p>{tpl.footer && <p className="text-xs text-slate-400">{tpl.footer}</p>}
+              </div>
+              <button type="button" className="btn btn-primary" disabled={!ready || isLoading}
+                onClick={async () => { try { await send({ id, name: tpl.name, language: tpl.language, params: vals.map((v) => v.trim()) }).unwrap(); setPick(''); setVals([]) } catch (e) { toast.error((e as { data?: { message?: string } }).data?.message ?? 'Not sent') } }}>
+                <Send size={14} aria-hidden /> Send template
+              </button>
+            </>
+          )}
+        </>
+      )}
     </div>
   )
 }
@@ -190,6 +228,7 @@ function InboxSettingsCard() {
           <>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Phone number ID" htmlFor="wap" error={p('whatsApp.phoneNumberId')} hint="In WhatsApp Manager, API setup."><input id="wap" className="input font-mono" value={s.whatsApp.phoneNumberId} onChange={(e) => set({ whatsApp: { ...s.whatsApp, phoneNumberId: e.target.value.trim() } })} /></Field>
+              <Field label="Business account ID" htmlFor="wab" error={p('whatsApp.businessAccountId')} hint="Also in API setup: lets the inbox list your message templates."><input id="wab" className="input font-mono" value={s.whatsApp.businessAccountId ?? ''} onChange={(e) => set({ whatsApp: { ...s.whatsApp, businessAccountId: e.target.value.trim() } })} /></Field>
               <Field label="Access token" htmlFor="wat" error={p('whatsApp.token')} hint="A system user's permanent token."><input id="wat" type="password" autoComplete="off" className="input font-mono" value={s.whatsApp.token} onChange={(e) => set({ whatsApp: { ...s.whatsApp, token: e.target.value.trim() } })} /></Field>
               <Field label="App secret" htmlFor="was" error={p('whatsApp.appSecret')}><input id="was" type="password" autoComplete="off" className="input font-mono" value={s.whatsApp.appSecret} onChange={(e) => set({ whatsApp: { ...s.whatsApp, appSecret: e.target.value.trim() } })} /></Field>
             </div>

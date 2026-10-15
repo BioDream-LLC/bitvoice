@@ -59,9 +59,10 @@ type Server struct {
 	// TURNStatus says how the TURN server runs (set by main).
 	TURNStatus func() map[string]any
 	// ACMEStatus and ACMEWake are the Let's Encrypt manager's state and its "look again now" (set by main).
-	ACMEStatus func() acme.Status
-	ACMECheck  func(ctx context.Context, names []string) []acme.Reach
-	ACMEWake   func()
+	ACMEStatus     func() acme.Status
+	inboxTemplates templateCache
+	ACMECheck      func(ctx context.Context, names []string) []acme.Reach
+	ACMEWake       func()
 	// DeskStatus says how Skinny phones and MGCP lines stand (set by main).
 	DeskStatus func() map[string]map[string]string
 	// DataDir, ReleaseKey and Restart make upgrades possible: where versions are kept, the key releases are

@@ -35,9 +35,11 @@ type WebChat struct {
 type WhatsApp struct {
 	Enabled       bool   `json:"enabled"`
 	PhoneNumberID string `json:"phoneNumberId"` // from WhatsApp Manager, not the phone number itself
-	Token         string `json:"token"`         // a system user's permanent access token
-	AppSecret     string `json:"appSecret"`     // the Meta app's secret, to check the webhooks
-	VerifyToken   string `json:"verifyToken"`   // what Meta sends to check the webhook address (made for you)
+	// BusinessAccountID is the WhatsApp business account's ID, to list its message templates.
+	BusinessAccountID string `json:"businessAccountId,omitempty"`
+	Token             string `json:"token"`       // a system user's permanent access token
+	AppSecret         string `json:"appSecret"`   // the Meta app's secret, to check the webhooks
+	VerifyToken       string `json:"verifyToken"` // what Meta sends to check the webhook address (made for you)
 }
 
 // Messenger is a Facebook Page's Messenger.
@@ -81,6 +83,9 @@ func (c *Config) validateInbox(p *Problems) {
 	if wa.Enabled {
 		if !digitsRe.MatchString(wa.PhoneNumberID) {
 			p.add("system.inbox.whatsApp.phoneNumberId", "enter the phone number ID from WhatsApp Manager (digits)")
+		}
+		if wa.BusinessAccountID != "" && !digitsRe.MatchString(wa.BusinessAccountID) {
+			p.add("system.inbox.whatsApp.businessAccountId", "enter the WhatsApp business account ID (digits), or leave it empty")
 		}
 		if wa.Token == "" {
 			p.add("system.inbox.whatsApp.token", "enter the access token")

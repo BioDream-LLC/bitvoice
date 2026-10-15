@@ -173,10 +173,11 @@ export interface InboundRoute { id: string; name: string; did: string; trunk: st
 export interface InboxSettings {
   greeting: string
   webChat: { enabled: boolean; title: string; welcome: string; colour: string; origins: string[] | null }
-  whatsApp: { enabled: boolean; phoneNumberId: string; token: string; appSecret: string; verifyToken: string }
+  whatsApp: { enabled: boolean; phoneNumberId: string; businessAccountId?: string; token: string; appSecret: string; verifyToken: string }
   messenger: { enabled: boolean; pageId: string; pageToken: string; appSecret: string; verifyToken: string }
 }
 export interface InboxConv { id: string; channel: 'webchat' | 'whatsapp' | 'messenger' | 'sms'; contact: string; name?: string; email?: string; state: 'open' | 'closed'; assignee?: string; unread: number; started?: string; updated: string; lastIn?: string; preview: string; page?: string; our?: string }
+export interface WhatsAppTemplate { name: string; language: string; status: string; category: string; header?: string; body: string; footer?: string; params: number; usable: boolean; why?: string }
 export interface InboxMsg { id: string; conv: string; at: string; in: boolean; text: string; by?: string; status?: string; error?: string }
 
 /** An outbound calling campaign for a queue's agents. */
@@ -474,8 +475,10 @@ export const api = createApi({
       updateDirectory: b.mutation<Item<Directory>, Directory>({ query: (body) => ({ url: `directories/${body.id}`, method: 'PUT', body }), invalidatesTags: ['Directories', 'History'] }),
       deleteDirectory: b.mutation<void, string>({ query: (id) => ({ url: `directories/${id}`, method: 'DELETE' }), invalidatesTags: ['Directories', 'History'] }),
       inbox: b.query<InboxConv[], string | void>({ query: (state) => `inbox${state ? `?state=${state}` : ''}`, providesTags: ['Inbox', 'Texts'] }),
-      inboxThread: b.query<{ conversation: InboxConv; messages: InboxMsg[]; windowOpen?: boolean; optedOut?: boolean }, string>({ query: (id) => `inbox/${encodeURIComponent(id)}`, providesTags: ['Inbox', 'Texts'] }),
+      inboxThread: b.query<{ conversation: InboxConv; messages: InboxMsg[]; windowOpen?: boolean; window?: 'open' | 'agent' | 'template' | 'shut'; optedOut?: boolean }, string>({ query: (id) => `inbox/${encodeURIComponent(id)}`, providesTags: ['Inbox', 'Texts'] }),
       inboxReply: b.mutation<InboxMsg, { id: string; text: string }>({ query: ({ id, text }) => ({ url: `inbox/${encodeURIComponent(id)}/reply`, method: 'POST', body: { text } }), invalidatesTags: ['Inbox', 'Texts'] }),
+      inboxTemplates: b.query<WhatsAppTemplate[], void>({ query: () => 'inbox/templates', keepUnusedDataFor: 300 }),
+      inboxSendTemplate: b.mutation<InboxMsg, { id: string; name: string; language: string; params: string[] }>({ query: ({ id, ...body }) => ({ url: `inbox/${encodeURIComponent(id)}/template`, method: 'POST', body }), invalidatesTags: ['Inbox'] }),
       inboxSet: b.mutation<void, { id: string; read?: boolean; state?: string; assignee?: string }>({ query: ({ id, ...body }) => ({ url: `inbox/${encodeURIComponent(id)}`, method: 'POST', body }), invalidatesTags: ['Inbox', 'Texts'] }),
       campaigns: b.query<List<Campaign>, void>({ query: () => 'campaigns', providesTags: ['Campaigns'] }),
       createCampaign: b.mutation<Item<Campaign>, Partial<Campaign>>({ query: (body) => ({ url: 'campaigns', method: 'POST', body }), invalidatesTags: ['Campaigns', 'Dialer', 'History'] }),
@@ -823,7 +826,7 @@ export const {
   useVoicemailQuery, useMarkHeardMutation, useDeleteVoicemailMutation, useSaveGreetingMutation, useResetGreetingMutation,
   useDirectoriesQuery, useCreateDirectoryMutation, useUpdateDirectoryMutation, useDeleteDirectoryMutation,
   useDialInsQuery, useCreateDialInMutation, useUpdateDialInMutation, useDeleteDialInMutation,
-  useInboxQuery, useInboxThreadQuery, useInboxReplyMutation, useInboxSetMutation,
+  useInboxQuery, useInboxThreadQuery, useInboxReplyMutation, useInboxSetMutation, useInboxTemplatesQuery, useInboxSendTemplateMutation,
   useCampaignsQuery, useCreateCampaignMutation, useUpdateCampaignMutation, useDeleteCampaignMutation, useDialerQuery, useCampaignContactsQuery,
   useUploadContactsMutation, useClearContactsMutation, usePreviewNextMutation, usePreviewCallMutation, usePutCampaignMessageMutation,
   useDeleteCampaignMessageMutation, useDncQuery, useAddDncMutation, useRemoveDncMutation,

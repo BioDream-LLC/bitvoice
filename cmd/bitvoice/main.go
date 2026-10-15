@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -36,6 +37,7 @@ import (
 	"github.com/biodream-llc/bitvoice/internal/events"
 	"github.com/biodream-llc/bitvoice/internal/h323"
 	"github.com/biodream-llc/bitvoice/internal/iax"
+	"github.com/biodream-llc/bitvoice/internal/inbox"
 	"github.com/biodream-llc/bitvoice/internal/mgcp"
 	"github.com/biodream-llc/bitvoice/internal/pbx"
 	"github.com/biodream-llc/bitvoice/internal/sccp"
@@ -317,6 +319,10 @@ func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 			return acme.Current{Names: i.Names, NotAfter: i.NotAfter, SelfSigned: i.SelfSigned}
 		},
 		Install: func(certPEM, keyPEM string) error { _, err := holder.Install(certPEM, keyPEM); return err }}
+	// Meta's Graph API address: a newer version, or a stand-in for tests.
+	if g := os.Getenv("BITVOICE_META_GRAPH"); strings.HasPrefix(g, "https://") || strings.HasPrefix(g, "http://127.0.0.1:") {
+		inbox.GraphBase = strings.TrimRight(g, "/")
+	}
 	srv.ACMEStatus, srv.ACMEWake, srv.ACMECheck = acm.Status, acm.Wake, acm.CheckReach
 	tlsCfg := &tls.Config{GetCertificate: holder.Get, MinVersion: tls.VersionTLS12}
 	tlsCfg.GetConfigForClient = acm.ConfigForClient(tlsCfg)

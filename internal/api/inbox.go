@@ -6,12 +6,14 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/biodream-llc/bitvoice/internal/config"
@@ -72,7 +74,18 @@ func (s *Server) reply(ctx context.Context, c store.InboxConv, text, by string) 
 	case "whatsapp":
 		id, err = inbox.SendWhatsApp(ctx, ib.WhatsApp.PhoneNumberID, ib.WhatsApp.Token, c.Contact, text)
 	case "messenger":
-		id, err = inbox.SendMessenger(ctx, ib.Messenger.PageToken, c.Contact, text)
+		switch inbox.MessengerWindow(c.LastIn) {
+		case "open":
+			id, err = inbox.SendMessenger(ctx, ib.Messenger.PageToken, c.Contact, text)
+		case "agent":
+			if by == "auto" {
+				err = errors.New("an automatic message may not be sent after 24 hours")
+			} else {
+				id, err = inbox.SendMessengerTagged(ctx, ib.Messenger.PageToken, c.Contact, text)
+			}
+		default:
+			err = errors.New("Messenger takes no reply more than 7 days after the person's last message")
+		}
 	case "webchat":
 		// The visitor's box collects it.
 	default:
@@ -90,7 +103,136 @@ func (s *Server) reply(ctx context.Context, c store.InboxConv, text, by string) 
 	return saved, err
 }
 
+// window says which replies the conversation's channel takes now: open, agent (Messenger's human
+// agent tag, up to 7 days), template (WhatsApp, only templates) or shut.
+func window(c store.InboxConv) string {
+	switch c.Channel {
+	case "whatsapp":
+		if time.Since(c.LastIn) < 24*time.Hour {
+			return "open"
+		}
+		return "template"
+	case "messenger":
+		return inbox.MessengerWindow(c.LastIn)
+	}
+	return "open"
+}
+
+// templates are the WhatsApp templates, kept a few minutes so the reply box does not ask Meta each time.
+type templateCache struct {
+	mu   sync.Mutex
+	key  string
+	at   time.Time
+	list []inbox.Template
+}
+
+func (s *Server) whatsAppTemplates(ctx context.Context, fresh bool) ([]inbox.Template, error) {
+	wa := s.config().System.Inbox.WhatsApp
+	key := wa.BusinessAccountID + "\x00" + wa.Token
+	tc := &s.inboxTemplates
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if !fresh && tc.key == key && time.Since(tc.at) < 5*time.Minute {
+		return tc.list, nil
+	}
+	list, err := inbox.WhatsAppTemplates(ctx, wa.BusinessAccountID, wa.Token)
+	if err != nil {
+		return nil, err
+	}
+	tc.key, tc.at, tc.list = key, time.Now(), list
+	return list, nil
+}
+
 func (s *Server) inboxRoutes() {
+	// WhatsApp's approved templates, for replies after the 24-hour window.
+	s.handle("GET /api/inbox/templates", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		if !s.config().System.Inbox.WhatsApp.Enabled {
+			writeError(w, 404, "WhatsApp is off")
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+		defer cancel()
+		list, err := s.whatsAppTemplates(ctx, r.URL.Query().Get("fresh") != "")
+		if err != nil {
+			writeError(w, 502, "WhatsApp's templates could not be read: "+err.Error())
+			return
+		}
+		if list == nil {
+			list = []inbox.Template{}
+		}
+		writeJSON(w, 200, list)
+	})
+	// Send a template into a WhatsApp conversation.
+	s.handle("POST /api/inbox/{id}/template", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		var in struct {
+			Name     string   `json:"name"`
+			Language string   `json:"language"`
+			Params   []string `json:"params"`
+		}
+		if err := readJSON(r, &in); err != nil {
+			writeErr(w, err)
+			return
+		}
+		c, err := s.Store.Conv(r.PathValue("id"))
+		if err != nil || c.Channel != "whatsapp" {
+			writeError(w, 404, "no such WhatsApp conversation")
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+		defer cancel()
+		list, err := s.whatsAppTemplates(ctx, false)
+		if err != nil {
+			writeError(w, 502, "WhatsApp's templates could not be read: "+err.Error())
+			return
+		}
+		var tpl *inbox.Template
+		for i := range list {
+			if list[i].Name == in.Name && list[i].Language == in.Language {
+				tpl = &list[i]
+			}
+		}
+		switch {
+		case tpl == nil:
+			writeError(w, 400, "no template "+in.Name+" in "+in.Language)
+			return
+		case !tpl.Usable:
+			writeError(w, 400, "this template cannot be sent from the inbox: "+tpl.Why)
+			return
+		case len(in.Params) != tpl.Params:
+			writeError(w, 400, fmt.Sprintf("this template needs %d values", tpl.Params))
+			return
+		}
+		for i, p := range in.Params {
+			in.Params[i] = strings.TrimSpace(p)
+			if in.Params[i] == "" || len(p) > 1000 || strings.ContainsAny(p, "\n\t") {
+				writeError(w, 400, fmt.Sprintf("value %d must be filled in, on one line", i+1))
+				return
+			}
+		}
+		wa := s.config().System.Inbox.WhatsApp
+		m := store.InboxMsg{Conv: c.ID, Text: tpl.Fill(in.Params), By: u.Username, Status: "sent"}
+		id, err := inbox.SendWhatsAppTemplate(ctx, wa.PhoneNumberID, wa.Token, c.Contact, *tpl, in.Params)
+		if err != nil {
+			m.Status, m.Error = "failed", err.Error()
+		}
+		m.ExtID = id
+		if c.Assignee == "" {
+			c.Assignee = u.Username
+			_ = s.Store.PutConv(c)
+		}
+		saved, serr := s.Store.AddMsg(m)
+		if serr != nil {
+			writeErr(w, serr)
+			return
+		}
+		s.Bus.Publish("inbox.message", map[string]string{"conv": c.ID, "channel": c.Channel})
+		s.audit(r, u.Username, "inbox.template", c.Contact+" "+tpl.Name+" "+saved.Status)
+		if err != nil {
+			writeJSON(w, 502, map[string]any{"message": "WhatsApp did not take it: " + err.Error(), "item": saved})
+			return
+		}
+		writeJSON(w, 201, saved)
+	})
 	// Every conversation, texts included, newest first.
 	s.handle("GET /api/inbox", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
 		state := r.URL.Query().Get("state")
@@ -139,7 +281,7 @@ func (s *Server) inboxRoutes() {
 		}
 		c.TokenHash = ""
 		writeJSON(w, 200, map[string]any{"conversation": inboxConvView{InboxConv: c}, "messages": msgs,
-			"windowOpen": c.Channel == "webchat" || time.Since(c.LastIn) < 24*time.Hour})
+			"windowOpen": c.Channel == "webchat" || time.Since(c.LastIn) < 24*time.Hour, "window": window(c)})
 	})
 	// Read, assign, close or reopen.
 	s.handle("POST /api/inbox/{id}", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
