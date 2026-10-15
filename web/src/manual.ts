@@ -236,6 +236,8 @@ Softphones and web apps built on JsSIP, SIP.js and similar libraries speak SIP o
 
 The WebSocket needs no sign-in of its own: the softphone signs in with SIP, and failed sign-ins and too many requests are counted for its own address, as for any phone. A softphone page served from another site must trust this server's certificate (use Let's Encrypt), and current Chrome asks the user before a public web page may reach a server on the local network.
 
+Tested with two independent libraries, JsSIP 3.13 and SIP.js 0.21: two softphones of each register, call each other and hear each other through BitVoice. Other softphones (Linphone's web client, Zoiper's) speak the same protocol but have not been tried.
+
 ## TURN, for networks that block UDP
 Some networks (hotels, guest Wi-Fi, strict company firewalls) let no UDP out, or hide computers behind NATs WebRTC cannot get through. For those, switch on **TURN server** in [Settings](#/settings): BitVoice then runs its own TURN server (RFC 8656) on port 3478 (UDP and TCP) and, with this server's certificate, on port 5349 over TLS. Browser phones, the staff phone and call links are given short-lived credentials for it, and use it when they cannot reach the media ports directly; the sound is still encrypted end to end, and BitVoice relays it only to its own addresses, so nobody can use it to reach anything else.
 

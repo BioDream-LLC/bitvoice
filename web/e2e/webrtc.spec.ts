@@ -411,3 +411,83 @@ test('JsSIP softphones over SIP over WebSocket', async ({ page, context }) => {
   expect(result.callee).toBeGreaterThan(50)
   expect(ws).toBe(2)
 })
+
+// The same against SIP.js (another independent SIP stack, MIT, bundled here only for the test): two
+// SIP.js user agents register over wss://…/ws, one calls the other, and the sound flows both ways.
+test('SIP.js softphones over SIP over WebSocket', async ({ page, context }) => {
+  const { build } = await import('vite')
+  const { resolve } = await import('node:path')
+  const { readFileSync, mkdtempSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const out = mkdtempSync(resolve(tmpdir(), 'sipjs-'))
+  await build({ configFile: false, logLevel: 'silent', build: { write: true, outDir: out, emptyOutDir: true, minify: false, copyPublicDir: false,
+    lib: { entry: resolve('node_modules/sip.js/lib/index.js'), name: 'SIP', formats: ['iife'], fileName: () => 'sip.js' } } })
+  const sipjs = readFileSync(resolve(out, 'sip.js'), 'utf8')
+
+  await signIn(page)
+  const secret = 'Softphone-Secret-1357'
+  const setup = await page.evaluate(async (secret) => {
+    const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
+    const s = await (await fetch('./api/settings')).json()
+    s.system.webSocket = { enabled: true }
+    let r = await fetch('./api/settings', { method: 'PUT', headers: H, body: JSON.stringify(s) })
+    if (!r.ok) return (await r.json()).message
+    for (const n of ['273', '274']) {
+      r = await fetch('./api/extensions', { method: 'POST', headers: H, body: JSON.stringify({ number: n, name: 'SIP.js ' + n, secret, enabled: true, outbound: true }) })
+      if (!r.ok && r.status !== 409) return (await r.json()).message
+    }
+    return ''
+  }, secret)
+  expect(setup).toBe('')
+  const bitvoice = new URL(page.url())
+
+  await context.grantPermissions(['local-network-access']).catch(() => {})
+  const phone = await context.newPage()
+  await phone.route('https://localhost:9/**', (r) => r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>softphone</title><script src="/sip.js"></script>' }))
+  // UTF-8 said outright: SIP.js's parser tables are characters above ASCII.
+  await phone.route('https://localhost:9/sip.js', (r) => r.fulfill({ contentType: 'text/javascript; charset=utf-8', body: sipjs }))
+  phone.on('console', (m) => { if (process.env.BV_DEBUG) console.log('PHONE', m.text().slice(0, 400)) })
+  await phone.goto('https://localhost:9/')
+  const result = await phone.evaluate(async ({ secret, host }) => {
+    const S = (window as any).SIP
+    const name = host.split(':')[0]
+    const agent = (user: string) => new S.UserAgent({
+      uri: S.UserAgent.makeURI(`sip:${user}@${name}`),
+      transportOptions: { server: `wss://${host}/ws` },
+      authorizationUsername: user, authorizationPassword: secret,
+      logLevel: 'warn',
+      sessionDescriptionHandlerFactoryOptions: { iceGatheringTimeout: 500 },
+    })
+    const a = agent('273'), b = agent('274')
+    let incoming: any = null
+    b.delegate = { onInvite: (inv: any) => { incoming = inv; inv.accept({ sessionDescriptionHandlerOptions: { constraints: { audio: true, video: false } } }) } }
+    await a.start(); await b.start()
+    const reg = async (u: any) => {
+      const r = new S.Registerer(u)
+      await new Promise<void>((ok, bad) => {
+        r.stateChange.addListener((st: string) => { if (st === 'Registered') ok() })
+        r.register({ requestDelegate: { onReject: (resp: any) => bad(new Error('registration refused ' + resp.message.statusCode)) } })
+      })
+    }
+    await reg(a); await reg(b)
+    const inviter = new S.Inviter(a, S.UserAgent.makeURI(`sip:274@${name}`), { sessionDescriptionHandlerOptions: { constraints: { audio: true, video: false } } })
+    await new Promise<void>((ok, bad) => {
+      inviter.stateChange.addListener((st: string) => { if (st === 'Established') ok(); if (st === 'Terminated') bad(new Error('call ended')) })
+      inviter.invite().catch(bad)
+    })
+    await new Promise((ok) => setTimeout(ok, 3000))
+    const packets = async (sess: any) => {
+      let n = 0
+      const st = await sess.sessionDescriptionHandler.peerConnection.getStats()
+      st.forEach((x: any) => { if (x.type === 'inbound-rtp' && x.kind === 'audio') n = x.packetsReceived })
+      return n
+    }
+    ;(window as any).end = async () => { await inviter.bye().catch(() => {}); await new Promise((ok) => setTimeout(ok, 500)); await a.stop(); await b.stop() }
+    return { caller: await packets(inviter), callee: incoming ? await packets(incoming) : -1, connected: inviter.sessionDescriptionHandler.peerConnection.connectionState }
+  }, { secret, host: bitvoice.host })
+  await phone.evaluate(async () => (window as any).end())
+  console.log(JSON.stringify(result))
+  expect(result.connected).toBe('connected')
+  expect(result.caller).toBeGreaterThan(50)
+  expect(result.callee).toBeGreaterThan(50)
+})

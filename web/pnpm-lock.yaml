@@ -105,6 +105,9 @@ importers:
       jssip:
         specifier: 3.13.8
         version: 3.13.8
+      sip.js:
+        specifier: 0.21.2
+        version: 0.21.2
       tailwindcss:
         specifier: 4.3.3
         version: 4.3.3
@@ -1673,6 +1676,10 @@ packages:
 
   siginfo@2.0.0:
     resolution: {integrity: sha512-ybx0WO1/8bSBLEWXZvEd7gMW3Sn3JFlW3TvX1nREbDLRNQNaeNN8WK0meBwPdAaOI7TtRRRJn/Es1zhrrCHu7g==}
+
+  sip.js@0.21.2:
+    resolution: {integrity: sha512-tSqTcIgrOd2IhP/rd70JablvAp+fSfLSxO4hGNY6LkWRY1SKygTO7OtJEV/BQb8oIxtMRx0LE7nUF2MaqGbFzA==}
+    engines: {node: '>=10.0'}
 
   sonner@2.0.8:
     resolution: {integrity: sha512-UM/ByIoFra8yzV75n1o0Puu0bw5U/9UNnDacrJNspekBewIfsQ3D6ez1nvlWpt7aTsO6rujQtifBpycwIivqlg==}
@@ -3327,6 +3334,8 @@ snapshots:
   semver@6.3.1: {}
 
   siginfo@2.0.0: {}
+
+  sip.js@0.21.2: {}
 
   sonner@2.0.8(@types/react@18.3.18)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:

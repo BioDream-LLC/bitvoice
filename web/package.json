@@ -45,6 +45,7 @@
     "@vitejs/plugin-react": "4.3.4",
     "happy-dom": "20.11.6",
     "jssip": "3.13.8",
+    "sip.js": "0.21.2",
     "tailwindcss": "4.3.3",
     "typescript": "5.7.2",
     "vite": "6.0.7",
