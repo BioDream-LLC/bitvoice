@@ -258,9 +258,21 @@ export function Settings() {
             <Field label="Media from" htmlFor="rm" error={p('system.rtpMin')}><input id="rm" type="number" className="input" value={sys.rtpMin} onChange={(e) => setSys({ rtpMin: Number(e.target.value) })} /></Field>
             <Field label="Media to" htmlFor="rx" error={p('system.rtpMax')}><input id="rx" type="number" className="input" value={sys.rtpMax} onChange={(e) => setSys({ rtpMax: Number(e.target.value) })} /></Field>
           </div>
-          <Field label="Codecs" htmlFor="codecs" error={p('system.codecs')} hint="What phones may use, best first. BitVoice converts between any two of them when two parties differ (G.723.1 only passes through).">
+          <Field label="Codecs" htmlFor="codecs" error={p('system.codecs')} hint="What phones may use, best first. BitVoice converts between any two of them when two parties differ (G.723.1 only with ffmpeg, below).">
             <CodecList id="codecs" value={sys.codecs ?? []} onChange={(v) => setSys({ codecs: v })} error={p('system.codecs')} />
           </Field>
+          <div className="space-y-1">
+            <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={!!sys.g723Convert} onChange={(v) => setSys({ g723Convert: v })} label="Convert G.723.1" />
+              <span>Convert G.723.1 with ffmpeg <span className="text-xs text-slate-500">(old video phones and gateways that speak nothing else; off, it only passes between two parties that both use it)</span></span></label>
+            {sys.g723Convert && sysInfo && (sysInfo.ffmpeg
+              ? <p className="text-xs text-emerald-300">ffmpeg is installed: G.723.1 is converted when needed (ffmpeg&apos;s encoder sends 6.3 kbit/s; both rates are heard).</p>
+              : <p className="text-xs text-amber-300">ffmpeg is not installed here, so G.723.1 is not converted. Install it (apt install ffmpeg, brew install ffmpeg) or give its path under video conversion.</p>)}
+            {sys.g723Convert && sys.videoOff && (
+              <Field label="ffmpeg program" htmlFor="sff2" error={p('system.ffmpeg')} hint="Empty finds ffmpeg on the path.">
+                <input id="sff2" className="input font-mono" value={sys.ffmpeg ?? ''} onChange={(e) => setSys({ ffmpeg: e.target.value.trim() })} placeholder="/usr/bin/ffmpeg" />
+              </Field>
+            )}
+          </div>
           <div className="space-y-1">
             <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={!sys.videoOff} onChange={(v) => setSys({ videoOff: !v })} label="Video calls" /><span>Video calls</span></label>
             <p className="text-xs text-slate-500">Video passes between phones (and video apps) that both send it, as it is, when they have a codec in common (most use H.264). A phone without video gets sound only.</p>

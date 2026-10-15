@@ -24,6 +24,9 @@ func Transcodable(pt int) bool {
 	if isAMR(pt) || isILBC(pt) || pt == PTSpeex {
 		return true
 	}
+	if _, ok := g723On(); ok && pt == PTG723 {
+		return true // through ffmpeg, when Settings allow it
+	}
 	return false
 }
 
@@ -60,6 +63,8 @@ func CodecPT(name string) int {
 		return PTAAL2G726_32
 	case "GSM":
 		return PTGSM
+	case "G723":
+		return PTG723
 	}
 	return -1
 }

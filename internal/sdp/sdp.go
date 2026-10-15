@@ -276,6 +276,8 @@ func (c Codec) Attributes() []Line {
 		return []Line{{'a', fmt.Sprintf("rtpmap:%d opus/48000/2", c.PT)}, {'a', fmt.Sprintf("fmtp:%d minptime=10;useinbandfec=1", c.PT)}}
 	case "G729":
 		return []Line{{'a', fmt.Sprintf("rtpmap:%d G729/8000", c.PT)}, {'a', fmt.Sprintf("fmtp:%d annexb=no", c.PT)}}
+	case "G723":
+		return []Line{{'a', fmt.Sprintf("rtpmap:%d G723/8000", c.PT)}}
 	case "ILBC":
 		// RFC 3952: BitVoice offers 20 ms frames; an answer keeps the mode offered.
 		f := c.Fmtp

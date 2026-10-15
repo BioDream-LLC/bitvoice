@@ -229,7 +229,7 @@ export interface SystemSettings {
   audio: { voicemail: boolean; calls: boolean }
   gitops: { url: string; token: string; everyMinutes: number; apply: boolean }
   vault: { awsAccessKey: string; awsSecretKey: string; azureTenant: string; azureClientId: string; azureClientSecret: string }
-  emergencyEmail: string[]; sendLocation: boolean; videoOff?: boolean; videoTranscode?: boolean; ffmpeg?: string; publicSafety?: boolean
+  emergencyEmail: string[]; sendLocation: boolean; videoOff?: boolean; videoTranscode?: boolean; ffmpeg?: string; g723Convert?: boolean; publicSafety?: boolean
   faxMail?: FaxMail; faxPaper?: '' | 'letter' | 'a4'; psap?: PSAPSettings; core?: CoreSettings; radio?: RadioSettings
   emergencyMode: { on: boolean; destination: Destination; code: string; allowed: string[]; since?: string; by?: string }
   mobile: { push: '' | 'relay' | 'direct'; relayUrl: string; relayKey: string; relaySecret: string; serverUrl: string; fcm: string

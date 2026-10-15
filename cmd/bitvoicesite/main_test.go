@@ -37,7 +37,7 @@ func TestBuild(t *testing.T) {
 	}
 	leak := regexp.MustCompile(`(?i)` + strings.Join(words, "|"))
 	err = filepath.Walk(out, func(path string, info os.FileInfo, err error) error {
-		if err != nil || !strings.HasSuffix(path, ".html") || strings.Contains(path, "/manual/") {
+		if err != nil || !strings.HasSuffix(path, ".html") || strings.Contains(filepath.ToSlash(path), "/manual/") {
 			return err
 		}
 		b, _ := os.ReadFile(path)

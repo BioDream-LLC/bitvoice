@@ -190,7 +190,7 @@ test('staff chat and presence in the portal', async ({ page, browser }) => {
   await page.getByRole('button', { name: 'Add a room' }).click()
   await page.getByLabel('Room 1 name').fill('Front desk')
   await page.getByRole('button', { name: 'Save' }).first().click()
-  await expect(page.getByText('Settings saved')).toBeVisible()
+  await expect(page.getByText('Settings saved').first()).toBeVisible()
 
   const portal = async (ext: string) => {
     const ctx = await browser.newContext({ ignoreHTTPSErrors: true })
@@ -258,13 +258,13 @@ test('SNMP monitoring and call records elsewhere', async ({ page }) => {
   await page.getByLabel('Answer only these networks').press('Enter')
   await page.getByRole('switch', { name: 'CSV files' }).click()
   await page.getByRole('button', { name: 'Save' }).first().click()
-  await expect(page.getByText('Settings saved')).toBeVisible()
+  await expect(page.getByText('Settings saved').first()).toBeVisible()
   await expect(page.getByText('Answering on 127.0.0.1:18161')).toBeVisible({ timeout: 15000 })
   const mib = await page.evaluate(async () => (await fetch('./api/snmp/mib')).text())
   expect(mib).toContain('BITVOICE-MIB DEFINITIONS')
   await page.getByRole('switch', { name: 'SNMP agent' }).click()
   await page.getByRole('button', { name: 'Save' }).first().click()
-  await expect(page.getByText('Settings saved')).toBeVisible()
+  await expect(page.getByText('Settings saved').first()).toBeVisible()
 })
 
 // Video conversion: switched on in Settings, which says whether ffmpeg is installed.
@@ -274,12 +274,28 @@ test('video conversion setting', async ({ page }) => {
   await page.getByRole('switch', { name: 'Convert video' }).click()
   await expect(page.getByText(/ffmpeg is (installed|not installed)/)).toBeVisible()
   await page.getByRole('button', { name: 'Save' }).first().click()
-  await expect(page.getByText('Settings saved')).toBeVisible()
+  await expect(page.getByText('Settings saved').first()).toBeVisible()
   const s = await page.evaluate(async () => (await (await fetch('./api/settings')).json()).system)
   expect(s.videoTranscode).toBe(true)
   await page.getByRole('switch', { name: 'Convert video' }).click()
   await page.getByRole('button', { name: 'Save' }).first().click()
-  await expect(page.getByText('Settings saved')).toBeVisible()
+  await expect(page.getByText('Settings saved').first()).toBeVisible()
+})
+
+// G.723.1 conversion: switched on in Settings, with ffmpeg's state shown.
+test('G.723.1 conversion setting', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/#/settings')
+  const sw = page.getByRole('switch', { name: 'Convert G.723.1' })
+  if ((await sw.getAttribute('aria-checked')) !== 'true') await sw.click()
+  await expect(page.getByText(/ffmpeg is (installed: G.723.1 is converted|not installed here, so G.723.1)/)).toBeVisible()
+  await page.getByRole('button', { name: 'Save' }).first().click()
+  await expect(page.getByText('Settings saved').first()).toBeVisible()
+  expect((await page.evaluate(async () => (await (await fetch('./api/settings')).json()).system)).g723Convert).toBe(true)
+  await page.getByRole('switch', { name: 'Convert G.723.1' }).click()
+  await page.getByRole('button', { name: 'Save' }).first().click()
+  await expect(page.getByText('Settings saved').first()).toBeVisible()
+  expect((await page.evaluate(async () => (await (await fetch('./api/settings')).json()).system)).g723Convert ?? false).toBe(false)
 })
 
 // The newer codecs can be chosen in Settings and are saved in the order shown.
@@ -292,7 +308,7 @@ test('codecs: iLBC, Speex and G.723.1', async ({ page }) => {
     if ((await sw.getAttribute('aria-checked')) !== 'true') await sw.click()
   }
   await page.getByRole('button', { name: 'Save' }).first().click()
-  await expect(page.getByText('Settings saved')).toBeVisible()
+  await expect(page.getByText('Settings saved').first()).toBeVisible()
   const s = await page.evaluate(async () => (await (await fetch('./api/settings')).json()).system)
   expect(s.codecs).toEqual(expect.arrayContaining(['ILBC', 'SPEEX', 'G723']))
 })
@@ -508,7 +524,7 @@ test('TURN server setting', async ({ page }) => {
   await expect(page.getByText(/relay ports are a range of at least 16/).first()).toBeVisible()
   await page.getByLabel('Relay ports from').fill('49152')
   await page.getByRole('button', { name: 'Save', exact: true }).click()
-  await expect(page.getByText('Settings saved')).toBeVisible()
+  await expect(page.getByText('Settings saved').first()).toBeVisible()
   await expect(page.getByText(/Running on 3479 \(UDP and TCP\)/)).toBeVisible({ timeout: 15000 })
   const ice = await page.evaluate(async () => (await (await fetch('./api/ice')).json()).iceServers)
   expect(ice[0].urls[0]).toMatch(/^turn:.*:3479\?transport=udp$/)
@@ -525,7 +541,7 @@ test('SIP over WebSocket setting', async ({ page }) => {
   if ((await ws.getAttribute('aria-checked')) !== 'true') {
     await ws.click()
     await page.getByRole('button', { name: 'Save', exact: true }).click()
-    await expect(page.getByText('Settings saved')).toBeVisible()
+    await expect(page.getByText('Settings saved').first()).toBeVisible()
   }
   await expect(page.getByText(/^wss:\/\/127\.0\.0\.1:\d+\/ws$/)).toBeVisible()
   await expect(page.getByText(/^\d+ softphones connected now\.$/)).toBeVisible()

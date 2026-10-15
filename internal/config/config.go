@@ -187,6 +187,10 @@ type System struct {
 	// core or so per call, so it is off by default.
 	VideoTranscode bool   `json:"videoTranscode,omitempty"`
 	FFmpeg         string `json:"ffmpeg,omitempty"`
+	// G723Convert converts G.723.1 (5.3 and 6.3 kbit/s) with the same ffmpeg, so a party that speaks
+	// only G.723.1 can talk to any other; off, it only passes between two parties that both use it.
+	// BitVoice holds no G.723.1 code of its own (no licence allows including the ITU's).
+	G723Convert bool `json:"g723Convert,omitempty"`
 	// PublicSafety shows the 911 profile, the radio console and NG911 Core Services in the menu. They
 	// are a lab and design-partner track, not certified for live 911 or radio dispatch, so a phone
 	// system shows only its own screens until someone switches them on. Office 911 (emergency calls,

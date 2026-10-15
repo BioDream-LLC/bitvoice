@@ -76,6 +76,10 @@ func newVoice(pt int) voice {
 		return newILBC(30)
 	case PTSpeex:
 		return newSpeex("")
+	case PTG723:
+		if v := newG723(); v != nil {
+			return v
+		}
 	}
 	return nil
 }

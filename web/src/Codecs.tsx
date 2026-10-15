@@ -18,7 +18,7 @@ export const codecInfo: Record<string, { label: string; detail: string; color: s
   'AMR-WB': { label: 'AMR-WB (HD)', detail: 'HD voice of mobile networks (G.722.2, up to 23.85 kbit/s); VoLTE interconnects', color: 'text-emerald-300', converts: true },
   ILBC: { label: 'iLBC', detail: 'Low bandwidth (13.3 to 15.2 kbit/s) that copes well with lost packets; older softphones and apps', color: 'text-violet-300', converts: true },
   SPEEX: { label: 'Speex', detail: 'Open narrowband codec (15 kbit/s, 2.15 to 24.6); older softphones, Asterisk links', color: 'text-sky-300', converts: true },
-  G723: { label: 'G.723.1', detail: 'Very low bandwidth (5.3 or 6.3 kbit/s); passed through between parties that both use it, never converted', color: 'text-slate-300', converts: false },
+  G723: { label: 'G.723.1', detail: 'Very low bandwidth (5.3 or 6.3 kbit/s); converted only with ffmpeg (Convert G.723.1, below), else passed between parties that both use it', color: 'text-slate-300', converts: false },
   GSM: { label: 'GSM', detail: 'GSM 06.10 full rate (13 kbit/s); some older softphones and gateways', color: 'text-fuchsia-300', converts: true },
 }
 export const allCodecs = ['G722', 'PCMU', 'PCMA', 'OPUS', 'AMR-WB', 'G729', 'AMR', 'G726-40', 'G726-32', 'AAL2-G726-32', 'G726-24', 'G726-16', 'ILBC', 'SPEEX', 'GSM', 'G723']

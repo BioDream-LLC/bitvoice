@@ -173,6 +173,7 @@ func New(cfg config.Config, bus *events.Bus, rec Recorder, log *slog.Logger) *En
 	e.reg = newRegistrar(e)
 	e.bans = newFailBan()
 	e.bans.apply(cfg.Security)
+	applyG723(cfg)
 	return e
 }
 
@@ -298,9 +299,22 @@ func (e *Engine) SIPPort() int {
 
 // Apply puts a new configuration into force. Calls in progress continue under the configuration they
 // started with; new calls use the new one.
+// applyG723 switches G.723.1 conversion on or off as the settings say (ffmpeg must be there).
+func applyG723(cfg config.Config) {
+	if ff := cfg.System.FFmpeg; cfg.System.G723Convert && media.FFmpegHas(ff) {
+		if ff == "" {
+			ff = "ffmpeg"
+		}
+		media.SetG723Converter(ff)
+	} else {
+		media.SetG723Converter("")
+	}
+}
+
 func (e *Engine) Apply(cfg config.Config) {
 	e.cfg.Store(&cfg)
 	e.bans.apply(cfg.Security)
+	applyG723(cfg)
 	if e.stack != nil {
 		e.stack.Host = cfg.System.PublicAddress
 	}
