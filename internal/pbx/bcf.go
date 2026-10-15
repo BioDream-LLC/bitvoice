@@ -39,6 +39,31 @@ func (e *Engine) BCFLog() []BCFEvent {
 	return out
 }
 
+// bcfIdentity checks a signed call's STIR/SHAKEN Identity header at the ESInet edge (System.Core.BCF.
+// VerifyIdentity): it reports whether the signature failed (the call is then marked suspicious and the
+// decision logged), and keeps the verdict with the call.
+func (e *Engine) bcfIdentity(cfg *config.Config, c *Call, identity, to string, source netip.Addr) bool {
+	b := cfg.System.Core.BCF
+	k := e.checker.Load()
+	if !b.Enabled || !b.VerifyIdentity || identity == "" || k == nil {
+		return false
+	}
+	v := k.Check(identity, c.from, to)
+	c.screen = &v
+	if v.Verified != "failed" {
+		return false
+	}
+	ev := BCFEvent{At: time.Now(), Source: source.Unmap().String(), From: c.from, Action: "marked", Why: "the caller ID's signature failed: " + v.Why}
+	e.bcf.mu.Lock()
+	e.bcf.log = append(e.bcf.log, ev)
+	if len(e.bcf.log) > 200 {
+		e.bcf.log = e.bcf.log[len(e.bcf.log)-200:]
+	}
+	e.bcf.mu.Unlock()
+	e.publish("bcf.event", ev)
+	return true
+}
+
 // bcfCheck decides on a call from an ESInet trunk: refuse it (a reason), or let it through, marked
 // suspicious or not.
 func (e *Engine) bcfCheck(cfg *config.Config, c *Call, source netip.Addr) (refuse string, suspicious bool) {

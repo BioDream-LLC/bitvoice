@@ -605,6 +605,9 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 				return
 			}
 			c.suspicious = suspicious
+			if e.bcfIdentity(cfg, c, m.Get("Identity"), did, in.From.Addr.Addr()) {
+				c.suspicious = true
+			}
 		}
 		if refuse := e.screenCall(cfg, c, m, trunk, did); refuse != "" {
 			tx.Respond(sip.NewResponse(m, 603, refuse))

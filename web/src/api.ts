@@ -129,7 +129,7 @@ export interface CoreRule {
   id: string; name: string; services: string[]; psaps: string[]; schedule: string; whenOpen: boolean
   noLocation: boolean; suspicious: boolean; trunks: string[]; action: 'route' | 'reject'; to: string
 }
-export interface BCFSettings { enabled: boolean; perMinute: number; concurrent: number; deny: string[]; mark: boolean }
+export interface BCFSettings { enabled: boolean; perMinute: number; concurrent: number; deny: string[]; mark: boolean; verifyIdentity: boolean }
 export interface LISRecordView { number: string; civic: Civic; lat?: number; lon?: number; radius?: number }
 export interface CoreSettings { ecrf: boolean; lis: boolean; source: string; allowFrom: string[]; psaps: CorePSAP[]; default: string; lostUrl: string; rules: CoreRule[]; bcf: BCFSettings }
 export interface Validation { valid: string[]; invalid: string[]; unchecked: string[]; matched?: string; found?: Record<string, string> }

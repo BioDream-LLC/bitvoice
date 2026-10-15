@@ -174,6 +174,7 @@ func New(cfg config.Config, bus *events.Bus, rec Recorder, log *slog.Logger) *En
 	e.bans = newFailBan()
 	e.bans.apply(cfg.Security)
 	applyG723(cfg)
+	e.applyScreening(cfg) // the caller ID checker, from the start (not only after a change)
 	return e
 }
 

@@ -11,7 +11,7 @@ import { store } from './store'
 import { useDraft } from './useDraft'
 import { Badge, Empty, Field, Page, StaleBanner, Toggle, problemFor } from './ui'
 
-const blankBCF = { enabled: false, perMinute: 0, concurrent: 0, deny: [] as string[], mark: false }
+const blankBCF = { enabled: false, perMinute: 0, concurrent: 0, deny: [] as string[], mark: false, verifyIdentity: false }
 const blankCore: CoreSettings = { ecrf: false, lis: false, source: '', allowFrom: [], psaps: [], default: '', lostUrl: '', rules: [], bcf: blankBCF }
 /** Place names may have spaces in them: split on commas only. */
 const commas = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean)
@@ -116,6 +116,8 @@ function CoreSetup() {
             </Field>
           </div>
           <Toggle checked={draft.bcf.mark} onChange={(v) => set({ bcf: { ...draft.bcf, mark: v } })} label="Over a limit: let the call through marked suspicious (for a policy rule) instead of refusing it" />
+          <Toggle checked={draft.bcf.verifyIdentity} onChange={(v) => set({ bcf: { ...draft.bcf, verifyIdentity: v } })} label="Check STIR/SHAKEN signatures: a call whose signed caller ID fails goes through marked suspicious" />
+          <p className="text-xs text-slate-500">Signatures are checked against the STI roots set under Call screening in Settings. A 911 call is never refused for a bad signature.</p>
         </>}
       </div>
       <div className="flex justify-end"><button className="btn btn-primary" disabled={isLoading} onClick={doSave}><Save size={15} aria-hidden /> Save</button></div>

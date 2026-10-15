@@ -519,6 +519,10 @@ type BCF struct {
 	Deny []string `json:"deny"`
 	// Mark lets calls over a limit through, marked suspicious, instead of refusing them.
 	Mark bool `json:"mark"`
+	// VerifyIdentity checks the STIR/SHAKEN signature (the Identity header, RFC 8224) of calls that
+	// carry one, against the STI roots set under Call screening: a call whose signature fails is let
+	// through marked suspicious, for the policy rules. A 911 call is never refused for it.
+	VerifyIdentity bool `json:"verifyIdentity"`
 }
 
 // CorePSAP is a PSAP the ESRP can send calls to: the URI the ECRF answers with, the trunk that
