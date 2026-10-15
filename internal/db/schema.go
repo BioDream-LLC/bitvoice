@@ -46,6 +46,13 @@ var migrations = []string{
 		number TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY (campaign, id));
 	CREATE INDEX dialer_due ON dialer_contacts (campaign, state, next_ms);
 	CREATE TABLE dnc (number TEXT PRIMARY KEY, at_ms BIGINT NOT NULL, body TEXT NOT NULL);`,
+	// The messaging inbox: conversations on WhatsApp, Messenger and the web chat, and their messages.
+	`CREATE TABLE inbox_convs (id TEXT PRIMARY KEY, channel TEXT NOT NULL, contact TEXT NOT NULL, state TEXT NOT NULL,
+		updated_ms BIGINT NOT NULL, body TEXT NOT NULL);
+	CREATE INDEX inbox_convs_updated ON inbox_convs (updated_ms);
+	CREATE INDEX inbox_convs_contact ON inbox_convs (channel, contact);
+	CREATE TABLE inbox_msgs (id TEXT PRIMARY KEY, conv TEXT NOT NULL, at_ms BIGINT NOT NULL, body TEXT NOT NULL);
+	CREATE INDEX inbox_msgs_conv ON inbox_msgs (conv, at_ms);`,
 }
 
 func (d *DB) migrate(ctx context.Context) error {

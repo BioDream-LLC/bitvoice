@@ -86,6 +86,8 @@ type System struct {
 	TURN TURN `json:"turn"`
 	// WebSocket is SIP over WebSocket for WebRTC softphones.
 	WebSocket WebSocketSIP `json:"webSocket"`
+	// Inbox is WhatsApp, Messenger and the web chat, answered beside the texts.
+	Inbox Inbox `json:"inbox"`
 
 	// PublicAddress is advertised in SIP and SDP. Empty means work it out per peer.
 	PublicAddress string `json:"publicAddress"`
@@ -2682,6 +2684,7 @@ func (c *Config) Validate() error {
 	c.validateCampaigns(&p, checkID)
 	c.validateACME(&p)
 	c.validateTURN(&p)
+	c.validateInbox(&p)
 	for i := range c.System.CallLinks {
 		if d := &c.System.CallLinks[i].Destination; d.Type != "" {
 			checkDest(fmt.Sprintf("system.callLinks[%d].destination", i), d)

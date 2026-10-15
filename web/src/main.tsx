@@ -40,6 +40,7 @@ import { Sounds } from './Sounds'
 import { DialIns, Directories } from './DialIn'
 import { Lookups, PINSets, Toggles, VoiceBots } from './Flow'
 import { Dialer } from './Dialer'
+import { Inbox } from './Inbox'
 import { Hotel } from './Hotel'
 import { DeskPhones } from './DeskPhones'
 import { TelephonyCards } from './TelephonyCards'
@@ -117,6 +118,7 @@ function Admin() {
         <Route path="/toggles" element={<Toggles />} />
         <Route path="/voice-bots" element={<VoiceBots />} />
         <Route path="/dialer" element={<Dialer />} />
+        <Route path="/inbox" element={<Inbox />} />
         <Route path="/pin-sets" element={<PINSets />} />
         <Route path="/lookups" element={<Lookups />} />
         <Route path="/hotel" element={<Hotel />} />

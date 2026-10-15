@@ -169,6 +169,16 @@ export interface Trunk {
 export interface Shaken { sign: boolean; cert: string; key: string; x5u: string; attest: '' | 'A' | 'B' | 'C'; origId: string }
 export interface Rate { prefix: string; name: string; perMinute: number; setup: number; increment: number; minimum: number }
 export interface InboundRoute { id: string; name: string; did: string; trunk: string; destination: Destination; lookup?: string }
+/** The messaging inbox: WhatsApp, Messenger and the web chat (texts are shown with them). */
+export interface InboxSettings {
+  greeting: string
+  webChat: { enabled: boolean; title: string; welcome: string; colour: string; origins: string[] | null }
+  whatsApp: { enabled: boolean; phoneNumberId: string; token: string; appSecret: string; verifyToken: string }
+  messenger: { enabled: boolean; pageId: string; pageToken: string; appSecret: string; verifyToken: string }
+}
+export interface InboxConv { id: string; channel: 'webchat' | 'whatsapp' | 'messenger' | 'sms'; contact: string; name?: string; email?: string; state: 'open' | 'closed'; assignee?: string; unread: number; started?: string; updated: string; lastIn?: string; preview: string; page?: string; our?: string }
+export interface InboxMsg { id: string; conv: string; at: string; in: boolean; text: string; by?: string; status?: string; error?: string }
+
 /** An outbound calling campaign for a queue's agents. */
 export interface Campaign {
   id: string; name: string; mode: 'preview' | 'progressive' | 'power' | 'predictive'; queue: string; active: boolean; callerId: string; as: string
@@ -207,6 +217,7 @@ export interface SystemSettings {
   acme?: ACME
   turn?: TURN
   webSocket?: { enabled: boolean }
+  inbox?: InboxSettings
   cdrOutputs?: { csv: boolean; syslog: { host: string; port: number; transport: '' | 'udp' | 'tcp' | 'tls'; facility: number }; postgres: { url: string; table: string } }
   publicAddress: string; cluster?: ClusterSettings; sipPort: number; rtpMin: number; rtpMax: number; codecs: string[]; echoNumber: string; voicemailNumber: string; parkNumber: string; parkSeconds: number
   codes?: FeatureCodes; speedDials?: SpeedDial[] | null
@@ -379,7 +390,7 @@ const baseQuery = fetchBaseQuery({
 })
 
 const tags = ['Me', 'Extensions', 'RingGroups', 'Trunks', 'Inbound', 'Outbound', 'Settings', 'Users', 'Calls',
-  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail', 'Tenants', 'System', 'Prompts', 'Music', 'Directories', 'DialIns', 'AudioStreams', 'Campaigns', 'Dialer', 'DNC', 'Toggles', 'ToggleState', 'PINSets', 'Lookups', 'Hotel', 'WakeUps', 'Chat'] as const
+  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail', 'Tenants', 'System', 'Prompts', 'Music', 'Directories', 'DialIns', 'Inbox', 'AudioStreams', 'Campaigns', 'Dialer', 'DNC', 'Toggles', 'ToggleState', 'PINSets', 'Lookups', 'Hotel', 'WakeUps', 'Chat'] as const
 
 export const api = createApi({
   reducerPath: 'api',
@@ -462,6 +473,10 @@ export const api = createApi({
       createDirectory: b.mutation<Item<Directory>, Partial<Directory>>({ query: (body) => ({ url: 'directories', method: 'POST', body }), invalidatesTags: ['Directories', 'History'] }),
       updateDirectory: b.mutation<Item<Directory>, Directory>({ query: (body) => ({ url: `directories/${body.id}`, method: 'PUT', body }), invalidatesTags: ['Directories', 'History'] }),
       deleteDirectory: b.mutation<void, string>({ query: (id) => ({ url: `directories/${id}`, method: 'DELETE' }), invalidatesTags: ['Directories', 'History'] }),
+      inbox: b.query<InboxConv[], string | void>({ query: (state) => `inbox${state ? `?state=${state}` : ''}`, providesTags: ['Inbox', 'Texts'] }),
+      inboxThread: b.query<{ conversation: InboxConv; messages: InboxMsg[]; windowOpen?: boolean; optedOut?: boolean }, string>({ query: (id) => `inbox/${encodeURIComponent(id)}`, providesTags: ['Inbox', 'Texts'] }),
+      inboxReply: b.mutation<InboxMsg, { id: string; text: string }>({ query: ({ id, text }) => ({ url: `inbox/${encodeURIComponent(id)}/reply`, method: 'POST', body: { text } }), invalidatesTags: ['Inbox', 'Texts'] }),
+      inboxSet: b.mutation<void, { id: string; read?: boolean; state?: string; assignee?: string }>({ query: ({ id, ...body }) => ({ url: `inbox/${encodeURIComponent(id)}`, method: 'POST', body }), invalidatesTags: ['Inbox', 'Texts'] }),
       campaigns: b.query<List<Campaign>, void>({ query: () => 'campaigns', providesTags: ['Campaigns'] }),
       createCampaign: b.mutation<Item<Campaign>, Partial<Campaign>>({ query: (body) => ({ url: 'campaigns', method: 'POST', body }), invalidatesTags: ['Campaigns', 'Dialer', 'History'] }),
       updateCampaign: b.mutation<Item<Campaign>, Campaign>({ query: (body) => ({ url: `campaigns/${body.id}`, method: 'PUT', body }), invalidatesTags: ['Campaigns', 'Dialer', 'History'] }),
@@ -807,6 +822,7 @@ export const {
   useVoicemailQuery, useMarkHeardMutation, useDeleteVoicemailMutation, useSaveGreetingMutation, useResetGreetingMutation,
   useDirectoriesQuery, useCreateDirectoryMutation, useUpdateDirectoryMutation, useDeleteDirectoryMutation,
   useDialInsQuery, useCreateDialInMutation, useUpdateDialInMutation, useDeleteDialInMutation,
+  useInboxQuery, useInboxThreadQuery, useInboxReplyMutation, useInboxSetMutation,
   useCampaignsQuery, useCreateCampaignMutation, useUpdateCampaignMutation, useDeleteCampaignMutation, useDialerQuery, useCampaignContactsQuery,
   useUploadContactsMutation, useClearContactsMutation, usePreviewNextMutation, usePreviewCallMutation, usePutCampaignMessageMutation,
   useDeleteCampaignMessageMutation, useDncQuery, useAddDncMutation, useRemoveDncMutation,

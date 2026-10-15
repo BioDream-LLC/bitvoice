@@ -309,6 +309,7 @@ func (s *Server) routes() {
 	s.deskRoutes()
 	s.flowRoutes()
 	s.dialerRoutes()
+	s.inboxRoutes()
 	s.iceRoutes()
 	s.cardsRoutes()
 	s.cdrOutputRoutes()

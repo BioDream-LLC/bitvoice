@@ -4,7 +4,7 @@ import {
   Activity, BookOpen, BookOpenText, Braces, CloudUpload, Megaphone, Workflow, CalendarClock, FileUp, Grid3x3, ListOrdered, Smartphone, Voicemail, ChevronRight, History, LayoutDashboard, LogOut, Monitor, Moon, Phone, PhoneCall, PhoneForwarded, Signal, Coins, BookUser, MessageSquare, ScrollText, Link2, BadgeCheck, Server as ServerIcon,
   Gauge, MapPin, PackageCheck, Route, Scale, Search, Server, Settings, Shield, Stethoscope, Sun, Users, UserCog, Waypoints,
   Bot, Printer,
-  Siren, Network, RadioTower, Users2, Asterisk, Building2, FlaskConical, AudioLines, BookA, KeyRound, BedDouble, Router, Cpu, ToggleRight, Contact } from 'lucide-react'
+  Siren, Network, RadioTower, Users2, Asterisk, Building2, FlaskConical, AudioLines, BookA, KeyRound, BedDouble, Router, Cpu, ToggleRight, Contact, Inbox as InboxIcon } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { Crash } from './Crash'
@@ -51,6 +51,7 @@ export const nav: NavItem[] = [
   { to: '/queues', label: 'Queues', icon: ListOrdered, color: 'text-orange-300', keys: 'acd agents contact centre wallboard', group: 'Today' },
   { to: '/voicemail', label: 'Voicemail', icon: Voicemail, color: 'text-violet-300', keys: 'messages greeting mailbox', group: 'Today' },
   { to: '/callbacks', label: 'Callbacks', icon: PhoneForwarded, color: 'text-emerald-300', keys: 'call back ring back request message', group: 'Today' },
+  { to: '/inbox', label: 'Inbox', icon: InboxIcon, color: 'text-emerald-300', keys: 'inbox omnichannel whatsapp messenger facebook web chat live chat website widget conversations messages', group: 'Today' },
   { to: '/texts', label: 'Texts', icon: MessageSquare, color: 'text-sky-300', keys: 'sms text message texting mms textmagic twilio telnyx bandwidth vonage plivo signalwire flowroute voip.ms 10dlc reply', group: 'Today' },
   { to: '/faxes', label: 'Faxes', icon: Printer, color: 'text-violet-300', keys: 'fax t38 t.38 pdf received send sent outbox fax to email email to fax fax number', group: 'Today' },
   { to: '/reputation', label: 'Caller ID reputation', icon: BadgeCheck, color: 'text-emerald-300', keys: 'reputation spam likely labelled caller id branded calling rich call data rcd cnam logo answer rate robocall', group: 'Calls' },

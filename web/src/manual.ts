@@ -11,7 +11,7 @@ export const parts: { title: string; intro: string; ids: string[] }[] = [
   { title: 'Where calls go', intro: 'The building blocks callers move through: groups and queues, menus and schedules, scripts and the AI receptionist, voicemail, and the diagram that shows it all.',
     ids: ['flow', 'ringgroups', 'queues', 'dialer', 'sounds', 'menus', 'directory', 'dialin', 'voicebots', 'toggles', 'schedules', 'scripts', 'ai', 'voicemail', 'callbacks', 'calllinks'] },
   { title: 'Everyday calling', intro: 'What people do on their phones every day, and what they set for themselves: forwarding, follow-me, pickup, conference rooms, paging, hot desks, faxes and texts.',
-    ids: ['codes', 'portal', 'conferences', 'paging', 'hotdesk', 'hotel', 'contacts', 'calendar', 'mobile', 'video', 'fax', 'texts', 'briefing'] },
+    ids: ['codes', 'portal', 'conferences', 'paging', 'hotdesk', 'hotel', 'contacts', 'calendar', 'mobile', 'video', 'fax', 'inbox', 'texts', 'briefing'] },
   { title: 'Customers and insight', intro: 'Knowing who called and how it went: the live calls and history, the customer timeline, CRMs, recordings and consent, quality, costs and caller ID reputation.',
     ids: ['calls', 'history', 'timeline', 'crm', 'insight', 'recording', 'consent', 'quality', 'costs', 'reputation', 'spam'] },
   { title: 'Running BitVoice', intro: 'Keeping it safe and running: administrators and sign-in, security, changes and updates, several servers, hosted organisations, codecs, Teams, importing, automation and the tools for finding faults.',
@@ -892,6 +892,29 @@ From a caller card (**Timeline**), from Contacts, from an incoming call in Call 
 
 ## Notes
 Administrators can **Add a note for the team**: it shows on the timeline for everyone, with who wrote it and when, and can be removed.`,
+  },
+  {
+    id: 'inbox', title: 'Inbox: web chat, WhatsApp and Messenger', route: '/inbox', keys: 'inbox omnichannel whatsapp messenger facebook web chat live chat website widget conversations messages meta cloud api',
+    body: `The [Inbox](#/inbox) holds every written conversation in one list: the chat box on your website, WhatsApp, Facebook Messenger and [texts](#texts). Anyone signed in to the web interface can answer; the first to reply takes the conversation (anyone can hand it on with **Answered by**), and **Close** puts it away until the person writes again. Unread conversations are counted, and the list refreshes by itself.
+
+## The chat box on your website
+Under **Channels**, switch on **Web chat**, choose its title, colour and first line, and put the line it shows in your site's pages:
+
+\`<script src="https://pbx.example.com:8443/webchat.js" async></script>\`
+
+It draws a chat button in the corner of every page; visitors write (with their name if they like) and see your answers as they come. The conversation stays in their browser, so it carries on as they move between pages. List your sites under **Only on these sites** so the box runs nowhere else. Visitors must reach this server's address from the internet, with a certificate browsers trust ([Let's Encrypt](#settings)). Ten new chats from one address in ten minutes is the most BitVoice takes.
+
+## WhatsApp
+WhatsApp Business numbers on Meta's Cloud API. In Meta's developer site, make an app with WhatsApp, add your number, and make a system user with a permanent access token. In **Channels**, switch on WhatsApp and give the **phone number ID** (from API setup), the **access token** and the app's **app secret**, then save. In the app's WhatsApp configuration, set the webhook: the callback address and verify token BitVoice shows, subscribed to *messages*.
+
+WhatsApp lets you answer freely for 24 hours after the customer's last message; after that it accepts only templates approved in WhatsApp Manager, and the inbox says so above the reply box.
+
+## Facebook Messenger
+For a Facebook Page: in the Meta app, add Messenger, connect the page and make a page access token. In **Channels**, give the **page ID**, the **page access token** and the **app secret**; then set the webhook (the address and verify token shown), subscribed to *messages* and *messaging_postbacks*. As on WhatsApp, replies are allowed within 24 hours of the person's last message.
+
+Every webhook is checked with the app secret (Meta's signature) before BitVoice believes it, and a message Meta sends twice is kept once. Pictures, voice notes and other attachments show as what they are ("[image]"); open them in Meta's own apps.
+
+**Automatic greeting**, when set, answers the first message of every new conversation at once.`,
   },
   {
     id: 'texts', title: 'Business texting (SMS)', route: '/texts', keys: 'sms text message texting textmagic 10dlc stop opt out reply provider',

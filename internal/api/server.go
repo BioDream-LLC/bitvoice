@@ -216,7 +216,9 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 			// SameSite=Strict cookie, that is complete protection against cross-site request forgery.
 			// A bearer token cannot be sent by a cross-site form, so token requests need no header.
 			bearer := strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ")
-			if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Header.Get(csrfHeader) == "" && !bearer {
+			// A browser's CORS preflight for the web chat box carries neither; it changes nothing.
+			preflight := r.Method == http.MethodOptions && strings.HasPrefix(r.URL.Path, "/api/webchat/")
+			if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Header.Get(csrfHeader) == "" && !bearer && !preflight {
 				writeError(w, http.StatusForbidden, "missing "+csrfHeader+" header")
 				return
 			}

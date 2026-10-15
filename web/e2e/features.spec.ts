@@ -639,3 +639,44 @@ test('outbound dialer campaign', async ({ page }) => {
   expect(st[0].states.dnc).toBe(1)
   expect(st[0].states.pending).toBe(1)
 })
+
+// The inbox: the web chat is switched on, a visitor on another site (a page with the script tag) writes,
+// the conversation appears in the inbox, an agent answers, and the visitor's box shows the answer.
+test('inbox: the web chat box on a website', async ({ page, context }) => {
+  await signIn(page)
+  await page.goto('/#/inbox')
+  await page.getByRole('button', { name: 'Channels' }).click()
+  await page.getByRole('switch', { name: 'Web chat' }).click()
+  await page.getByLabel('Title').fill('Talk to Echo Lab')
+  await page.getByLabel('First line visitors see').fill('Hello! How can we help?')
+  await page.getByRole('switch', { name: 'WhatsApp' }).click()
+  await page.getByRole('button', { name: 'Save channels' }).click()
+  await expect(page.getByText(/enter the phone number ID from WhatsApp Manager/).first()).toBeVisible()
+  await page.getByRole('switch', { name: 'WhatsApp' }).click()
+  await page.getByRole('button', { name: 'Save channels' }).click()
+  await expect(page.getByText('Inbox channels saved')).toBeVisible()
+  const base = new URL(page.url()).origin
+
+  await context.grantPermissions(['local-network-access']).catch(() => {})
+  const site = await context.newPage()
+  await site.route('https://localhost:9/**', (r) => r.fulfill({ contentType: 'text/html',
+    body: `<!doctype html><title>Shop</title><h1>Our shop</h1><script src="${base}/webchat.js" async></script>` }))
+  await site.goto('https://localhost:9/shop')
+  const chat = site.locator('[data-bitvoice-chat]')
+  await chat.getByRole('button', { name: 'Chat' }).first().click()
+  await expect(chat.getByText('Talk to Echo Lab')).toBeVisible()
+  await expect(chat.getByText('Hello! How can we help?')).toBeVisible()
+  await chat.getByLabel('Your name').fill('Bob')
+  await chat.getByLabel('Message').fill('Do you deliver on Saturdays?')
+  await chat.getByRole('button', { name: 'Send' }).click()
+  await expect(chat.getByText('Do you deliver on Saturdays?')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Back to the inbox' }).click()
+  await page.getByRole('list', { name: 'Conversations list' }).getByText('Bob').click()
+  await expect(page.getByText('Do you deliver on Saturdays?')).toBeVisible()
+  await page.getByLabel('Reply').fill('Yes, until noon.')
+  await page.getByRole('button', { name: 'Send' }).click()
+  await expect(chat.getByText('Yes, until noon.')).toBeVisible({ timeout: 10000 })
+  await page.getByRole('button', { name: 'Close' }).click()
+  await expect(page.getByText('Closed', { exact: true })).toBeVisible()
+})
