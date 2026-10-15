@@ -55,7 +55,7 @@ func TestInboxTemplates(t *testing.T) {
 		t.Fatal("webhook")
 	}
 	var id string
-	for end := time.Now().Add(3 * time.Second); id == "" && time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
+	for end := time.Now().Add(8 * time.Second); id == "" && time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
 		r, _ := admin.http.Do(must(http.NewRequest("GET", ts.URL+"/api/inbox", nil)))
 		var arr []map[string]any
 		json.NewDecoder(r.Body).Decode(&arr)

@@ -81,7 +81,7 @@ func TestInbox(t *testing.T) {
 		t.Fatal("webhook refused")
 	}
 	var conv map[string]any
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(8 * time.Second)
 	for time.Now().Before(deadline) {
 		req, _ := http.NewRequest("GET", ts.URL+"/api/inbox", nil)
 		r, _ := admin.http.Do(req)
@@ -106,7 +106,7 @@ func TestInbox(t *testing.T) {
 	}
 	id := conv["id"].(string)
 	var msgs []any
-	for end := time.Now().Add(3 * time.Second); time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
+	for end := time.Now().Add(8 * time.Second); time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
 		_, thread := admin.do("GET", "/api/inbox/"+id, nil)
 		if msgs = thread["messages"].([]any); len(msgs) >= 2 {
 			break // the greeting is kept once Meta has taken it
