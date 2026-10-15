@@ -2,9 +2,9 @@ package isdn
 
 import (
 	"errors"
-	"strings"
 	"log/slog"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -33,8 +33,8 @@ type Config struct {
 	// side); else point to point (TEI 0, a PBX line).
 	BRI  bool
 	PTMP bool
-	ALaw     bool  // E1: G.711 A-law; T1: µ-law
-	Log      *slog.Logger
+	ALaw bool // E1: G.711 A-law; T1: µ-law
+	Log  *slog.Logger
 	// Switch is the switch type: ni2 (National ISDN-2, the default), 5ess, dms100, euroisdn or qsig.
 	// It decides how names and transfers are sent.
 	Switch string

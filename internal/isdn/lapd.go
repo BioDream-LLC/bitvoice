@@ -50,8 +50,8 @@ type lapd struct {
 	// onDemand (a multipoint BRI): the link is set up when there is something to send and stays
 	// released when the other side releases it, rather than being kept up.
 	onDemand bool
-	deliver func([]byte) // a received layer 3 message
-	up      func(bool)
+	deliver  func([]byte) // a received layer 3 message
+	up       func(bool)
 
 	mu         sync.Mutex
 	state      int // 0 down, 1 establishing, 2 established
