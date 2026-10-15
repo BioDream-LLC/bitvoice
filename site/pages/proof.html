@@ -1,0 +1,54 @@
+<section class="hero small"><div class="wrap">
+  <p class="eyebrow">Proof</p>
+  <h1>How BitVoice is tested, and what has not been tested</h1>
+  <p class="lede">A phone system is only as good as the calls it does not drop. This page says what every change must pass, what
+    BitVoice is checked against, and what it has not been tried with yet.</p>
+</div></section>
+
+<section class="band"><div class="wrap prose-lite">
+  <h2>On every change</h2>
+  <ul class="ticks">
+    <li>The Go tests, with the race detector, on Linux against both SQLite and PostgreSQL, on Windows and on macOS
+      (<a href="https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml">continuous integration</a>)</li>
+    <li>Fuzzing of the SIP, SDP, STUN and SRTP parsers, and of the ISDN facility decoder</li>
+    <li><b>Every setting has a screen:</b> a test walks the whole configuration and fails if any setting is not named in the web
+      interface, so nothing quietly becomes file-only</li>
+    <li><b>Browser tests in Chromium</b> that drive every screen as a person would, and make real <b>WebRTC calls</b> between
+      browser phones and the engine with the sound checked in both directions</li>
+  </ul>
+
+  <h2 style="margin-top:56px">Checked against other people's software</h2>
+  <table>
+    <thead><tr><th>Part</th><th>Checked against</th></tr></thead>
+    <tbody>
+      <tr><td>IAX2 trunks</td><td>A real Asterisk 23: registration, calls both ways with sound, busy</td></tr>
+      <tr><td>T1/E1 PRI</td><td>libpri 1.6.1, both sides: calls, caller names, redirecting numbers, hold, and transfers handed to the network</td></tr>
+      <tr><td>SIP over WebSocket</td><td>JsSIP and SIP.js softphones registering and calling each other through BitVoice</td></tr>
+      <tr><td>Let's Encrypt</td><td>Pebble, the test authority from the Let's Encrypt project</td></tr>
+      <tr><td>MP3 hold music</td><td>minimp3's C decoder, sample for sample</td></tr>
+      <tr><td>GSM and G.726</td><td>ffmpeg: GSM decoded sample for sample as ffmpeg does, G.726 streams exchanged with it</td></tr>
+      <tr><td>P25 (lab track)</td><td>A real ISSI capture from NIST's public-domain tester, and the standard's own encryption examples</td></tr>
+    </tbody>
+  </table>
+
+  <h2 style="margin-top:56px">Not yet tried for real</h2>
+  <p>These are built and tested against stand-ins, but not yet with the real thing. Reports from anyone who tries them are welcome
+    on <a href="https://github.com/BioDream-LLC/bitvoice/issues">GitHub</a>.</p>
+  <ul class="ticks">
+    <li>Real desk phones: the automatic set-up (Yealink, Poly, Grandstream, Snom, Fanvil, Cisco, Mitel and Aastra, Sangoma, Algo,
+      CyberData) is checked against each maker's published formats, not yet on the phones themselves</li>
+    <li>SIP carriers in production, the outbound dialer's answering-machine detection on real lines, and T.38 fax through real carriers</li>
+    <li>Telephony cards and PRI switches, including transfers handed to the phone company on real lines</li>
+    <li>Skinny, MGCP and H.323 equipment; hotel systems (FIAS) against a real property-management system; SNMP managers</li>
+    <li>Let's Encrypt itself (as against its test authority), TURN through real NATs, and Meta's live WhatsApp and Messenger
+      APIs</li>
+    <li>Published capacity figures on stated hardware</li>
+  </ul>
+
+  <h2 style="margin-top:56px">Not built</h2>
+  <ul class="ticks">
+    <li>BRI cards, E&amp;M, MFC-R2 and SS7; DMS-100 release link transfer and advice of charge on PRI</li>
+    <li>Converting G.723.1: no licence allows its reference code to be included</li>
+    <li>P25 Phase 2 half-rate voice (AMBE+2): patented until 2028</li>
+  </ul>
+</div></section>

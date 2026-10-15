@@ -446,8 +446,15 @@ test('toggles, PIN sets and caller ID lookup', async ({ page }) => {
   const lookups = await page.evaluate(async () => (await (await fetch('./api/lookups')).json()).items)
   await page.getByRole('button', { name: 'Add' }).first().click()
   await page.getByLabel('Name', { exact: true }).fill('Main number')
-  await page.getByLabel('Send calls to').selectOption('toggle:' + (await page.evaluate(async () => (await (await fetch('./api/toggles')).json()).items[0].id)))
+  // The choices load with the page's lists: wait for the toggle among them, and check both choices
+  // held before saving (a list arriving late re-renders the selects).
+  const toggle = 'toggle:' + (await page.evaluate(async () => (await (await fetch('./api/toggles')).json()).items[0].id))
+  await expect(page.getByLabel('Send calls to').locator(`option[value="${toggle}"]`)).toBeAttached()
+  await expect(page.getByLabel('Caller ID lookup').locator(`option[value="${lookups[0].id}"]`)).toBeAttached()
+  await page.getByLabel('Send calls to').selectOption(toggle)
   await page.getByLabel('Caller ID lookup').selectOption(lookups[0].id)
+  await expect(page.getByLabel('Send calls to')).toHaveValue(toggle)
+  await expect(page.getByLabel('Caller ID lookup')).toHaveValue(lookups[0].id)
   await page.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(page.getByText('a day/night toggle')).toBeVisible()
   const routes = await page.evaluate(async () => (await (await fetch('./api/inbound-routes')).json()).items)
@@ -460,7 +467,9 @@ test('toggles, PIN sets and caller ID lookup', async ({ page }) => {
 test("Let's Encrypt certificate", async ({ page }) => {
   await signIn(page)
   await page.goto('/#/settings')
-  await page.getByRole('switch', { name: "Let's Encrypt" }).click()
+  const le = page.getByRole('switch', { name: "Let's Encrypt" })
+  if ((await le.getAttribute('aria-checked')) !== 'true') await le.click()
+  await page.getByLabel('Names').fill('')
   await page.getByRole('button', { name: "Apply Let's Encrypt settings" }).click()
   await expect(page.getByText(/enter the name this server is reached by/).first()).toBeVisible()
   await page.getByLabel('Names').fill('pbx.example.com')
@@ -470,12 +479,20 @@ test("Let's Encrypt certificate", async ({ page }) => {
   await page.getByLabel('Port 80 here').fill('0')
   await page.getByRole('button', { name: "Apply Let's Encrypt settings" }).click()
   await expect(page.getByText("Let's Encrypt settings saved")).toBeVisible()
-  await expect(page.getByText(/^Failed: .*Tried again/)).toBeVisible({ timeout: 15000 })
+  // The manager's own answer first (it fails at once: nothing listens there), then the page, which
+  // asks again every 5 seconds; "Check now" asks at once if a poll was missed on a busy machine.
+  await expect.poll(async () => page.evaluate(async () => (await (await fetch('./api/certificate/acme')).json()).state), { timeout: 30000 }).toBe('failed')
+  const failed = page.getByText(/^Failed: .*Tried again/)
+  if (!await failed.isVisible()) await page.getByRole('button', { name: 'Check now' }).click()
+  await expect(failed).toBeVisible({ timeout: 15000 })
   const st = await page.evaluate(async () => (await (await fetch('./api/certificate/acme')).json()))
-  expect(st.state).toBe('failed')
   expect(st.challenge).toBe('http-01')
   await page.getByRole('button', { name: 'Test the names' }).click()
   await expect(page.getByRole('list', { name: 'Name test results' }).getByText(/pbx\.example\.com/)).toBeVisible({ timeout: 30000 })
+  // Off again, so the tests after this one do not keep asking an authority that is not there.
+  await le.click()
+  await page.getByRole('button', { name: "Apply Let's Encrypt settings" }).click()
+  await expect.poll(async () => page.evaluate(async () => (await (await fetch('./api/certificate/acme')).json()).state), { timeout: 15000 }).toBe('off')
 })
 
 // TURN for browser phones: switched on in Settings, it reports its ports.

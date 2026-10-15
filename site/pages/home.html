@@ -1,0 +1,127 @@
+<section class="hero hero-split">
+  <div class="wrap">
+    <div class="hero-copy">
+    <p class="eyebrow">Free and open source · Apache 2.0</p>
+    <h1>The phone system that is one file and one web page</h1>
+    <p class="lede">BitVoice is a complete phone system for offices, contact centres and hosted providers: extensions, queues,
+      menus, voicemail, recording, trunks and desk phones, set up entirely in the browser. An open-source alternative to
+      FreePBX and Asterisk, with neither underneath.</p>
+    <div class="actions">
+      <a class="btn btn-primary" href="/download/">ICON:download Download {{VERSION}}</a>
+      <a class="btn btn-ghost" href="/features/">See everything it does</a>
+    </div>
+    <p class="hero-note">Double-click it and a browser opens on a setup wizard; a few minutes later a phone rings. No
+      configuration files, no paid modules, no licence meter.</p>
+    </div>
+    <img class="shot" src="/assets/screens/dashboard.webp" width="1600" height="1000"
+      alt="The BitVoice dashboard for a sample clinic: four calls now, eight of eight phones online, two of two trunks up, a chart of calls in the last 24 hours and the calls happening now.">
+  </div>
+</section>
+
+<div class="strip"><div class="wrap">
+  <div><b>$0</b><span>No licence, no per-extension or per-agent fee</span></div>
+  <div><b>One file</b><span>About 34 MB, for Linux, macOS and Windows</span></div>
+  <div><b>47 MB</b><span>Memory carrying four live calls and eight phones</span></div>
+  <div><b>100%</b><span>Of the settings have a screen, checked on every change</span></div>
+</div></div>
+
+<section class="band">
+  <div class="wrap">
+    <div class="intro">
+      <p class="eyebrow">Everything in the browser</p>
+      <h2>A phone system packaged like an appliance</h2>
+      <p>One program, one built-in web interface, no outside runtime. Underneath is BitVoice's own engine, written in Go: SIP and
+        IAX2, RTP and SRTP, codec conversion and WebRTC. A REST API and configuration in Git are there for those who want them.</p>
+    </div>
+    <div class="grid">
+      <a class="card" href="/features/#calls"><div class="icon">ICON:phone</div><h3>Everything an office phone system does</h3>
+        <p>Extensions, ring groups, menus, schedules, voicemail to email, recording, parking, paging, conference rooms, forwarding,
+        follow-me, intercom and the usual feature codes.</p></a>
+      <a class="card" href="/features/#contact"><div class="icon">ICON:queue</div><h3>A contact centre</h3>
+        <p>Queues with a live wallboard, callbacks, VIP and sticky routing, supervisors listening in, an outbound dialer and one
+        inbox for web chat, WhatsApp, Messenger and texts.</p></a>
+      <a class="card" href="/features/#phones"><div class="icon">ICON:browser</div><h3>Desk phones and browsers</h3>
+        <p>Yealink, Poly, Grandstream, Snom, Fanvil and more set up automatically; a phone in every browser; WebRTC softphones over
+        SIP over WebSocket.</p></a>
+      <a class="card" href="/freepbx-alternative/"><div class="icon">ICON:swap</div><h3>Bring your FreePBX with you</h3>
+        <p>Import FreePBX, Asterisk, 3CX, Cisco, Avaya and Mitel exports. See exactly what would change before it is applied, and
+        undo it in one click.</p></a>
+      <a class="card" href="/features/#ai"><div class="icon">ICON:spark</div><h3>AI you choose, or none</h3>
+        <p>Transcripts, summaries and an AI receptionist with the AI service you pick, or one you run yourself. Off until you set
+        it up.</p></a>
+      <a class="card" href="/features/#operations"><div class="icon">ICON:server</div><h3>Runs anywhere, many at once</h3>
+        <p>SQLite on one server or PostgreSQL for several; many organisations on one server, each with its own data, address and
+        administrators.</p></a>
+      <a class="card" href="/features/#security"><div class="icon">ICON:shield</div><h3>Secure by default</h3>
+        <p>HTTPS only, SIP over TLS with SRTP, Let's Encrypt, two-step sign-in and single sign-on, signed updates, and an audit of
+        every change.</p></a>
+      <a class="card" href="/features/#calls"><div class="icon">ICON:code</div><h3>Scripts that never lose a call</h3>
+        <p>Route calls with JavaScript or Lua, sandboxed and time-limited, with a fixed fallback when a script fails. Asterisk's
+        AMI and ARI tools work too.</p></a>
+    </div>
+  </div>
+</section>
+
+<section class="band soft">
+  <div class="wrap">
+    <div class="split">
+      <div>
+        <p class="eyebrow">See it as it happens</p>
+        <h2>Live calls, with their quality</h2>
+        <p>Every call in progress, both sides, with the codec, packet loss, jitter and an audio score, and what needs attention in
+          plain words on the dashboard.</p>
+        <ul class="ticks">
+          <li>A call flow diagram of where calls from outside go</li>
+          <li>A call-path simulator: pick a caller, a number and a time and see the exact route, without ringing anything</li>
+          <li>Call history with recordings, quality and search across what was said</li>
+        </ul>
+      </div>
+      <div class="frame"><img src="/assets/screens/calls.webp" width="1600" height="1000" loading="lazy"
+        alt="Live calls: four calls into the Appointments queue, each showing both sides with codec, loss, jitter and a quality score of 4.4."></div>
+    </div>
+    <div class="split flip">
+      <div>
+        <p class="eyebrow">Queues</p>
+        <h2>A wallboard for every queue</h2>
+        <p>Callers waiting, the longest wait and each agent's state, live. Agents log in and pause from their phones or the screen;
+          supervisors listen, whisper and barge.</p>
+      </div>
+      <div class="frame"><img src="/assets/screens/queues.webp" width="1600" height="1000" loading="lazy"
+        alt="The Appointments queue with one caller waiting, three answered, and three agents on calls."></div>
+    </div>
+    <div class="split">
+      <div>
+        <p class="eyebrow">Routing</p>
+        <h2>Where every call goes, drawn</h2>
+        <p>The main number to the opening hours, then the menu, the queues and the people, each ending where it ends. Change a
+          step and the diagram follows.</p>
+      </div>
+      <div class="frame"><img src="/assets/screens/flow.webp" width="1600" height="1000" loading="lazy"
+        alt="The call flow diagram: the main number goes to clinic hours, then the main menu, then the Appointments queue, Billing, the clinical team and the front office, each ending at voicemail."></div>
+    </div>
+  </div>
+</section>
+
+<section class="band">
+  <div class="wrap">
+    <div class="intro">
+      <p class="eyebrow">Plainly</p>
+      <h2>What is proven, and what is not yet</h2>
+      <p>Every change runs the Go tests with the race detector, fuzzing, and browser tests that make real WebRTC calls and check
+        the sound both ways. BitVoice is checked against Asterisk, libpri, ffmpeg, JsSIP and SIP.js. It has not yet been run with
+        every phone, carrier and telephony card it supports; the proof page lists which.</p>
+    </div>
+    <a class="btn btn-line" href="/proof/">ICON:check How it is tested</a>
+  </div>
+</section>
+
+<section class="calltoaction">
+  <div class="wrap">
+    <h2>Try it on your own computer</h2>
+    <p>Download, double-click, and follow the wizard. Point a SIP phone at it, or press the phone button to call from the browser.</p>
+    <div class="actions">
+      <a class="btn btn-primary" href="/download/">ICON:download Download {{VERSION}}</a>
+      <a class="btn btn-ghost" href="/manual/">ICON:book Read the manual</a>
+    </div>
+  </div>
+</section>

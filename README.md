@@ -373,6 +373,7 @@ today.
 
 | | |
 |---|---|
+| [**Website**](https://bitvoice.org) | Features, the FreePBX comparison, how it is tested, downloads; built from this README and the manual by `make site` |
 | [**Manual**](https://biodream-llc.github.io/bitvoice/manual/) | 63 chapters in six parts, with 63 diagrams, step-by-step set-up and reference tables. Also `docs/manual/index.html` in a checkout |
 | [**Manual (PDF)**](docs/manual/bitvoice-manual.pdf) | The same, about 90 pages with a contents page, for printing; also in every release archive |
 | **Help in the program** | Every screen has a Help button that opens its article; <kbd>⌘K</kbd> searches screens and articles |

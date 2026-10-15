@@ -1,0 +1,52 @@
+<section class="hero small"><div class="wrap">
+  <p class="eyebrow">Download</p>
+  <h1>BitVoice {{VERSION}}</h1>
+  <p class="lede">One program, nothing to install. Each archive holds the program, its signature, the licence, the notice and the
+    manual as a PDF.</p>
+</div></section>
+
+<section class="band"><div class="wrap prose-lite">
+  <table>
+    <thead><tr><th>Platform</th><th>Architecture</th><th>Download</th></tr></thead>
+    <tbody>
+      <tr><td><b>Linux</b></td><td>x86-64</td><td><a href="https://github.com/BioDream-LLC/bitvoice/releases/download/{{VERSION}}/bitvoice-{{VERSION}}-linux-amd64.tar.gz">bitvoice-{{VERSION}}-linux-amd64.tar.gz</a></td></tr>
+      <tr><td><b>Linux</b></td><td>ARM64 / aarch64</td><td><a href="https://github.com/BioDream-LLC/bitvoice/releases/download/{{VERSION}}/bitvoice-{{VERSION}}-linux-arm64.tar.gz">bitvoice-{{VERSION}}-linux-arm64.tar.gz</a></td></tr>
+      <tr><td><b>macOS</b></td><td>Apple Silicon</td><td><a href="https://github.com/BioDream-LLC/bitvoice/releases/download/{{VERSION}}/bitvoice-{{VERSION}}-darwin-arm64.tar.gz">bitvoice-{{VERSION}}-darwin-arm64.tar.gz</a></td></tr>
+      <tr><td><b>macOS</b></td><td>Intel</td><td><a href="https://github.com/BioDream-LLC/bitvoice/releases/download/{{VERSION}}/bitvoice-{{VERSION}}-darwin-amd64.tar.gz">bitvoice-{{VERSION}}-darwin-amd64.tar.gz</a></td></tr>
+      <tr><td><b>Windows</b></td><td>x64</td><td><a href="https://github.com/BioDream-LLC/bitvoice/releases/download/{{VERSION}}/bitvoice-{{VERSION}}-windows-amd64.zip">bitvoice-{{VERSION}}-windows-amd64.zip</a></td></tr>
+      <tr><td><b>Windows</b></td><td>ARM64</td><td><a href="https://github.com/BioDream-LLC/bitvoice/releases/download/{{VERSION}}/bitvoice-{{VERSION}}-windows-arm64.zip">bitvoice-{{VERSION}}-windows-arm64.zip</a></td></tr>
+    </tbody>
+  </table>
+  <p style="margin-top:14px">All releases and their notes: <a href="https://github.com/BioDream-LLC/bitvoice/releases">GitHub releases</a>.</p>
+
+  <h2 style="margin-top:48px">Start it</h2>
+  <pre><code># 1. Start it. The web interface is inside the program.
+./bitvoice
+
+# 2. A browser opens on the setup wizard (or open https://127.0.0.1:8443). Until you install your own
+#    certificate, the browser warns once about BitVoice's self-signed one; continue to the site.
+
+# 3. Point a SIP phone at this computer, port 5060, with the extension's number and password.
+#    Or press the phone button at the bottom of any screen. Dial *43 for the echo test.</code></pre>
+  <p><b>On Windows</b>, unzip and double-click <code>bitvoice.exe</code>; keep its window open while you use it. Windows asks once
+    whether BitVoice may use the network: allow it on private networks so phones can connect.</p>
+  <p>The programs are pure Go with no C libraries, so they run on any Linux, Alpine and distroless images included.</p>
+  <p class="lab-note"><b>Newer than {{VERSION}}.</b> This site and its manual describe the main branch. Features added since
+    {{VERSION}} was released ({{RELEASED}}), among them telephony cards through <code>bitvoice-dahdi</code>, the outbound dialer and
+    the omnichannel inbox, come in the next release; until then, build from source (below) to have them.</p>
+
+  <h2 style="margin-top:48px">Check what you downloaded</h2>
+  <p>Against <a href="https://github.com/BioDream-LLC/bitvoice/releases/download/{{VERSION}}/SHA256SUMS">SHA256SUMS</a>:</p>
+  <pre><code>shasum -a 256 -c SHA256SUMS --ignore-missing</code></pre>
+  <p><b>Signed releases.</b> Every program carries BioDream's release key and comes with its signature beside it. The
+    <b>Updates</b> page installs only programs signed with that key, so a forged or damaged file is refused. The public key
+    (ed25519, base64):</p>
+  <pre><code>M6UaGaLM1T0SekufRzAlUSeSTjfxpVL18YHE5eKkKxY=</code></pre>
+
+  <h2 style="margin-top:48px">Other ways</h2>
+  <pre><code># Go 1.26 or newer
+go install github.com/biodream-llc/bitvoice/cmd/bitvoice@latest
+
+# From source
+git clone https://github.com/BioDream-LLC/bitvoice &amp;&amp; cd bitvoice &amp;&amp; make build</code></pre>
+</div></section>

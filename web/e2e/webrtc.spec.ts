@@ -343,12 +343,13 @@ test('browser audio relayed through BitVoice TURN', async ({ page }) => {
 test('JsSIP softphones over SIP over WebSocket', async ({ page, context }) => {
   const { build } = await import('vite')
   const { resolve } = await import('node:path')
-  const { readFileSync, mkdtempSync } = await import('node:fs')
+  const { readFileSync, mkdtempSync, rmSync } = await import('node:fs')
   const { tmpdir } = await import('node:os')
   const out = mkdtempSync(resolve(tmpdir(), 'jssip-'))
   await build({ configFile: false, logLevel: 'silent', build: { write: true, outDir: out, emptyOutDir: true, minify: false, copyPublicDir: false,
     lib: { entry: resolve('node_modules/jssip/lib/JsSIP.js'), name: 'JsSIP', formats: ['iife'], fileName: () => 'jssip.js' } } })
   const jssip = readFileSync(resolve(out, 'jssip.js'), 'utf8')
+  rmSync(out, { recursive: true, force: true })
 
   await signIn(page)
   const secret = 'Softphone-Secret-2468'
@@ -417,12 +418,13 @@ test('JsSIP softphones over SIP over WebSocket', async ({ page, context }) => {
 test('SIP.js softphones over SIP over WebSocket', async ({ page, context }) => {
   const { build } = await import('vite')
   const { resolve } = await import('node:path')
-  const { readFileSync, mkdtempSync } = await import('node:fs')
+  const { readFileSync, mkdtempSync, rmSync } = await import('node:fs')
   const { tmpdir } = await import('node:os')
   const out = mkdtempSync(resolve(tmpdir(), 'sipjs-'))
   await build({ configFile: false, logLevel: 'silent', build: { write: true, outDir: out, emptyOutDir: true, minify: false, copyPublicDir: false,
     lib: { entry: resolve('node_modules/sip.js/lib/index.js'), name: 'SIP', formats: ['iife'], fileName: () => 'sip.js' } } })
   const sipjs = readFileSync(resolve(out, 'sip.js'), 'utf8')
+  rmSync(out, { recursive: true, force: true })
 
   await signIn(page)
   const secret = 'Softphone-Secret-1357'

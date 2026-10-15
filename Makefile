@@ -10,7 +10,7 @@ RELEASE_KEY ?=
 BIODREAM_KEY := M6UaGaLM1T0SekufRzAlUSeSTjfxpVL18YHE5eKkKxY=
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.releaseKey=$(RELEASE_KEY)
 
-.PHONY: all build test vet fmt check clean web e2e manual release
+.PHONY: all build test vet fmt check clean web e2e manual release site
 
 all: check build
 
@@ -70,3 +70,9 @@ release:
 		echo "built $$name"; done
 	rm dist/.bvsign
 	cd dist && shasum -a 256 *.tar.gz *.zip > SHA256SUMS
+
+# The bitvoice.org website, built from README.md, docs/manual and docs/assets (site/ holds its pages).
+# Needs cwebp for the screenshots (brew install webp; without it they stay PNG). Publish with
+# deploy/site.sh.
+site:
+	go run ./cmd/bitvoicesite -out dist-site -base https://bitvoice.org

@@ -1,0 +1,51 @@
+<section class="hero small"><div class="wrap">
+  <p class="eyebrow">Leaving FreePBX</p>
+  <h1>A FreePBX and Asterisk alternative you run from the browser</h1>
+  <p class="lede">FreePBX is a web interface for Asterisk. BitVoice is a phone system with its own engine and its own web interface
+    in one program: nothing to assemble, and every setting on a screen.</p>
+</div></section>
+
+<section class="band"><div class="wrap prose-lite">
+  <h2>How they differ</h2>
+  <table class="compare">
+    <thead><tr><th></th><th>BitVoice</th><th>FreePBX on Asterisk</th></tr></thead>
+    <tbody>
+      <tr><td>What you install</td><td>One program for Linux, macOS or Windows; SQLite inside, PostgreSQL for several servers</td><td>Asterisk, FreePBX, a web server, PHP and a database on Linux, usually from a distribution image</td></tr>
+      <tr><td>Where it is set up</td><td>Every setting in the web interface, checked by a test on every change</td><td>The web interface, with Asterisk's configuration files and command line underneath</td></tr>
+      <tr><td>Licence</td><td>Apache 2.0, no paid modules</td><td>Open source (GPL), with some modules sold commercially by Sangoma</td></tr>
+      <tr><td>Engine</td><td>BitVoice's own, in Go: SIP, IAX2, RTP, SRTP, WebRTC, codecs</td><td>Asterisk, in C</td></tr>
+      <tr><td>Track record</td><td class="caveat">New: no large production sites yet</td><td>Very many sites over many years, a large community and commercial support</td></tr>
+    </tbody>
+  </table>
+
+  <h2 style="margin-top:56px">What comes over</h2>
+  <p>On <b>Import</b>, upload the exports; BitVoice shows exactly what would change before anything is applied, and the import is
+    a revision you can undo.</p>
+  <ul class="ticks">
+    <li><b>FreePBX:</b> Admin → Bulk Handler → Export → Extensions (CSV)</li>
+    <li><b>Asterisk:</b> <code>pjsip.conf</code> or <code>sip.conf</code></li>
+    <li>Also 3CX, Cisco Unified CM, Avaya IP Office and Communication Manager, and Mitel MiVoice Business</li>
+    <li>Voicemail PINs, names and email addresses come over when the export has them; exports carry no SIP passwords, so each
+      extension gets a new one, and trunks arrive switched off until you enter their passwords</li>
+  </ul>
+  <p>The usual FreePBX feature codes work (<code>*72</code>, <code>*78</code>, <code>*8</code>, <code>*97</code> and the rest) and
+    can be changed. Day/night toggles (FreePBX's call flow control), PIN sets, caller ID lookup and DISA are there. IAX2 trunks join
+    an Asterisk or FreePBX server you keep, so you can move one site or department at a time, and tools written for Asterisk's AMI
+    and ARI can drive BitVoice too.</p>
+
+  <h2 style="margin-top:56px">What BitVoice does not do yet</h2>
+  <ul class="ticks">
+    <li>BRI ISDN cards, E&amp;M and MFC-R2 signalling, and SS7. BRI lines connect through a SIP gateway instead.</li>
+    <li>On PRI: DMS-100 release link transfer and advice of charge.</li>
+    <li>Converting G.723.1 (it is passed through when both ends speak it).</li>
+    <li>A long list of real phones, carriers and cards tried in production: see <a href="/proof/">what has been tested</a>.</li>
+  </ul>
+  <p>The step-by-step guide to the import is in the <a href="/manual/#import">manual</a>.</p>
+</div></section>
+
+<section class="calltoaction"><div class="wrap">
+  <h2>Try the import on a copy</h2>
+  <p>Run BitVoice on a laptop, upload your FreePBX export and read the preview. Nothing is applied until you say so.</p>
+  <div class="actions"><a class="btn btn-primary" href="/download/">ICON:download Download {{VERSION}}</a>
+    <a class="btn btn-ghost" href="/features/">Everything it does</a></div>
+</div></section>

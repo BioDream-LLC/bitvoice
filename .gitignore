@@ -21,3 +21,4 @@
 
 .DS_Store
 deploy/lab/bitvoice
+/dist-site/
