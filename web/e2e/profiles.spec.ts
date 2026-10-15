@@ -374,3 +374,23 @@ test('text to 911 from a text control centre', async ({ page }) => {
     tcc.close()
   }
 })
+
+// Radio positions from a radio data gateway: posted to the API, shown on the console with the
+// radio's name; a bad report is refused with the reason.
+test('radio positions from a data gateway', async ({ page }) => {
+  await signIn(page)
+  const r = await page.evaluate(async () => {
+    const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
+    const bad = await fetch('./api/radio/locations', { method: 'POST', headers: H, body: JSON.stringify({ unit: 1205, lat: 95, lon: 1 }) })
+    const ok = await fetch('./api/radio/locations', { method: 'POST', headers: H, body: JSON.stringify([{ unit: 4242, lat: 40.2633, lon: -76.8823, speed: 50, heading: 270, accuracy: 8 }]) })
+    return { bad: bad.status, badText: await bad.text(), ok: ok.status }
+  })
+  expect(r.bad).toBe(400)
+  expect(r.badText).toContain('a position in degrees')
+  expect(r.ok).toBe(200)
+  await page.goto('./#/radio')
+  const sec = page.getByRole('region', { name: 'Radio positions' })
+  await expect(sec.getByText('40.26330, -76.88230')).toBeVisible()
+  await expect(sec.getByText('50 km/h')).toBeVisible()
+  await expect(sec.getByRole('link', { name: 'Map of unit 4242' })).toBeVisible()
+})

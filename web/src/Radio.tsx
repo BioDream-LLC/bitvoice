@@ -1,11 +1,11 @@
 import { clsx } from 'clsx'
 import {
-  BellRing, CheckCheck, Headphones, KeyRound, Link2, Lock, LockOpen, Mic, Phone, PhoneOff, Plus, Radio as RadioIcon, Save, Search, Siren, Trash2, Volume2, VolumeX,
+  BellRing, CheckCheck, Headphones, KeyRound, Link2, Lock, LockOpen, MapPin, Mic, Phone, PhoneOff, Plus, Radio as RadioIcon, Save, Search, Siren, Trash2, Volume2, VolumeX,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import {
-  errorOf, useAckEmergencyMutation, useAlertToneMutation, useHangUpMutation, useMonitorMutation, usePatchMutation, usePttMutation, useRadioLogQuery, useRadioQuery, useSimulSelectMutation,
+  errorOf, useAckEmergencyMutation, useAlertToneMutation, useHangUpMutation, useMonitorMutation, usePatchMutation, usePttMutation, useRadioLocationsQuery, useRadioLogQuery, useRadioQuery, useSimulSelectMutation,
   useSaveSettingsMutation, useSettingsQuery, useUnitCallMutation,
   type ApiErrorBody, type ConsoleState, type P25Key, type RadioSettings,
 } from './api'
@@ -48,6 +48,7 @@ export function RadioConsole() {
         </section>
       )}
       {st && <Channels st={st} pos={pos} admin={admin} />}
+      <RadioPositions />
       {number && <RadioLog />}
       {admin && <RadioSetup />}
     </Page>
@@ -201,6 +202,38 @@ function Channels({ st, pos, admin }: { st: ConsoleState; pos?: Position; admin:
       })}
     </section>
     </>
+  )
+}
+
+const ago = (at: string) => {
+  const s = Math.max(0, Math.round((Date.now() - new Date(at).getTime()) / 1000))
+  return s < 60 ? `${s} s ago` : s < 3600 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`
+}
+
+/** Where the radios are, as the radio data gateway reports them. Shown once a report has come. */
+function RadioPositions() {
+  const { data } = useRadioLocationsQuery(undefined, { pollingInterval: 5000 })
+  const items = data?.items ?? []
+  if (!items.length) return null
+  return (
+    <section className="card mt-6 space-y-3 p-5" aria-label="Radio positions">
+      <h2 className="flex items-center gap-2 font-semibold text-slate-100"><MapPin size={16} className="text-rose-300" aria-hidden /> Radio positions</h2>
+      <table className="w-full text-sm">
+        <thead className="text-left text-xs text-slate-500"><tr><th className="py-1">Radio</th><th>Position</th><th>Speed</th><th>Reported</th><th /></tr></thead>
+        <tbody>{items.map((f) => {
+          const stale = Date.now() - new Date(f.at).getTime() > 10 * 60_000
+          return (
+            <tr key={f.unit} className="border-t border-slate-800">
+              <td className="py-1">{f.alias ? <span className="font-semibold text-emerald-200">{f.alias}</span> : <span className="text-slate-300">Unit</span>} <span className="font-mono text-xs text-slate-500">{f.unit}</span></td>
+              <td className="font-mono text-sky-200">{f.lat.toFixed(5)}, {f.lon.toFixed(5)}{f.accuracy ? <span className="ml-1 text-xs text-slate-500">±{Math.round(f.accuracy)} m</span> : null}</td>
+              <td className="text-slate-300">{f.speed ? `${Math.round(f.speed)} km/h` : '–'}{f.heading != null && f.speed ? <span className="ml-1 text-xs text-slate-500">{Math.round(f.heading)}°</span> : null}</td>
+              <td className={stale ? 'text-amber-300' : 'text-slate-400'}>{ago(f.at)}</td>
+              <td><a className="btn py-0.5" href={`https://www.openstreetmap.org/?mlat=${f.lat}&mlon=${f.lon}#map=16/${f.lat}/${f.lon}`} target="_blank" rel="noreferrer" aria-label={`Map of ${f.alias || `unit ${f.unit}`}`}><MapPin size={12} aria-hidden /> Map</a></td>
+            </tr>
+          )
+        })}</tbody>
+      </table>
+    </section>
   )
 }
 

@@ -29,8 +29,9 @@ type radio struct {
 	issi      *sip.Stack               // the ISSI's SIP stack, for talkgroup channels
 	issiPort  int
 	p25cfg    config.P25Console
-	record    bool      // keep every transmission (System.Radio.Record)
-	recOnce   sync.Once // the recorder's goroutine
+	record    bool             // keep every transmission (System.Radio.Record)
+	recOnce   sync.Once        // the recorder's goroutine
+	fixes     map[int]RadioFix // each radio's last position, by unit ID
 }
 
 type radioChannel struct {
@@ -529,4 +530,73 @@ func (e *Engine) SimulSelect(call string, channels []string, on bool) error {
 		done = append(done, id)
 	}
 	return nil
+}
+
+// RadioFix is a radio's position, as a radio data or AVL gateway reports it (P25 location service,
+// LRRP or a vendor's own, translated by the gateway): radio.location, for the console and CAD.
+type RadioFix struct {
+	Unit     int       `json:"unit"`
+	Alias    string    `json:"alias,omitempty"`
+	Lat      float64   `json:"lat"`
+	Lon      float64   `json:"lon"`
+	Accuracy float64   `json:"accuracy,omitempty"` // metres
+	Speed    float64   `json:"speed,omitempty"`    // km/h
+	Heading  float64   `json:"heading,omitempty"`  // degrees from north
+	At       time.Time `json:"at"`
+	Source   string    `json:"source,omitempty"` // the gateway, as it names itself
+}
+
+// maxFixes bounds the radios whose last position is kept.
+const maxFixes = 5000
+
+// RadioLocation takes a radio's position report.
+func (e *Engine) RadioLocation(f RadioFix) (RadioFix, error) {
+	switch {
+	case f.Unit < 1 || f.Unit > 0xFFFFFF:
+		return f, errors.New("unit: a P25 unit ID, 1 to 16777215")
+	case f.Lat < -90 || f.Lat > 90 || f.Lon < -180 || f.Lon > 180 || f.Lat == 0 && f.Lon == 0:
+		return f, errors.New("lat and lon: a position in degrees")
+	case f.Accuracy < 0 || f.Speed < 0 || f.Heading < 0 || f.Heading >= 360:
+		return f, errors.New("accuracy and speed are not negative; heading is 0 to 359")
+	}
+	now := time.Now().UTC()
+	if f.At.IsZero() || f.At.After(now.Add(time.Minute)) {
+		f.At = now
+	}
+	f.Alias = e.Config().System.Radio.AliasFor(f.Unit)
+	r := e.radioSys()
+	r.mu.Lock()
+	if r.fixes == nil {
+		r.fixes = map[int]RadioFix{}
+	}
+	if old, ok := r.fixes[f.Unit]; ok && old.At.After(f.At) {
+		r.mu.Unlock()
+		return old, nil // an older report arriving late changes nothing
+	}
+	if _, ok := r.fixes[f.Unit]; !ok && len(r.fixes) >= maxFixes {
+		oldest, at := 0, now
+		for u, x := range r.fixes {
+			if x.At.Before(at) {
+				oldest, at = u, x.At
+			}
+		}
+		delete(r.fixes, oldest)
+	}
+	r.fixes[f.Unit] = f
+	r.mu.Unlock()
+	e.publish("radio.location", f)
+	return f, nil
+}
+
+// RadioLocations is every radio's last position, newest first.
+func (e *Engine) RadioLocations() []RadioFix {
+	r := e.radioSys()
+	r.mu.Lock()
+	out := make([]RadioFix, 0, len(r.fixes))
+	for _, f := range r.fixes {
+		out = append(out, f)
+	}
+	r.mu.Unlock()
+	sort.Slice(out, func(i, j int) bool { return out[i].At.After(out[j].At) })
+	return out
 }

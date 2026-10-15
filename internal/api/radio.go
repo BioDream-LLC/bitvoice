@@ -1,8 +1,14 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"strconv"
+
+	"github.com/biodream-llc/bitvoice/internal/pbx"
 
 	"github.com/biodream-llc/bitvoice/internal/store"
 )
@@ -28,6 +34,39 @@ func (s *Server) radioRoutes() {
 			return
 		}
 		w.WriteHeader(204)
+	})
+	// Radio positions, from a radio data or AVL gateway (an API token with the gateway's own account).
+	s.handle("POST /api/radio/locations", true, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		var in []pbx.RadioFix
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
+		if err != nil {
+			writeError(w, 400, "the body is too large")
+			return
+		}
+		if len(bytes.TrimSpace(body)) > 0 && bytes.TrimSpace(body)[0] == '{' { // one report, or a list
+			var one pbx.RadioFix
+			err = json.Unmarshal(body, &one)
+			in = []pbx.RadioFix{one}
+		} else {
+			err = json.Unmarshal(body, &in)
+		}
+		if err != nil || len(in) == 0 || len(in) > 500 {
+			writeError(w, 400, "send a position report, {\"unit\": 1205, \"lat\": 40.26, \"lon\": -76.88}, or a list of up to 500")
+			return
+		}
+		out := make([]pbx.RadioFix, 0, len(in))
+		for i, f := range in {
+			g, err := s.Engine.RadioLocation(f)
+			if err != nil {
+				writeError(w, 400, fmt.Sprintf("report %d: %s", i+1, err))
+				return
+			}
+			out = append(out, g)
+		}
+		writeJSON(w, 200, map[string]any{"items": out})
+	})
+	s.handle("GET /api/radio/locations", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		writeJSON(w, 200, map[string]any{"items": s.Engine.RadioLocations()})
 	})
 	s.handle("POST /api/radio/simulselect", true, func(w http.ResponseWriter, r *http.Request, u store.User) {
 		var in struct {

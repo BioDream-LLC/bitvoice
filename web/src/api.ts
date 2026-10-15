@@ -141,6 +141,7 @@ export interface P25Console {
   keys: P25Key[]; unitHome: string; unitHomeRfss: number; unitTxKey: string
 }
 export interface UnitAlias { unit: number; name: string }
+export interface RadioFix { unit: number; alias?: string; lat: number; lon: number; accuracy?: number; speed?: number; heading?: number; at: string; source?: string }
 export interface RadioSettings { console: string; channels: RadioChannel[]; p25: P25Console; record: boolean; cadUrl: string; cadSecret: string; aliases: UnitAlias[] }
 export interface ConsoleState {
   channels: {
@@ -469,6 +470,7 @@ export const api = createApi({
       alertTone: b.mutation<void, { call: string; channel: string; tone: string }>({ query: (body) => ({ url: 'radio/tone', method: 'POST', body }) }),
       unitCall: b.mutation<{ channel: string }, { call: string; unit: number; emergency: boolean }>({ query: (body) => ({ url: 'radio/unitcall', method: 'POST', body }) }),
       hangUp: b.mutation<void, { channel: string }>({ query: (body) => ({ url: 'radio/hangup', method: 'POST', body }) }),
+      radioLocations: b.query<{ items: RadioFix[] }, void>({ query: () => 'radio/locations', providesTags: ['Calls'] }),
       radioLog: b.query<{ items: Transmission[] }, { channel?: string; q?: string }>({ query: (a) => ({ url: 'radio/log', params: { channel: a.channel || undefined, q: a.q || undefined, limit: 200 } }), providesTags: ['Calls'] }),
       testFaxMail: b.mutation<{ result: string }, FaxMail>({ query: (body) => ({ url: 'faxes/mail/test', method: 'POST', body }) }),
       pageGroups: b.query<List<PageGroup>, void>({ query: () => 'page-groups', providesTags: ['PageGroups'] }),
@@ -813,7 +815,7 @@ export const api = createApi({
 })
 
 export const {
-  useFaxBoxesQuery, useCreateFaxBoxMutation, useUpdateFaxBoxMutation, useDeleteFaxBoxMutation, useFaxesQuery, useDeleteFaxMutation, useFaxKindsQuery, useSendFaxMutation, useRetryFaxMutation, useTestFaxMailMutation, usePsapReportQuery, usePsapLogQuery, useRebidMutation, useSendCallTextMutation, useTakeTextCallMutation, useEndTextCallMutation, useBoundariesQuery, useSaveBoundaryMutation, useDeleteBoundaryMutation, useLazyFindAreaQuery, useAddressDataQuery, useDeleteAddressesMutation, useValidateAddressMutation, useBcfLogQuery, useRadioQuery, usePttMutation, useSimulSelectMutation, useAckEmergencyMutation, useMonitorMutation, usePatchMutation, useAlertToneMutation, useUnitCallMutation, useHangUpMutation, useRadioLogQuery,
+  useFaxBoxesQuery, useCreateFaxBoxMutation, useUpdateFaxBoxMutation, useDeleteFaxBoxMutation, useFaxesQuery, useDeleteFaxMutation, useFaxKindsQuery, useSendFaxMutation, useRetryFaxMutation, useTestFaxMailMutation, usePsapReportQuery, usePsapLogQuery, useRebidMutation, useSendCallTextMutation, useTakeTextCallMutation, useEndTextCallMutation, useBoundariesQuery, useSaveBoundaryMutation, useDeleteBoundaryMutation, useLazyFindAreaQuery, useAddressDataQuery, useDeleteAddressesMutation, useValidateAddressMutation, useBcfLogQuery, useRadioQuery, usePttMutation, useSimulSelectMutation, useAckEmergencyMutation, useMonitorMutation, usePatchMutation, useAlertToneMutation, useUnitCallMutation, useHangUpMutation, useRadioLogQuery, useRadioLocationsQuery,
   useTextingKindsQuery,
   useMeQuery, useAuthOptionsQuery, useLoginMutation, useLogoutMutation, useSetupStatusQuery, useCompleteSetupMutation,
   useExtensionsQuery, useCreateExtensionMutation, useUpdateExtensionMutation, useDeleteExtensionMutation, useLazyNextExtensionQuery,
