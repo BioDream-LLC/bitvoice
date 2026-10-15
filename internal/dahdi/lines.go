@@ -300,6 +300,12 @@ func (b *Bridge) handleLine(tx *sip.ServerTx, in *sip.Incoming) {
 			}
 			p.lineDone()
 		}
+	case sip.REFER:
+		if lc == nil {
+			tx.Respond(sip.NewResponse(m, 481, ""))
+			return
+		}
+		go b.referPRI(tx, m, lc)
 	case sip.ACK:
 	default:
 		tx.Respond(sip.NewResponse(m, 200, ""))

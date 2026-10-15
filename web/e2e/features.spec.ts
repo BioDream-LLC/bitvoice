@@ -605,6 +605,7 @@ test('T1 and E1 PRI on a telephony card', async ({ page }) => {
   await expect(page.getByText('Channels 1 to 31, D-channel 16.')).toBeVisible()
   await expect(page.getByLabel('Switch type')).toHaveValue('euroisdn')
   await page.getByLabel('First channel').fill('101')
+  await page.getByRole('switch', { name: 'Transfers through the phone company on span 1' }).click()
   await page.getByRole('button', { name: 'Save' }).click()
   await expect(page.getByText('Telephony cards saved')).toBeVisible()
   const token = await page.getByRole('textbox', { name: 'Token' }).inputValue()
@@ -612,6 +613,10 @@ test('T1 and E1 PRI on a telephony card', async ({ page }) => {
   expect(cfg.spans[0].d).toBe(116)
   expect(cfg.spans[0].b).toHaveLength(30)
   expect(cfg.spans[0].q931[15]).toBe(17) // timeslot 16 is the D-channel
+  expect(cfg.spans[0].networkTransfer).toBe(true)
+  // DMS-100 takes no transfers: the switch goes away.
+  await page.getByLabel('Switch type').selectOption('dms100')
+  await expect(page.getByRole('switch', { name: 'Transfers through the phone company on span 1' })).toHaveCount(0)
 })
 
 // The outbound dialer: a campaign is made for a queue, a CSV list is loaded (one number on the

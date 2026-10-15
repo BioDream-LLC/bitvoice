@@ -12,6 +12,7 @@ import (
 	"github.com/biodream-llc/bitvoice/internal/dahdi"
 	"github.com/biodream-llc/bitvoice/internal/isdn"
 	"github.com/biodream-llc/bitvoice/internal/media"
+	"github.com/biodream-llc/bitvoice/internal/sip"
 )
 
 // A card with a phone on channel 1 (extension 100) and a phone company line on channel 2, joined by
@@ -229,4 +230,122 @@ func waitEvent(t *testing.T, c *isdn.Call, kind string) {
 			t.Fatalf("no %s on the PRI", kind)
 		}
 	}
+}
+
+// PRI supplementary services through the engine: a caller's name and redirecting number arrive as
+// the From display name and Diversion; 101's name and its forwarding go out in SETUP; and when 101
+// transfers a PRI caller to an outside number on the same span, the call is handed to the phone
+// company (Two B-Channel Transfer), which joins the two and clears both channels.
+func TestTelephonyCardPRIServices(t *testing.T) {
+	cfg := testConfig()
+	cfg.System.Cards = config.Cards{Enabled: true, Token: "abcdefghijklmnopqrstuvwxyz012345", LinePort: 25393,
+		Spans: []config.CardSpan{{Type: "t1", First: 1, NetworkTransfer: true}}}
+	cfg.Trunks = []config.Trunk{{ID: "cards", Name: "PRI", Enabled: true, Protocol: "dahdi"}}
+	cfg.InboundRoutes = []config.InboundRoute{{Name: "Main", DID: "2125550100", Destination: config.Destination{Type: "extension", Target: "101"}}}
+	cfg.OutboundRoutes = []config.OutboundRoute{{Name: "Out", Patterns: []string{"9."}, Strip: 1, Trunks: []string{"cards"}}}
+	cfg.Extensions[1].CallerID = "2125550101"
+	cfg.Extensions[1].Outbound = true
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.System.Cards.Spans[0].Switch != "ni2" {
+		t.Fatal(cfg.System.Cards.Spans[0].Switch)
+	}
+	bs, d := cfg.System.Cards.Spans[0].Channels()
+	e, _ := startEngine(t, cfg)
+	bridgeEnd, farEnd := dahdi.NewFakeD()
+	dahdi.OpenD = func(n int) (isdn.Link, error) { return bridgeEnd, nil }
+	fakes := map[int]*dahdi.Fake{}
+	for _, ch := range bs {
+		fakes[ch] = dahdi.NewFake()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	b, err := dahdi.New(ctx, dahdi.Config{SIPPort: e.SIPPort(), LinePort: 25393,
+		Spans: []dahdi.SpanConf{{D: d, B: bs, Q931: bs, Switch: "ni2", NetworkTransfer: true}}},
+		func(n int, _ bool) (dahdi.Channel, error) { return fakes[n], nil }, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(b.Close)
+	network := isdn.New(farEnd, isdn.Config{Network: true, Channels: bs})
+	incoming := make(chan *isdn.Call, 4)
+	network.Incoming = func(c *isdn.Call) { incoming <- c }
+	joined := make(chan [2]*isdn.Call, 1)
+	network.OnTransfer = func(a, c *isdn.Call) bool {
+		joined <- [2]*isdn.Call{a, c}
+		go func() { a.Hangup(isdn.CauseNormal); c.Hangup(isdn.CauseNormal) }()
+		return true
+	}
+	go network.Run()
+	t.Cleanup(network.Close)
+	waitFor(t, "the PRI did not come up", func() bool { return strings.HasPrefix(b.Status()["span1"], "D-channel up") })
+
+	callee := registered(t, e, "101")[0]
+	in, err := network.DialWith(isdn.Setup{Called: "2125550100", Calling: "3125550199", Name: "Ann Smith", Redirecting: "3125550111", RedirectReason: isdn.RedirectBusy})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ring := callee.waitRing(4 * time.Second)
+	if ring == nil {
+		t.Fatal("the DID did not reach 101")
+	}
+	if f := ring.Req.Get("From"); !strings.Contains(f, `"Ann Smith"`) || !strings.Contains(f, "3125550199") {
+		t.Fatalf("From %s", f)
+	}
+	cd := callee.answer(ring)
+	waitEvent(t, in, "connected")
+
+	// 101 transfers the caller to an outside number on the same PRI.
+	refer := cd.request(sip.REFER)
+	refer.Set("Refer-To", "<sip:93125550177@127.0.0.1>")
+	refer.Set("Referred-By", "<sip:101@127.0.0.1>")
+	if r := callee.send(refer); r == nil || r.StatusCode != 202 {
+		t.Fatalf("REFER: %v", r)
+	}
+	var out *isdn.Call
+	select {
+	case out = <-incoming:
+	case <-time.After(4 * time.Second):
+		t.Fatal("no SETUP for the transfer")
+	}
+	if out.Called != "3125550177" {
+		t.Fatalf("called %q", out.Called)
+	}
+	out.Answer()
+	select {
+	case j := <-joined:
+		if !(j[0] == in && j[1] == out || j[0] == out && j[1] == in) {
+			t.Fatalf("the network joined %v and %v", j[0].Called, j[1].Called)
+		}
+	case <-time.After(6 * time.Second):
+		t.Fatal("the transfer was not handed to the phone company")
+	}
+	waitFor(t, "the B-channels are not free", func() bool { return len(network.Busy()) == 0 })
+	waitFor(t, "the engine's call did not end", func() bool { return len(e.Calls()) == 0 })
+
+	// 101's own call out carries its name.
+	go callee.dial("93125550199")
+	out = <-incoming
+	if out.Calling != "2125550101" || out.Name == "" {
+		t.Fatalf("SETUP calling %q name %q", out.Calling, out.Name)
+	}
+	out.Hangup(isdn.CauseNormal)
+	// 101 forwards every call outside: the PRI caller's call goes back out with 101 as the
+	// redirecting number, reason unconditional.
+	if err := e.SetDivert(Divert{Ext: "101", All: "93125550188"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := network.Dial("2125550100", "3125550199"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case out = <-incoming:
+	case <-time.After(4 * time.Second):
+		t.Fatal("the forward did not go out")
+	}
+	if out.Called != "3125550188" || out.Redirecting != "2125550101" || out.RedirectReason != isdn.RedirectUnconditional {
+		t.Fatalf("forward: called %q redirecting %q reason %d", out.Called, out.Redirecting, out.RedirectReason)
+	}
+	out.Hangup(isdn.CauseNormal)
 }

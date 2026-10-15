@@ -2,6 +2,7 @@ package dahdi
 
 import (
 	"net/netip"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -22,6 +23,8 @@ type SpanConf struct {
 	Q931    []int  `json:"q931"`    // the same channels as Q.931 numbers them
 	Network bool   `json:"network"` // BitVoice is the network side
 	Switch  string `json:"switch"`
+	// NetworkTransfer: transfers joining two calls on this span go to the phone company.
+	NetworkTransfer bool `json:"networkTransfer,omitempty"`
 }
 
 // OpenD opens a span's D-channel (HDLC frames); tests replace it.
@@ -76,7 +79,7 @@ func (s *span) run(i int) {
 			}
 			continue
 		}
-		p := isdn.New(link, isdn.Config{Network: s.conf.Network, Channels: s.conf.Q931, ALaw: b.cfg.ALaw, Log: b.log})
+		p := isdn.New(link, isdn.Config{Network: s.conf.Network, Channels: s.conf.Q931, ALaw: b.cfg.ALaw, Log: b.log, Switch: s.conf.Switch})
 		p.Incoming = s.incoming
 		p.Up = func(up bool) { b.log.Info("dahdi: PRI D-channel", "span", i+1, "up", up) }
 		b.mu.Lock()
@@ -148,7 +151,7 @@ func (s *span) incoming(c *isdn.Call) {
 		from = "anonymous"
 	}
 	lc := &lineCall{p: p, callID: sip.NewCallID(), inbound: true, cseq: 1, pri: c}
-	lc.localURI = "<sip:" + from + "@127.0.0.1>;tag=" + sip.NewTag()
+	lc.localURI = sipDisplay(c.Name) + "<sip:" + from + "@127.0.0.1>;tag=" + sip.NewTag()
 	lc.remoteURI = "<sip:" + to + "@127.0.0.1>"
 	inv := &sip.Message{IsRequest: true, Method: sip.INVITE, RequestURI: "sip:" + to + "@" + b.engine().Addr.String()}
 	inv.Set("From", lc.localURI)
@@ -156,6 +159,9 @@ func (s *span) incoming(c *isdn.Call) {
 	inv.Set("Call-ID", lc.callID)
 	inv.Set("CSeq", "1 INVITE")
 	inv.Set("Contact", b.contact())
+	if c.Redirecting != "" {
+		inv.Set("Diversion", "<sip:"+c.Redirecting+"@127.0.0.1>;reason="+divReason[c.RedirectReason])
+	}
 	inv.Set("Content-Type", "application/sdp")
 	inv.Body = p.description(conn).Bytes()
 	p.mu.Lock()
@@ -280,14 +286,23 @@ func (b *Bridge) priOut(tx *sip.ServerTx, m *sip.Message, number string) bool {
 	b.mu.Lock()
 	spans := slices.Clone(b.spans)
 	b.mu.Unlock()
-	calling := ""
-	if f, err := sip.ParseAddress(m.Get("From")); err == nil && f.URI != nil {
-		calling = strings.Map(func(r rune) rune {
+	digits := func(s string) string {
+		return strings.Map(func(r rune) rune {
 			if r >= '0' && r <= '9' || r == '+' {
 				return r
 			}
 			return -1
-		}, f.URI.User)
+		}, s)
+	}
+	setup := isdn.Setup{Called: number}
+	if f, err := sip.ParseAddress(m.Get("From")); err == nil && f.URI != nil {
+		setup.Calling, setup.Name = digits(f.URI.User), f.Display
+	}
+	if d := m.Get("Diversion"); d != "" {
+		if a, err := sip.ParseAddress(d); err == nil && a.URI != nil {
+			setup.Redirecting = digits(a.URI.User)
+			setup.RedirectReason = divCode(d)
+		}
 	}
 	for _, s := range spans {
 		b.mu.Lock()
@@ -296,7 +311,7 @@ func (b *Bridge) priOut(tx *sip.ServerTx, m *sip.Message, number string) bool {
 		if pri == nil || !pri.IsUp() {
 			continue
 		}
-		c, err := pri.Dial(number, calling)
+		c, err := pri.DialWith(setup)
 		if err != nil {
 			continue
 		}
@@ -395,4 +410,74 @@ func (b *Bridge) callOnSpan(tx *sip.ServerTx, m *sip.Message, c *isdn.Call, p *p
 			}
 		}
 	}
+}
+
+// divReason names a redirect reason as SIP's Diversion header does (RFC 5806).
+var divReason = map[int]string{isdn.RedirectUnknown: "unknown", isdn.RedirectBusy: "user-busy", isdn.RedirectNoReply: "no-answer",
+	isdn.RedirectDeflection: "deflection", isdn.RedirectUnconditional: "unconditional"}
+
+// divCode reads a Diversion header's reason.
+func divCode(h string) int {
+	l := strings.ToLower(h)
+	for code, name := range divReason {
+		if code != isdn.RedirectUnknown && strings.Contains(l, "reason="+name) {
+			return code
+		}
+	}
+	return isdn.RedirectUnknown
+}
+
+// sipDisplay quotes a caller's name for a From header (nothing when there is none).
+func sipDisplay(name string) string {
+	name = strings.Map(func(r rune) rune {
+		if r == '"' || r == '\\' || r < 0x20 {
+			return -1
+		}
+		return r
+	}, strings.TrimSpace(name))
+	if name == "" {
+		return ""
+	}
+	return `"` + name + `" `
+}
+
+// referPRI joins two calls on one span through the phone company (a SIP REFER from BitVoice on one
+// call, naming the other with Replaces): Two B-Channel Transfer on National ISDN-2 and 5ESS, explicit
+// call transfer on EuroISDN. On success both B-channels are freed when the network clears the calls.
+func (b *Bridge) referPRI(tx *sip.ServerTx, m *sip.Message, lc *lineCall) {
+	refTo := m.Get("Refer-To")
+	i := strings.Index(strings.ToLower(refTo), "replaces=")
+	var sp *span
+	b.mu.Lock()
+	for _, s := range b.spans {
+		if s.pri != nil && lc.pri != nil && s.pri == lc.pri.PRI() {
+			sp = s
+		}
+	}
+	b.mu.Unlock()
+	if lc.pri == nil || i < 0 || sp == nil || !sp.conf.NetworkTransfer {
+		tx.Respond(sip.NewResponse(m, 603, "Only Calls On A PRI Are Handed To The Network"))
+		return
+	}
+	v := refTo[i+len("replaces="):]
+	if j := strings.IndexAny(v, ";&>"); j >= 0 {
+		v = v[:j]
+	}
+	other, _ := url.QueryUnescape(v)
+	if j := strings.IndexByte(other, ';'); j >= 0 {
+		other = other[:j] // the Call-ID, before its tags
+	}
+	_, olc := b.lineOf(other)
+	if olc == nil || olc.pri == nil || olc == lc {
+		tx.Respond(sip.NewResponse(m, 481, ""))
+		return
+	}
+	if err := lc.pri.Transfer(olc.pri); err != nil {
+		b.log.Warn("dahdi: the network did not take the transfer", "err", err)
+		tx.Respond(sip.NewResponse(m, 603, "Network Transfer Refused"))
+		return
+	}
+	r := sip.NewResponse(m, 202, "")
+	r.Set("Refer-Sub", "false")
+	tx.Respond(r)
 }

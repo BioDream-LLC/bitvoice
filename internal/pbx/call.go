@@ -3,6 +3,7 @@ package pbx
 import (
 	"fmt"
 	"github.com/biodream-llc/bitvoice/internal/i3"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -417,6 +418,9 @@ func (c *Call) startFork(t target, stageNo int) bool {
 	}
 	if t.trunk != nil && signCID != "" {
 		c.signCall(cfg, t.trunk, inv, signCID, t.number)
+	}
+	if t.trunk != nil && t.divertFrom != "" {
+		inv.Set("Diversion", fmt.Sprintf("<sip:%s@%s>;reason=%s;counter=1", t.divertFrom, e.stack.LocalHost(peer), t.divertReason))
 	}
 	if t.binding != nil && t.binding.node != "" && t.viaTrunk != "" {
 		inv.Set(nodeHeader, e.Cluster.Sign(callID, t.ext+"@"+t.viaTrunk))
@@ -1439,9 +1443,44 @@ func (c *Call) blindTransfer(transferor, stay *Leg, number string) {
 	c.mu.Unlock()
 	connect(stay, leg)
 	c.bridged()
+	go c.handToNetwork(stay, leg)
 	transferor.bye()
 	transferor.close()
 	c.e.publish("call.updated", c.info())
+}
+
+// handToNetwork: after a transfer joined two calls on the telephony cards' trunk, the bridge is asked
+// (a REFER naming the other call with Replaces) to have the phone company join them, freeing both
+// channels. It is tried only when a span takes transfers; if the network refuses, the call goes on
+// through this server as before.
+func (c *Call) handToNetwork(a, b *Leg) {
+	cfg := c.e.Config()
+	if a == nil || b == nil || a.TrunkID == "" || a.TrunkID != b.TrunkID {
+		return
+	}
+	if t := cfg.FindTrunk(a.TrunkID); t == nil || t.Protocol != "dahdi" {
+		return
+	}
+	on := false
+	for _, s := range cfg.System.Cards.Spans {
+		on = on || s.NetworkTransfer
+	}
+	if !on {
+		return
+	}
+	b.mu.Lock()
+	replaces := b.callID + ";to-tag=" + b.remoteTag + ";from-tag=" + b.localTag
+	b.mu.Unlock()
+	m := a.newRequest(sip.REFER)
+	m.Set("Refer-To", "<sip:cards@127.0.0.1?Replaces="+url.QueryEscape(replaces)+">")
+	m.Set("Refer-Sub", "false")
+	r := a.request(m)
+	switch {
+	case r != nil && r.StatusCode == 202:
+		c.e.Log.Info("transfer handed to the phone company", "call", c.ID)
+	case r != nil:
+		c.e.Log.Info("the phone company did not take the transfer; it stays on this server", "call", c.ID, "status", r.StatusCode)
+	}
 }
 
 // attendedTransfer joins the party who stays with the party on another call the transferor is in.
@@ -1487,6 +1526,7 @@ func (c *Call) attendedTransfer(transferor, stay *Leg, headers string) {
 	c.answeredBy = join.party()
 	c.mu.Unlock()
 	connect(stay, join)
+	go c.handToNetwork(stay, join)
 	notifyReferIf(transferor, "200 OK", true)
 	transferor.bye()
 	target.bye()

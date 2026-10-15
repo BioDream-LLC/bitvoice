@@ -155,7 +155,7 @@ Neither protocol has passwords. Skinny phones are accepted only from the local n
 > Both are tested against BitVoice's own test phone and test gateway, which follow the protocols, but not yet against Cisco phones or gateway hardware.`,
   },
   {
-    id: 'cards', title: 'Telephony cards', route: '/cards', keys: 'telephony card dahdi digium sangoma openvox wildcard fxs fxo analogue analog phone line pstn pots tdm bitvoice-dahdi chan_dahdi pri t1 e1 isdn primary rate did q931 libpri',
+    id: 'cards', title: 'Telephony cards', route: '/cards', keys: 'telephony card dahdi digium sangoma openvox wildcard fxs fxo analogue analog phone line pstn pots tdm bitvoice-dahdi chan_dahdi pri t1 e1 isdn primary rate did q931 libpri calling name redirecting two b-channel transfer 2bct ect',
     body: `A telephony card in the BitVoice computer (Digium, Sangoma, OpenVox and other cards with Linux DAHDI drivers) can carry analogue phones and phone company lines. A separate program, **bitvoice-dahdi**, drives the card and joins its ports to BitVoice over the computer's own network connection, so BitVoice itself never touches the kernel driver and a card problem cannot stop the phone system.
 
 ## Setting it up
@@ -179,9 +179,13 @@ A T1 (23 calls at once) or E1 (30) line run as primary rate ISDN plugs into a di
 
 Calls out take a PRI first, the analogue lines after; a busy number, a wrong number or no free channel comes back as busy, not found or unavailable, as the network says. The page shows whether each span's D-channel is up and how many of its channels are in calls. T1 channels set up with robbed-bit signalling (\`fxsks\`, \`fxoks\`) work as the analogue ports above.
 
-The PRI code is tested against libpri (the ISDN library Asterisk uses), both as the user side and as the network side, for National ISDN-2 and EuroISDN calls.
+**Names, forwarding and transfers.** A caller's name comes in with the call (from the Display element, or on National ISDN-2 from the name the network sends as a facility) and phones show it; calls out send the extension's name the same way. The number a call was forwarded from comes in as its redirecting number (BitVoice passes it on as SIP's Diversion, with the reason: busy, no answer, unconditional), and when an extension's forwarding sends a call back out on the PRI, the extension's number goes with it as the redirecting number, so the far end and the phone company know whose call it is. When an outside call is answered, BitVoice tells the network the number that answered (the connected number).
 
-Not yet: caller ID shown on analogue phones or read from analogue lines, hook flash, BRI (basic rate ISDN), E&M and MFC/R2 signalling, SS7, supplementary services on PRI (transfer, AOC, two B-channel transfer), and echo cancellation beyond what the card itself does.
+Switch on **Transfers through the phone company** on a span (user side, National ISDN-2, 5ESS or EuroISDN) and when someone transfers a caller on that line to another number on the same line, BitVoice asks the network to join the two calls itself: Two B-Channel Transfer on North American lines, explicit call transfer (the caller held, then joined) on EuroISDN. Both channels are freed as soon as the network has joined them. The line needs the service (ask the phone company for "two B-channel transfer" or "ECT"); if the network refuses, the transfer still works, through BitVoice, using both channels as before. On a span where BitVoice is the network side, another PBX may ask BitVoice to join two of its calls; BitVoice declines (it is not a switch), and the PBX keeps the calls itself.
+
+The PRI code is tested against libpri (the ISDN library Asterisk uses), both as the user side and as the network side, for National ISDN-2 and EuroISDN calls, names, redirecting and connected numbers, explicit call transfer, and the Two B-Channel Transfer request byte for byte.
+
+Not yet: caller ID shown on analogue phones or read from analogue lines, hook flash, BRI (basic rate ISDN), E&M and MFC/R2 signalling, SS7, advice of charge and DMS-100's release link trunk transfer on PRI, and echo cancellation beyond what the card itself does.
 
 > bitvoice-dahdi is tested against a simulated card, not yet against real card hardware. It must run on the same computer as BitVoice: it only talks to 127.0.0.1, and BitVoice answers its token only from there.`,
   },

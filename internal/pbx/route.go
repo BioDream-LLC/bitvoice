@@ -50,6 +50,9 @@ type target struct {
 	trunk    *config.Trunk
 	number   string // what to send to a trunk
 	confirm  bool   // follow-me to an outside number: whoever answers presses 1 to take the call
+	// divertFrom and divertReason: a call forwarded out from an extension, sent as Diversion (RFC 5806)
+	// so the carrier, or a PRI as its redirecting number, knows whose call it is.
+	divertFrom, divertReason string
 }
 
 // resolve turns a destination into a plan. depth limits no-answer chains so a loop cannot ring forever.
@@ -77,7 +80,7 @@ func (e *Engine) resolveFor(cfg *config.Config, d config.Destination, depth int,
 		if x == nil {
 			return plan{reject: 404}
 		}
-		return e.forwardPlan(cfg, x, d.Target, depth, sc)
+		return diverted(e.forwardPlan(cfg, x, d.Target, depth, sc), x, "no-answer")
 	case "conference":
 		r := cfg.FindConference(d.Target)
 		if r == nil {
@@ -163,7 +166,7 @@ func (e *Engine) resolveFor(cfg *config.Config, d config.Destination, depth int,
 		}
 		dv := e.DivertOf(x.Number)
 		if dv.All != "" && depth < 4 {
-			return e.forwardPlan(cfg, x, dv.All, depth, sc)
+			return diverted(e.forwardPlan(cfg, x, dv.All, depth, sc), x, "unconditional")
 		}
 		if a, away := e.awayNow(x.Number); away && depth < 8 {
 			if to, ok := whileAway(x, a); ok {
@@ -184,7 +187,7 @@ func (e *Engine) resolveFor(cfg *config.Config, d config.Destination, depth int,
 			}
 		}
 		if dv.Busy != "" && depth < 4 && e.onCall(x.Number) {
-			return e.forwardPlan(cfg, x, dv.Busy, depth, sc)
+			return diverted(e.forwardPlan(cfg, x, dv.Busy, depth, sc), x, "user-busy")
 		}
 		p := plan{toName: x.Name, noAnswer: x.NoAnswer}
 		if dv.NoAnswer != "" && depth < 4 {

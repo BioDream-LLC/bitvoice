@@ -222,3 +222,59 @@ func FuzzParse(f *testing.F) {
 		}
 	})
 }
+
+func FuzzFacility(f *testing.F) {
+	f.Add(nameFacility(1, "Ann Smith"))
+	f.Add(twoBCTFacility(3, 2))
+	f.Add(ectFacility(7))
+	f.Fuzz(func(t *testing.T, b []byte) {
+		parseFacility(b)
+		facilityName(b)
+		parseRedirecting(b)
+	})
+}
+
+// Transfers between BitVoice's own two sides: the user side asks, the network side's OnTransfer
+// sees the two calls, accepts, and clears them; on both switch kinds. Without OnTransfer it is refused.
+func TestTransferBothWays(t *testing.T) {
+	T200 = 100 * time.Millisecond
+	for _, sw := range []string{"ni2", "euroisdn"} {
+		t.Run(sw, func(t *testing.T) {
+			ua, na := pair()
+			user := New(ua, Config{Channels: []int{1, 2, 3}, Switch: sw})
+			net := New(na, Config{Network: true, Channels: []int{1, 2, 3}, Switch: sw})
+			joined := make(chan [2]string, 1)
+			net.OnTransfer = func(a, b *Call) bool {
+				joined <- [2]string{a.Called, b.Called}
+				go func() { a.Hangup(CauseNormal); b.Hangup(CauseNormal) }()
+				return true
+			}
+			net.Incoming = func(c *Call) { c.Answer() }
+			go user.Run()
+			go net.Run()
+			waitUp(t, user)
+			a, _ := user.Dial("2125550001", "")
+			next(t, a, "connected")
+			b, _ := user.Dial("2125550002", "")
+			next(t, b, "connected")
+			if err := a.Transfer(b); err != nil {
+				t.Fatal(err)
+			}
+			if j := <-joined; j != [2]string{"2125550001", "2125550002"} {
+				t.Fatalf("joined %v", j)
+			}
+			next(t, a, "released")
+			next(t, b, "released")
+			net.OnTransfer = nil
+			c, _ := user.Dial("2125550003", "")
+			next(t, c, "connected")
+			d, _ := user.Dial("2125550004", "")
+			next(t, d, "connected")
+			if err := c.Transfer(d); err == nil {
+				t.Fatal("a refused transfer succeeded")
+			}
+			user.Close()
+			net.Close()
+		})
+	}
+}

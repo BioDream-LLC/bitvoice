@@ -263,6 +263,22 @@ func (e *Engine) forwardPlan(cfg *config.Config, x *config.Extension, n string, 
 	return p
 }
 
+// diverted marks a forward's calls out with the extension they were forwarded from.
+func diverted(p plan, x *config.Extension, reason string) plan {
+	from := x.CallerID
+	if from == "" {
+		from = x.Number
+	}
+	for i := range p.stages {
+		for j := range p.stages[i].targets {
+			if t := &p.stages[i].targets[j]; t.trunk != nil && t.divertFrom == "" {
+				t.divertFrom, t.divertReason = from, reason
+			}
+		}
+	}
+	return p
+}
+
 // followMeStages are the stages follow-me adds after the extension's own phones.
 func (e *Engine) followMeStages(cfg *config.Config, x *config.Extension, depth int) []stage {
 	fm := x.FollowMe

@@ -2,11 +2,13 @@ package isdn
 
 import (
 	"bufio"
+	"encoding/hex"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -154,5 +156,148 @@ func TestAgainstLibpriAsNetwork(t *testing.T) {
 		t.Fatalf("cause %d", e.Cause)
 	}
 	next(t, in, "released")
+	p.Close()
+}
+
+// Names and redirecting numbers, both ways: BitVoice's SETUP as libpri reads it (National ISDN-2's
+// facility name and EuroISDN's display), and libpri's as BitVoice reads it, with the connected number
+// BitVoice answers with.
+func TestAgainstLibpriNames(t *testing.T) {
+	for _, sw := range []string{"ni2", "euro"} {
+		t.Run(sw, func(t *testing.T) {
+			link, o := startOracle(t, "net", sw, "answer")
+			p := New(link, Config{Channels: []int{1, 2, 3, 4}, ALaw: sw == "euro", Switch: sw})
+			go p.Run()
+			o.expect("UP")
+			waitUp(t, p)
+			c, err := p.DialWith(Setup{Called: "2125551234", Calling: "3125550100", Name: "Front Desk", Redirecting: "3125550111", RedirectReason: RedirectNoReply})
+			if err != nil {
+				t.Fatal(err)
+			}
+			ring := o.expect("RING")
+			if !strings.Contains(ring, "name=Front Desk") || !strings.Contains(ring, "redir=3125550111 reason=2") {
+				t.Fatalf("libpri saw %q", ring)
+			}
+			next(t, c, "connected")
+			c.Hangup(CauseNormal)
+			o.expect("HANGUP")
+			p.Close()
+		})
+	}
+	link, o := startOracle(t, "cpe", "ni2", "call")
+	p := New(link, Config{Network: true, Channels: []int{1, 2, 3}})
+	incoming := make(chan *Call, 1)
+	p.Incoming = func(c *Call) { incoming <- c }
+	go p.Run()
+	o.expect("UP")
+	in := <-incoming
+	if in.Name != "Ann Smith" || in.Redirecting != "3125550111" || in.RedirectReason != RedirectBusy {
+		t.Fatalf("got %+v", in)
+	}
+	in.Answer()
+	if l := o.expect("ANSWER"); !strings.Contains(l, "connected=2125551234") {
+		t.Fatalf("libpri: %s", l)
+	}
+	p.Close()
+}
+
+// EuroISDN explicit call transfer: BitVoice holds one call and asks the network (libpri) to join it to
+// the other; libpri reports the transfer, answers it, and clears both calls.
+func TestAgainstLibpriTransferEuro(t *testing.T) {
+	link, o := startOracle(t, "net", "euro", "ect")
+	p := New(link, Config{Channels: []int{1, 2, 3, 4}, ALaw: true, Switch: "euro"})
+	go p.Run()
+	o.expect("UP")
+	waitUp(t, p)
+	a, err := p.Dial("2125550001", "3125550100")
+	if err != nil {
+		t.Fatal(err)
+	}
+	next(t, a, "connected")
+	b, err := p.Dial("2125550002", "3125550100")
+	if err != nil {
+		t.Fatal(err)
+	}
+	next(t, b, "connected")
+	if err := b.Hold(); err == nil {
+		if err := b.Retrieve(); err != nil {
+			t.Fatalf("retrieve: %v", err)
+		}
+		o.expect("HOLD")
+		o.expect("RETRIEVE")
+	} else {
+		t.Fatalf("hold: %v", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- a.Transfer(b) }()
+	if l := o.expect("TRANSFER"); l != "TRANSFER held1=1 held2=0" {
+		t.Fatalf("libpri: %s", l)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("transfer: %v", err)
+	}
+	for _, c := range []*Call{a, b} {
+		for e := range c.Events {
+			if e.Kind == "released" {
+				break
+			}
+		}
+	}
+	if len(p.Busy()) != 0 {
+		t.Fatalf("channels still busy: %v", p.Busy())
+	}
+	p.Close()
+}
+
+// National ISDN-2 Two B-Channel Transfer: libpri (a PBX) asks BitVoice (the network) to join two
+// calls; BitVoice reads the request (and refuses it, not being a switch), and its own encoding of the
+// request is byte for byte libpri's.
+func TestAgainstLibpri2BCT(t *testing.T) {
+	link, o := startOracle(t, "cpe", "ni2", "bridge")
+	var mu sync.Mutex
+	var facs [][]byte
+	p := New(link, Config{Network: true, Channels: []int{1, 2, 3}, Trace: func(in bool, b []byte) {
+		if m, err := Parse(b); in && err == nil && m.Type == MsgFacility {
+			if d, ok := m.Get(ieFacility); ok {
+				mu.Lock()
+				facs = append(facs, d)
+				mu.Unlock()
+			}
+		}
+	}})
+	asked := make(chan *Call, 2)
+	p.Incoming = func(c *Call) {
+		c.Answer()
+		for e := range c.Events {
+			if e.Kind == "transfer-asked" {
+				asked <- c
+			}
+		}
+	}
+	go p.Run()
+	o.expect("UP")
+	o.expect("BRIDGED")
+	var c *Call
+	select {
+	case c = <-asked:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the transfer request was not read")
+	}
+	mu.Lock()
+	got := facs[0]
+	mu.Unlock()
+	var other *Call
+	p.mu.Lock()
+	for k, x := range p.calls {
+		if x != c && !k.ours {
+			other = x
+		}
+	}
+	p.mu.Unlock()
+	comps := parseFacility(got)
+	want := twoBCTFacility(comps[0].InvokeID, other.ref)
+	if hex.EncodeToString(got) != hex.EncodeToString(want) {
+		t.Fatalf("libpri sent %x, BitVoice would send %x", got, want)
+	}
 	p.Close()
 }

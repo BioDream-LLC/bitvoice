@@ -22,11 +22,16 @@ type Config struct {
 	Channels []int // the B-channels in use, numbered as Q.931 numbers them (1-23 on T1; 1-15 and 17-31 on E1)
 	ALaw     bool  // E1: G.711 A-law; T1: µ-law
 	Log      *slog.Logger
+	// Switch is the switch type: ni2 (National ISDN-2, the default), 5ess, dms100, euroisdn or qsig.
+	// It decides how names and transfers are sent.
+	Switch string
+	// Trace, when set, is given every Q.931 message, in (true) or out.
+	Trace func(in bool, msg []byte)
 }
 
 // Event is what happens to a call.
 type Event struct {
-	Kind  string // proceeding, alerting, progress, connected, disconnected, released
+	Kind  string // proceeding, alerting, progress, connected, held, retrieved, transfer-asked, disconnected, released
 	Cause int
 }
 
@@ -55,13 +60,27 @@ type Call struct {
 	Called   string
 	Calling  string
 	Outgoing bool
-	Events   chan Event
+	// Name is the caller's name (an incoming call's, as the network sent it). Redirecting is the number
+	// an incoming call was forwarded from, with RedirectReason. Connected is the number that answered
+	// an outgoing call, when the network says.
+	Name           string
+	Redirecting    string
+	RedirectReason int
+	Connected      string
+	Events         chan Event
 
 	state   int
 	timer   *time.Timer
 	retried bool
 	setup   []byte // the SETUP, for T303's one resend
 	done    bool
+
+	held       bool
+	waitFor    byte // the acknowledgement a HOLD or RETRIEVE waits for
+	waitDone   chan error
+	invokeWait bool
+	invokeID   int
+	invokeDone chan error
 }
 
 type callKey struct {
@@ -78,12 +97,19 @@ type PRI struct {
 	Incoming func(*Call)
 	// Up is told when the D-channel comes up or goes down.
 	Up func(bool)
+	// OnTransfer, on the network side, is asked when the user side asks for two of its calls to be
+	// joined (Two B-Channel Transfer, or ETSI explicit call transfer on a held call). True accepts:
+	// the result goes back, and the caller then joins the two and clears both. Unset refuses, and
+	// HOLD is refused too.
+	OnTransfer func(a, b *Call) bool
 
 	mu    sync.Mutex
 	calls map[callKey]*Call
 	busy  map[int]*Call
 	next  int
 	isUp  bool
+
+	invokes int
 }
 
 // New makes call control over a link; Run starts it.
@@ -142,7 +168,13 @@ func (p *PRI) linkUp(up bool) {
 	}
 }
 
-func (p *PRI) send(m *Message) error { return p.l.Send(m.Bytes()) }
+func (p *PRI) send(m *Message) error {
+	b := m.Bytes()
+	if p.cfg.Trace != nil {
+		p.cfg.Trace(false, b)
+	}
+	return p.l.Send(b)
+}
 
 func (c *Call) msg(t byte) *Message {
 	return &Message{CallRef: c.ref, FromSide: !c.ours, Type: t}
@@ -207,6 +239,12 @@ var ErrNoChannel = errors.New("isdn: every B-channel is busy")
 
 // Dial places a call: SETUP on a free B-channel, with the numbers.
 func (p *PRI) Dial(called, calling string) (*Call, error) {
+	return p.DialWith(Setup{Called: called, Calling: calling})
+}
+
+// DialWith places a call with a name and a redirecting number too.
+func (p *PRI) DialWith(s Setup) (*Call, error) {
+	called, calling := s.Called, s.Calling
 	p.mu.Lock()
 	if !p.isUp {
 		p.mu.Unlock()
@@ -222,17 +260,31 @@ func (p *PRI) Dial(called, calling string) (*Call, error) {
 		ref = ref%0x7FFF + 1
 	}
 	p.next = ref%0x7FFF + 1
-	c := &Call{p: p, ref: ref, ours: true, Channel: ch, Called: called, Calling: calling, Outgoing: true,
+	name := clipName(s.Name)
+	c := &Call{p: p, ref: ref, ours: true, Channel: ch, Called: called, Calling: calling, Outgoing: true, Name: name,
 		Events: make(chan Event, 16), state: stCallInit}
 	p.calls[callKey{ref, true}] = c
 	p.busy[ch] = c
 	m := c.msg(MsgSetup)
 	m.add(ieBearer, bearer(p.cfg.ALaw))
 	m.add(ieChannelID, channelID(ch, true))
+	if name != "" {
+		if p.nameFac() {
+			m.add(ieFacility, nameFacility(p.invokeID(), name))
+		}
+		if p.euro() {
+			m.add(ieDisplay, []byte(name))
+		} else {
+			m.add(ieDisplay, append([]byte{0xB1}, name...)) // with the character set, as North American switches want
+		}
+	}
 	if calling != "" {
 		m.add(ieCallingNumber, numberIE(calling, true))
 	}
 	m.add(ieCalledNumber, numberIE(called, false))
+	if s.Redirecting != "" {
+		m.add(ieRedirectingNum, redirectingIE(s.Redirecting, s.RedirectReason))
+	}
 	m.IEs = append(m.IEs, IE{ID: ieSendingComplete})
 	c.setup = m.Bytes()
 	c.arm(T303, c.onT303)
@@ -258,6 +310,9 @@ func (c *Call) onT303() {
 	_ = c.p.l.Send(setup)
 }
 
+// PRI says which D-channel the call is on.
+func (c *Call) PRI() *PRI { return c.p }
+
 // Proceeding, Alerting and Answer move an incoming call on.
 func (c *Call) Alerting() error {
 	c.p.mu.Lock()
@@ -282,6 +337,9 @@ func (c *Call) Answer() error {
 	c.state = stConnectReq
 	c.p.mu.Unlock()
 	m := c.msg(MsgConnect)
+	if c.Called != "" {
+		m.add(ieConnectedNum, numberIE(c.Called, true)) // the number that answered
+	}
 	return c.p.send(m)
 }
 
@@ -321,6 +379,9 @@ func (c *Call) Hangup(cause int) {
 
 // receive handles one Q.931 message from the D-channel.
 func (p *PRI) receive(b []byte) {
+	if p.cfg.Trace != nil {
+		p.cfg.Trace(true, b)
+	}
 	m, err := Parse(b)
 	if err != nil {
 		return
@@ -423,6 +484,15 @@ func (p *PRI) setup(m *Message) {
 	if d, ok := m.Get(ieCallingNumber); ok {
 		c.Calling = parseNumber(d)
 	}
+	if d, ok := m.Get(ieFacility); ok {
+		c.Name = facilityName(d)
+	}
+	if d, ok := m.Get(ieDisplay); ok && c.Name == "" {
+		c.Name = clipName(displayText(d))
+	}
+	if d, ok := m.Get(ieRedirectingNum); ok {
+		c.Redirecting, c.RedirectReason = parseRedirecting(d)
+	}
 	p.calls[callKey{c.ref, false}] = c
 	p.busy[ch] = c
 	c.state = stInProceeding
@@ -443,6 +513,9 @@ func (c *Call) message(m *Message) {
 	cause := CauseNormal
 	if d, ok := m.Get(ieCause); ok {
 		cause = parseCause(d)
+	}
+	if c.supplementary(m) {
+		return
 	}
 	switch m.Type {
 	case MsgCallProceeding, MsgSetupAck:
@@ -475,6 +548,9 @@ func (c *Call) message(m *Message) {
 	case MsgConnect:
 		p.mu.Lock()
 		ok := c.Outgoing && c.state != stActive && c.state < stDisconnectReq
+		if d, has := m.Get(ieConnectedNum); has {
+			c.Connected = parseNumber(d)
+		}
 		if ok {
 			c.state = stActive
 			if c.timer != nil {

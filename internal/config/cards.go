@@ -32,8 +32,12 @@ type CardSpan struct {
 	// connects to BitVoice as if it were the phone company).
 	Role string `json:"role"`
 	// Switch is the phone company's switch type: ni2, 5ess, dms100 (North America), euroisdn, qsig.
-	// Basic calls are the same on all of them; it is noted for the support desk and for what comes.
+	// It decides how callers' names and transfers are signalled.
 	Switch string `json:"switch"`
+	// NetworkTransfer hands a transfer joining two calls on this span to the phone company (Two
+	// B-Channel Transfer on ni2 and 5ess, explicit call transfer on euroisdn), freeing both channels.
+	// It needs the service on the line; without it, transfers stay on the server, both channels in use.
+	NetworkTransfer bool `json:"networkTransfer,omitempty"`
 }
 
 // Channels of a span: its B-channels and D-channel, as DAHDI numbers them.
@@ -133,6 +137,9 @@ func (c *Config) validateCards(p *Problems) {
 		case "ni2", "5ess", "dms100", "euroisdn", "qsig":
 		default:
 			p.add(f+".switch", "choose ni2, 5ess, dms100, euroisdn or qsig")
+		}
+		if s.NetworkTransfer && (s.Role != "user" || s.Switch == "dms100" || s.Switch == "qsig") {
+			p.add(f+".networkTransfer", "the phone company takes transfers only on a user-side line with ni2, 5ess or euroisdn")
 		}
 		if s.First < 1 || s.First > 1000 {
 			p.add(f+".first", "use the span's first DAHDI channel number")
