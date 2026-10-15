@@ -522,7 +522,7 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 	}
 	if len(sdpBody) > 0 {
 		offer, err = sdp.Parse(sdpBody)
-		if err != nil || offer.Audio() == nil {
+		if err != nil || offer.Audio() == nil && !hasMSRP(offer) { // text to 911 comes with no sound
 			tx.Respond(sip.NewResponse(m, 488, "No Audio"))
 			return
 		}
@@ -701,6 +701,18 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 			c.place = &pl
 		}
 	}
+	if offer != nil && offer.Audio() == nil { // a text session: only text to 911 is taken
+		if c.i3 == nil && !c.esinet { // (no phone free does not matter: a text waits on the 911 screen)
+			tx.Respond(sip.NewResponse(m, 488, "No Audio"))
+			return
+		}
+		if p.leavesByTrunk() { // an NG911 core passing calls on: it relays no text sessions
+			tx.Respond(sip.NewResponse(m, 488, "Text To 911 Is Answered At The PSAP"))
+			return
+		}
+		p = plan{local: "text911", toName: "Text to 911", direction: p.direction, trunk: p.trunk}
+		c.textOnly = true
+	}
 	c.direction, c.toName, c.trunk, c.intercom = p.direction, p.toName, p.trunk, p.intercom
 	if why := e.overLimit(p.direction); why != "" {
 		tx.Respond(sip.NewResponse(m, 503, why))
@@ -736,6 +748,7 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 	if p.direction == "inbound" {
 		a.TrunkID = inTrunk
 	}
+	a.textOK = c.i3 != nil || c.esinet
 	if offer != nil {
 		a.setRemoteSDP(offer)
 	}

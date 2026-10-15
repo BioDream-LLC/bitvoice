@@ -247,6 +247,20 @@ func (s *Server) psapRoutes() {
 		}
 		writeJSON(w, 200, l)
 	})
+	s.handle("POST /api/calls/{id}/take", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		if err := s.Engine.TakeTextCall(r.PathValue("id"), u.Username, firstNonEmpty(u.Name, u.Username)); err != nil {
+			writeError(w, 409, err.Error())
+			return
+		}
+		writeJSON(w, 200, map[string]any{"taken": true})
+	})
+	s.handle("POST /api/calls/{id}/end-text", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		if err := s.Engine.EndTextCall(r.PathValue("id")); err != nil {
+			writeError(w, 409, err.Error())
+			return
+		}
+		writeJSON(w, 200, map[string]any{"ended": true})
+	})
 	s.handle("GET /api/calls/{id}/eido", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
 		for _, c := range s.Engine.Calls() {
 			if c.ID == r.PathValue("id") && c.Emergency != nil {

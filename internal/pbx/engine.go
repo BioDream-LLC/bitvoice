@@ -686,4 +686,6 @@ type Emergency struct {
 	// Text is the call's text conversation; TextVia the ways text has come (tty, rtt, msrp, sip).
 	Text    []TextLine `json:"text,omitempty"`
 	TextVia []string   `json:"textVia,omitempty"`
+	// TextOnly is text to 911 with no voice: a call-taker takes it on the 911 screen.
+	TextOnly bool `json:"textOnly,omitempty"`
 }

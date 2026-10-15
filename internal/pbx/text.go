@@ -2,11 +2,19 @@ package pbx
 
 import (
 	"errors"
+	"fmt"
+	"net"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/biodream-llc/bitvoice/internal/media"
+	"github.com/biodream-llc/bitvoice/internal/msrp"
+	"github.com/biodream-llc/bitvoice/internal/rtt"
+	"github.com/biodream-llc/bitvoice/internal/sdp"
+	"github.com/biodream-llc/bitvoice/internal/sip"
+	"github.com/biodream-llc/bitvoice/internal/srtp"
 	"github.com/biodream-llc/bitvoice/internal/store"
 	"github.com/biodream-llc/bitvoice/internal/tty"
 )
@@ -60,12 +68,12 @@ func (c *Call) textHeard(via, s string) {
 		c.textOn = map[string]bool{}
 	}
 	c.textOn[via] = true
+	if n := len(c.text); n > 0 && c.text[n-1].Open && now.Sub(c.textAt) > textQuiet {
+		c.text[n-1].Open = false // a pause ended the caller's line
+	}
 	for _, r := range s {
 		n := len(c.text)
 		open := n > 0 && c.text[n-1].Open && c.text[n-1].From == "caller" && c.text[n-1].Via == via
-		if open && now.Sub(c.textAt) > textQuiet {
-			c.text[n-1].Open, open = false, false
-		}
 		switch r {
 		case '\n', '\r':
 			if open {
@@ -125,10 +133,13 @@ func (e *Engine) SendCallText(id, via, text, ext, name string) (TextLine, error)
 	if via == "" {
 		via = c.textVia()
 	}
-	ended := c.ended
+	ended, taken := c.ended, c.takenBy != ""
 	c.mu.Unlock()
 	if ended {
 		return TextLine{}, errors.New("the call has ended")
+	}
+	if !taken {
+		return TextLine{}, errors.New("take the call before sending text")
 	}
 	var err error
 	switch via {
@@ -162,10 +173,14 @@ func (e *Engine) SendCallText(id, via, text, ext, name string) (TextLine, error)
 // textVia is how text reaches this caller: the session's own text channel when there is one, else TTY.
 // Called with c.mu held.
 func (c *Call) textVia() string {
-	for _, v := range []string{"msrp", "sip", "rtt"} {
-		if c.textOn[v] {
-			return v
-		}
+	if c.caller != nil && c.caller.msrpOn.Load() {
+		return "msrp"
+	}
+	if c.textOn["sip"] {
+		return "sip"
+	}
+	if c.caller != nil && c.caller.rttOn.Load() {
+		return "rtt"
 	}
 	return "tty"
 }
@@ -174,6 +189,29 @@ func (c *Call) textVia() string {
 func (c *Call) textSender(via string) func(string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if via == "msrp" && c.caller != nil {
+		l := c.caller
+		l.mu.Lock()
+		ss := l.msrp
+		l.mu.Unlock()
+		if ss == nil {
+			return nil
+		}
+		return ss.Send
+	}
+	if via == "rtt" && c.caller != nil {
+		l := c.caller
+		l.mu.Lock()
+		out := l.textOut
+		l.mu.Unlock()
+		if out == nil {
+			return nil
+		}
+		return func(text string) error {
+			out.Send(strings.ReplaceAll(text, "\n", string(rtt.LineSep)) + string(rtt.LineSep))
+			return nil
+		}
+	}
 	return c.senders[via]
 }
 
@@ -209,4 +247,371 @@ func (c *Call) sendTTY(text string) error {
 		connect(a, l)
 	}
 	return nil
+}
+
+// describeText answers a 911 caller's real-time text stream (an m=text line with T.140, RFC 4103):
+// BitVoice itself is the far end, and the text goes to the call-taker's screen, since desk phones
+// carry no text. Any other text stream, or one on a call that is not a 911 call, is refused.
+func (l *Leg) describeText(s, offer *sdp.Session) {
+	for i, m := range s.Media {
+		if i >= len(offer.Media) {
+			continue
+		}
+		o := offer.Media[i]
+		if o.Type == "message" && strings.Contains(strings.ToUpper(o.Proto), "MSRP") {
+			if o.Port == 0 || !l.textOK || strings.Contains(strings.ToUpper(o.Proto), "TLS") || !l.msrpFor(m, o) {
+				m.Port = 0 // MSRP over TLS is not offered yet
+			}
+			continue
+		}
+		if o.Type != "text" {
+			continue
+		}
+		t140, red := 0, 0
+		for _, k := range o.Codecs() {
+			switch strings.ToLower(k.Name) {
+			case "t140":
+				if t140 == 0 {
+					t140 = k.PT
+				}
+			case "red":
+				if red == 0 {
+					red = k.PT
+				}
+			}
+		}
+		ep := (*media.Endpoint)(nil)
+		if o.Port != 0 && t140 != 0 && l.textOK { // c.mu may be held here: only the leg's own state is read
+			ep = l.textEndpoint(t140, red, s.Connection(m), o)
+		}
+		if ep == nil {
+			m.Port = 0
+			continue
+		}
+		m.Type, m.Port, m.Proto = "text", ep.Port(), o.Proto
+		m.Formats = []string{strconv.Itoa(t140)}
+		m.Lines = []sdp.Line{{Type: 'a', Value: fmt.Sprintf("rtpmap:%d t140/1000", t140)}}
+		if red != 0 {
+			m.Formats = []string{strconv.Itoa(red), strconv.Itoa(t140)}
+			m.Lines = append([]sdp.Line{{Type: 'a', Value: fmt.Sprintf("rtpmap:%d red/1000", red)}, {Type: 'a', Value: fmt.Sprintf("fmtp:%d %d/%d/%d", red, t140, t140, t140)}}, m.Lines...)
+		}
+		m.Lines = append(m.Lines, sdp.Line{Type: 'a', Value: "sendrecv"})
+		if o.Secure() {
+			l.mu.Lock()
+			key := l.textKey
+			l.mu.Unlock()
+			if key == nil {
+				m.Port = 0
+				continue
+			}
+			m.SetCrypto([]sdp.Crypto{{Tag: l.textTag, Suite: l.textSuite, Key: key}})
+		}
+	}
+}
+
+// textEndpoint opens (once) the leg's text stream, sending to the address the caller offered.
+func (l *Leg) textEndpoint(t140, red int, _ string, o *sdp.Media) *media.Endpoint {
+	l.mu.Lock()
+	if l.text != nil || l.ended {
+		ep := l.text
+		l.mu.Unlock()
+		return ep
+	}
+	remote := l.remoteSDP
+	l.mu.Unlock()
+	host := ""
+	if l.peer.Local.IsValid() {
+		host = l.peer.Local.String()
+	}
+	ep, err := l.e.pool.AllocateOn(host)
+	if err != nil {
+		l.e.Log.Warn("no port for real-time text", "err", err)
+		return nil
+	}
+	var key []byte
+	var tag int
+	var suite string
+	if o.Secure() {
+		cr, ok := supportedCrypto(o)
+		if !ok {
+			ep.Close()
+			return nil
+		}
+		key, tag, suite = newMasterKey(), cr.Tag, cr.Suite
+		in, err1 := srtp.New(suite, cr.Key[:16], cr.Key[16:])
+		out, err2 := srtp.New(suite, key[:16], key[16:])
+		if err1 != nil || err2 != nil {
+			ep.Close()
+			return nil
+		}
+		ep.SetSRTP(in, out)
+	}
+	if remote != nil {
+		ep.SetRemote(remote.Connection(o), o.Port)
+	}
+	recv := &rtt.Receiver{T140: t140, Red: red}
+	c := l.call
+	ep.Listen(func(pkt []byte) {
+		if s := recv.Packet(pkt); s != "" {
+			s = strings.NewReplacer(string(rtt.LineSep), "\n", "\r\n", "\n").Replace(s)
+			c.textHeard("rtt", s)
+		}
+	})
+	out := &rtt.Sender{T140: t140, Red: red, SSRC: uint32(time.Now().UnixNano()), Write: ep.SendRTP}
+	l.mu.Lock()
+	if l.text != nil || l.ended {
+		l.mu.Unlock()
+		ep.Close()
+		return l.text
+	}
+	l.text, l.textOut, l.textKey, l.textTag, l.textSuite = ep, out, key, tag, suite
+	l.mu.Unlock()
+	ep.Start()
+	l.rttOn.Store(true) // offered: the call-taker may answer by text before any arrives
+	return ep
+}
+
+func (l *Leg) closeText() {
+	l.mu.Lock()
+	ep, out := l.text, l.textOut
+	l.text, l.textOut = nil, nil
+	ss := l.msrp
+	l.mu.Unlock()
+	if ss != nil {
+		ss.Close()
+	}
+	if out != nil {
+		out.Close()
+	}
+	if ep != nil {
+		ep.Close()
+	}
+}
+
+// leavesByTrunk reports whether a plan sends the call on to another network.
+func (p plan) leavesByTrunk() bool {
+	for _, s := range p.stages {
+		for _, t := range s.targets {
+			if t.viaTrunk != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// hasMSRP reports whether a description offers an MSRP text session (text to 911).
+func hasMSRP(s *sdp.Session) bool {
+	for _, m := range s.Media {
+		if m.Type == "message" && m.Port != 0 && strings.Contains(strings.ToUpper(m.Proto), "MSRP") {
+			return true
+		}
+	}
+	return false
+}
+
+// answerText answers a text-to-911 session itself: the conversation waits on the 911 screen until a
+// call-taker takes it.
+func (c *Call) answerText() {
+	c.mu.Lock()
+	a := c.caller
+	offer := c.offer
+	if c.ended || a == nil || offer == nil {
+		c.mu.Unlock()
+		return
+	}
+	ans := offer.Clone()
+	stripICE(ans)
+	ans.SetConnection(c.e.mediaHost(a.peer))
+	for _, m := range ans.Media {
+		m.Port = 0
+	}
+	ans.Lines = replaceOrigin(ans.Lines, nil)
+	c.mu.Unlock()
+	a.describeText(ans, offer)
+	if !a.msrpOn.Load() {
+		c.reject(488, "No Text Session")
+		return
+	}
+	c.mu.Lock()
+	c.localAnswer = true
+	c.answer = time.Now()
+	c.answeredBy = "Text to 911"
+	a.mu.Lock()
+	a.localSDP = ans
+	a.answered = true
+	a.mu.Unlock()
+	ok := c.response(200, ans)
+	c.mu.Unlock()
+	c.e.mu.Lock()
+	delete(c.e.pending, a.invite.Branch())
+	c.e.mu.Unlock()
+	a.invite.Respond(ok)
+	c.ansOnce.Do(func() { close(c.answered) })
+	c.e.publish("call.updated", c.info())
+}
+
+// TakeTextCall makes a call-taker the one handling a text-to-911 conversation: the answer that counts
+// for answer times, and the moment CAD is told.
+func (e *Engine) TakeTextCall(id, ext, name string) error {
+	e.mu.Lock()
+	c := e.calls[id]
+	e.mu.Unlock()
+	if c == nil {
+		return errors.New("no such call")
+	}
+	c.mu.Lock()
+	text, taken, ended := c.textOnly, c.takenBy, c.ended
+	c.mu.Unlock()
+	switch {
+	case ended:
+		return errors.New("the conversation has ended")
+	case !text:
+		return errors.New("this is a voice call: answer it on a phone")
+	case taken != "":
+		return fmt.Errorf("already taken by %s", taken)
+	}
+	if ext == "" {
+		ext = name
+	}
+	c.emergencyAnswered(&Leg{Ext: ext, Name: name})
+	e.publish("call.updated", c.info())
+	return nil
+}
+
+// EndTextCall ends a text-to-911 conversation from the PSAP's side.
+func (e *Engine) EndTextCall(id string) error {
+	e.mu.Lock()
+	c := e.calls[id]
+	e.mu.Unlock()
+	if c == nil {
+		return errors.New("no such call")
+	}
+	c.hangup("ended by the call-taker", "callee")
+	return nil
+}
+
+// msrpFor opens (once) the leg's text-to-911 session for an offered m=message line, and fills in the
+// answer's line. It listens for the TCC's connection, or connects when the TCC asks to be passive.
+func (l *Leg) msrpFor(m, o *sdp.Media) bool {
+	l.mu.Lock()
+	ss := l.msrp
+	ended := l.ended
+	l.mu.Unlock()
+	path, _ := o.Attr("path")
+	setup, _ := o.Attr("setup")
+	if ended || path == "" {
+		return false
+	}
+	if ss == nil {
+		host := l.e.mediaHost(l.peer)
+		active := setup == "passive"
+		var ln net.Listener
+		port := 9 // RFC 4975 8.1: an active end that will not be connected to says port 9
+		if !active {
+			var err error
+			if ln, err = net.Listen("tcp", net.JoinHostPort(host, "0")); err != nil {
+				l.e.Log.Warn("no port for text to 911", "err", err)
+				return false
+			}
+			port = ln.Addr().(*net.TCPAddr).Port
+		}
+		ss = msrp.New(msrp.Path(host, port), strings.Fields(path)[0])
+		c := l.call
+		ss.OnMessage = func(msg msrp.Message) {
+			if s, ok := msg.Text(); ok && strings.TrimSpace(s) != "" {
+				c.textHeard("msrp", strings.TrimRight(s, "\r\n")+"\n")
+			}
+		}
+		l.mu.Lock()
+		l.msrp, l.msrpActive = ss, active
+		l.mu.Unlock()
+		go l.serveMSRP(ss, ln)
+	}
+	m.Type, m.Port, m.Proto = "message", portOf(ss.Local), o.Proto
+	m.Formats = []string{"*"}
+	m.Lines = []sdp.Line{{Type: 'a', Value: "accept-types:text/plain message/cpim"}, {Type: 'a', Value: "path:" + ss.Local}}
+	if l.msrpActive {
+		m.Lines = append(m.Lines, sdp.Line{Type: 'a', Value: "setup:active"})
+	} else if setup != "" {
+		m.Lines = append(m.Lines, sdp.Line{Type: 'a', Value: "setup:passive"})
+	}
+	m.Lines = append(m.Lines, sdp.Line{Type: 'a', Value: "sendrecv"})
+	l.msrpOn.Store(true)
+	return true
+}
+
+func portOf(path string) int {
+	hp, err := msrp.HostPort(path)
+	if err != nil {
+		return 0
+	}
+	_, p, _ := net.SplitHostPort(hp)
+	n, _ := strconv.Atoi(p)
+	return n
+}
+
+// serveMSRP runs a text-to-911 session: it takes the TCC's connection (one, within 30 seconds) or
+// makes it, then reads until either side ends. The call ends when the session does.
+func (l *Leg) serveMSRP(ss *msrp.Session, ln net.Listener) {
+	var conn net.Conn
+	var err error
+	if ln != nil {
+		_ = ln.(*net.TCPListener).SetDeadline(time.Now().Add(30 * time.Second))
+		conn, err = ln.Accept()
+		ln.Close()
+	} else {
+		hp, herr := msrp.HostPort(ss.Remote)
+		if herr != nil {
+			err = herr
+		} else if conn, err = net.DialTimeout("tcp", hp, 10*time.Second); err == nil {
+			go func() {
+				if ss.Wait(5 * time.Second) {
+					_ = ss.Bind()
+				}
+			}()
+		}
+	}
+	if err != nil {
+		l.e.Log.Warn("text to 911: no connection from the text control centre", "call", l.call.ID, "err", err)
+		l.call.hangup("the text session never connected", "system")
+		return
+	}
+	if err := ss.Serve(conn); err != nil {
+		l.e.Log.Warn("text to 911 session failed", "call", l.call.ID, "err", err)
+	}
+	l.mu.Lock()
+	ended := l.ended
+	l.mu.Unlock()
+	if !ended && l.call.textOnly {
+		l.call.hangup("the text session closed", "caller")
+	}
+}
+
+// textMessage takes a SIP MESSAGE (RFC 3428) in a 911 caller's dialog as text from the caller, and
+// opens the way back: replies go the same way. It reports false for a message with no text in it.
+func (l *Leg) textMessage(m *sip.Message) bool {
+	msg := msrp.Message{ContentType: m.Get("Content-Type"), Body: m.Body}
+	s, ok := msg.Text()
+	if !ok || strings.TrimSpace(s) == "" || len(s) > maxTextLine {
+		return false
+	}
+	c := l.call
+	c.mu.Lock()
+	if c.senders == nil {
+		c.senders = map[string]func(string) error{}
+	}
+	c.senders["sip"] = func(text string) error {
+		r := l.newRequest(sip.MESSAGE)
+		r.Set("Content-Type", "text/plain;charset=UTF-8")
+		r.Body = []byte(text)
+		resp := l.request(r)
+		if resp == nil || resp.StatusCode >= 300 {
+			return errors.New("the caller's side did not take the message")
+		}
+		return nil
+	}
+	c.mu.Unlock()
+	c.textHeard("sip", strings.TrimRight(s, "\r\n")+"\n")
+	return true
 }

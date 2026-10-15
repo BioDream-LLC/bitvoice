@@ -6,8 +6,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/biodream-llc/bitvoice/internal/media"
+	"github.com/biodream-llc/bitvoice/internal/msrp"
+	"github.com/biodream-llc/bitvoice/internal/rtt"
 	"github.com/biodream-llc/bitvoice/internal/sdp"
 	"github.com/biodream-llc/bitvoice/internal/sip"
 )
@@ -59,6 +62,16 @@ type Leg struct {
 	remoteKey []byte
 	// video carries the call's video, when both parties send it: relayed as it is, keyed apart.
 	video      *media.Endpoint
+	text       *media.Endpoint // real-time text (RFC 4103), on a 911 caller's leg
+	textOut    *rtt.Sender
+	textOK     bool          // set when the leg is made: a 911 caller, whose text BitVoice answers
+	rttOn      atomic.Bool   // a text stream is open
+	msrp       *msrp.Session // text to 911 (MSRP), on a 911 caller's leg
+	msrpActive bool          // BitVoice connects to the TCC, rather than the TCC to BitVoice
+	msrpOn     atomic.Bool
+	textKey    []byte // its SRTP key, when the caller encrypts it
+	textTag    int
+	textSuite  string
 	vLocalKey  []byte
 	vRemoteKey []byte
 	vSuite     string
@@ -134,6 +147,7 @@ func (l *Leg) close() {
 	stopVideoConversion(l)
 	l.closeVideo()
 	l.closeImage()
+	l.closeText()
 }
 
 // receive handles a request inside this leg's dialog.
@@ -188,7 +202,13 @@ func (l *Leg) receive(tx *sip.ServerTx, in *sip.Incoming) {
 			fwd.Body = m.Body
 			go other.request(fwd)
 		}
-	case sip.OPTIONS, sip.NOTIFY, sip.MESSAGE:
+	case sip.MESSAGE:
+		if l.textOK && l.textMessage(m) {
+			ok()
+			return
+		}
+		ok()
+	case sip.OPTIONS, sip.NOTIFY:
 		ok()
 	case sip.CANCEL:
 		ok()
@@ -339,6 +359,7 @@ func (l *Leg) answerFor(offer *sdp.Session) *sdp.Session {
 	if l.secure(ans, offer) != nil {
 		return nil
 	}
+	l.describeText(ans, offer)
 	return ans
 }
 
@@ -503,6 +524,10 @@ func (l *Leg) describeFor(from *sdp.Session) *sdp.Session {
 			offerVideoAlternatives(video) // a party with the other codec can still be shown
 		}
 	}
+	if l.inbound && offer != nil {
+		alignToOffer(s, offer)
+		l.describeText(s, offer)
+	}
 	return s
 }
 
@@ -554,4 +579,33 @@ func (l *Leg) charge(m *sip.Message) bool {
 	l.call.mu.Unlock()
 	l.e.publish("call.charged", map[string]any{"call": l.call.ID, "trunk": l.TrunkID, "charge": c.String(), "final": c.Final})
 	return true
+}
+
+// alignToOffer makes an answer hold one media line for each line of the offer, in the offer's order,
+// as RFC 3264 6 requires: each offered line takes the answer's next line of the same type, and a line
+// the answer lacks is refused (port 0). The other party's answer may have fewer lines than the offer
+// this party made, since BitVoice offered it only what it carries.
+func alignToOffer(s, offer *sdp.Session) {
+	if len(s.Media) == len(offer.Media) {
+		return
+	}
+	used := make([]bool, len(s.Media))
+	out := make([]*sdp.Media, 0, len(offer.Media))
+	for _, o := range offer.Media {
+		var pick *sdp.Media
+		for j, m := range s.Media {
+			if !used[j] && m.Type == o.Type {
+				used[j], pick = true, m
+				break
+			}
+		}
+		if pick == nil {
+			pick = &sdp.Media{Type: o.Type, Port: 0, Proto: o.Proto, Formats: append([]string(nil), o.Formats...)}
+			if len(pick.Formats) == 0 {
+				pick.Formats = []string{"0"}
+			}
+		}
+		out = append(out, pick)
+	}
+	s.Media = out
 }

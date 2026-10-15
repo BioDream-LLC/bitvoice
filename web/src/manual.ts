@@ -1788,7 +1788,7 @@ These exports hold no SIP passwords, so each extension gets a new one; voicemail
 Phones and apps that share a video codec (most use H.264) get each other's video as it is. When two parties have none in common (a desk phone with only H.264 and a browser with only VP8), switch on **Convert video between H.264 and VP8** in Settings: BitVoice then offers both codecs, answers each party in its own, and converts each way with **ffmpeg**, which must be installed on the server (apt install ffmpeg, brew install ffmpeg; or give its path). Conversion costs about a processor core per call and adds a little delay, so it is off by default and used only when needed. Settings says whether ffmpeg was found.`,
   },
   {
-    id: 'psap', title: '911 calls (the 911 profile)', route: '/psap', keys: '911 psap ng911 i3 esinet location pidf-lo held rebid ali spill eido cad nena log answer time call-taker tty tdd baudot deaf text',
+    id: 'psap', title: '911 calls (the 911 profile)', route: '/psap', keys: '911 psap ng911 i3 esinet location pidf-lo held rebid ali spill eido cad nena log answer time call-taker tty tdd baudot deaf text rtt real-time text msrp tcc text to 911 sms',
     body: `> **Lab and design-partner track.** Not certified for live 911 or radio dispatch, and not yet tried with a live ESInet, P25 system or CAD. Use it in a lab or in shadow mode beside your current equipment. Switch on **Public-safety profiles (lab)** in [Settings](#/settings) to show it in the menu.
 
 BitVoice answers 911 calls as a PSAP's call-handling system: calls from the emergency services network (the ESInet, NENA i3) arrive with the caller's location and the network's data, the call-taker sees them at once, and CAD is told when the call is answered.
@@ -1817,7 +1817,13 @@ Location comes in the call (by value), or as a reference BitVoice fetches with H
 
 **Transfers.** A 911 call sent on to another PSAP keeps its location: the PIDF-LO goes with the call.
 
-What is not here yet: text to 911 and real-time text (RTT).
+**Real-time text (RTT).** A phone that sends text beside its voice (RFC 4103, as VoLTE phones and NG911 calls do) has its text answered by BitVoice itself, since desk phones show none: each character appears on the call as the caller types it, and your reply goes back as text. Lost packets are made good by the redundancy RTT carries; text lost beyond it shows as �.
+
+**Text to 911.** A text control centre (TCC) sends texts to the PSAP as a session with no voice (MSRP, RFC 4975, over the ESInet trunk). BitVoice answers it and it waits on **911 calls** marked **Text to 911**, with the texts that have come; nobody's phone rings. **Take this text** makes you the call-taker (the answer time is counted then, and CAD gets the ALI spill and the EIDO then); reply in the box under the conversation, and **End conversation** when done. The TCC closing the session ends it too. A SIP MESSAGE sent inside a 911 call's dialog is taken as the caller's text the same way, and replies go back by SIP MESSAGE. Texts are taken only from trunks marked **From the ESInet**.
+
+The whole conversation, whichever way it came, is kept with the call in the call history and in the i3 log.
+
+What is not here yet: MSRP over TLS (TCP only for now), and passing a text session on through the NG911 core (the ESRP routes voice; a text session is answered where it arrives).
 `,
   },
   {

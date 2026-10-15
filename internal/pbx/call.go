@@ -55,6 +55,7 @@ type Call struct {
 	textAt             time.Time                     // the caller's last character
 	senders            map[string]func(string) error // how to send text on each of the call's text channels
 	ttySend            sync.Mutex
+	textOnly           bool      // text to 911 with no voice: answered by BitVoice, taken on the 911 screen
 	esinet             bool      // arrived on a trunk from the ESInet
 	srcIP              string    // the address an ESInet call came from (for the BCF)
 	suspicious         bool      // the BCF let it through marked suspicious
@@ -120,6 +121,13 @@ func (c *Call) info() CallInfo {
 		for v := range c.textOn {
 			em.TextVia = append(em.TextVia, v)
 		}
+		if c.caller != nil && c.caller.rttOn.Load() && !c.textOn["rtt"] {
+			em.TextVia = append(em.TextVia, "rtt")
+		}
+		if c.caller != nil && c.caller.msrpOn.Load() && !c.textOn["msrp"] {
+			em.TextVia = append(em.TextVia, "msrp")
+		}
+		em.TextOnly = c.textOnly
 		slices.Sort(em.TextVia)
 		ci.Emergency = em
 	}
@@ -974,6 +982,8 @@ func (c *Call) finish(code int, reason, disposition, by, cause string) {
 // answerLocal answers a call BitVoice handles itself: the echo test or voicemail.
 func (c *Call) answerLocal(p plan) {
 	switch p.local {
+	case "text911":
+		c.answerText()
 	case "echo":
 		if c.answerHere("Echo test") {
 			c.caller.ep.Echo()
@@ -1309,7 +1319,7 @@ func (c *Call) writeRecord(info CallInfo, recording string) {
 func (c *Call) checkMedia() {
 	const deadAfter = 60 * time.Second
 	c.mu.Lock()
-	if c.ended || (c.callee == nil && !c.localAnswer) || c.answer.IsZero() || time.Since(c.answer) < deadAfter {
+	if c.ended || c.textOnly || (c.callee == nil && !c.localAnswer) || c.answer.IsZero() || time.Since(c.answer) < deadAfter {
 		c.mu.Unlock()
 		return
 	}

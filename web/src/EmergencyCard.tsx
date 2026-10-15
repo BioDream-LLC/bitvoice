@@ -1,7 +1,7 @@
-import { AlertTriangle, Building2, Crosshair, ExternalLink, FileJson, Keyboard, MapPin, MessageSquareText, Phone, RefreshCw, Send, Smartphone, User } from 'lucide-react'
+import { AlertTriangle, Building2, Crosshair, ExternalLink, FileJson, Hand, Keyboard, MapPin, MessageSquareText, Phone, PhoneOff, RefreshCw, Send, Smartphone, User } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { errorOf, useRebidMutation, useSendCallTextMutation, type Call, type Civic, type Location, type TextLine, type TextVia } from './api'
+import { errorOf, useEndTextCallMutation, useRebidMutation, useSendCallTextMutation, useTakeTextCallMutation, type Call, type Civic, type Location, type TextLine, type TextVia } from './api'
 import { Badge, relTime } from './ui'
 
 export function streetLine(c: Civic) {
@@ -38,11 +38,13 @@ export function EmergencyCard({ call }: { call: Call }) {
   return (
     <article className={`card space-y-3 border-l-4 p-4 ${answered ? 'border-l-emerald-500' : 'border-l-rose-500'}`} aria-label={`911 call from ${callback}`}>
       <header className="flex flex-wrap items-center gap-2">
-        <Phone size={16} className={answered ? 'text-emerald-300' : 'animate-pulse text-rose-300'} aria-hidden />
+        {em.textOnly ? <MessageSquareText size={16} className={answered ? 'text-emerald-300' : 'animate-pulse text-rose-300'} aria-hidden />
+          : <Phone size={16} className={answered ? 'text-emerald-300' : 'animate-pulse text-rose-300'} aria-hidden />}
         <span className="font-mono text-lg font-semibold text-sky-200">{callback}</span>
         {call.fromName && call.fromName !== callback && <span className="text-slate-300">{call.fromName}</span>}
-        <Badge status={answered ? 'ok' : 'fail'}>{answered ? `Taken by ${em.takenBy} ${em.takenName ?? ''} ${relTime(em.takenAt!)}` : held ? `Waiting for a call-taker since ${relTime(call.start)}` : `Ringing since ${relTime(call.start)}`}</Badge>
+        <Badge status={answered ? 'ok' : 'fail'}>{answered ? `Taken by ${em.takenBy} ${em.takenName ?? ''} ${relTime(em.takenAt!)}` : held || em.textOnly ? `Waiting for a call-taker since ${relTime(call.start)}` : `Ringing since ${relTime(call.start)}`}</Badge>
         {em.esinet && <Badge status="info">ESInet</Badge>}
+        {em.textOnly && <Badge status="warn">Text to 911</Badge>}
         {em.service && em.service !== 'urn:service:sos' && <Badge status="info">{em.service.replace('urn:service:', '')}</Badge>}
       </header>
 
@@ -84,6 +86,7 @@ export function EmergencyCard({ call }: { call: Call }) {
       <Conversation call={call} answered={answered} />
 
       <footer className="flex flex-wrap items-center gap-2">
+        {em.textOnly && <TextControls id={call.id} taken={answered} />}
         {em.locationUri && <button className="btn" disabled={isLoading} onClick={doRebid}><RefreshCw size={14} className="text-sky-300" aria-hidden /> {isLoading ? 'Fetching…' : 'Rebid location'}</button>}
         {em.rebid && <span className="text-xs text-slate-500">fetched again {relTime(em.rebid)}</span>}
         <a className="btn" href={`/api/calls/${call.id}/eido`} target="_blank" rel="noreferrer"><FileJson size={14} className="text-violet-300" aria-hidden /> EIDO</a>
@@ -140,4 +143,16 @@ function Conversation({ call, answered }: { call: Call; answered: boolean }) {
       )}
     </section>
   )
+}
+
+/** Take or end a text-to-911 conversation: there is no phone to pick up, so it is taken here. */
+function TextControls({ id, taken }: { id: string; taken: boolean }) {
+  const [take, { isLoading: taking }] = useTakeTextCallMutation()
+  const [end, { isLoading: ending }] = useEndTextCallMutation()
+  const run = async (f: () => Promise<unknown>, ok: string) => {
+    try { await f(); toast.success(ok) } catch (e) { toast.error('Could not do that', { description: errorOf(e).message }) }
+  }
+  return taken
+    ? <button className="btn" disabled={ending} onClick={() => run(() => end(id).unwrap(), 'Conversation ended')}><PhoneOff size={14} className="text-rose-300" aria-hidden /> End conversation</button>
+    : <button className="btn btn-primary" disabled={taking} onClick={() => run(() => take(id).unwrap(), 'Conversation taken')}><Hand size={14} aria-hidden /> Take this text</button>
 }

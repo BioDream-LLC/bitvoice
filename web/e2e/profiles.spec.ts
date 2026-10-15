@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import dgram from 'node:dgram'
+import net from 'node:net'
 import { readFileSync } from 'node:fs'
 import { signIn } from './helpers'
 
@@ -276,4 +277,81 @@ test('911 calls page: TTY setting and text replies', async ({ page }) => {
   })
   expect(r.status).toBe(409)
   expect(JSON.stringify(r.body)).toContain('no such call')
+})
+
+/** A stand-in text control centre: offers text to 911 over SIP and MSRP, as a TCC does, and reads the
+ * PSAP's replies. */
+async function standInTCC() {
+  const sip = dgram.createSocket('udp4')
+  await new Promise<void>((r) => sip.bind(0, '127.0.0.1', r))
+  const callId = `tcc-${Date.now()}`
+  const replies: string[] = []
+  let bye = false, answer = '', tag = ''
+  sip.on('message', (m, from) => {
+    const s = m.toString()
+    if (s.startsWith('SIP/2.0 200') && /CSeq: 1 INVITE/i.test(s)) {
+      answer = s.split('\r\n\r\n')[1]
+      tag = /\r\nTo: (.*)/i.exec(s)![1]
+      sip.send(`ACK sip:127.0.0.1:25060 SIP/2.0\r\nVia: SIP/2.0/UDP 127.0.0.1:${sip.address().port};branch=z9hG4bKack${Date.now()}\r\nFrom: <sip:+17175550142@tcc.example.net>;tag=tcc1\r\nTo: ${tag}\r\nCall-ID: ${callId}\r\nCSeq: 1 ACK\r\nContent-Length: 0\r\n\r\n`, from.port, from.address)
+    }
+    if (s.startsWith('BYE ')) {
+      bye = true
+      const keep = s.split('\r\n').filter((l) => /^(Via|From|To|Call-ID|CSeq):/i.test(l)).join('\r\n')
+      sip.send(`SIP/2.0 200 OK\r\n${keep}\r\nContent-Length: 0\r\n\r\n`, from.port, from.address)
+    }
+  })
+  const sdp = 'v=0\r\no=tcc 1 1 IN IP4 127.0.0.1\r\ns=-\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\nm=message 9 TCP/MSRP *\r\na=accept-types:text/plain\r\na=path:msrp://127.0.0.1:9/tcc1;tcp\r\na=setup:active\r\n'
+  sip.send(`INVITE urn:service:sos SIP/2.0\r\nVia: SIP/2.0/UDP 127.0.0.1:${sip.address().port};branch=z9hG4bKinv${Date.now()}\r\nFrom: <sip:+17175550142@tcc.example.net>;tag=tcc1\r\nTo: <urn:service:sos>\r\nCall-ID: ${callId}\r\nCSeq: 1 INVITE\r\nContact: <sip:tcc@127.0.0.1:${sip.address().port}>\r\nMax-Forwards: 70\r\nContent-Type: application/sdp\r\nContent-Length: ${sdp.length}\r\n\r\n${sdp}`, 25060, '127.0.0.1')
+  await expect.poll(() => answer, { timeout: 5000 }).toContain('m=message')
+  const path = /a=path:(\S+)/.exec(answer)![1]
+  const [, host, port] = /msrp:\/\/([^:]+):(\d+)\//.exec(path)!
+  const sock = net.connect(Number(port), host)
+  await new Promise<void>((r) => sock.on('connect', () => r()))
+  let buf = ''
+  sock.on('data', (d) => {
+    buf += d.toString()
+    for (let m; (m = /MSRP (\S+) SEND\r\n[\s\S]*?\r\n\r\n([\s\S]*?)\r\n-------\1\$\r\n/.exec(buf));) {
+      replies.push(m[2]); buf = buf.slice(m.index + m[0].length)
+      sock.write(`MSRP ${m[1]} 200 OK\r\nTo-Path: ${path}\r\nFrom-Path: msrp://127.0.0.1:9/tcc1;tcp\r\n-------${m[1]}$\r\n`)
+    }
+  })
+  const send = (text: string) => {
+    const tid = `t${Math.random().toString(36).slice(2, 10)}`
+    const n = Buffer.byteLength(text)
+    sock.write(`MSRP ${tid} SEND\r\nTo-Path: ${path}\r\nFrom-Path: msrp://127.0.0.1:9/tcc1;tcp\r\nMessage-ID: ${tid}\r\nByte-Range: 1-${n}/${n}\r\nContent-Type: text/plain\r\n\r\n${text}\r\n-------${tid}$\r\n`)
+  }
+  return { send, replies, byed: () => bye, close: () => { sock.destroy(); sip.close() } }
+}
+
+// Text to 911: a TCC's session shows on the 911 page, a call-taker takes it, replies, and ends it.
+test('text to 911 from a text control centre', async ({ page }) => {
+  await signIn(page)
+  const ok = await page.evaluate(async () => {
+    const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
+    const tr = await fetch('./api/trunks', { method: 'POST', headers: H, body: JSON.stringify({ name: 'ESInet', enabled: true, host: '127.0.0.1', port: 5099, transport: 'udp', codecs: [], esinet: true, register: false, allowFrom: ['127.0.0.1'] }) })
+    const t = (await tr.json()).item
+    const r = await fetch('./api/inbound-routes', { method: 'POST', headers: H, body: JSON.stringify({ name: '911 from the ESInet', did: '', trunk: t.id, destination: { type: 'hangup', target: '' } }) })
+    return r.ok && !!t.id
+  })
+  expect(ok).toBe(true)
+  const tcc = await standInTCC()
+  try {
+    tcc.send('there is a man outside my window')
+    await page.goto('./#/psap')
+    const card = page.getByRole('article', { name: /911 call from \+?17175550142/ })
+    await expect(card.getByText('Text to 911').first()).toBeVisible()
+    await expect(card.getByText('there is a man outside my window')).toBeVisible()
+    await expect(card.getByRole('textbox', { name: 'Reply' })).toHaveCount(0) // not yet taken
+    await card.getByRole('button', { name: 'Take this text' }).click()
+    await expect(card.getByText(/Taken by/)).toBeVisible()
+    await card.getByRole('textbox', { name: 'Reply' }).fill('Are the doors locked?')
+    await card.getByRole('button', { name: 'Send' }).click()
+    await expect.poll(() => tcc.replies.join('|')).toContain('Are the doors locked?')
+    await expect(card.getByText('Are the doors locked?')).toBeVisible()
+    await card.getByRole('button', { name: 'End conversation' }).click()
+    await expect.poll(() => tcc.byed(), { timeout: 5000 }).toBe(true)
+    await expect(card).toHaveCount(0)
+  } finally {
+    tcc.close()
+  }
 })

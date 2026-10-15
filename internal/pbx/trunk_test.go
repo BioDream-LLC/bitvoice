@@ -23,10 +23,11 @@ type carrier struct {
 	registered atomic.Bool
 	answered   chan string // dialled numbers
 	invites    chan *sip.Message
+	messages   chan *sip.Message // SIP MESSAGEs received
 }
 
 func newCarrier(t *testing.T) *carrier {
-	c := &carrier{auth: sip.NewAuthenticator("carrier.test"), answered: make(chan string, 4), invites: make(chan *sip.Message, 4)}
+	c := &carrier{auth: sip.NewAuthenticator("carrier.test"), answered: make(chan string, 4), invites: make(chan *sip.Message, 4), messages: make(chan *sip.Message, 8)}
 	c.stack = sip.NewStack(c.handle)
 	c.stack.Host = "127.0.0.1"
 	c.stack.T1, c.stack.T2 = 50*time.Millisecond, 200*time.Millisecond
@@ -81,6 +82,12 @@ func (c *carrier) handle(tx *sip.ServerTx, in *sip.Incoming) {
 		}
 		tx.Respond(r)
 	default:
+		if m.Method == sip.MESSAGE {
+			select {
+			case c.messages <- m:
+			default:
+			}
+		}
 		tx.Respond(sip.NewResponse(m, 200, ""))
 	}
 }
