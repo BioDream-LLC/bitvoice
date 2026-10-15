@@ -66,3 +66,39 @@ func TestAsk(t *testing.T) {
 		t.Fatalf("outside: %v", err)
 	}
 }
+
+// A location no boundary here covers goes to the forest guide: fetched for a recursive query (both
+// servers in the answer's path), a redirect otherwise; a query that comes back is a loop.
+func TestForestGuide(t *testing.T) {
+	fgBounds, err := ParseGeoJSON([]byte(`{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"name":"West","uri":"sip:sos@west.example.gov"},"geometry":{"type":"Polygon","coordinates":[[[-80,40],[-79,40],[-79,41],[-80,41],[-80,40]]]}}]}`), "urn:service:sos", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fg := &Server{Source: "fg.example.gov", Boundaries: func() []Boundary { return fgBounds }}
+	fgSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write(fg.Respond(r.Body)) }))
+	defer fgSrv.Close()
+	ecrf := &Server{Source: "ecrf.east.example.gov", Boundaries: func() []Boundary { return nil }, ForestGuide: fgSrv.URL + "/lost"}
+	q := func(recursive bool, path string) string {
+		r := `<findService xmlns="urn:ietf:params:xml:ns:lost1"`
+		if recursive {
+			r += ` recursive="true"`
+		}
+		r += `><location id="l" profile="geodetic-2d"><Point xmlns="http://www.opengis.net/gml" srsName="urn:ogc:def:crs:EPSG::4326"><pos>40.5 -79.5</pos></Point></location><service>urn:service:sos</service>` + path + `</findService>`
+		return string(ecrf.Respond(strings.NewReader(r)))
+	}
+	got := q(true, "")
+	if !strings.Contains(got, "<uri>sip:sos@west.example.gov</uri>") || !strings.Contains(got, `<via source="fg.example.gov"/><via source="ecrf.east.example.gov"/>`) {
+		t.Fatalf("recursive:\n%s", got)
+	}
+	got = q(false, "")
+	if !strings.Contains(got, "<redirect") || !strings.Contains(got, `target="127.0.0.1"`) || !strings.Contains(got, `source="ecrf.east.example.gov"`) {
+		t.Fatalf("redirect:\n%s", got)
+	}
+	if got = q(true, `<path><via source="ecrf.east.example.gov"/></path>`); !strings.Contains(got, "<loop") {
+		t.Fatalf("loop:\n%s", got)
+	}
+	ecrf.ForestGuide = ""
+	if got = q(true, ""); !strings.Contains(got, "<notFound") {
+		t.Fatalf("no forest guide:\n%s", got)
+	}
+}

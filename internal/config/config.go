@@ -483,6 +483,10 @@ type Core struct {
 	Default string `json:"default"`
 	// LoSTURL is an outside ECRF to ask; empty uses this server's own boundaries.
 	LoSTURL string `json:"lostUrl"`
+	// ForestGuide is the forest guide's LoST address (RFC 5582): where this ECRF sends a query for a
+	// location none of its boundaries covers (on the asker's behalf when the query is recursive,
+	// otherwise as a redirect).
+	ForestGuide string `json:"forestGuide"`
 	// Rules is the ESRP's policy (NENA's policy routing function): checked in order once the ECRF
 	// has chosen a PSAP; the first rule whose conditions all hold decides.
 	Rules []CoreRule `json:"rules"`
@@ -2099,6 +2103,9 @@ func (c *Config) Validate() error {
 	}
 	if u := c.System.Core.LoSTURL; u != "" && !strings.HasPrefix(u, "https://") && !strings.HasPrefix(u, "http://") {
 		p.add("system.core.lostUrl", "enter the ECRF's https address")
+	}
+	if fg := strings.TrimSpace(c.System.Core.ForestGuide); fg != "" && !strings.HasPrefix(fg, "https://") && !strings.HasPrefix(fg, "http://") {
+		p.add("system.core.forestGuide", "enter the forest guide's https address")
 	}
 	if c.System.Core.ECRF && len(c.System.Core.AllowFrom) == 0 {
 		p.add("system.core.allowFrom", "say which addresses may ask (your ESInet), so LoST is not open to everyone")

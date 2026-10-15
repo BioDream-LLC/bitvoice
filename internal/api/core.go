@@ -66,7 +66,8 @@ func (s *Server) saveBoundaries(list []lost.Boundary) error {
 }
 
 func (s *Server) lostServer(cfg config.Config) *lost.Server {
-	return &lost.Server{Source: firstNonEmpty(cfg.System.Core.Source, elementID(cfg)), Boundaries: s.boundaries, Addresses: s.addresses}
+	return &lost.Server{Source: firstNonEmpty(cfg.System.Core.Source, elementID(cfg)), Boundaries: s.boundaries, Addresses: s.addresses,
+		ForestGuide: cfg.System.Core.ForestGuide}
 }
 
 // allowed says whether a client address is in the ECRF's allow list.

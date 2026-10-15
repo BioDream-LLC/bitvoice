@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -181,6 +183,11 @@ type Server struct {
 	Boundaries func() []Boundary
 	Addresses  func() *Addresses // the LVF's data (nil: none)
 	Now        func() time.Time
+	// ForestGuide is the LoST address of the forest guide (RFC 5582) asked about a location no
+	// boundary here covers: for a recursive query the answer is fetched from it, otherwise the asker
+	// is redirected to it. Empty: notFound, as before.
+	ForestGuide string
+	Client      *http.Client // for the forest guide (a 5 second timeout when nil)
 }
 
 func (s *Server) addresses() *Addresses {
@@ -197,7 +204,9 @@ type Query struct {
 	Lon                 *float64
 	State, County, City string
 	Validate            bool
-	Civic               Civic // the whole civic address, for validation
+	Civic               Civic    // the whole civic address, for validation
+	Recursive           bool     // the asker wants the answer fetched on its behalf
+	Path                []string // the servers the query has already passed through
 }
 
 // node reading, namespace-free, as in package i3.
@@ -238,7 +247,14 @@ func ParseFindService(r io.Reader) (Query, error) {
 	if root.XMLName.Local != "findService" {
 		return Query{}, fmt.Errorf("unsupported request %s", root.XMLName.Local)
 	}
-	q := Query{Validate: root.attr("validateLocation") == "true"}
+	q := Query{Validate: root.attr("validateLocation") == "true", Recursive: root.attr("recursive") == "true"}
+	if p := root.find("path"); p != nil {
+		for _, v := range p.Kids {
+			if strings.EqualFold(v.XMLName.Local, "via") {
+				q.Path = append(q.Path, v.attr("source"))
+			}
+		}
+	}
 	if s := root.find("service"); s != nil {
 		q.Service = strings.TrimSpace(s.Text)
 	}
@@ -311,11 +327,23 @@ const ns = "urn:ietf:params:xml:ns:lost1"
 
 // Respond answers a request body with a findServiceResponse or an errors document.
 func (s *Server) Respond(body io.Reader) []byte {
-	q, err := ParseFindService(body)
+	raw, err := io.ReadAll(io.LimitReader(body, 1<<20))
 	if err != nil {
 		return s.errorDoc("badRequest", err.Error())
 	}
+	q, err := ParseFindService(bytes.NewReader(raw))
+	if err != nil {
+		return s.errorDoc("badRequest", err.Error())
+	}
+	for _, v := range q.Path {
+		if strings.EqualFold(v, s.Source) {
+			return s.errorDoc("loop", "this query has passed through "+s.Source+" before")
+		}
+	}
 	b, code := s.Find(q)
+	if b == nil && code == "notFound" && s.ForestGuide != "" {
+		return s.forest(raw, q)
+	}
 	if b == nil {
 		return s.errorDoc(code, "")
 	}
@@ -354,6 +382,52 @@ func (s *Server) Respond(body io.Reader) []byte {
 	}
 	fmt.Fprintf(&w, `<path><via source="%s"/></path></findServiceResponse>`, esc(s.Source))
 	return w.Bytes()
+}
+
+var (
+	closeFind = regexp.MustCompile(`</([A-Za-z0-9_]+:)?findService>`)
+	openPath  = regexp.MustCompile(`<([A-Za-z0-9_]+:)?path(\s[^>]*)?>`)
+	closePath = regexp.MustCompile(`</([A-Za-z0-9_]+:)?path>`)
+)
+
+// forest takes a query no boundary here covers to the forest guide: asked on the asker's behalf
+// when the query is recursive (this server added to its path, and to the answer's), or a redirect to
+// it otherwise (RFC 5222 8.1, 13).
+func (s *Server) forest(raw []byte, q Query) []byte {
+	if !q.Recursive {
+		target := s.ForestGuide
+		if u, err := url.Parse(s.ForestGuide); err == nil && u.Host != "" {
+			target = u.Hostname()
+		}
+		var w bytes.Buffer
+		w.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
+		fmt.Fprintf(&w, `<redirect xmlns="%s" target="%s" source="%s" message="no boundary here covers this location: ask the forest guide" xml:lang="en"/>`, ns, esc(target), esc(s.Source))
+		return w.Bytes()
+	}
+	via := []byte(`<via source="` + esc(s.Source) + `"/>`)
+	req := raw
+	if loc := openPath.FindIndex(req); loc != nil {
+		req = append(append(append([]byte{}, req[:loc[1]]...), via...), req[loc[1]:]...)
+	} else if loc := closeFind.FindIndex(req); loc != nil {
+		req = append(append(append([]byte{}, req[:loc[0]]...), append(append([]byte("<path>"), via...), []byte("</path>")...)...), req[loc[0]:]...)
+	}
+	client := s.Client
+	if client == nil {
+		client = &http.Client{Timeout: 5 * time.Second}
+	}
+	resp, err := client.Post(s.ForestGuide, "application/lost+xml", bytes.NewReader(req))
+	if err != nil {
+		return s.errorDoc("serverTimeout", "the forest guide did not answer")
+	}
+	defer resp.Body.Close()
+	ans, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil || resp.StatusCode/100 != 2 {
+		return s.errorDoc("serverError", "the forest guide's answer could not be read")
+	}
+	if loc := closePath.FindIndex(ans); loc != nil { // this server answered too: on the way back
+		ans = append(append(append([]byte{}, ans[:loc[0]]...), via...), ans[loc[0]:]...)
+	}
+	return ans
 }
 
 func (s *Server) errorDoc(code, msg string) []byte {

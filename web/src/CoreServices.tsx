@@ -12,7 +12,7 @@ import { useDraft } from './useDraft'
 import { Badge, Empty, Field, Page, StaleBanner, Toggle, problemFor } from './ui'
 
 const blankBCF = { enabled: false, perMinute: 0, concurrent: 0, deny: [] as string[], mark: false, verifyIdentity: false }
-const blankCore: CoreSettings = { ecrf: false, lis: false, source: '', allowFrom: [], psaps: [], default: '', lostUrl: '', rules: [], bcf: blankBCF }
+const blankCore: CoreSettings = { ecrf: false, lis: false, source: '', allowFrom: [], psaps: [], default: '', lostUrl: '', forestGuide: '', rules: [], bcf: blankBCF }
 /** Place names may have spaces in them: split on commas only. */
 const commas = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean)
 const list = (s: string) => s.split(/[,\s]+/).map((x) => x.trim()).filter(Boolean)
@@ -67,6 +67,9 @@ function CoreSetup() {
             <input id="csa" className="input font-mono" value={allow ?? draft.allowFrom.join(', ')} placeholder="10.20.0.0/16" onChange={(e) => setAllow(e.target.value)} />
           </Field>
           <Field label="ECRF name" htmlFor="css" hint="This ECRF's name in answers; blank uses the server's name."><input id="css" className="input" value={draft.source} onChange={(e) => set({ source: e.target.value.trim() })} /></Field>
+          <Field label="Forest guide" htmlFor="csfg" error={p('forestGuide')} hint="Where a query for a place none of your areas covers goes (RFC 5582): fetched there for a recursive query, a redirect otherwise. Blank: notFound.">
+            <input id="csfg" className="input font-mono" value={draft.forestGuide} placeholder="https://fg.nationwide.example/lost" onChange={(e) => set({ forestGuide: e.target.value.trim() })} />
+          </Field>
         </div>
       </div>
       <div className="space-y-3">

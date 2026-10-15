@@ -131,7 +131,7 @@ export interface CoreRule {
 }
 export interface BCFSettings { enabled: boolean; perMinute: number; concurrent: number; deny: string[]; mark: boolean; verifyIdentity: boolean }
 export interface LISRecordView { number: string; civic: Civic; lat?: number; lon?: number; radius?: number }
-export interface CoreSettings { ecrf: boolean; lis: boolean; source: string; allowFrom: string[]; psaps: CorePSAP[]; default: string; lostUrl: string; rules: CoreRule[]; bcf: BCFSettings }
+export interface CoreSettings { ecrf: boolean; lis: boolean; source: string; allowFrom: string[]; psaps: CorePSAP[]; default: string; lostUrl: string; forestGuide: string; rules: CoreRule[]; bcf: BCFSettings }
 export interface Validation { valid: string[]; invalid: string[]; unchecked: string[]; matched?: string; found?: Record<string, string> }
 export interface BCFEvent { at: string; source: string; from: string; action: 'refused' | 'marked'; why: string }
 export interface Boundary { id: string; service: string; name: string; uri: string; number: string; cities?: string[] | null; counties?: string[] | null; states?: string[] | null; corners: number }
