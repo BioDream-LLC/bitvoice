@@ -59,9 +59,11 @@ type ConferenceRoom struct {
 	Waiting int                `json:"waiting"`
 	Records bool               `json:"records"`
 	HD      bool               `json:"hd,omitempty"` // mixed at 16 kHz
-	// Video is the room's video mode (talker or leader), Showing the member everyone sees.
-	Video   string `json:"video,omitempty"`
-	Showing string `json:"showing,omitempty"`
+	// Video is the room's video mode (talker, leader or grid), Showing the member everyone sees, Grid
+	// the members in the grid, in their places.
+	Video   string   `json:"video,omitempty"`
+	Showing string   `json:"showing,omitempty"`
+	Grid    []string `json:"grid,omitempty"`
 }
 
 // ConferenceMember is one person in a room.
@@ -131,6 +133,7 @@ func (r *room) view() ConferenceRoom {
 	if r.video != nil {
 		sp, sees := r.video.watching()
 		v.Video, v.Showing = r.video.mode, sp
+		v.Grid = r.video.gridShows()
 		for i := range v.Members {
 			_, v.Members[i].Video = sees[v.Members[i].ID]
 		}
@@ -251,7 +254,7 @@ func (c *Call) joinConference(number string) {
 			opener: num, members: map[string]*member{}, waiting: map[string]*member{}}
 		r.bridge.SetHearing(r.hears)
 		if rc.Video != "" {
-			r.video, r.vcodec = newVideoSwitch(r, rc.Video), rc.VideoCodec
+			r.video, r.vcodec = newVideoSwitch(r, rc.Video, rc.VideoCodec, cfg.System.FFmpeg, e.Log.Warn), rc.VideoCodec
 		}
 		if rc.Record && e.Recordings != nil && shouldRecordRoom(cfg) {
 			r.recOn = true

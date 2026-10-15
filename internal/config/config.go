@@ -1682,7 +1682,7 @@ func (c *Config) Validate() error {
 		switch r.Video {
 		case "":
 			r.VideoCodec = ""
-		case "talker", "leader":
+		case "talker", "leader", "grid":
 			r.VideoCodec = strings.ToUpper(strings.TrimSpace(r.VideoCodec))
 			if r.VideoCodec == "" {
 				r.VideoCodec = "H264"
@@ -1697,7 +1697,7 @@ func (c *Config) Validate() error {
 				p.add(f+".video", "video is switched off for the whole system (Settings)")
 			}
 		default:
-			p.add(f+".video", "choose sound only, follow the speaker or show the leader")
+			p.add(f+".video", "choose sound only, follow the speaker, show the leader or a grid")
 		}
 	}
 	checkSpeedDials := func(field string, list []SpeedDial) {

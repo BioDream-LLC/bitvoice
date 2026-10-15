@@ -1138,10 +1138,11 @@ Switch on **HD audio** in a room (new rooms have it on) and it is mixed at 16 kH
 Set **Video** on a room and video phones (and softphones) that join it send their camera and see one picture, switched as people talk, as in Asterisk's ConfBridge:
 - **Follow the speaker**: everyone sees whoever has been talking for a second, once the one on screen has been quiet for a second; the person on screen sees the one before.
 - **Show the leader**: everyone sees the leader (who joins with the leader PIN); the leader sees whoever spoke last.
+- **Grid**: everyone sees everyone at once, side by side (one picture fills the screen, two side by side, then 2 by 2 and 3 by 3, up to nine), each person in their own place in the order they joined, themselves included.
 
 BitVoice switches the pictures without decoding them, so it costs next to nothing, and it asks each new picture's phone for a full frame (RTCP PLI and FIR, and the SIP INFO picture-fast-update most desk phones answer) so the switch shows at once. Every member's video uses the room's **video codec** (H.264 unless you choose VP8); a phone without it joins with sound only. Each viewer gets one steady stream (one source, its own payload type), whoever is on screen. The live view marks who has video and who is **on screen**.
 
-Not offered: a grid of everyone at once (that needs decoding and re-encoding every picture).`,
+A grid is made differently: BitVoice gives every picture to **ffmpeg** on the server, which decodes them, places them in a 1280 by 720 picture at 15 frames a second, and encodes that once for everyone. Install ffmpeg (Settings, Video conversion, says whether it is found); without it a grid room follows the speaker instead, and the room's screen says so. Each picture costs processor time: on a small server, keep grids to a few rooms at once. Only members whose camera is sending are shown: someone joining without video, or whose camera stops, leaves the grid (it never freezes on a still camera), and the grid is remade within a couple of seconds when that changes, with a short pause in the picture. The tenth member and later are heard but not shown. The live view marks the grid's size and who is **in the grid**.`,
   },
   {
     id: 'codes', title: 'Feature codes, forwarding and speed dials', route: '/codes', keys: 'feature codes star codes forward call forwarding do not disturb dnd follow me find me pickup intercom speed dial',

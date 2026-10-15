@@ -582,6 +582,13 @@ test('video conference room', async ({ page }) => {
   const r = rooms.find((x: { name: string }) => x.name === 'Video huddle')
   expect(r.video).toBe('talker')
   expect(r.videoCodec).toBe('VP8')
+  // A grid room.
+  await page.getByRole('button', { name: /Video huddle/ }).click()
+  await page.getByLabel('Video', { exact: true }).selectOption('grid')
+  await expect(page.getByText(/Everyone sees everyone, up to nine at once/)).toBeVisible()
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect.poll(async () => (await page.evaluate(async () => (await (await fetch('./api/conferences')).json()).items))
+    .find((x: { name: string }) => x.name === 'Video huddle').video).toBe('grid')
 })
 
 // A T1 PRI on the card: its channels are worked out, overlaps with ports are refused, and

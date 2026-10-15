@@ -3,7 +3,7 @@ import { Crown, Hand, Lock, LockOpen, Mic, MicOff, PhoneOff, Plus, Radio, Users2
 import { useState } from 'react'
 import {
   useConferenceLiveQuery, useConferencesQuery, useCreateConferenceMutation, useDeleteConferenceMutation, useLockConferenceMutation,
-  useMuteConferenceMemberMutation, useRemoveConferenceMemberMutation, useUpdateConferenceMutation,
+  useMuteConferenceMemberMutation, useRemoveConferenceMemberMutation, useSystemQuery, useUpdateConferenceMutation,
   type ApiErrorBody, type Conference, type ConferenceRoom,
 } from './api'
 import { attempt, DeleteButton, Drawer, useIsAdmin } from './Editor'
@@ -79,7 +79,7 @@ function LiveRoom({ r }: { r: ConferenceRoom }) {
         <span className="text-xs text-slate-500">since {relTime(r.started)}</span>
         {r.records && <span className="rounded-full bg-rose-950 px-2 py-0.5 text-xs text-rose-300">Recording</span>}
         {r.hd && <span className="rounded-full bg-teal-950 px-2 py-0.5 text-xs text-teal-300">HD</span>}
-        {r.video && <span className="flex items-center gap-1 rounded-full bg-fuchsia-950 px-2 py-0.5 text-xs text-fuchsia-300"><Video size={12} aria-hidden /> {r.video === 'leader' ? 'showing the leader' : 'following the speaker'}</span>}
+        {r.video && <span className="flex items-center gap-1 rounded-full bg-fuchsia-950 px-2 py-0.5 text-xs text-fuchsia-300"><Video size={12} aria-hidden /> {r.video === 'leader' ? 'showing the leader' : r.video === 'grid' ? `grid of ${r.grid?.length ?? 0}` : 'following the speaker'}</span>}
         {r.locked && <span className="rounded-full bg-amber-950 px-2 py-0.5 text-xs text-amber-300">Locked</span>}
         {admin && (
           <button type="button" className="btn btn-ghost ml-auto text-sm" onClick={() => attempt(() => lock({ number: r.number, locked: !r.locked }).unwrap(), r.locked ? 'Room unlocked' : 'Room locked')}>
@@ -95,7 +95,10 @@ function LiveRoom({ r }: { r: ConferenceRoom }) {
             <span className="text-slate-200">{m.name}</span>
             {m.leader && <span className="flex items-center gap-1 text-xs text-violet-300"><Crown size={12} aria-hidden /> leader</span>}
             {m.hd && <span className="text-xs text-teal-300" title="On a wideband codec: hears and is heard in HD">HD</span>}
-            {m.video && <span className={clsx('flex items-center gap-1 text-xs', r.showing === m.id ? 'text-fuchsia-300' : 'text-slate-500')} title={r.showing === m.id ? 'Everyone sees this picture' : 'Sends and receives video'}><Video size={12} aria-hidden />{r.showing === m.id ? ' on screen' : ''}</span>}
+            {m.video && (() => {
+              const on = r.video === 'grid' ? !!r.grid?.includes(m.id) : r.showing === m.id
+              return <span className={clsx('flex items-center gap-1 text-xs', on ? 'text-fuchsia-300' : 'text-slate-500')} title={on ? (r.video === 'grid' ? 'In the grid' : 'Everyone sees this picture') : 'Sends and receives video'}><Video size={12} aria-hidden />{on ? (r.video === 'grid' ? ' in the grid' : ' on screen') : ''}</span>
+            })()}
             {m.waiting && <span className="text-xs text-amber-300">waiting for the leader</span>}
             {m.hand && <span className="flex items-center gap-1 text-xs text-amber-300"><Hand size={12} aria-hidden /> asks to speak</span>}
             <span className="ml-auto text-xs text-slate-500">{relTime(m.joined)}</span>
@@ -121,6 +124,7 @@ function LiveRoom({ r }: { r: ConferenceRoom }) {
 function ConferenceEditor({ c: initial, onClose }: { c: Conference; onClose: () => void }) {
   const admin = useIsAdmin()
   const [c, setC] = useState(initial)
+  const { data: sys } = useSystemQuery()
   const [err, setErr] = useState<ApiErrorBody | null>(null)
   const [create] = useCreateConferenceMutation()
   const [update] = useUpdateConferenceMutation()
@@ -158,13 +162,15 @@ function ConferenceEditor({ c: initial, onClose }: { c: Conference; onClose: () 
           <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={!c.quiet} onChange={(v) => set('quiet', !v)} label="Tones when people join and leave" /> Tones when people join and leave</label>
         </div>
         <div className="grid gap-3 sm:grid-cols-[1fr_9rem]">
-          <Field label="Video" htmlFor="cvid" error={p('video')} hint="Video phones see one picture, switched as people talk. Nothing is decoded, so every member's video uses one codec.">
+          <Field label="Video" htmlFor="cvid" error={p('video')} hint={c.video === 'grid' ? 'Everyone sees everyone, up to nine at once, made by ffmpeg on this server (Settings, video conversion). Each member costs some processor time.' : "Video phones see one picture, switched as people talk. Nothing is decoded, so every member's video uses one codec."}>
             <select id="cvid" className="input" value={c.video ?? ''} onChange={(e) => set('video', e.target.value as Conference['video'])}>
               <option value="">Sound only</option>
               <option value="talker">Follow the speaker (the speaker sees the one before)</option>
               <option value="leader">Show the leader (the leader sees whoever speaks)</option>
+              <option value="grid">Grid: everyone sees everyone (needs ffmpeg)</option>
             </select>
           </Field>
+          {c.video === 'grid' && sys && !sys.ffmpeg && <p className="text-xs text-amber-300 sm:col-span-2">ffmpeg is not installed on this server: until it is, the room follows the speaker instead.</p>}
           {c.video && (
             <Field label="Video codec" htmlFor="cvc" error={p('videoCodec')}>
               <select id="cvc" className="input" value={c.videoCodec || 'H264'} onChange={(e) => set('videoCodec', e.target.value)}>

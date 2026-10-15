@@ -1,9 +1,12 @@
 package pbx
 
 import (
+	"context"
 	"encoding/binary"
 	"math"
+	"net"
 	"net/netip"
+	"os/exec"
 	"strconv"
 	"testing"
 	"time"
@@ -220,5 +223,141 @@ func TestVideoRoomShowsTheLeader(t *testing.T) {
 	got = look()
 	if got[1]['C'] == 0 || got[0]['B'] == 0 || got[2]['B'] == 0 {
 		t.Fatalf("after 102 spoke: %v", got)
+	}
+}
+
+// A grid room: three phones send real H.264 (ffmpeg's test picture); each gets one grid stream back,
+// in its own payload type and one SSRC; a phone whose camera stops leaves the grid. Without ffmpeg the
+// room follows the speaker instead.
+func TestVideoRoomGrid(t *testing.T) {
+	if !media.FFmpegHas("") {
+		t.Skip("ffmpeg is not installed")
+	}
+	cfg := testConfig()
+	cfg.Conferences = []config.Conference{{Number: "700", Name: "Grid room", Video: "grid", Quiet: true}, {Number: "701", Name: "No ffmpeg", Video: "grid", Quiet: true}}
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	e, _ := startEngine(t, cfg)
+	ps := registered(t, e, "100", "101", "102")
+	pts := []int{96, 99, 102}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cams := make([]*exec.Cmd, 3)
+	for i, p := range ps {
+		p.video, p.videoPT = videoSocket(t), pts[i]
+		d, code := p.dial("700")
+		if code != 200 {
+			t.Fatalf("%s joined with %d", p.user, code)
+		}
+		m := videoOf(t, d.body)
+		to := netip.MustParseAddrPort("127.0.0.1:" + strconv.Itoa(m.Port))
+		relay, _ := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+		defer relay.Close()
+		go func(p *phone, pt int) {
+			buf := make([]byte, 2048)
+			for {
+				n, err := relay.Read(buf)
+				if err != nil {
+					return
+				}
+				buf[1] = buf[1]&0x80 | byte(pt)
+				_, _ = p.video.WriteToUDPAddrPort(buf[:n], to)
+			}
+		}(p, pts[i])
+		cams[i] = exec.CommandContext(ctx, "ffmpeg", "-hide_banner", "-loglevel", "error", "-re", "-f", "lavfi", "-i", "testsrc=size=320x240:rate=15",
+			"-t", "30", "-pix_fmt", "yuv420p", "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency", "-profile:v", "baseline", "-g", "15",
+			"-payload_type", "96", "-f", "rtp", "rtp://"+relay.LocalAddr().String())
+		if err := cams[i].Start(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	defer func() {
+		cancel()
+		for _, c := range cams {
+			_ = c.Wait()
+		}
+	}()
+	// What a phone receives for a moment: packets, SSRCs, payload types.
+	recv := func(p *phone, d time.Duration) (n int, ssrcs map[uint32]bool, got map[int]bool) {
+		ssrcs, got = map[uint32]bool{}, map[int]bool{}
+		buf := make([]byte, 2048)
+		end := time.Now().Add(d)
+		for time.Now().Before(end) {
+			_ = p.video.SetReadDeadline(end)
+			k, _, err := p.video.ReadFromUDPAddrPort(buf)
+			if err != nil {
+				break
+			}
+			if k > 12 {
+				n++
+				ssrcs[binary.BigEndian.Uint32(buf[8:])] = true
+				got[int(buf[1]&0x7f)] = true
+			}
+		}
+		return
+	}
+	grid := func() []string {
+		for _, r := range e.Conferences() {
+			if r.Number == "700" {
+				return r.Grid
+			}
+		}
+		return nil
+	}
+	deadline := time.Now().Add(15 * time.Second)
+	for len(grid()) != 3 && time.Now().Before(deadline) {
+		time.Sleep(200 * time.Millisecond)
+	}
+	if g := grid(); len(g) != 3 {
+		t.Fatalf("grid %v", g)
+	}
+	started := time.Now()
+	for time.Since(started) < 25*time.Second {
+		r := e.roomFor("700")
+		r.video.mu.Lock()
+		g := r.video.grid
+		r.video.mu.Unlock()
+		if g != nil && !g.LastOut().IsZero() {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Logf("the grid's first picture after %v", time.Since(started))
+	for i, p := range ps {
+		n, ssrcs, got := recv(p, 6*time.Second)
+		if n < 30 || len(ssrcs) != 1 || len(got) != 1 || !got[pts[i]] {
+			t.Fatalf("%s got %d grid packets, SSRCs %v, payload types %v", p.user, n, ssrcs, got)
+		}
+	}
+	// 102's camera stops: the grid is made again with two.
+	_ = cams[2].Process.Kill()
+	deadline = time.Now().Add(10 * time.Second)
+	for len(grid()) != 2 && time.Now().Before(deadline) {
+		time.Sleep(200 * time.Millisecond)
+	}
+	if g := grid(); len(g) != 2 {
+		t.Fatalf("after a camera stopped: %v", g)
+	}
+	if n, _, _ := recv(ps[2], 6*time.Second); n < 20 {
+		t.Fatalf("102, its camera off, still sees the grid: got %d", n)
+	}
+}
+
+func TestVideoRoomGridWithoutFFmpeg(t *testing.T) {
+	cfg := testConfig()
+	cfg.System.FFmpeg = "/nonexistent/ffmpeg"
+	cfg.Conferences = []config.Conference{{Number: "700", Name: "Grid room", Video: "grid", Quiet: true}}
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	e, _ := startEngine(t, cfg)
+	p := registered(t, e, "100")[0]
+	p.video, p.videoPT = videoSocket(t), 96
+	if _, code := p.dial("700"); code != 200 {
+		t.Fatal(code)
+	}
+	if v := e.Conferences(); len(v) != 1 || v[0].Video != "talker" {
+		t.Fatalf("%+v", v)
 	}
 }

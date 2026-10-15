@@ -19,8 +19,19 @@ import (
 // continuous sequence numbers and timestamps, its own payload type) so phones see one steady stream.
 
 type videoSwitch struct {
-	mode string // talker or leader
+	mode string // talker, leader or grid
 	room *room
+
+	// grid rooms: ffmpeg makes one picture of everyone (videogrid.go).
+	ffmpeg, codec string
+	log           func(msg string, args ...any)
+	grid          *media.VideoMixer
+	gridGen       int
+	gridIDs       []string
+	gridAt        time.Time
+	gridWant      []string
+	gridWantSince time.Time
+	joins         int
 
 	mu       sync.Mutex
 	members  map[string]*vmember
@@ -34,12 +45,15 @@ type videoSwitch struct {
 }
 
 type vmember struct {
-	id     string
-	leg    *Leg
-	ep     *media.Endpoint
-	pt     int    // this member's payload type for the room's codec
-	ssrc   uint32 // this member's own SSRC, as seen
-	leader bool
+	id      string
+	leg     *Leg
+	ep      *media.Endpoint
+	pt      int    // this member's payload type for the room's codec
+	ssrc    uint32 // this member's own SSRC, as seen
+	leader  bool
+	joined  int       // order of joining, for the grid's places
+	lastVid time.Time // when its last picture packet came
+	tile    int       // its place in the grid, -1 when not shown
 
 	// What this member is sent: one SSRC, sequence and timestamp carried across switches.
 	outSSRC        uint32
@@ -57,9 +71,15 @@ const (
 	videoQuietTicks = 5 // ticks the speaker must be quiet first
 )
 
-func newVideoSwitch(r *room, mode string) *videoSwitch {
+func newVideoSwitch(r *room, mode, codec, ffmpeg string, log func(string, ...any)) *videoSwitch {
+	if mode == "grid" && !media.FFmpegHas(ffmpeg) {
+		mode = "talker" // without ffmpeg a grid cannot be made: follow the speaker instead
+		if log != nil {
+			log("video room shows the speaker: a grid needs ffmpeg, which is not installed", "room", r.number)
+		}
+	}
 	v := &videoSwitch{mode: mode, room: r, members: map[string]*vmember{}, heard: map[string]int{},
-		lastPLI: map[string]time.Time{}, stop: make(chan struct{})}
+		lastPLI: map[string]time.Time{}, stop: make(chan struct{}), ffmpeg: ffmpeg, codec: codec, log: log}
 	go v.run()
 	return v
 }
@@ -92,7 +112,7 @@ func (v *videoSwitch) add(m *member, codec string) {
 	if pt < 0 {
 		return
 	}
-	x := &vmember{id: m.id, leg: leg, ep: ep, pt: pt, leader: m.leader, outSSRC: randSSRC()}
+	x := &vmember{id: m.id, leg: leg, ep: ep, pt: pt, leader: m.leader, outSSRC: randSSRC(), tile: -1}
 	media.Connect(ep, nil)
 	ep.SetTap(func(pkt []byte) { v.packet(x, pkt) })
 	ep.OnRTCP(func(pkt []byte) { v.rtcp(x, pkt) })
@@ -100,7 +120,15 @@ func (v *videoSwitch) add(m *member, codec string) {
 	leg.call.keyframe = func() { v.wantPicture(x) }
 	leg.call.mu.Unlock()
 	v.mu.Lock()
+	v.joins++
+	x.joined = v.joins
 	v.members[m.id] = x
+	if v.mode == "grid" {
+		v.retarget()
+		v.mu.Unlock()
+		v.askPicture(m.id)
+		return
+	}
 	if v.speaker == "" || (v.mode == "leader" && x.leader && !v.isLeader(v.speaker)) {
 		v.prev, v.speaker = v.speaker, m.id
 	} else if v.prev == "" {
@@ -126,6 +154,10 @@ func (v *videoSwitch) remove(id string) {
 	if x != nil {
 		x.ep.SetTap(nil)
 		x.ep.OnRTCP(nil)
+	}
+	if v.mode == "grid" {
+		v.mu.Unlock()
+		return // the next tick makes the grid without it
 	}
 	if v.speaker == id || v.prev == id {
 		if v.speaker == id {
@@ -167,11 +199,24 @@ func (v *videoSwitch) close() {
 		x.ep.SetTap(nil)
 		x.ep.OnRTCP(nil)
 	}
+	g := v.grid
+	v.grid = nil
 	v.mu.Unlock()
+	if g != nil {
+		g.Close()
+	}
 }
 
 // retarget points each member at the picture it should get. Called with v.mu held.
 func (v *videoSwitch) retarget() {
+	if v.mode == "grid" {
+		for _, x := range v.members {
+			if x.src != "grid" {
+				x.src, x.switched = "grid", true
+			}
+		}
+		return
+	}
 	for id, x := range v.members {
 		want := v.speaker
 		if id == v.speaker {
@@ -195,6 +240,10 @@ func (v *videoSwitch) run() {
 		case <-v.stop:
 			return
 		case <-t.C:
+		}
+		if v.mode == "grid" {
+			v.gridTick()
+			continue
 		}
 		v.mu.Lock()
 		ids := make([]string, 0, len(v.members))
@@ -258,6 +307,22 @@ func (v *videoSwitch) packet(from *vmember, pkt []byte) {
 		from.ssrc = binary.BigEndian.Uint32(pkt[8:])
 		v.mu.Unlock()
 	}
+	if v.mode == "grid" {
+		v.mu.Lock()
+		from.lastVid = time.Now()
+		g, tile := v.grid, from.tile
+		v.mu.Unlock()
+		if g != nil && tile >= 0 {
+			g.Write(tile, pkt)
+		}
+		return
+	}
+	v.forward(from.id, from, pkt)
+}
+
+// forward sends a picture's packet to every member watching src (from, when a member, never gets
+// its own), rewritten so each sees one steady stream.
+func (v *videoSwitch) forward(src string, from *vmember, pkt []byte) {
 	seq := uint32(binary.BigEndian.Uint16(pkt[2:]))
 	ts := binary.BigEndian.Uint32(pkt[4:])
 	now := time.Now()
@@ -265,7 +330,7 @@ func (v *videoSwitch) packet(from *vmember, pkt []byte) {
 	var outs []*media.Endpoint
 	var bufs [][]byte
 	for _, x := range v.members {
-		if x.src != from.id || x == from {
+		if x.src != src || (from != nil && x == from) {
 			continue
 		}
 		if x.switched || !x.started {
@@ -363,6 +428,9 @@ func (v *videoSwitch) watching() (speaker string, sees map[string]string) {
 	sees = map[string]string{}
 	for id, x := range v.members {
 		sees[id] = x.src
+	}
+	if v.mode == "grid" {
+		return "", sees
 	}
 	return v.speaker, sees
 }
