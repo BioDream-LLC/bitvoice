@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -392,8 +394,65 @@ func (s *Server) psapReportRoutes() {
 			writeErr(w, err)
 			return
 		}
+		if r.URL.Query().Get("format") == "csv" {
+			writeAnswerCSV(w, cfg, cdrs, from, to, r.URL.Query().Get("by"))
+			return
+		}
 		writeJSON(w, 200, answerReport(cfg, cdrs, from, to))
 	})
+}
+
+// writeAnswerCSV writes the answer-time report as a spreadsheet: one row a day (the counts state
+// 911 offices ask for: calls, answered, abandoned, the share answered within the goal and within
+// 20 seconds, the average and longest wait), or with by=call one row a 911 call.
+func writeAnswerCSV(w http.ResponseWriter, cfg config.Config, cdrs []store.CDR, from, to time.Time, by string) {
+	loc := cfg.System.Location()
+	name := "911-answer-times-" + from.Format("2006-01-02") + "-to-" + to.AddDate(0, 0, -1).Format("2006-01-02")
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	cw := csv.NewWriter(w)
+	if by == "call" {
+		w.Header().Set("Content-Disposition", `attachment; filename="`+name+`-calls.csv"`)
+		cw.Write([]string{"start", "callback number", "answered at", "seconds to answer", "call-taker", "abandoned", "text"})
+		sort.Slice(cdrs, func(i, j int) bool { return cdrs[i].Start.Before(cdrs[j].Start) })
+		for _, c := range cdrs {
+			if !c.Emergency {
+				continue
+			}
+			ans := c.Taken
+			if ans.IsZero() && c.AnsweredExt != "" {
+				ans = c.Answer
+			}
+			row := []string{c.Start.In(loc).Format("2006-01-02 15:04:05"), csvSafe(c.From), "", "", csvSafe(c.AnsweredExt), "yes", ""}
+			if !ans.IsZero() {
+				row[2], row[3], row[5] = ans.In(loc).Format("2006-01-02 15:04:05"), strconv.FormatFloat(ans.Sub(c.Start).Seconds(), 'f', 1, 64), "no"
+			}
+			if len(c.Text) > 0 {
+				row[6] = c.Text[0].Via
+			}
+			cw.Write(row)
+		}
+		cw.Flush()
+		return
+	}
+	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`.csv"`)
+	target := cfg.System.PSAP.AnswerTarget
+	if target == 0 {
+		target = 15
+	}
+	cw.Write([]string{"day", "calls", "answered", "abandoned", "answered within " + strconv.Itoa(target) + " s (%)", "answered within 20 s (%)", "average to answer (s)", "longest to answer (s)"})
+	for d := from; d.Before(to); d = d.AddDate(0, 0, 1) {
+		next := d.AddDate(0, 0, 1)
+		var day []store.CDR
+		for _, c := range cdrs {
+			if !c.Start.Before(d) && c.Start.Before(next) {
+				day = append(day, c)
+			}
+		}
+		r := answerReport(cfg, day, d, next)
+		f := func(v float64) string { return strconv.FormatFloat(v, 'f', 1, 64) }
+		cw.Write([]string{d.In(loc).Format("2006-01-02"), strconv.Itoa(r.Calls), strconv.Itoa(r.Answered), strconv.Itoa(r.Abandoned), f(r.WithinTarget), f(r.Within20), f(r.Average), f(r.Longest)})
+	}
+	cw.Flush()
 }
 
 // RunPSAPLog writes the i3 log's call start and end for every 911 call, answered or not (an

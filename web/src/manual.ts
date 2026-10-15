@@ -1801,7 +1801,7 @@ BitVoice answers 911 calls as a PSAP's call-handling system: calls from the emer
 3. On **911 calls**, enter your agency ID (a domain, like \`psap.county.example.gov\`) and what CAD takes: the address and port its ALI listener is on, and its EIDO address.
 
 **When a 911 call rings**, it shows on **911 calls** with:
-- **the address** the network sent (civic location), and **the position** with how sure it is (within so many metres), with a link to a map;
+- **the address** the network sent (civic location), and **the position** with how sure it is (within so many metres), drawn on the map with its circle of uncertainty (once a map is set, below), and a link to OpenStreetMap;
 - **the provider**, the kind of service (wireless, VoIP, residence, business), the device and the subscriber, when the call brought them (Additional Data, RFC 7852);
 - anything that went wrong reading it.
 
@@ -1811,7 +1811,9 @@ Location comes in the call (by value), or as a reference BitVoice fetches with H
 - **the ALI spill**: the text block CAD systems read (callback number, class of service, address, position and uncertainty, provider), sent over TCP;
 - **the EIDO**, the incident document of NENA-STA-024, by HTTPS POST (with a bearer token if set). **EIDO** on a call shows it.
 
-**The i3 log** keeps the NENA i3 events of each call (call start, answer, location, EIDO sent), one file a day. **Answer times** shows how many calls were answered within your goal (NENA: 90% within 15 seconds, 95% within 20), the abandoned ones, and each call-taker's average.
+**The map.** Under **Map** in the 911 settings, give BitVoice its map tiles: an **.mbtiles file** of raster tiles (PNG, JPEG or WebP) on this server, for a map that works with no internet (your GIS team, TileMill, gdal2tiles or a tile vendor makes one of your area), or **a tile server** with {z}, {x} and {y} in its address (your county's, or a commercial one: mind its terms; the public OpenStreetMap servers are not for this). Either way the call-takers' browsers fetch tiles from BitVoice only: it reads the file, or fetches from the tile server and keeps the last tiles in memory. The same map shows radio positions on the radio console. Vector tiles are not supported.
+
+**The i3 log** keeps the NENA i3 events of each call (call start, answer, location, EIDO sent), one file a day. **Answer times** shows how many calls were answered within your goal (NENA: 90% within 15 seconds, 95% within 20), the abandoned ones, and each call-taker's average. **A row a day (CSV)** downloads the counts state 911 offices usually ask for (calls, answered, abandoned, within the goal and within 20 seconds, average and longest wait) for the days chosen; **A row a call (CSV)** lists every 911 call with when it was answered, by whom, and whether it was text. Each state has its own form: copy the figures from these into it.
 
 **TTY calls.** Deaf and hard-of-hearing callers may call 911 with a TTY (a text telephone, Baudot at 45.45 bit/s). BitVoice listens for one on every 911 call's voice, from the first moment: what the caller types appears on the call as they type it, under **Text**, with a pause or a new line starting a fresh line. A silent call may be a TTY waiting for you: once you answer, **Reply by TTY** sends text even before any has come. Type the reply and press **Send**: it goes to the caller as TTY tones (the call-taker's voice is muted while it plays, as TTYs take turns), in capitals, and TTY etiquette applies: end each turn with GA ("go ahead"), and SK when signing off. Characters a TTY cannot show are left out. Speech, music and touch tones are never taken for TTY text: a character counts only when every bit of it is a clean TTY tone. The conversation is kept with the call in the call history and in the i3 log (one MessageLogEvent a turn). Untick **Listen for TTYs on 911 calls** in the 911 settings to stop listening.
 

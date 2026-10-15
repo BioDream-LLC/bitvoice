@@ -10,6 +10,7 @@ import {
   type ApiErrorBody, type ConsoleState, type P25Key, type RadioSettings,
 } from './api'
 import { useIsAdmin } from './Editor'
+import { LazyMap as MapView } from './LazyMap'
 import { useDraft } from './useDraft'
 import { Empty, Field, Page, StaleBanner, Toggle, problemFor } from './ui'
 
@@ -218,6 +219,7 @@ function RadioPositions() {
   return (
     <section className="card mt-6 space-y-3 p-5" aria-label="Radio positions">
       <h2 className="flex items-center gap-2 font-semibold text-slate-100"><MapPin size={16} className="text-rose-300" aria-hidden /> Radio positions</h2>
+      <MapView label="Map of the radios' positions" height={280} points={items.map((f) => ({ id: String(f.unit), lat: f.lat, lon: f.lon, radius: f.accuracy, label: f.alias || `Unit ${f.unit}`, color: '#34d399' }))} />
       <table className="w-full text-sm">
         <thead className="text-left text-xs text-slate-500"><tr><th className="py-1">Radio</th><th>Position</th><th>Speed</th><th>Reported</th><th /></tr></thead>
         <tbody>{items.map((f) => {

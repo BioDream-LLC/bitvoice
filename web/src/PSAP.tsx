@@ -1,12 +1,13 @@
-import { ScrollText, Save, Siren, Timer } from 'lucide-react'
+import { Download, ScrollText, Save, Siren, Timer } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { errorOf, useCallsQuery, usePsapLogQuery, usePsapReportQuery, useSaveSettingsMutation, useSettingsQuery, type ApiErrorBody, type PSAPSettings } from './api'
+import { errorOf, useCallsQuery, usePsapLogQuery, usePsapReportQuery, useSaveSettingsMutation, useSettingsQuery, type ApiErrorBody, type MapSource, type PSAPSettings } from './api'
 import { useIsAdmin } from './Editor'
 import { EmergencyCard } from './EmergencyCard'
 import { useDraft } from './useDraft'
 import { Badge, Empty, Field, Page, StaleBanner, problemFor } from './ui'
 
+const blankMap: MapSource = { file: '', url: '', attribution: '' }
 const blankPSAP: PSAPSettings = { agencyId: '', elementId: '', aliAddress: '', eidoUrl: '', eidoToken: '', answerTarget: 15, ttyOff: false }
 
 export function PSAP() {
@@ -45,6 +46,8 @@ function Report() {
       <div className="flex flex-wrap items-end gap-3">
         <Field label="From" htmlFor="psf"><input id="psf" type="date" className="input" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
         <Field label="To" htmlFor="pst"><input id="pst" type="date" className="input" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
+        <a className="btn" href={`./api/psap/report?format=csv&from=${from}&to=${to}`} download><Download size={14} className="text-emerald-300" aria-hidden /> A row a day (CSV)</a>
+        <a className="btn" href={`./api/psap/report?format=csv&by=call&from=${from}&to=${to}`} download><Download size={14} className="text-emerald-300" aria-hidden /> A row a call (CSV)</a>
       </div>
       {!r || !r.calls ? <p className="text-sm text-slate-400">No 911 calls in these days.</p> : <>
         <div className="grid gap-3 sm:grid-cols-4">
@@ -100,15 +103,18 @@ function I3Log() {
 
 function PSAPSetup() {
   const { data } = useSettingsQuery()
-  const server = useMemo(() => (data ? { ...blankPSAP, ...(data.system.psap ?? {}) } : undefined), [data])
-  const { draft, setDraft, reset, stale } = useDraft<PSAPSettings>(server)
+  const server = useMemo(() => (data ? { ...blankPSAP, ...(data.system.psap ?? {}), map: { ...blankMap, ...(data.system.map ?? {}) } } : undefined), [data])
+  const { draft, setDraft, reset, stale } = useDraft<PSAPSettings & { map: MapSource }>(server)
   const [err, setErr] = useState<ApiErrorBody | null>(null)
   const [save, { isLoading }] = useSaveSettingsMutation()
   if (!draft || !data) return null
   const p = (f: string) => problemFor(err?.problems, 'system.psap.' + f)
   const set = (v: Partial<PSAPSettings>) => setDraft((d) => ({ ...d, ...v }))
+  const setMap = (v: Partial<MapSource>) => setDraft((d) => ({ ...d, map: { ...d.map, ...v } }))
+  const pm = (f: string) => problemFor(err?.problems, 'system.map.' + f)
   const doSave = async () => {
-    try { const s = await save({ ...data, system: { ...data.system, psap: draft } }).unwrap(); reset({ ...blankPSAP, ...(s.system.psap ?? {}) }); setErr(null); toast.success('911 settings saved') }
+    const { map, ...psap } = draft
+    try { const s = await save({ ...data, system: { ...data.system, psap, map } }).unwrap(); reset({ ...blankPSAP, ...(s.system.psap ?? {}), map: { ...blankMap, ...(s.system.map ?? {}) } }); setErr(null); toast.success('911 settings saved') }
     catch (e) { setErr(errorOf(e)) }
   }
   return (
@@ -130,6 +136,13 @@ function PSAPSetup() {
         <Field label="ALI spill to" htmlFor="psl" error={p('aliAddress')} hint="CAD's address and port: the ALI text goes there over TCP when a call is answered."><input id="psl" className="input font-mono" value={draft.aliAddress} placeholder="10.0.0.20:4000" onChange={(e) => set({ aliAddress: e.target.value.trim() })} /></Field>
         <Field label="EIDO to" htmlFor="psu" error={p('eidoUrl')} hint="CAD's address for EIDOs (NENA-STA-024), sent by HTTPS POST."><input id="psu" className="input font-mono" value={draft.eidoUrl} placeholder="https://cad.example.gov/eido" onChange={(e) => set({ eidoUrl: e.target.value.trim() })} /></Field>
         <Field label="EIDO token" htmlFor="pst2" hint="Sent as a bearer token, if CAD asks for one. Blank keeps the saved one."><input id="pst2" type="password" autoComplete="off" className="input font-mono" value={draft.eidoToken} onChange={(e) => set({ eidoToken: e.target.value })} /></Field>
+      </div>
+      <h3 className="text-sm font-semibold text-violet-300">Map</h3>
+      <p className="text-sm text-slate-400">The map on each 911 call and of radio positions. For a map with no internet, give an .mbtiles file of raster tiles on this server (your GIS team or a tile tool such as TileMill or gdal2tiles makes one); or a tile server's address. Leave both empty for no map.</p>
+      <div className="grid gap-3 md:grid-cols-3">
+        <Field label="Map file on this server" htmlFor="pmf" error={pm('file')} hint="The path of an .mbtiles file of PNG, JPEG or WebP tiles."><input id="pmf" className="input font-mono" value={draft.map.file} placeholder="/var/lib/bitvoice/county.mbtiles" onChange={(e) => setMap({ file: e.target.value })} /></Field>
+        <Field label="Or a tile server" htmlFor="pmu" error={pm('url')} hint="With {z}, {x} and {y}. The call-takers' browsers fetch from it."><input id="pmu" className="input font-mono" value={draft.map.url} placeholder="https://tiles.example.gov/{z}/{x}/{y}.png" onChange={(e) => setMap({ url: e.target.value })} /></Field>
+        <Field label="Credit" htmlFor="pma" error={pm('attribution')} hint="What the tiles' licence asks the map to show."><input id="pma" className="input" value={draft.map.attribution} placeholder="© County GIS" onChange={(e) => setMap({ attribution: e.target.value })} /></Field>
       </div>
       <div className="flex justify-end"><button className="btn btn-primary" disabled={isLoading} onClick={doSave}><Save size={15} aria-hidden /> Save</button></div>
     </section>

@@ -139,6 +139,8 @@ type System struct {
 	Core Core `json:"core"`
 	// PSAP is the 911 profile's settings: who this answering point is and where CAD hears of calls.
 	PSAP PSAP `json:"psap"`
+	// Map is where the maps of 911 calls and radio positions get their tiles.
+	Map MapSource `json:"map"`
 	// FaxMail is the mailbox read for email to fax.
 	FaxMail FaxMail `json:"faxMail"`
 	// FaxPaper is the page size faxes are drawn on: letter or a4 (empty: by country).
@@ -523,6 +525,14 @@ type CorePSAP struct {
 	Name     string `json:"name"`
 	Trunk    string `json:"trunk"`    // trunk ID
 	Overflow string `json:"overflow"` // another PSAP's URI, tried when this one is busy or down
+}
+
+// MapSource names the map tiles: an .mbtiles file of raster tiles on this server (offline, served by
+// BitVoice), or a tile server's URL template with {z}, {x} and {y}. Neither: no map, only the position.
+type MapSource struct {
+	File        string `json:"file"`        // the .mbtiles file's path on this server
+	URL         string `json:"url"`         // https://tiles.example.gov/{z}/{x}/{y}.png
+	Attribution string `json:"attribution"` // the credit the tiles' licence asks for, shown on the map
 }
 
 // PSAP holds the 911 profile: the answering point's identity in NENA i3 terms, and the outputs
@@ -2149,6 +2159,20 @@ func (c *Config) Validate() error {
 		}
 		if ps.AnswerTarget < 0 || ps.AnswerTarget > 120 {
 			p.add("system.psap.answerTarget", "seconds, 1 to 120")
+		}
+	}
+	if m := &c.System.Map; true {
+		m.File, m.URL, m.Attribution = strings.TrimSpace(m.File), strings.TrimSpace(m.URL), strings.TrimSpace(m.Attribution)
+		switch {
+		case m.File != "" && m.URL != "":
+			p.add("system.map.url", "use the file on this server or a tile server, not both")
+		case m.File != "" && !strings.HasSuffix(strings.ToLower(m.File), ".mbtiles"):
+			p.add("system.map.file", "an .mbtiles file of map tiles")
+		case m.URL != "" && (!strings.HasPrefix(m.URL, "https://") && !strings.HasPrefix(m.URL, "http://") || !strings.Contains(m.URL, "{z}") || !strings.Contains(m.URL, "{x}") || !strings.Contains(m.URL, "{y}")):
+			p.add("system.map.url", "a tile address with {z}, {x} and {y}, like https://tiles.example.gov/{z}/{x}/{y}.png")
+		}
+		if len(m.Attribution) > 200 {
+			p.add("system.map.attribution", "up to 200 characters")
 		}
 	}
 	if fp := c.System.FaxPaper; fp != "" && fp != "letter" && fp != "a4" {

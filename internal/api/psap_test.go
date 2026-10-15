@@ -126,6 +126,31 @@ func TestAnswerReport(t *testing.T) {
 	}
 }
 
+// The report as a spreadsheet: a row a day, or a row a call; a caller ID cannot become a formula.
+func TestAnswerReportCSV(t *testing.T) {
+	cfg := config.Default()
+	base := time.Date(2026, 10, 12, 9, 0, 0, 0, time.UTC)
+	cdrs := []store.CDR{
+		{Start: base, Emergency: true, From: "=HYPERLINK(1)", AnsweredExt: "101", Taken: base.Add(9 * time.Second)},
+		{Start: base.Add(time.Minute), Emergency: true, From: "+17175550100"},
+		{Start: base.AddDate(0, 0, 1), Emergency: true, AnsweredExt: "102", Taken: base.AddDate(0, 0, 1).Add(25 * time.Second), Text: []store.TextLine{{Via: "msrp"}}},
+	}
+	w := httptest.NewRecorder()
+	writeAnswerCSV(w, cfg, cdrs, base.Truncate(24*time.Hour), base.Truncate(24*time.Hour).AddDate(0, 0, 2), "")
+	want := "day,calls,answered,abandoned,answered within 15 s (%),answered within 20 s (%),average to answer (s),longest to answer (s)\n" +
+		"2026-10-12,2,1,1,100.0,100.0,9.0,9.0\n2026-10-13,1,1,0,0.0,0.0,25.0,25.0\n"
+	if got := w.Body.String(); got != want {
+		t.Fatalf("by day:\n%s", got)
+	}
+	w = httptest.NewRecorder()
+	writeAnswerCSV(w, cfg, cdrs, base.Truncate(24*time.Hour), base.Truncate(24*time.Hour).AddDate(0, 0, 2), "call")
+	got := w.Body.String()
+	if !strings.Contains(got, "2026-10-12 09:00:00,'=HYPERLINK(1),2026-10-12 09:00:09,9.0,101,no,\n") ||
+		!strings.Contains(got, ",+17175550100,,,,yes,\n") || !strings.Contains(got, ",25.0,102,no,msrp\n") {
+		t.Fatalf("by call:\n%s", got)
+	}
+}
+
 func TestPSAPLogFromEvents(t *testing.T) {
 	s, _ := newServer(t)
 	s.DataDir = t.TempDir()

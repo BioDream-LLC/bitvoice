@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import dgram from 'node:dgram'
+import http from 'node:http'
 import net from 'node:net'
 import { readFileSync } from 'node:fs'
 import { signIn } from './helpers'
@@ -273,6 +274,10 @@ test('911 calls page: settings and reports', async ({ page }) => {
   await expect(page.getByText(/911 settings saved|saved/i).first()).toBeVisible()
   await page.getByRole('tab', { name: /Answer times/ }).click()
   await expect(page.getByRole('region', { name: 'Answer times' })).toBeVisible()
+  const [csv] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'A row a day (CSV)' }).click()])
+  expect(csv.suggestedFilename()).toMatch(/^911-answer-times-.*\.csv$/)
+  const body = (await import('node:fs')).readFileSync((await csv.path())!, 'utf8')
+  expect(body.split('\n')[0]).toBe('day,calls,answered,abandoned,answered within 15 s (%),answered within 20 s (%),average to answer (s),longest to answer (s)')
   await page.getByRole('tab', { name: /i3 log/ }).click()
   await expect(page.getByRole('region', { name: 'i3 log' })).toBeVisible()
 })
@@ -393,4 +398,39 @@ test('radio positions from a data gateway', async ({ page }) => {
   await expect(sec.getByText('40.26330, -76.88230')).toBeVisible()
   await expect(sec.getByText('50 km/h')).toBeVisible()
   await expect(sec.getByRole('link', { name: 'Map of unit 4242' })).toBeVisible()
+})
+
+// The map: a tile server set in the 911 settings draws radio positions; BitVoice fetches the tiles.
+test('map of radio positions from the chosen tiles', async ({ page }) => {
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64')
+  let tiles = 0
+  const srv = http.createServer((_req, res) => { tiles++; res.writeHead(200, { 'Content-Type': 'image/png' }); res.end(png) })
+  await new Promise<void>((r) => srv.listen(0, '127.0.0.1', r))
+  const port = (srv.address() as { port: number }).port
+  try {
+    await signIn(page)
+    await page.goto('./#/psap')
+    await page.locator('#pmu').fill(`http://127.0.0.1:${port}/{z}/{x}.png`)
+    await page.locator('section[aria-labelledby="pss-h"]').getByRole('button', { name: 'Save' }).click()
+    await expect(page.getByText(/a tile address with \{z\}, \{x\} and \{y\}/)).toBeVisible()
+    await page.locator('#pmu').fill(`http://127.0.0.1:${port}/{z}/{x}/{y}.png`)
+    await page.locator('#pma').fill('© Example tiles')
+    await page.locator('section[aria-labelledby="pss-h"]').getByRole('button', { name: 'Save' }).click()
+    await expect(page.getByText(/911 settings saved/).first()).toBeVisible()
+    await page.evaluate(async () => {
+      await fetch('./api/radio/locations', { method: 'POST', headers: { 'X-BitVoice': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ unit: 77, lat: 40.2633, lon: -76.8823, accuracy: 30 }) })
+    })
+    await page.goto('./#/radio')
+    const map = page.getByRole('img', { name: "Map of the radios' positions" })
+    await expect(map).toBeVisible()
+    await expect(map.locator('canvas')).toBeVisible()
+    await expect.poll(() => tiles, { timeout: 10_000 }).toBeGreaterThan(0)
+    await expect(map.getByText('© Example tiles')).toBeAttached()
+    await page.goto('./#/psap')
+    await page.locator('#pmu').fill('')
+    await page.locator('section[aria-labelledby="pss-h"]').getByRole('button', { name: 'Save' }).click()
+    await expect(page.getByText(/911 settings saved/).first()).toBeVisible()
+  } finally {
+    srv.close()
+  }
 })

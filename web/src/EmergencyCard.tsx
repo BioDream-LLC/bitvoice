@@ -2,6 +2,7 @@ import { AlertTriangle, Building2, Crosshair, ExternalLink, FileJson, Hand, Keyb
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { errorOf, useEndTextCallMutation, useRebidMutation, useSendCallTextMutation, useTakeTextCallMutation, type Call, type Civic, type Location, type TextLine, type TextVia } from './api'
+import { LazyMap as MapView } from './LazyMap'
 import { Badge, relTime } from './ui'
 
 export function streetLine(c: Civic) {
@@ -73,6 +74,8 @@ export function EmergencyCard({ call }: { call: Call }) {
           )}
         </div>
       )}
+
+      {loc && loc.lat != null && loc.lon != null && <MapView label={`Map of the caller's position, ${loc.lat.toFixed(5)}, ${loc.lon.toFixed(5)}`} points={[{ id: call.id, lat: loc.lat, lon: loc.lon, radius: loc.radius, label: callback }]} />}
 
       <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-slate-400">
         {add.providers?.map((p, i) => <span key={i}>Provider: <span className="text-slate-200">{p.name}</span>{p.contact && <> · <span className="font-mono">{p.contact}</span></>}</span>)}

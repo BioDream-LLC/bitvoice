@@ -140,6 +140,8 @@ export interface P25Console {
   wacn: string; system: string; rfss: number; unit: number; sipPort: number; console: boolean; priority: number
   keys: P25Key[]; unitHome: string; unitHomeRfss: number; unitTxKey: string
 }
+export interface MapSource { file: string; url: string; attribution: string }
+export interface MapInfo { tiles?: string; maxZoom?: number; attribution?: string; problem?: string }
 export interface UnitAlias { unit: number; name: string }
 export interface RadioFix { unit: number; alias?: string; lat: number; lon: number; accuracy?: number; speed?: number; heading?: number; at: string; source?: string }
 export interface RadioSettings { console: string; channels: RadioChannel[]; p25: P25Console; record: boolean; cadUrl: string; cadSecret: string; aliases: UnitAlias[] }
@@ -235,7 +237,7 @@ export interface SystemSettings {
   gitops: { url: string; token: string; everyMinutes: number; apply: boolean }
   vault: { awsAccessKey: string; awsSecretKey: string; azureTenant: string; azureClientId: string; azureClientSecret: string }
   emergencyEmail: string[]; sendLocation: boolean; videoOff?: boolean; videoTranscode?: boolean; ffmpeg?: string; g723Convert?: boolean; publicSafety?: boolean
-  faxMail?: FaxMail; faxPaper?: '' | 'letter' | 'a4'; psap?: PSAPSettings; core?: CoreSettings; radio?: RadioSettings
+  faxMail?: FaxMail; faxPaper?: '' | 'letter' | 'a4'; psap?: PSAPSettings; map?: MapSource; core?: CoreSettings; radio?: RadioSettings
   emergencyMode: { on: boolean; destination: Destination; code: string; allowed: string[]; since?: string; by?: string }
   mobile: { push: '' | 'relay' | 'direct'; relayUrl: string; relayKey: string; relaySecret: string; serverUrl: string; fcm: string
     apns: { keyId: string; teamId: string; topic: string; key: string; sandbox: boolean } }
@@ -470,6 +472,7 @@ export const api = createApi({
       alertTone: b.mutation<void, { call: string; channel: string; tone: string }>({ query: (body) => ({ url: 'radio/tone', method: 'POST', body }) }),
       unitCall: b.mutation<{ channel: string }, { call: string; unit: number; emergency: boolean }>({ query: (body) => ({ url: 'radio/unitcall', method: 'POST', body }) }),
       hangUp: b.mutation<void, { channel: string }>({ query: (body) => ({ url: 'radio/hangup', method: 'POST', body }) }),
+      mapSource: b.query<MapInfo, void>({ query: () => 'map', providesTags: ['Settings'] }),
       radioLocations: b.query<{ items: RadioFix[] }, void>({ query: () => 'radio/locations', providesTags: ['Calls'] }),
       radioLog: b.query<{ items: Transmission[] }, { channel?: string; q?: string }>({ query: (a) => ({ url: 'radio/log', params: { channel: a.channel || undefined, q: a.q || undefined, limit: 200 } }), providesTags: ['Calls'] }),
       testFaxMail: b.mutation<{ result: string }, FaxMail>({ query: (body) => ({ url: 'faxes/mail/test', method: 'POST', body }) }),
@@ -815,7 +818,7 @@ export const api = createApi({
 })
 
 export const {
-  useFaxBoxesQuery, useCreateFaxBoxMutation, useUpdateFaxBoxMutation, useDeleteFaxBoxMutation, useFaxesQuery, useDeleteFaxMutation, useFaxKindsQuery, useSendFaxMutation, useRetryFaxMutation, useTestFaxMailMutation, usePsapReportQuery, usePsapLogQuery, useRebidMutation, useSendCallTextMutation, useTakeTextCallMutation, useEndTextCallMutation, useBoundariesQuery, useSaveBoundaryMutation, useDeleteBoundaryMutation, useLazyFindAreaQuery, useAddressDataQuery, useDeleteAddressesMutation, useValidateAddressMutation, useBcfLogQuery, useRadioQuery, usePttMutation, useSimulSelectMutation, useAckEmergencyMutation, useMonitorMutation, usePatchMutation, useAlertToneMutation, useUnitCallMutation, useHangUpMutation, useRadioLogQuery, useRadioLocationsQuery,
+  useFaxBoxesQuery, useCreateFaxBoxMutation, useUpdateFaxBoxMutation, useDeleteFaxBoxMutation, useFaxesQuery, useDeleteFaxMutation, useFaxKindsQuery, useSendFaxMutation, useRetryFaxMutation, useTestFaxMailMutation, usePsapReportQuery, usePsapLogQuery, useRebidMutation, useSendCallTextMutation, useTakeTextCallMutation, useEndTextCallMutation, useBoundariesQuery, useSaveBoundaryMutation, useDeleteBoundaryMutation, useLazyFindAreaQuery, useAddressDataQuery, useDeleteAddressesMutation, useValidateAddressMutation, useBcfLogQuery, useRadioQuery, usePttMutation, useSimulSelectMutation, useAckEmergencyMutation, useMonitorMutation, usePatchMutation, useAlertToneMutation, useUnitCallMutation, useHangUpMutation, useRadioLogQuery, useRadioLocationsQuery, useMapSourceQuery,
   useTextingKindsQuery,
   useMeQuery, useAuthOptionsQuery, useLoginMutation, useLogoutMutation, useSetupStatusQuery, useCompleteSetupMutation,
   useExtensionsQuery, useCreateExtensionMutation, useUpdateExtensionMutation, useDeleteExtensionMutation, useLazyNextExtensionQuery,
