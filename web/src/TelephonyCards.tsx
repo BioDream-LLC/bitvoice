@@ -134,7 +134,7 @@ export function TelephonyCards() {
               const last = s.first + (s.type === 'e1' ? 30 : s.type === 'bri' ? 2 : 23)
               const d = s.first + (s.type === 'e1' ? 15 : s.type === 'bri' ? 2 : 23)
               const sp = (f: string) => p(`spans[${i}].${f}`)
-              const chans = sig === 'em' ? `Channels ${s.first} to ${last}, each an E&M trunk.` : sig === 'r2' ? `Channels ${s.first} to ${last} (timeslot 16 carries the signalling bits), each an MFC-R2 circuit.` : `Channels ${s.first} to ${last}, D-channel ${d}.`
+              const chans = sig === 'ss7' ? `Voice circuits ${s.first} to ${last} (CIC ${s.firstCic || 1} up), signalling link on channel ${d}.` : sig === 'em' ? `Channels ${s.first} to ${last}, each an E&M trunk.` : sig === 'r2' ? `Channels ${s.first} to ${last} (timeslot 16 carries the signalling bits), each an MFC-R2 circuit.` : `Channels ${s.first} to ${last}, D-channel ${d}.`
               return (
                 <div key={i} className="space-y-1 rounded-lg border border-slate-800 p-3">
                   <div className="grid items-end gap-2 sm:grid-cols-[7rem_7rem_11rem_10rem_auto]">
@@ -151,6 +151,7 @@ export function TelephonyCards() {
                         <select id={`sp-g-${i}`} className="input" value={sig} onChange={(e) => setSpan(i, { signalling: e.target.value === 'isdn' ? '' : e.target.value, networkTransfer: false, charges: false })}>
                           <option value="isdn">ISDN (PRI)</option>
                           {s.type === 't1' ? <option value="em">E&amp;M (robbed bit)</option> : <option value="r2">MFC-R2</option>}
+                          <option value="ss7">SS7 (ISUP)</option>
                         </select>
                       </Field>
                     )}
@@ -175,7 +176,31 @@ export function TelephonyCards() {
                         </select>
                       </Field>
                     )}
-                    {sig !== 'isdn' && (
+                    {sig === 'ss7' && <>
+                      <Field label="SS7 variant" htmlFor={`sp-sv-${i}`} error={sp('variant')}>
+                        <select id={`sp-sv-${i}`} className="input" value={s.variant || (s.type === 't1' ? 'ansi' : 'itu')} onChange={(e) => setSpan(i, { variant: e.target.value })}>
+                          <option value="ansi">ANSI (North America)</option><option value="itu">ITU-T</option>
+                        </select>
+                      </Field>
+                      <Field label="Our point code" htmlFor={`sp-opc-${i}`} error={sp('opc')}>
+                        <input id={`sp-opc-${i}`} className="input font-mono" placeholder={(s.variant || (s.type === 't1' ? 'ansi' : 'itu')) === 'ansi' ? '245-16-1' : '1-10-2'} value={s.opc ?? ''} onChange={(e) => setSpan(i, { opc: e.target.value })} />
+                      </Field>
+                      <Field label="Adjacent point code" htmlFor={`sp-apc-${i}`} error={sp('apc')}>
+                        <input id={`sp-apc-${i}`} className="input font-mono" value={s.apc ?? ''} onChange={(e) => setSpan(i, { apc: e.target.value })} />
+                      </Field>
+                      <Field label="Network" htmlFor={`sp-ni-${i}`} error={sp('ni')}>
+                        <select id={`sp-ni-${i}`} className="input" value={s.ni || 'national'} onChange={(e) => setSpan(i, { ni: e.target.value })}>
+                          <option value="national">National</option><option value="international">International</option>
+                        </select>
+                      </Field>
+                      <Field label="Link code (SLC)" htmlFor={`sp-slc-${i}`} error={sp('slc')}>
+                        <input id={`sp-slc-${i}`} type="number" min={0} max={15} className="input" value={s.slc ?? 0} onChange={(e) => setSpan(i, { slc: Number(e.target.value) })} />
+                      </Field>
+                      <Field label="First CIC" htmlFor={`sp-cic-${i}`} error={sp('firstCic')}>
+                        <input id={`sp-cic-${i}`} type="number" min={1} className="input" value={s.firstCic || 1} onChange={(e) => setSpan(i, { firstCic: Number(e.target.value) })} />
+                      </Field>
+                    </>}
+                    {(sig === 'em' || sig === 'r2') && (
                       <Field label="Number when none is sent" htmlFor={`sp-n-${i}`} error={sp('number')}>
                         <input id={`sp-n-${i}`} className="input" inputMode="tel" placeholder="optional" value={s.number ?? ''} onChange={(e) => setSpan(i, { number: e.target.value })} />
                       </Field>
@@ -197,6 +222,7 @@ export function TelephonyCards() {
                     <button type="button" className="btn" aria-label={`Remove span ${i + 1}`} onClick={() => set({ spans: spans.filter((_, j) => j !== i) })}><Trash2 size={14} className="text-rose-300" aria-hidden /></button>
                   </div>
                   {sig === 'em' && <p className="text-xs text-slate-500">{emHelp[s.start || 'wink']}</p>}
+                  {sig === 'ss7' && <p className="text-xs text-slate-500">ISUP calls on the span&apos;s voice circuits, signalled on one link (the D-channel&apos;s timeslot, set up as <code>mtp2</code> or <code>hardhdlc</code> in system.conf) to the adjacent signalling point: the carrier&apos;s STP or switch, whose point codes and CIC numbering it gives you. One link per span; the link set comes up with the link test and a reset of every circuit.</p>}
                   {sig === 'r2' && <p className="text-xs text-slate-500">Line signalling on the ABCD bits of timeslot 16 (Q.421), the number and the caller&apos;s category and number by compelled multifrequency tones (Q.441), in the country&apos;s variant. Calls go both ways on every circuit.</p>}
                   {s.type === 'bri' && (
                     <label className="flex items-center gap-3 pt-1 text-sm text-slate-300">

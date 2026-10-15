@@ -10,6 +10,7 @@ import (
 
 	"github.com/biodream-llc/bitvoice/internal/isdn"
 	"github.com/biodream-llc/bitvoice/internal/sip"
+	"github.com/biodream-llc/bitvoice/internal/ss7"
 )
 
 // Primary rate ISDN: a T1 or E1 span's B-channels are lines of the card trunk, signalled on its
@@ -30,24 +31,28 @@ type SpanConf struct {
 	// BRI is a basic rate span; Multipoint, several terminals on it.
 	BRI        bool `json:"bri,omitempty"`
 	Multipoint bool `json:"multipoint,omitempty"`
+	// SS7: the span's voice channels are ISUP circuits, D is their signalling link.
+	SS7 *SS7Conf `json:"ss7,omitempty"`
 }
 
 // OpenD opens a span's D-channel (HDLC frames); tests replace it.
 var OpenD = openDChannel
 
 type span struct {
-	b    *Bridge
-	conf SpanConf
-	pri  *isdn.PRI
-	byQ  map[int]int // Q.931 channel -> DAHDI channel
-	byD  map[int]int
-	err  string
+	b     *Bridge
+	conf  SpanConf
+	pri   *isdn.PRI
+	ss7   *ss7.SS7
+	byQ   map[int]int // Q.931 channel -> DAHDI channel
+	byCIC map[int]int // CIC -> DAHDI channel
+	byD   map[int]int
+	err   string
 }
 
 // startSpans opens each span's D-channel and its B-channels' ports.
 func (b *Bridge) startSpans() {
 	for i, sc := range b.cfg.Spans {
-		s := &span{b: b, conf: sc, byQ: map[int]int{}, byD: map[int]int{}}
+		s := &span{b: b, conf: sc, byQ: map[int]int{}, byD: map[int]int{}, byCIC: map[int]int{}}
 		for j, ch := range sc.B {
 			if j < len(sc.Q931) {
 				s.byQ[sc.Q931[j]], s.byD[ch] = ch, sc.Q931[j]
@@ -81,6 +86,18 @@ func (s *span) run(i int) {
 			case <-b.ctx.Done():
 				return
 			case <-time.After(10 * time.Second):
+			}
+			continue
+		}
+		if s.conf.SS7 != nil {
+			err = s.runSS7(i, link)
+			b.mu.Lock()
+			s.err = "the signalling link stopped: " + errString(err)
+			b.mu.Unlock()
+			select {
+			case <-b.ctx.Done():
+				return
+			case <-time.After(2 * time.Second):
 			}
 			continue
 		}
@@ -119,8 +136,17 @@ func closeLink(l isdn.Link) {
 
 func (s *span) status() string {
 	s.b.mu.Lock()
-	p, err := s.pri, s.err
+	p, l, err := s.pri, s.ss7, s.err
 	s.b.mu.Unlock()
+	if s.conf.SS7 != nil {
+		if l == nil || !l.IsUp() {
+			if err != "" {
+				return "SS7 link set down: " + err
+			}
+			return "SS7 link set down"
+		}
+		return "SS7 link set up, " + strconv.Itoa(len(l.Busy())) + " of " + strconv.Itoa(len(s.conf.B)) + " circuits in calls"
+	}
 	if p == nil || !p.IsUp() {
 		if err != "" {
 			return "D-channel down: " + err
@@ -132,11 +158,15 @@ func (s *span) status() string {
 
 // incoming: the phone company (or the PBX on our network side) calls: the engine is called, to the
 // called number, from the caller's.
-func (s *span) incoming(c *isdn.Call) {
-	b := s.b
-	b.mu.Lock()
-	p := b.ports[s.byQ[c.Channel]]
-	b.mu.Unlock()
+func (s *span) incoming(ic *isdn.Call) {
+	s.b.mu.Lock()
+	p := s.b.ports[s.byQ[ic.Channel]]
+	s.b.mu.Unlock()
+	s.b.incomingCall(fromISDN(ic), p)
+}
+
+// incomingCall: a call on a digital trunk (ISDN or SS7) reaches the engine.
+func (b *Bridge) incomingCall(c *tcall, p *port) {
 	if p == nil || !p.is(stIdle) {
 		c.Hangup(isdn.CauseChannelUnavailable)
 		return
@@ -156,7 +186,7 @@ func (s *span) incoming(c *isdn.Call) {
 	if from == "" {
 		from = "anonymous"
 	}
-	lc := &lineCall{p: p, callID: sip.NewCallID(), inbound: true, cseq: 1, pri: c}
+	lc := &lineCall{p: p, callID: sip.NewCallID(), inbound: true, cseq: 1, pri: c.pri, hang: c.Hangup}
 	lc.localURI = sipDisplay(c.Name) + "<sip:" + from + "@127.0.0.1>;tag=" + sip.NewTag()
 	lc.remoteURI = "<sip:" + to + "@127.0.0.1>"
 	inv := &sip.Message{IsRequest: true, Method: sip.INVITE, RequestURI: "sip:" + to + "@" + b.engine().Addr.String()}
@@ -178,7 +208,7 @@ func (s *span) incoming(c *isdn.Call) {
 	lc.client = tx
 	lc.mu.Unlock()
 	// The caller hanging up before the answer: cancel the engine's call.
-	go s.watch(c, lc, p)
+	go b.watch(c, lc, p)
 	var fin *sip.Message
 	alerted := false
 	for r := range tx.Responses {
@@ -228,7 +258,7 @@ func (s *span) incoming(c *isdn.Call) {
 }
 
 // watch follows the ISDN side of a call: the far end clearing ends the SIP side and frees the port.
-func (s *span) watch(c *isdn.Call, lc *lineCall, p *port) {
+func (b *Bridge) watch(c *tcall, lc *lineCall, p *port) {
 	for e := range c.Events {
 		switch e.Kind {
 		case "charge":
@@ -314,8 +344,14 @@ func (b *Bridge) priOut(tx *sip.ServerTx, m *sip.Message, number string) bool {
 	}
 	for _, s := range spans {
 		b.mu.Lock()
-		pri := s.pri
+		pri, link := s.pri, s.ss7
 		b.mu.Unlock()
+		if link != nil && link.IsUp() {
+			if b.ss7Out(tx, m, s, link, setup) {
+				return true
+			}
+			continue
+		}
 		if pri == nil || !pri.IsUp() {
 			continue
 		}
@@ -330,13 +366,13 @@ func (b *Bridge) priOut(tx *sip.ServerTx, m *sip.Message, number string) bool {
 			c.Hangup(isdn.CauseChannelUnavailable)
 			continue
 		}
-		b.callOnSpan(tx, m, c, p)
+		b.callOnSpan(tx, m, fromISDN(c), p)
 		return true
 	}
 	return false
 }
 
-func (b *Bridge) callOnSpan(tx *sip.ServerTx, m *sip.Message, c *isdn.Call, p *port) {
+func (b *Bridge) callOnSpan(tx *sip.ServerTx, m *sip.Message, c *tcall, p *port) {
 	p.set(stCalling)
 	conn, err := p.openRTP(remoteOf(m.Body))
 	if err != nil {
@@ -345,7 +381,7 @@ func (b *Bridge) callOnSpan(tx *sip.ServerTx, m *sip.Message, c *isdn.Call, p *p
 		tx.Respond(sip.NewResponse(m, 503, ""))
 		return
 	}
-	lc := &lineCall{p: p, callID: m.CallID(), invite: tx, cseq: 1000, pri: c}
+	lc := &lineCall{p: p, callID: m.CallID(), invite: tx, cseq: 1000, pri: c.pri, hang: c.Hangup}
 	lc.localURI = m.Get("To") + ";tag=" + sip.NewTag()
 	lc.remoteURI = m.Get("From")
 	if ct, err := sip.ParseAddress(m.Get("Contact")); err == nil && ct.URI != nil {
@@ -490,4 +526,24 @@ func (b *Bridge) referPRI(tx *sip.ServerTx, m *sip.Message, lc *lineCall) {
 	r := sip.NewResponse(m, 202, "")
 	r.Set("Refer-Sub", "false")
 	tx.Respond(r)
+}
+
+// tcall is a call on a digital trunk, ISDN or SS7, as the bridge needs it.
+type tcall struct {
+	Called, Calling, Name string
+	Redirecting           string
+	RedirectReason        int
+	Events                <-chan isdn.Event
+	alerting, answer      func() error
+	hangup                func(int)
+	pri                   *isdn.Call
+}
+
+func (c *tcall) Alerting() error  { return c.alerting() }
+func (c *tcall) Answer() error    { return c.answer() }
+func (c *tcall) Hangup(cause int) { c.hangup(cause) }
+
+func fromISDN(c *isdn.Call) *tcall {
+	return &tcall{Called: c.Called, Calling: c.Calling, Name: c.Name, Redirecting: c.Redirecting, RedirectReason: c.RedirectReason,
+		Events: c.Events, alerting: c.Alerting, answer: c.Answer, hangup: c.Hangup, pri: c}
 }

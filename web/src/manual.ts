@@ -155,7 +155,7 @@ Neither protocol has passwords. Skinny phones are accepted only from the local n
 > Both are tested against BitVoice's own test phone and test gateway, which follow the protocols, but not yet against Cisco phones or gateway hardware.`,
   },
   {
-    id: 'cards', title: 'Telephony cards', route: '/cards', keys: 'telephony card dahdi digium sangoma openvox wildcard fxs fxo analogue analog phone line pstn pots tdm bitvoice-dahdi chan_dahdi pri t1 e1 isdn primary rate did q931 libpri calling name redirecting two b-channel transfer 2bct ect dms-100 rlt release link trunk advice of charge aoc aoc-d aoc-e charging units bri basic rate s0 s-bus tei multipoint ptmp msn overlap e&m em wink feature group d fgd mf r1 robbed bit mfc-r2 r2 cas openr2 latin america',
+    id: 'cards', title: 'Telephony cards', route: '/cards', keys: 'telephony card dahdi digium sangoma openvox wildcard fxs fxo analogue analog phone line pstn pots tdm bitvoice-dahdi chan_dahdi pri t1 e1 isdn primary rate did q931 libpri calling name redirecting two b-channel transfer 2bct ect dms-100 rlt release link trunk advice of charge aoc aoc-d aoc-e charging units bri basic rate s0 s-bus tei multipoint ptmp msn overlap e&m em wink feature group d fgd mf r1 robbed bit mfc-r2 r2 cas openr2 latin america ss7 isup mtp2 mtp3 point code opc dpc apc cic stp libss7 grs',
     body: `A telephony card in the BitVoice computer (Digium, Sangoma, OpenVox and other cards with Linux DAHDI drivers) can carry analogue phones and phone company lines. A separate program, **bitvoice-dahdi**, drives the card and joins its ports to BitVoice over the computer's own network connection, so BitVoice itself never touches the kernel driver and a card problem cannot stop the phone system.
 
 ## Setting it up
@@ -208,11 +208,21 @@ Every circuit carries calls both ways. A call in reaches the inbound routes with
 
 The MFC-R2 signalling is tested against OpenR2 (the R2 library Asterisk's chan_dahdi uses), in every variant offered and in both directions, including a call refused as busy; E&M against BitVoice's own simulated channels.
 
+## SS7
+A carrier may hand over T1s or E1s signalled by SS7 rather than ISDN: the voice circuits carry calls, each named by a circuit identification code (CIC), and one timeslot carries the signalling link to the carrier's signal transfer point or switch, over which ISUP sets the calls up. BitVoice is then a signalling point of its own, with a point code the carrier assigns. In /etc/dahdi/system.conf set the span up as clear channels with the signalling timeslot as \`mtp2\` or \`hardhdlc\` (timeslot 16 on an E1, 24 on a T1). Under **Digital lines** add the span, set **Signalling** to **SS7 (ISUP)** and give:
+
+- **SS7 variant**: ANSI (North America; point codes network-cluster-member, like 245-16-1) or ITU-T (most of the world; point codes zone-area-point, like 1-10-2, or a plain number).
+- **Our point code** and **Adjacent point code**, the **Network** (national, the usual, or international), the signalling **Link code** (SLC, 0 unless told otherwise), and the **First CIC**: the code of the span's first voice channel, the others following in order. All of these come from the carrier.
+
+When the link comes up, BitVoice aligns it (MTP level 2, with the emergency proving period as a single-link link set uses), proves it with the link test (SLTM/SLTA), exchanges traffic restart allowed, and resets every circuit (GRS). Calls in reach the inbound routes with the number dialled, the caller's number (withheld ones as anonymous), the number a call was forwarded from and, on ANSI, the caller's name; calls out carry the extension's caller ID and name. The carrier blocking or resetting circuits is obeyed. On dual seizure the end with the higher point code keeps the even circuits, as Q.764 says, and BitVoice takes the circuits it keeps first.
+
+SS7 is tested against libss7 (the SS7 library Asterisk's chan_dahdi uses), ITU and ANSI: alignment, link test, traffic restart, circuit reset, calls both ways with numbers and names, release, busy and blocking; and BitVoice against itself with frames lost on the link (sent again by MTP2's error correction) and a dual seizure. One link per span: a link set of several links, signal transfer, and SCCP/TCAP (number portability lookups, toll-free translation) are not offered.
+
 **Advice of charge.** On a EuroISDN line, switch on **Advice of charge** and BitVoice asks the phone company, with each call out, to say what it costs: during the call (AOC-D) and at its end (AOC-E), in money or in charging units. The last figure goes on the call's record (**charged EUR 1.50** in History, and beside the call on Costs); when it is in your currency (set on Costs) it is the call's cost, instead of the figure from the trunk's rates. The phone company must offer the service on the line. SIP trunks may send the same advice, as the 3GPP AOC XML in an INFO or the BYE, and BitVoice keeps it the same way.
 
 The PRI code is tested against libpri (the ISDN library Asterisk uses), both as the user side and as the network side, for National ISDN-2 and EuroISDN calls, names, redirecting and connected numbers, explicit call transfer, the Two B-Channel Transfer and DMS-100 Release Link Trunk requests byte for byte (with libpri's PBX joined by BitVoice as the DMS-100), and advice of charge in both directions; and on BRI, point to point and multipoint, as the terminal and as the network (TEI assignment, calls broadcast to the bus, numbers dialled digit by digit).
 
-Not yet: caller ID shown on analogue phones or read from analogue lines, hook flash, SS7, and echo cancellation beyond what the card itself does.
+Not yet: caller ID shown on analogue phones or read from analogue lines, hook flash, and echo cancellation beyond what the card itself does.
 
 > bitvoice-dahdi is tested against a simulated card, not yet against real card hardware. It must run on the same computer as BitVoice: it only talks to 127.0.0.1, and BitVoice answers its token only from there.`,
   },

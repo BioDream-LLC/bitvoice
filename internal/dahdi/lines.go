@@ -31,8 +31,9 @@ type lineCall struct {
 	cseq                int
 	answered            bool
 	ended               bool
-	pri                 *isdn.Call // a call on a PRI B-channel
-	charge              []byte     // the network's final advice of charge, for the BYE
+	pri                 *isdn.Call      // a call on a PRI B-channel
+	hang                func(cause int) // ends the call on a digital trunk (ISDN or SS7)
+	charge              []byte          // the network's final advice of charge, for the BYE
 	mu                  sync.Mutex
 }
 
@@ -142,8 +143,8 @@ func (lc *lineCall) end(hang bool) {
 		r.Set("To", lc.localURI)
 		invite.Respond(r)
 	}
-	if lc.pri != nil {
-		lc.pri.Hangup(isdn.CauseNormal)
+	if lc.hang != nil {
+		lc.hang(isdn.CauseNormal)
 		return
 	}
 	lc.p.mu.Lock()
@@ -327,8 +328,8 @@ func (b *Bridge) handleLine(tx *sip.ServerTx, in *sip.Incoming) {
 				r.Set("To", lc.localURI)
 				inv.Respond(r)
 			}
-			if lc.pri != nil {
-				lc.pri.Hangup(isdn.CauseNormal)
+			if lc.hang != nil {
+				lc.hang(isdn.CauseNormal)
 			}
 			p.lineDone()
 		}
@@ -338,8 +339,8 @@ func (b *Bridge) handleLine(tx *sip.ServerTx, in *sip.Incoming) {
 			lc.mu.Lock()
 			lc.ended = true
 			lc.mu.Unlock()
-			if lc.pri != nil {
-				lc.pri.Hangup(isdn.CauseNormal)
+			if lc.hang != nil {
+				lc.hang(isdn.CauseNormal)
 			}
 			p.lineDone()
 		}

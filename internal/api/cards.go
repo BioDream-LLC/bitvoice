@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/biodream-llc/bitvoice/internal/config"
 	"github.com/biodream-llc/bitvoice/internal/dahdi"
 	"github.com/biodream-llc/bitvoice/internal/store"
 )
@@ -70,7 +71,18 @@ func (s *Server) cardsRoutes() {
 				}
 				continue
 			}
-			sc := dahdi.SpanConf{D: d, B: bs, Network: sp.Role == "network", Switch: sp.Switch, NetworkTransfer: sp.NetworkTransfer, Charges: sp.Charges,
+			var sig *dahdi.SS7Conf
+			if sp.Signalling == "ss7" {
+				ansi := sp.Variant == "ansi"
+				opc, _ := config.PointCode(sp.OPC, ansi)
+				apc, _ := config.PointCode(sp.APC, ansi)
+				ni := 2
+				if sp.NI == "international" {
+					ni = 0
+				}
+				sig = &dahdi.SS7Conf{ANSI: ansi, OPC: opc, APC: apc, NI: ni, SLC: sp.SLC, FirstCIC: sp.FirstCIC}
+			}
+			sc := dahdi.SpanConf{SS7: sig, D: d, B: bs, Network: sp.Role == "network", Switch: sp.Switch, NetworkTransfer: sp.NetworkTransfer, Charges: sp.Charges,
 				BRI: sp.Type == "bri", Multipoint: sp.Multipoint}
 			for _, ch := range bs {
 				sc.Q931 = append(sc.Q931, ch-sp.First+1)

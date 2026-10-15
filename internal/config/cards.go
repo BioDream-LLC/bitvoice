@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"regexp"
+	"strconv"
+	"strings"
 )
 
 // Cards is the telephony cards (DAHDI) of this computer, joined to BitVoice by the separate
@@ -57,8 +59,55 @@ type CardSpan struct {
 	Address string `json:"address,omitempty"`
 	// Number (em, r2) is the number a call in reaches when the far end sends none.
 	Number string `json:"number,omitempty"`
-	// Variant (r2) is the country's MFC-R2 variant: itu, and the national ones.
+	// Variant (r2) is the country's MFC-R2 variant: itu, and the national ones; (ss7) itu or ansi.
 	Variant string `json:"variant,omitempty"`
+	// SS7 (signalling ss7): this end's point code (OPC), the adjacent signalling point's (APC: the
+	// carrier's STP or switch), the network indicator (national or international), the signalling
+	// link code, and the CIC of the span's first voice channel. Point codes are a number, or dashed:
+	// network-cluster-member for ANSI, zone-area-point (3-8-3) for ITU.
+	OPC      string `json:"opc,omitempty"`
+	APC      string `json:"apc,omitempty"`
+	NI       string `json:"ni,omitempty"`
+	SLC      int    `json:"slc,omitempty"`
+	FirstCIC int    `json:"firstCic,omitempty"`
+}
+
+// PointCode reads a point code: a number, or n-c-m (ANSI, 8 bits each) or z-a-s (ITU, 3-8-3 bits).
+func PointCode(s string, ansi bool) (int, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, false
+	}
+	parts := strings.Split(s, "-")
+	if len(parts) == 1 {
+		v, err := strconv.Atoi(s)
+		max := 1<<14 - 1
+		if ansi {
+			max = 1<<24 - 1
+		}
+		return v, err == nil && v > 0 && v <= max
+	}
+	if len(parts) != 3 {
+		return 0, false
+	}
+	var n [3]int
+	for i, p := range parts {
+		v, err := strconv.Atoi(p)
+		if err != nil || v < 0 {
+			return 0, false
+		}
+		n[i] = v
+	}
+	if ansi {
+		if n[0] > 255 || n[1] > 255 || n[2] > 255 {
+			return 0, false
+		}
+		return n[0]<<16 | n[1]<<8 | n[2], true
+	}
+	if n[0] > 7 || n[1] > 255 || n[2] > 7 {
+		return 0, false
+	}
+	return n[0]<<11 | n[1]<<3 | n[2], true
 }
 
 // CAS says whether the span's channels are signalled one by one (E&M, R2) rather than on a D-channel.
@@ -194,8 +243,45 @@ func (c *Config) validateCards(p *Problems) {
 			if s.Type != "e1" {
 				p.add(f+".signalling", "MFC-R2 is for E1 spans")
 			}
+		case "ss7":
+			if s.Type == "bri" {
+				p.add(f+".signalling", "SS7 is for T1 and E1 spans")
+			}
+			if s.Variant == "" {
+				s.Variant = "itu"
+				if s.Type == "t1" {
+					s.Variant = "ansi"
+				}
+			}
+			if s.Variant != "itu" && s.Variant != "ansi" {
+				p.add(f+".variant", "choose itu or ansi")
+			}
+			ansi := s.Variant == "ansi"
+			if _, ok := PointCode(s.OPC, ansi); !ok {
+				p.add(f+".opc", "give this end's point code (a number, or %s)", map[bool]string{true: "network-cluster-member", false: "zone-area-point"}[ansi])
+			}
+			if v, ok := PointCode(s.APC, ansi); !ok {
+				p.add(f+".apc", "give the adjacent signalling point's code")
+			} else if o, _ := PointCode(s.OPC, ansi); o == v {
+				p.add(f+".apc", "the adjacent point code is the same as this end's")
+			}
+			if s.NI == "" {
+				s.NI = "national"
+			}
+			if s.NI != "national" && s.NI != "international" {
+				p.add(f+".ni", "choose national or international")
+			}
+			if s.SLC < 0 || s.SLC > 15 {
+				p.add(f+".slc", "use 0 to 15")
+			}
+			if s.FirstCIC <= 0 {
+				s.FirstCIC = 1
+			}
+			if max := map[bool]int{true: 1<<14 - 1, false: 1<<12 - 1}[ansi]; s.FirstCIC+30 > max {
+				p.add(f+".firstCic", "the circuits' codes go up to %d", max)
+			}
 		default:
-			p.add(f+".signalling", "choose isdn, em or r2")
+			p.add(f+".signalling", "choose isdn, em, r2 or ss7")
 		}
 		if s.Number != "" && !lineNumberRe.MatchString(s.Number) {
 			p.add(f+".number", "use digits, with + in front for an international number")

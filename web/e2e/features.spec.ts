@@ -710,6 +710,35 @@ test('E&M and MFC-R2 spans on a telephony card', async ({ page }) => {
   expect(r2.map((c: { channel: number }) => c.channel)).not.toContain(416) // timeslot 16 carries the bits
 })
 
+// SS7 on an E1: point codes checked, and bitvoice-dahdi told the link set and the circuits' codes.
+test('SS7 span on a telephony card', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/#/cards')
+  const on = page.getByRole('switch', { name: 'Telephony cards' })
+  if (!(await on.isChecked())) await on.click()
+  await page.getByRole('button', { name: 'Add a T1, E1 or BRI' }).click()
+  const n = await page.getByLabel('Line', { exact: true }).count()
+  await page.getByLabel('Line', { exact: true }).nth(n - 1).selectOption('e1')
+  await page.getByLabel('First channel').nth(n - 1).fill('501')
+  await page.locator('[id^="sp-g-"]').last().selectOption('ss7')
+  await expect(page.getByLabel('SS7 variant').last()).toHaveValue('itu')
+  await page.getByLabel('Our point code').last().fill('1-10-2')
+  await page.getByLabel('Adjacent point code').last().fill('1-10-2')
+  await page.getByLabel('First CIC').last().fill('33')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText('the adjacent point code is the same as this end\'s')).toBeVisible()
+  await page.getByLabel('Adjacent point code').last().fill('1-10-1')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText('Telephony cards saved')).toBeVisible()
+  await expect(page.getByText('Voice circuits 501 to 531 (CIC 33 up), signalling link on channel 516.')).toBeVisible()
+  const token = await page.getByRole('textbox', { name: 'Token' }).inputValue()
+  const cfg = await page.evaluate(async (tok) => (await (await fetch('./api/cards/bridge', { headers: { Authorization: 'Bearer ' + tok } })).json()), token)
+  const s = cfg.spans[cfg.spans.length - 1]
+  expect(s.d).toBe(516)
+  expect(s.b).toHaveLength(30)
+  expect(s.ss7).toMatchObject({ opc: 2130, apc: 2129, ni: 2, firstCic: 33 })
+})
+
 // The outbound dialer: a campaign is made for a queue, a CSV list is loaded (one number on the
 // do-not-call list), preview hands out the next contact, and the do-not-call list takes numbers.
 test('outbound dialer campaign', async ({ page }) => {
