@@ -5,6 +5,7 @@ package config
 
 import (
 	"crypto/rand"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -476,6 +477,13 @@ type Core struct {
 	// LIS answers HELD location requests by telephone number at /held (the same addresses only),
 	// from the location records uploaded on the Core services page.
 	LIS bool `json:"lis"`
+	// Logging runs an i3 logging service (NENA-STA-010) at /i3log for the other elements: log events
+	// arrive signed (JWS) and are kept; they can be read back by ID, call or incident.
+	Logging bool `json:"logging"`
+	// PCARoots are the PSAP Credentialing Agency's root certificates (PEM): with them, a signed log
+	// event is taken only when its signer's certificate chains to one. Empty: the signature alone is
+	// checked, and the event is kept marked as not traced to the PCA.
+	PCARoots string `json:"pcaRoots"`
 	// ESRP: calls sent to the "esrp" destination go to the PSAP serving the caller's location.
 	PSAPs []CorePSAP `json:"psaps"`
 	// Default is the PSAP URI for calls with no location, or one no area covers (the policy's
@@ -2103,6 +2111,15 @@ func (c *Config) Validate() error {
 	}
 	if u := c.System.Core.LoSTURL; u != "" && !strings.HasPrefix(u, "https://") && !strings.HasPrefix(u, "http://") {
 		p.add("system.core.lostUrl", "enter the ECRF's https address")
+	}
+	if r := strings.TrimSpace(c.System.Core.PCARoots); r != "" {
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM([]byte(r)) {
+			p.add("system.core.pcaRoots", "paste the PCA's root certificates in PEM (-----BEGIN CERTIFICATE-----)")
+		}
+	}
+	if c.System.Core.Logging && len(c.System.Core.AllowFrom) == 0 {
+		p.add("system.core.allowFrom", "say which addresses may send log events (your ESInet)")
 	}
 	if fg := strings.TrimSpace(c.System.Core.ForestGuide); fg != "" && !strings.HasPrefix(fg, "https://") && !strings.HasPrefix(fg, "http://") {
 		p.add("system.core.forestGuide", "enter the forest guide's https address")

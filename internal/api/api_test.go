@@ -44,7 +44,7 @@ func newServer(t *testing.T) (*Server, *httptest.Server) {
 	}
 	t.Cleanup(eng.Stop)
 	st.OnChange(eng.Apply)
-	s := &Server{Store: st, Engine: eng, Bus: bus, Version: "test", SetupCode: "123456", Trace: NewTraceBuffer(100)}
+	s := &Server{Store: st, Engine: eng, Bus: bus, Version: "test", SetupCode: "123456", Trace: NewTraceBuffer(100), DataDir: t.TempDir()}
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(ts.Close)
 	return s, ts

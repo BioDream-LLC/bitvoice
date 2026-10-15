@@ -3,7 +3,7 @@ import { useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   api, errorOf, useBoundariesQuery, useDeleteBoundaryMutation, useLazyFindAreaQuery, useSaveBoundaryMutation, useSaveSettingsMutation, useSettingsQuery, useTrunksQuery, useSchedulesQuery,
-  useAddressDataQuery, useDeleteAddressesMutation, useValidateAddressMutation, useBcfLogQuery, useLisDataQuery, useLazyLisDataQuery, useDeleteLISMutation,
+  useAddressDataQuery, useDeleteAddressesMutation, useValidateAddressMutation, useBcfLogQuery, useLisDataQuery, useLazyLisDataQuery, useDeleteLISMutation, useReceivedLogQuery,
   type ApiErrorBody, type Boundary, type CoreRule, type CoreSettings, type Validation,
 } from './api'
 import { attempt, useIsAdmin } from './Editor'
@@ -12,7 +12,7 @@ import { useDraft } from './useDraft'
 import { Badge, Empty, Field, Page, StaleBanner, Toggle, problemFor } from './ui'
 
 const blankBCF = { enabled: false, perMinute: 0, concurrent: 0, deny: [] as string[], mark: false, verifyIdentity: false }
-const blankCore: CoreSettings = { ecrf: false, lis: false, source: '', allowFrom: [], psaps: [], default: '', lostUrl: '', forestGuide: '', rules: [], bcf: blankBCF }
+const blankCore: CoreSettings = { ecrf: false, lis: false, logging: false, pcaRoots: '', source: '', allowFrom: [], psaps: [], default: '', lostUrl: '', forestGuide: '', rules: [], bcf: blankBCF }
 /** Place names may have spaces in them: split on commas only. */
 const commas = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean)
 const list = (s: string) => s.split(/[,\s]+/).map((x) => x.trim()).filter(Boolean)
@@ -27,6 +27,7 @@ export function CoreServices() {
       <TryPlace />
       <AddressData />
       <LocationRecords />
+      <ReceivedLog />
       <BCFLog />
     </Page>
   )
@@ -62,6 +63,11 @@ function CoreSetup() {
         <p className="text-sm text-slate-400">Other NG911 elements ask at <span className="font-mono text-amber-300">{origin}/lost</span> (LoST, RFC 5222). Only the addresses below get an answer.</p>
         <Toggle checked={draft.lis} onChange={(v) => set({ lis: v })} label="Answer location requests by telephone number (LIS)" />
         <p className="text-sm text-slate-400">PSAPs and legacy network gateways ask at <span className="font-mono text-amber-300">{origin}/held</span> (HELD, RFC 5985, by number as RFC 6155 has it), from the location records below. The same addresses only.</p>
+        <Toggle checked={draft.logging} onChange={(v) => set({ logging: v })} label="Run an i3 logging service (NENA-STA-010)" />
+        <p className="text-sm text-slate-400">The other elements send their log events, signed (JWS), to <span className="font-mono text-amber-300">{origin}/i3log/LogEvents</span>; they are kept and can be read back by ID, call or incident. The same addresses only.</p>
+        <Field label="PSAP Credentialing Agency roots" htmlFor="cspca" error={p('pcaRoots')} hint="The PCA's root certificates, PEM. With them, a log event is taken only when its signer's certificate comes from the PCA; without, the signature alone is checked.">
+          <textarea id="cspca" className="input h-24 font-mono text-xs" value={draft.pcaRoots} placeholder="-----BEGIN CERTIFICATE-----" onChange={(e) => set({ pcaRoots: e.target.value })} />
+        </Field>
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="May ask (your ESInet)" htmlFor="csa" error={p('allowFrom') ?? err?.problems?.find((x) => x.field.startsWith('system.core.allowFrom['))?.message} hint="Addresses or ranges, separated by commas.">
             <input id="csa" className="input font-mono" value={allow ?? draft.allowFrom.join(', ')} placeholder="10.20.0.0/16" onChange={(e) => setAllow(e.target.value)} />
@@ -360,6 +366,30 @@ function AddressData() {
           {error && <p className="text-sm text-rose-300">{errorOf(error).message}</p>}
           {result && <ValidationResult v={result} />}
         </form>
+      )}
+    </section>
+  )
+}
+
+/** What the i3 logging service has taken, by day. */
+function ReceivedLog() {
+  const [day, setDay] = useState(new Date().toISOString().slice(0, 10))
+  const { data } = useReceivedLogQuery(day, { pollingInterval: 10000 })
+  const items = data?.items ?? []
+  return (
+    <section className="card mt-6 space-y-3 p-5" aria-labelledby="cg-h">
+      <h2 id="cg-h" className="flex items-center gap-2 font-semibold text-slate-100"><ListOrdered size={17} className="text-sky-300" aria-hidden /> Log events received</h2>
+      <Field label="Day (UTC)" htmlFor="cgd"><input id="cgd" type="date" className="input w-48" value={day} onChange={(e) => setDay(e.target.value)} /></Field>
+      {!items.length ? <p className="text-sm text-slate-400">No log events on this day.</p> : (
+        <table className="w-full text-sm"><thead className="text-left text-xs text-slate-500"><tr><th className="py-1">Received</th><th>Event</th><th>From</th><th>Signed by</th><th>Call</th></tr></thead>
+          <tbody>{items.map((e) => (
+            <tr key={e.logEventId} className="border-t border-slate-800">
+              <td className="py-1 font-mono text-xs text-slate-400">{new Date(e.received).toLocaleTimeString()}</td>
+              <td><Badge status="info">{String(e.type).replace(/LogEvent$/, '')}</Badge> <span className="text-xs text-slate-500">{e.elementId}</span></td>
+              <td className="font-mono text-xs text-slate-400">{e.from}</td>
+              <td>{e.signer} {e.chained ? <Badge status="ok">PCA</Badge> : <Badge status="warn">not traced to the PCA</Badge>}</td>
+              <td className="font-mono text-xs text-slate-500">{e.callId?.split(':')[4]}</td>
+            </tr>))}</tbody></table>
       )}
     </section>
   )

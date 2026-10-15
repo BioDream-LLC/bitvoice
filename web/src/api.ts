@@ -131,7 +131,7 @@ export interface CoreRule {
 }
 export interface BCFSettings { enabled: boolean; perMinute: number; concurrent: number; deny: string[]; mark: boolean; verifyIdentity: boolean }
 export interface LISRecordView { number: string; civic: Civic; lat?: number; lon?: number; radius?: number }
-export interface CoreSettings { ecrf: boolean; lis: boolean; source: string; allowFrom: string[]; psaps: CorePSAP[]; default: string; lostUrl: string; forestGuide: string; rules: CoreRule[]; bcf: BCFSettings }
+export interface CoreSettings { ecrf: boolean; lis: boolean; logging: boolean; pcaRoots: string; source: string; allowFrom: string[]; psaps: CorePSAP[]; default: string; lostUrl: string; forestGuide: string; rules: CoreRule[]; bcf: BCFSettings }
 export interface Validation { valid: string[]; invalid: string[]; unchecked: string[]; matched?: string; found?: Record<string, string> }
 export interface BCFEvent { at: string; source: string; from: string; action: 'refused' | 'marked'; why: string }
 export interface Boundary { id: string; service: string; name: string; uri: string; number: string; cities?: string[] | null; counties?: string[] | null; states?: string[] | null; corners: number }
@@ -459,6 +459,7 @@ export const api = createApi({
       boundaries: b.query<List<Boundary>, void>({ query: () => 'core/boundaries', providesTags: ['Settings'] }),
       saveBoundary: b.mutation<void, Boundary>({ query: (x) => ({ url: `core/boundaries/${x.id}`, method: 'PUT', body: x }), invalidatesTags: ['Settings'] }),
       deleteBoundary: b.mutation<void, string>({ query: (id) => ({ url: `core/boundaries/${id}`, method: 'DELETE' }), invalidatesTags: ['Settings'] }),
+      receivedLog: b.query<{ day: string; items: { logEventId: string; received: string; from: string; signer: string; chained: boolean; type: string; elementId?: string; agencyId?: string; callId?: string }[] }, string>({ query: (day) => ({ url: 'core/i3log', params: { day } }), providesTags: ['Calls'] }),
       lisData: b.query<{ records: number; updated?: string; found?: LISRecordView }, string | void>({ query: (n) => ({ url: 'core/lis', params: n ? { number: n } : undefined }), providesTags: ['Settings'] }),
       deleteLIS: b.mutation<void, void>({ query: () => ({ url: 'core/lis', method: 'DELETE' }), invalidatesTags: ['Settings'] }),
       addressData: b.query<{ streets: number; points: number; updated?: string }, void>({ query: () => 'core/addresses', providesTags: ['Settings'] }),
@@ -821,7 +822,7 @@ export const api = createApi({
 })
 
 export const {
-  useFaxBoxesQuery, useCreateFaxBoxMutation, useUpdateFaxBoxMutation, useDeleteFaxBoxMutation, useFaxesQuery, useDeleteFaxMutation, useFaxKindsQuery, useSendFaxMutation, useRetryFaxMutation, useTestFaxMailMutation, usePsapReportQuery, usePsapLogQuery, useRebidMutation, useSendCallTextMutation, useTakeTextCallMutation, useEndTextCallMutation, useBoundariesQuery, useSaveBoundaryMutation, useDeleteBoundaryMutation, useLazyFindAreaQuery, useAddressDataQuery, useLisDataQuery, useLazyLisDataQuery, useDeleteLISMutation, useDeleteAddressesMutation, useValidateAddressMutation, useBcfLogQuery, useRadioQuery, usePttMutation, useSimulSelectMutation, useAckEmergencyMutation, useMonitorMutation, usePatchMutation, useAlertToneMutation, useUnitCallMutation, useHangUpMutation, useRadioLogQuery, useRadioLocationsQuery, useMapSourceQuery,
+  useFaxBoxesQuery, useCreateFaxBoxMutation, useUpdateFaxBoxMutation, useDeleteFaxBoxMutation, useFaxesQuery, useDeleteFaxMutation, useFaxKindsQuery, useSendFaxMutation, useRetryFaxMutation, useTestFaxMailMutation, usePsapReportQuery, usePsapLogQuery, useRebidMutation, useSendCallTextMutation, useTakeTextCallMutation, useEndTextCallMutation, useBoundariesQuery, useSaveBoundaryMutation, useDeleteBoundaryMutation, useLazyFindAreaQuery, useAddressDataQuery, useLisDataQuery, useLazyLisDataQuery, useReceivedLogQuery, useDeleteLISMutation, useDeleteAddressesMutation, useValidateAddressMutation, useBcfLogQuery, useRadioQuery, usePttMutation, useSimulSelectMutation, useAckEmergencyMutation, useMonitorMutation, usePatchMutation, useAlertToneMutation, useUnitCallMutation, useHangUpMutation, useRadioLogQuery, useRadioLocationsQuery, useMapSourceQuery,
   useTextingKindsQuery,
   useMeQuery, useAuthOptionsQuery, useLoginMutation, useLogoutMutation, useSetupStatusQuery, useCompleteSetupMutation,
   useExtensionsQuery, useCreateExtensionMutation, useUpdateExtensionMutation, useDeleteExtensionMutation, useLazyNextExtensionQuery,

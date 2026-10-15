@@ -56,6 +56,9 @@ func (s *Server) lisRecords() (map[string]i3.LISRecord, time.Time) {
 }
 
 func (s *Server) saveLIS(by map[string]i3.LISRecord) error {
+	if s.DataDir == "" {
+		return errors.New("this server has no data folder to keep location records in")
+	}
 	list := make([]i3.LISRecord, 0, len(by))
 	for _, r := range by {
 		list = append(list, r)
