@@ -10,6 +10,8 @@ package r2
 
 import (
 	"errors"
+	"fmt"
+	"os"
 	"time"
 )
 
@@ -364,6 +366,7 @@ func (c *Chan) ended() {
 }
 
 func (c *Chan) protocolError() {
+	dbg("PROTO", c.line, c.state, c.group, c.readTone, c.writeTone)
 	// As OpenR2 does: report the call down and return to idle (after a clear forward when we seized).
 	wasForward := c.dir == dirForward
 	if c.call != csIdle {
@@ -494,6 +497,7 @@ func (c *Chan) incoming() {
 }
 
 func (c *Chan) prepareTone(n int) {
+	dbg("SEND", n)
 	if c.writeTone == n {
 		return
 	}
@@ -620,6 +624,7 @@ func (c *Chan) receiveANI(n int) {
 
 // handleTone takes a change in what is heard.
 func (c *Chan) handleTone(n int) {
+	dbg("TONE", n, c.state, c.group, c.readTone, c.writeTone)
 	if c.state == mfOff {
 		return
 	}
@@ -1061,5 +1066,13 @@ func (c *Chan) hangup() {
 		c.setCAS(casClearForward)
 	default:
 		c.sendClearForward()
+	}
+}
+
+var dbgOn = os.Getenv("R2GODEBUG") != ""
+
+func dbg(a ...any) {
+	if dbgOn {
+		fmt.Fprintln(os.Stderr, append([]any{time.Now().Format("05.000")}, a...)...)
 	}
 }

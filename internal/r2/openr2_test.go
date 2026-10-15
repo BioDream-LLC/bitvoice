@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"runtime/pprof"
 	"strings"
 	"sync"
 	"testing"
@@ -50,15 +52,24 @@ func (k *circuit) setForward(f bool) {
 	k.mu.Unlock()
 }
 
+// tick sends a frame every 20 ms, as an E1's clock does. It polls the clock rather than sleeping on a
+// timer: macOS defers the timers of a process it thinks idle (by seconds), which a line cannot afford.
 func (k *circuit) tick() {
-	t := time.NewTicker(20 * time.Millisecond)
-	defer t.Stop()
 	pcm := make([]int16, 160)
+	next := time.Now()
 	for {
-		select {
-		case <-k.stopTick:
-			return
-		case <-t.C:
+		next = next.Add(20 * time.Millisecond)
+		for time.Now().Before(next) {
+			select {
+			case <-k.stopTick:
+				return
+			default:
+			}
+			if d := time.Until(next); d > 2*time.Millisecond {
+				time.Sleep(time.Millisecond)
+			} else {
+				runtime.Gosched()
+			}
 		}
 		k.mu.Lock()
 		if k.forward {
@@ -78,8 +89,9 @@ func (k *circuit) tick() {
 
 func (k *circuit) read() {
 	buf := make([]byte, 512)
-	pcm := make([]int16, 160)
+	pcm := make([]int16, 512)
 	for {
+		pcm = pcm[:cap(pcm)]
 		n, _, err := k.c.ReadFromUnix(buf)
 		if err != nil {
 			return
@@ -87,7 +99,8 @@ func (k *circuit) read() {
 		switch {
 		case n >= 2 && buf[0] == 'B':
 			k.ch.Bits(int(buf[1]))
-		case n == 161 && buf[0] == 'A':
+		case n > 1 && buf[0] == 'A': // OpenR2 may write less than a frame at a time
+			pcm = pcm[:n-1]
 			for i := range pcm {
 				pcm[i] = media.AlawToLinear(buf[1+i])
 			}
@@ -117,13 +130,22 @@ func (o *r2oracle) expect(prefix string) string {
 			if !ok {
 				o.t.Fatalf("OpenR2 ended before %q", prefix)
 			}
+			if l == "RXFULL" {
+				o.t.Log("OpenR2 stopped reading the line: its queue filled")
+			}
 			if strings.HasPrefix(l, "PROTOCOL_ERROR") && !strings.HasPrefix(prefix, "PROTOCOL") {
+				if os.Getenv("R2STACKS") != "" {
+					_ = pprof.Lookup("goroutine").WriteTo(os.Stderr, 2)
+				}
 				o.t.Fatalf("OpenR2: %s (waiting for %q)", l, prefix)
 			}
 			if strings.HasPrefix(l, prefix) {
 				return l
 			}
 		case <-timeout:
+			if os.Getenv("R2STACKS") != "" {
+				_ = pprof.Lookup("goroutine").WriteTo(os.Stderr, 2)
+			}
 			o.t.Fatalf("OpenR2 never said %q", prefix)
 		}
 	}
@@ -144,6 +166,8 @@ func startOpenR2(t *testing.T, variant string, args []string, ev func(**Chan) Ev
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { c.Close() })
+	_ = c.SetReadBuffer(1 << 20) // room for jitter: neither end ever blocks the other
+	_ = c.SetWriteBuffer(1 << 20)
 	names := map[string]string{"itu": "itu", "ar": "ar", "br": "br", "cz": "cz", "co": "co", "ec": "ec", "mx": "mx", "ph": "ph", "ve": "ve"}
 	cmd := exec.Command(bin, append([]string{path, names[variant]}, args...)...)
 	out, _ := cmd.StdoutPipe()
