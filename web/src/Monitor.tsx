@@ -38,7 +38,8 @@ export function History() {
       const cause = c.row.original.cause
       return <span className="flex flex-col items-start gap-0.5"><Badge status={d[0]}>{d[1]}</Badge>{c.getValue() !== 'answered' && cause && <span className="text-xs text-slate-500">{cause}</span>}</span>
     } }),
-    col.accessor('billsec', { header: 'Talk time', cell: (c) => <span className="font-mono text-xs tabular-nums text-emerald-300">{c.row.original.answer ? formatDuration(c.getValue()) : '—'}</span> }),
+    col.accessor('billsec', { header: 'Talk time', cell: (c) => <span className="flex flex-col items-start gap-0.5"><span className="font-mono text-xs tabular-nums text-emerald-300">{c.row.original.answer ? formatDuration(c.getValue()) : '—'}</span>
+      {c.row.original.charged && <span className="text-xs text-amber-200" title="What the phone company said this call cost (advice of charge)">charged {c.row.original.charged}</span>}</span> }),
     col.accessor('recording', { header: () => <span className="sr-only">Recording</span>, enableSorting: false, cell: (c) => {
       const r = c.row.original
       const paused = r.paused?.map((s) => `${formatDuration(s.from)}–${formatDuration(s.to)}`).join(', ')

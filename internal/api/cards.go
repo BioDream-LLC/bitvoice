@@ -62,7 +62,7 @@ func (s *Server) cardsRoutes() {
 		}
 		for _, sp := range k.Spans {
 			bs, d := sp.Channels()
-			sc := dahdi.SpanConf{D: d, B: bs, Network: sp.Role == "network", Switch: sp.Switch, NetworkTransfer: sp.NetworkTransfer}
+			sc := dahdi.SpanConf{D: d, B: bs, Network: sp.Role == "network", Switch: sp.Switch, NetworkTransfer: sp.NetworkTransfer, Charges: sp.Charges}
 			for _, ch := range bs {
 				sc.Q931 = append(sc.Q931, ch-sp.First+1)
 			}

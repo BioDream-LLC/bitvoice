@@ -2,6 +2,7 @@ package pbx
 
 import (
 	"fmt"
+	"github.com/biodream-llc/bitvoice/internal/isdn"
 	"strconv"
 	"strings"
 	"sync"
@@ -152,6 +153,7 @@ func (l *Leg) receive(tx *sip.ServerTx, in *sip.Incoming) {
 			}
 		}
 	case sip.BYE:
+		l.charge(m)
 		ok()
 		l.mu.Lock()
 		l.ended = true
@@ -165,6 +167,10 @@ func (l *Leg) receive(tx *sip.ServerTx, in *sip.Incoming) {
 		l.mu.Unlock()
 		l.call.refer(l, tx, m)
 	case sip.INFO:
+		if l.charge(m) {
+			ok()
+			return
+		}
 		ok()
 		if strings.Contains(string(m.Body), "picture_fast_update") {
 			l.call.mu.Lock()
@@ -528,4 +534,24 @@ func (l *Leg) info() LegInfo {
 		li.Secure = ep.Secure()
 	}
 	return li
+}
+
+// charge takes the phone company's advice of charge from a trunk (RFC-less but standard: 3GPP TS
+// 24.647's XML in an INFO or the BYE), keeping the latest on the call for its record. It reports
+// whether the message was one.
+func (l *Leg) charge(m *sip.Message) bool {
+	if !strings.HasPrefix(strings.ToLower(m.Get("Content-Type")), isdn.ChargeContentType) || l.TrunkID == "" {
+		return false
+	}
+	c, ok := isdn.ParseChargeXML(m.Body)
+	if !ok {
+		return true
+	}
+	l.call.mu.Lock()
+	if old := l.call.charged; old == nil || !old.Final || c.Final {
+		l.call.charged = &c // a figure during the call never replaces the final one
+	}
+	l.call.mu.Unlock()
+	l.e.publish("call.charged", map[string]any{"call": l.call.ID, "trunk": l.TrunkID, "charge": c.String(), "final": c.Final})
+	return true
 }

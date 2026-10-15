@@ -113,6 +113,9 @@ type CDR struct {
 	// Code is the SIP failure an unanswered call ended with (607 unwanted, 608 rejected by analytics).
 	Code int    `json:"code,omitempty"`
 	Rate string `json:"rate,omitempty"`
+	// Charged is what the phone company said the call cost (advice of charge), in its own words:
+	// "EUR 1.50", "5 units". When it is in the system currency, Cost is that figure.
+	Charged string `json:"charged,omitempty"`
 }
 
 // LegQuality is one side of a call as BitVoice heard it.

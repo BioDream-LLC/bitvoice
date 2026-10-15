@@ -32,6 +32,7 @@ type lineCall struct {
 	answered            bool
 	ended               bool
 	pri                 *isdn.Call // a call on a PRI B-channel
+	charge              []byte     // the network's final advice of charge, for the BYE
 	mu                  sync.Mutex
 }
 
@@ -83,6 +84,41 @@ func (lc *lineCall) request(method string) *sip.Message {
 }
 
 // end finishes the SIP side; hang: the line is put back on hook too.
+// bye is the BYE to the engine, with the network's final advice of charge when it gave one.
+func (lc *lineCall) bye() *sip.Message {
+	m := lc.request(sip.BYE)
+	lc.mu.Lock()
+	if lc.charge != nil {
+		m.Set("Content-Type", isdn.ChargeContentType)
+		m.Body = lc.charge
+	}
+	lc.mu.Unlock()
+	return m
+}
+
+// charged passes the network's advice of charge to the engine: during the call in an INFO, the
+// final one in the BYE.
+func (lc *lineCall) charged(c *isdn.Charge) {
+	body := isdn.ChargeXML(*c)
+	lc.mu.Lock()
+	if c.Final {
+		lc.charge = body
+	}
+	live := lc.answered && !lc.ended && !c.Final
+	lc.mu.Unlock()
+	if !live {
+		return
+	}
+	m := lc.request(sip.INFO)
+	m.Set("Content-Type", isdn.ChargeContentType)
+	m.Body = body
+	b := lc.p.b
+	go func() {
+		for range b.lines.Request(m, b.engine()).Responses {
+		}
+	}()
+}
+
 func (lc *lineCall) end(hang bool) {
 	lc.mu.Lock()
 	if lc.ended {
@@ -96,7 +132,7 @@ func (lc *lineCall) end(hang bool) {
 	switch {
 	case answered:
 		go func() {
-			for range b.lines.Request(lc.request(sip.BYE), b.engine()).Responses {
+			for range b.lines.Request(lc.bye(), b.engine()).Responses {
 			}
 		}()
 	case inbound && client != nil:

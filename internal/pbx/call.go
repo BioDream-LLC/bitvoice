@@ -3,6 +3,7 @@ package pbx
 import (
 	"fmt"
 	"github.com/biodream-llc/bitvoice/internal/i3"
+	"github.com/biodream-llc/bitvoice/internal/isdn"
 	"net/url"
 	"strconv"
 	"strings"
@@ -23,7 +24,8 @@ type Call struct {
 	ID string
 
 	mu        sync.Mutex
-	account   string // the PIN an outbound route asked for, when its set records it
+	account   string       // the PIN an outbound route asked for, when its set records it
+	charged   *isdn.Charge // the phone company's advice of charge, the last it gave
 	caller    *Leg
 	callee    *Leg
 	forks     []*Leg
@@ -1249,6 +1251,23 @@ func (c *Call) writeRecord(info CallInfo, recording string) {
 	}
 	c.mu.Unlock()
 	c.e.price(&r, trunkID, number)
+	c.mu.Lock()
+	charged := c.charged
+	c.mu.Unlock()
+	if charged != nil {
+		r.Charged = charged.String()
+		cur := c.e.Config().System.Costs.Currency
+		if cur == "" {
+			cur = "USD"
+		}
+		if charged.Kind == "currency" && strings.EqualFold(charged.Currency, cur) {
+			if v, err := strconv.ParseFloat(charged.Money(), 64); err == nil {
+				r.Cost, r.Rate = v, "Charged by the phone company"
+			}
+		} else if charged.Kind == "free" {
+			r.Cost, r.Rate = 0, "Free, said the phone company"
+		}
+	}
 	for _, l := range info.Legs {
 		if l.Media.Packets == 0 {
 			continue // nothing was heard from this side (ringing, or BitVoice answered itself)

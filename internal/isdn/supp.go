@@ -150,7 +150,7 @@ func parseFacility(d []byte) []Component {
 	if len(d) < 1 {
 		return nil
 	}
-	b := d[1:]
+	b := d[len(facHeader(d)):]
 	var out []Component
 	for len(b) > 0 {
 		tag, v, rest, ok := berNext(b)
@@ -315,6 +315,9 @@ func (c *Call) Transfer(other *Call) error {
 	if !okState {
 		return ErrState
 	}
+	if p.dms() {
+		return c.rltTransferCalls(other)
+	}
 	if !p.ni2() && !p.euro() {
 		return errors.New("isdn: transfers on this switch type are not offered")
 	}
@@ -428,14 +431,17 @@ func (c *Call) supplementary(m *Message) bool {
 		_ = p.send(r)
 		return true
 	case MsgFacility:
-		if d, ok := m.Get(ieFacility); ok {
+		for _, d := range m.GetAll(ieFacility) {
 			c.facility(d, true)
 		}
 		return true
 	}
-	// Results can come in other messages too (a transfer's, in the DISCONNECT that follows it).
-	if d, ok := m.Get(ieFacility); ok && m.Type != MsgSetup {
-		c.facility(d, false)
+	// Results and charges come in other messages too (a transfer's result and the final charge in the
+	// DISCONNECT that follows).
+	if m.Type != MsgSetup {
+		for _, d := range m.GetAll(ieFacility) {
+			c.facility(d, false)
+		}
 	}
 	return false
 }
@@ -446,6 +452,9 @@ func (c *Call) facility(d []byte, reply bool) {
 	p := c.p
 	{
 		for _, comp := range parseFacility(d) {
+			if c.rltComponent(comp, d, reply) || (comp.Kind == 0xA1 && c.chargeInvoke(comp, d, reply)) {
+				continue
+			}
 			switch comp.Kind {
 			case 0xA2, 0xA3, 0xA4:
 				p.mu.Lock()
@@ -478,12 +487,8 @@ func (c *Call) facility(d []byte, reply bool) {
 				}
 				// An operation BitVoice does not offer: return error "not available".
 				r := c.msg(MsgFacility)
-				prof := byte(0x91)
-				if len(d) > 0 {
-					prof = d[0]
-				}
-				r.add(ieFacility, append([]byte{prof}, berTLV(0xA3, append(berInt(comp.InvokeID), berInt(3)...))...))
-				_ = p.send(r)
+				r.add(ieFacility, append(append([]byte(nil), facHeader(d)...), berTLV(0xA3, append(berInt(comp.InvokeID), berInt(3)...))...))
+				pendingReply(c, r)
 			}
 		}
 	}
@@ -526,12 +531,12 @@ func (c *Call) transferAsked(comp Component, d []byte) bool {
 	default:
 		return false
 	}
-	prof := d[0]
+	prof := facHeader(d)
 	r := c.msg(MsgFacility)
 	if other != nil && p.OnTransfer != nil && p.OnTransfer(c, other) {
-		r.add(ieFacility, append([]byte{prof}, berTLV(0xA2, berInt(comp.InvokeID))...))
+		r.add(ieFacility, append(append([]byte(nil), prof...), berTLV(0xA2, berInt(comp.InvokeID))...))
 	} else {
-		r.add(ieFacility, append([]byte{prof}, berTLV(0xA3, append(berInt(comp.InvokeID), berInt(3)...))...))
+		r.add(ieFacility, append(append([]byte(nil), prof...), berTLV(0xA3, append(berInt(comp.InvokeID), berInt(3)...))...))
 	}
 	_ = p.send(r)
 	return true

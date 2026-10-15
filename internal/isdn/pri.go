@@ -25,14 +25,20 @@ type Config struct {
 	// Switch is the switch type: ni2 (National ISDN-2, the default), 5ess, dms100, euroisdn or qsig.
 	// It decides how names and transfers are sent.
 	Switch string
+	// RequestCharge (EuroISDN, user side) asks the network for advice of charge during and at the end
+	// of each outgoing call. OfferCharge (network side) agrees to such requests; the charges are given
+	// with Call.SendCharge and Call.SetFinalCharge.
+	RequestCharge bool
+	OfferCharge   bool
 	// Trace, when set, is given every Q.931 message, in (true) or out.
 	Trace func(in bool, msg []byte)
 }
 
 // Event is what happens to a call.
 type Event struct {
-	Kind  string // proceeding, alerting, progress, connected, held, retrieved, transfer-asked, disconnected, released
-	Cause int
+	Kind   string // proceeding, alerting, progress, connected, held, retrieved, transfer-asked, charge, disconnected, released
+	Cause  int
+	Charge *Charge // for charge: the advice of charge the network gave
 }
 
 // Call states (Q.931 table 3-1, the ones used).
@@ -67,7 +73,15 @@ type Call struct {
 	Redirecting    string
 	RedirectReason int
 	Connected      string
-	Events         chan Event
+	// Charge is the last advice of charge the network gave (EuroISDN); ChargeAsked, on the network
+	// side, what the caller asked to be told (AskDuring, AskAtTheEnd).
+	Charge      *Charge
+	ChargeAsked int
+	Events      chan Event
+
+	finalCharge     *Charge
+	rltID           int        // DMS-100: the switch's identifier for the call, for transfers
+	afterProceeding []*Message // replies to SETUP's facilities, sent after CALL PROCEEDING
 
 	state   int
 	timer   *time.Timer
@@ -110,6 +124,7 @@ type PRI struct {
 	isUp  bool
 
 	invokes int
+	rltNext int
 }
 
 // New makes call control over a link; Run starts it.
@@ -268,6 +283,13 @@ func (p *PRI) DialWith(s Setup) (*Call, error) {
 	m := c.msg(MsgSetup)
 	m.add(ieBearer, bearer(p.cfg.ALaw))
 	m.add(ieChannelID, channelID(ch, true))
+	if p.dms() && !p.cfg.Network {
+		m.add(ieFacility, rltAbility())
+	}
+	if p.euro() && p.cfg.RequestCharge && !p.cfg.Network {
+		m.add(ieFacility, chargingRequest(p.invokeID(), chargeDuring))
+		m.add(ieFacility, chargingRequest(p.invokeID(), chargeAtTheEnd))
+	}
 	if name != "" {
 		if p.nameFac() {
 			m.add(ieFacility, nameFacility(p.invokeID(), name))
@@ -358,6 +380,7 @@ func (c *Call) Hangup(cause int) {
 		c.arm(T308, func() { c.free(CauseRecoveryTimer) })
 		p.mu.Unlock()
 		m := c.msg(MsgRelease)
+		c.addFinalCharge(m)
 		_ = p.send(m)
 		return
 	}
@@ -374,6 +397,7 @@ func (c *Call) Hangup(cause int) {
 	p.mu.Unlock()
 	m := c.msg(MsgDisconnect)
 	m.add(ieCause, causeIE(cause, p.cfg.Network))
+	c.addFinalCharge(m)
 	_ = p.send(m)
 }
 
@@ -495,11 +519,23 @@ func (p *PRI) setup(m *Message) {
 	}
 	p.calls[callKey{c.ref, false}] = c
 	p.busy[ch] = c
+	p.mu.Unlock()
+	// What SETUP's facilities ask (a DMS-100 transfer identifier, advice of charge) is answered after
+	// CALL PROCEEDING.
+	for _, d := range m.GetAll(ieFacility) {
+		c.facility(d, true)
+	}
+	p.mu.Lock()
 	c.state = stInProceeding
+	later := c.afterProceeding
+	c.afterProceeding = nil
 	p.mu.Unlock()
 	r := c.msg(MsgCallProceeding)
 	r.add(ieChannelID, channelID(ch, true))
 	_ = p.send(r)
+	for _, x := range later {
+		_ = p.send(x)
+	}
 	if p.Incoming != nil {
 		go p.Incoming(c)
 	} else {

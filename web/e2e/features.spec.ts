@@ -623,6 +623,7 @@ test('T1 and E1 PRI on a telephony card', async ({ page }) => {
   await expect(page.getByLabel('Switch type')).toHaveValue('euroisdn')
   await page.getByLabel('First channel').fill('101')
   await page.getByRole('switch', { name: 'Transfers through the phone company on span 1' }).click()
+  await page.getByRole('switch', { name: 'Advice of charge on span 1' }).click()
   await page.getByRole('button', { name: 'Save' }).click()
   await expect(page.getByText('Telephony cards saved')).toBeVisible()
   const token = await page.getByRole('textbox', { name: 'Token' }).inputValue()
@@ -631,9 +632,17 @@ test('T1 and E1 PRI on a telephony card', async ({ page }) => {
   expect(cfg.spans[0].b).toHaveLength(30)
   expect(cfg.spans[0].q931[15]).toBe(17) // timeslot 16 is the D-channel
   expect(cfg.spans[0].networkTransfer).toBe(true)
-  // DMS-100 takes no transfers: the switch goes away.
+  expect(cfg.spans[0].charges).toBe(true)
+  // DMS-100: transfers are Release Link Trunk ones, and there is no advice of charge.
   await page.getByLabel('Switch type').selectOption('dms100')
-  await expect(page.getByRole('switch', { name: 'Transfers through the phone company on span 1' })).toHaveCount(0)
+  await expect(page.getByText(/Release Link Trunk: when one of the two calls is one BitVoice placed/)).toBeVisible()
+  await expect(page.getByRole('switch', { name: 'Advice of charge on span 1' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('Telephony cards saved')).toBeVisible()
+  const cfg2 = await page.evaluate(async (tok) => (await (await fetch('./api/cards/bridge', { headers: { Authorization: 'Bearer ' + tok } })).json()), token)
+  expect(cfg2.spans[0].switch).toBe('dms100')
+  expect(cfg2.spans[0].networkTransfer).toBe(true)
+  expect(cfg2.spans[0].charges ?? false).toBe(false)
 })
 
 // The outbound dialer: a campaign is made for a queue, a CSV list is loaded (one number on the

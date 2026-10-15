@@ -72,7 +72,7 @@ export function Costs() {
                         <td className="py-1 text-slate-400">{new Date(c.start).toLocaleString()}</td>
                         <td className="text-slate-200">{c.fromName || c.from}</td>
                         <td className="font-mono text-sky-300">{c.to}</td>
-                        <td className="text-slate-400">{c.rate}</td>
+                        <td className="text-slate-400">{c.rate}{c.charged && <span className="block text-xs text-amber-200">the phone company said {c.charged}</span>}</td>
                         <td className="font-mono text-slate-300">{(c.billsec / 60).toFixed(1)}</td>
                         <td className="text-right font-mono text-amber-200">{amount(cur, c.cost ?? 0)}</td>
                       </tr>

@@ -37,7 +37,12 @@ type CardSpan struct {
 	// NetworkTransfer hands a transfer joining two calls on this span to the phone company (Two
 	// B-Channel Transfer on ni2 and 5ess, explicit call transfer on euroisdn), freeing both channels.
 	// It needs the service on the line; without it, transfers stay on the server, both channels in use.
+	// On dms100 it is Release Link Trunk transfer, for transfers where one of the two calls is one
+	// BitVoice placed.
 	NetworkTransfer bool `json:"networkTransfer,omitempty"`
+	// Charges asks the phone company for advice of charge on calls out (euroisdn, user side): its own
+	// figure for each call, kept on the call's record.
+	Charges bool `json:"charges,omitempty"`
 }
 
 // Channels of a span: its B-channels and D-channel, as DAHDI numbers them.
@@ -138,8 +143,11 @@ func (c *Config) validateCards(p *Problems) {
 		default:
 			p.add(f+".switch", "choose ni2, 5ess, dms100, euroisdn or qsig")
 		}
-		if s.NetworkTransfer && (s.Role != "user" || s.Switch == "dms100" || s.Switch == "qsig") {
-			p.add(f+".networkTransfer", "the phone company takes transfers only on a user-side line with ni2, 5ess or euroisdn")
+		if s.NetworkTransfer && (s.Role != "user" || s.Switch == "qsig") {
+			p.add(f+".networkTransfer", "the phone company takes transfers only on a user-side line with ni2, 5ess, dms100 or euroisdn")
+		}
+		if s.Charges && (s.Role != "user" || s.Switch != "euroisdn") {
+			p.add(f+".charges", "advice of charge comes from the phone company on a user-side euroisdn line")
 		}
 		if s.First < 1 || s.First > 1000 {
 			p.add(f+".first", "use the span's first DAHDI channel number")

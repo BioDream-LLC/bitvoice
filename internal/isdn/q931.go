@@ -162,6 +162,17 @@ func (m *Message) Get(id byte) ([]byte, bool) {
 	return nil, false
 }
 
+// GetAll returns every element with the id (a message may carry several Facility elements).
+func (m *Message) GetAll(id byte) [][]byte {
+	var out [][]byte
+	for _, ie := range m.IEs {
+		if ie.ID == id {
+			out = append(out, ie.Data)
+		}
+	}
+	return out
+}
+
 func (m *Message) add(id byte, data []byte) { m.IEs = append(m.IEs, IE{ID: id, Data: data}) }
 
 // bearer is speech, 64 kbit/s circuit mode, G.711 at the line's law.

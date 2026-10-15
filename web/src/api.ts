@@ -273,7 +273,7 @@ export interface CDR {
   id: string; start: string; answer?: string; end: string; direction: string; from: string; fromName: string
   to: string; toName: string; answeredBy: string; trunk: string; disposition: string; cause: string
   duration: number; billsec: number; hangupBy: string; mos: number; recording?: string
-  paused?: { from: number; to: number }[]; held?: boolean; attest?: string; signed?: string; verified?: string; screened?: string; ext?: string; department?: string; cost?: number; rate?: string
+  paused?: { from: number; to: number }[]; held?: boolean; attest?: string; signed?: string; verified?: string; screened?: string; ext?: string; department?: string; cost?: number; rate?: string; charged?: string
 }
 export interface Check { id: string; status: 'ok' | 'warn' | 'fail'; title: string; detail: string; fix?: string }
 export interface Revision { rev: number; at: string; actor: string; summary: string }
@@ -357,7 +357,7 @@ export interface ACMEStatus { state: 'off' | 'ok' | 'working' | 'failed'; detail
 /** Telephony cards (DAHDI) on this computer, through bitvoice-dahdi. */
 export interface Cards { enabled: boolean; token: string; linePort: number; alaw: boolean; channels: { channel: number; kind: 'phone' | 'line'; extension: string; number: string }[]; spans?: CardSpan[] | null }
 /** A T1 or E1 line run as PRI. */
-export interface CardSpan { type: 't1' | 'e1'; first: number; role: 'user' | 'network'; switch: string; networkTransfer?: boolean }
+export interface CardSpan { type: 't1' | 'e1'; first: number; role: 'user' | 'network'; switch: string; networkTransfer?: boolean; charges?: boolean }
 
 /** Skinny (SCCP) phones and MGCP gateways: older protocols beside SIP. */
 export interface DeskProtocols {

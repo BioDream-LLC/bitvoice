@@ -25,6 +25,8 @@ type SpanConf struct {
 	Switch  string `json:"switch"`
 	// NetworkTransfer: transfers joining two calls on this span go to the phone company.
 	NetworkTransfer bool `json:"networkTransfer,omitempty"`
+	// Charges asks the phone company for advice of charge on calls out (EuroISDN).
+	Charges bool `json:"charges,omitempty"`
 }
 
 // OpenD opens a span's D-channel (HDLC frames); tests replace it.
@@ -79,7 +81,8 @@ func (s *span) run(i int) {
 			}
 			continue
 		}
-		p := isdn.New(link, isdn.Config{Network: s.conf.Network, Channels: s.conf.Q931, ALaw: b.cfg.ALaw, Log: b.log, Switch: s.conf.Switch})
+		p := isdn.New(link, isdn.Config{Network: s.conf.Network, Channels: s.conf.Q931, ALaw: b.cfg.ALaw, Log: b.log, Switch: s.conf.Switch,
+			RequestCharge: s.conf.Charges && !s.conf.Network})
 		p.Incoming = s.incoming
 		p.Up = func(up bool) { b.log.Info("dahdi: PRI D-channel", "span", i+1, "up", up) }
 		b.mu.Lock()
@@ -225,6 +228,8 @@ func (s *span) incoming(c *isdn.Call) {
 func (s *span) watch(c *isdn.Call, lc *lineCall, p *port) {
 	for e := range c.Events {
 		switch e.Kind {
+		case "charge":
+			lc.charged(e.Charge)
 		case "disconnected", "released":
 			p.mu.Lock()
 			mine := p.line == lc
@@ -361,6 +366,8 @@ func (b *Bridge) callOnSpan(tx *sip.ServerTx, m *sip.Message, c *isdn.Call, p *p
 			early(183)
 		case "alerting":
 			early(180)
+		case "charge":
+			lc.charged(e.Charge)
 		case "connected":
 			lc.mu.Lock()
 			if lc.ended {
@@ -391,7 +398,7 @@ func (b *Bridge) callOnSpan(tx *sip.ServerTx, m *sip.Message, c *isdn.Call, p *p
 			if !ended {
 				if answered {
 					go func() {
-						for range b.lines.Request(lc.request(sip.BYE), b.engine()).Responses {
+						for range b.lines.Request(lc.bye(), b.engine()).Responses {
 						}
 					}()
 				} else {
