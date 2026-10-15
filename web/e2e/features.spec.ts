@@ -673,6 +673,43 @@ test('BRI on a telephony card', async ({ page }) => {
   expect(s.q931).toEqual([1, 2])
 })
 
+// E&M on a T1 and MFC-R2 on an E1: each channel becomes a line of its own for bitvoice-dahdi, with
+// the start signal, the number format and the country variant.
+test('E&M and MFC-R2 spans on a telephony card', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/#/cards')
+  const on = page.getByRole('switch', { name: 'Telephony cards' })
+  if (!(await on.isChecked())) await on.click()
+  const add = async (type: string, first: string) => {
+    await page.getByRole('button', { name: 'Add a T1, E1 or BRI' }).click()
+    const n = await page.getByLabel('Line', { exact: true }).count()
+    await page.getByLabel('Line', { exact: true }).nth(n - 1).selectOption(type)
+    await page.getByLabel('First channel').nth(n - 1).fill(first)
+    return n
+  }
+  await add('t1', '301')
+  await page.locator('[id^="sp-g-"]').last().selectOption('em')
+  await expect(page.getByText('Channels 301 to 324, each an E&M trunk.')).toBeVisible()
+  await page.getByLabel('Start signal').last().selectOption('fgd')
+  await expect(page.getByText(/Feature Group D: wink start with MF numbers/)).toBeVisible()
+  await expect(page.getByLabel('Numbers sent as')).toHaveCount(0)
+  await add('e1', '401')
+  await page.locator('[id^="sp-g-"]').last().selectOption('r2')
+  await page.getByLabel('Country variant').last().selectOption('mx')
+  await page.getByLabel('Number when none is sent').last().fill('5550100')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText('Telephony cards saved')).toBeVisible()
+  const token = await page.getByRole('textbox', { name: 'Token' }).inputValue()
+  const cfg = await page.evaluate(async (tok) => (await (await fetch('./api/cards/bridge', { headers: { Authorization: 'Bearer ' + tok } })).json()), token)
+  const em = cfg.channels.filter((c: { kind: string }) => c.kind === 'em')
+  const r2 = cfg.channels.filter((c: { kind: string }) => c.kind === 'r2')
+  expect(em).toHaveLength(24)
+  expect(em[0]).toMatchObject({ channel: 301, start: 'fgd' })
+  expect(r2).toHaveLength(30)
+  expect(r2[0]).toMatchObject({ channel: 401, variant: 'mx', number: '5550100' })
+  expect(r2.map((c: { channel: number }) => c.channel)).not.toContain(416) // timeslot 16 carries the bits
+})
+
 // The outbound dialer: a campaign is made for a queue, a CSV list is loaded (one number on the
 // do-not-call list), preview hands out the next contact, and the do-not-call list takes numbers.
 test('outbound dialer campaign', async ({ page }) => {

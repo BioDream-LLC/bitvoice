@@ -62,6 +62,14 @@ func (s *Server) cardsRoutes() {
 		}
 		for _, sp := range k.Spans {
 			bs, d := sp.Channels()
+			if sp.CAS() {
+				// Each channel is a line of its own, signalled on its own.
+				for _, ch := range bs {
+					out.Channels = append(out.Channels, dahdi.ChannelConf{Channel: ch, Kind: sp.Signalling, Number: sp.Number,
+						Start: sp.Start, Address: sp.Address, Variant: sp.Variant})
+				}
+				continue
+			}
 			sc := dahdi.SpanConf{D: d, B: bs, Network: sp.Role == "network", Switch: sp.Switch, NetworkTransfer: sp.NetworkTransfer, Charges: sp.Charges,
 				BRI: sp.Type == "bri", Multipoint: sp.Multipoint}
 			for _, ch := range bs {

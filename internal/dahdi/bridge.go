@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"github.com/biodream-llc/bitvoice/internal/mf"
+	"github.com/biodream-llc/bitvoice/internal/r2"
 	"log/slog"
 	"math"
 	"net"
@@ -30,10 +32,15 @@ type Config struct {
 // ChannelConf is one port as the bridge needs it.
 type ChannelConf struct {
 	Channel   int    `json:"channel"`
-	Kind      string `json:"kind"` // phone or line
+	Kind      string `json:"kind"` // phone, line, or em (a channel of an E&M T1)
 	Extension string `json:"extension,omitempty"`
 	Secret    string `json:"secret,omitempty"`
 	Number    string `json:"number,omitempty"`
+	// E&M: the start signal (wink, immediate, delay, fgd) and how numbers are sent (dtmf or mf).
+	Start   string `json:"start,omitempty"`
+	Address string `json:"address,omitempty"`
+	// R2: the country variant.
+	Variant string `json:"variant,omitempty"`
 }
 
 // DigitTimeout is how long a phone may pause between digits before the number is dialled.
@@ -97,6 +104,16 @@ type port struct {
 	lastRing  time.Time
 	lastEvent uint32
 	eventSeen bool
+
+	waitEv     chan int       // E&M: an outgoing call waiting for the far end's signals
+	digitsDone chan struct{}  // E&M: closed when the number coming in is complete
+	mfrx       *mf.R1Receiver // E&M: MF digits coming in
+
+	r2      *r2.Chan // MFC-R2: the circuit's signalling
+	r2io    *r2io
+	r2wait  chan string // MFC-R2: a call out waiting for accepted/answered
+	fwdDet  *mf.Detector
+	backDet *mf.Detector
 }
 
 // New starts the bridge: every port is opened, phones registered, the card trunk's port opened.
@@ -213,6 +230,9 @@ func (p *port) run() {
 	p.mu.Lock()
 	p.ch = ch
 	p.mu.Unlock()
+	if p.isR2() {
+		p.r2Start()
+	}
 	if p.conf.Kind == "phone" {
 		id := "ch" + strconv.Itoa(p.conf.Channel)
 		ph, err := p.b.gw.OpenAs("card", "BitVoice telephony card", id, p.conf.Extension, p.conf.Secret, "")
@@ -262,10 +282,23 @@ func (p *port) audio(b []byte) {
 		outFrame, p.out = p.out[0], p.out[1:]
 	}
 	p.mu.Unlock()
+	if p.isR2() {
+		if tone := p.r2Audio(b); tone != nil {
+			outFrame = tone // the compelled tones take the channel while they last
+		}
+	}
 	if outFrame != nil {
 		_, _ = p.ch.Write(outFrame)
 	}
-	if st == stDialTone || st == stDialling || st == stTalking && p.conf.Kind == "phone" {
+	if p.isEM() {
+		if st == stDialling {
+			pcm := make([]int16, len(b))
+			for i, v := range b {
+				pcm[i] = decode(v, p.law)
+			}
+			p.emAudio(pcm)
+		}
+	} else if st == stDialTone || st == stDialling || st == stTalking && p.conf.Kind == "phone" {
 		pcm := make([]int16, len(b))
 		for i, v := range b {
 			pcm[i] = decode(v, p.law)
@@ -454,6 +487,12 @@ func (p *port) event(ev int) {
 	}
 	if p.conf.Kind == "phone" {
 		p.phoneEvent(ev)
+	} else if p.isEM() {
+		p.emEvent(ev)
+	} else if p.isR2() {
+		if ev == EventBitsChanged {
+			p.r2Bits()
+		}
 	} else {
 		p.lineEvent(ev)
 	}

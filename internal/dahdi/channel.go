@@ -32,6 +32,7 @@ const (
 	EventRingerOn    = 10
 	EventRingerOff   = 11
 	EventHookDone    = 12
+	EventBitsChanged = 13 // a CAS channel's received signalling bits changed (RxBits reads them)
 	EventPolarity    = 17
 	EventRingBegin   = 18 // a line is ringing (FXO port)
 )
@@ -60,6 +61,12 @@ type Channel interface {
 	Hook(op int) error
 	Tone(t int) error
 	Close() error
+}
+
+// CAS is a channel whose signalling bits are read and set directly (cas in system.conf, for MFC-R2).
+type CAS interface {
+	RxBits() (int, error)
+	TxBits(abcd int) error
 }
 
 // Open opens a DAHDI channel by number for 20 ms G.711 frames, µ-law or A-law.

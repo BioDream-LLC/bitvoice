@@ -47,10 +47,31 @@ type CardSpan struct {
 	// offered to all (a "multi-device" line; or, on the network side, ISDN phones on BitVoice's bus).
 	// Off: point to point (a PBX line, one device).
 	Multipoint bool `json:"multipoint,omitempty"`
+	// Signalling is how the span's calls are signalled: isdn (PRI or BRI, the default), em (a T1's
+	// channels as E&M trunks, robbed-bit signalling, e&m in system.conf) or r2 (an E1's channels as
+	// MFC-R2, cas in system.conf).
+	Signalling string `json:"signalling,omitempty"`
+	// Start (em) is the start signal: wink (the usual), immediate, delay, or fgd (Feature Group D, the
+	// caller's number sent too). Address (em) is how numbers go: dtmf or mf (MF R1).
+	Start   string `json:"start,omitempty"`
+	Address string `json:"address,omitempty"`
+	// Number (em, r2) is the number a call in reaches when the far end sends none.
+	Number string `json:"number,omitempty"`
+	// Variant (r2) is the country's MFC-R2 variant: itu, and the national ones.
+	Variant string `json:"variant,omitempty"`
 }
+
+// CAS says whether the span's channels are signalled one by one (E&M, R2) rather than on a D-channel.
+func (s CardSpan) CAS() bool { return s.Signalling == "em" || s.Signalling == "r2" }
 
 // Channels of a span: its B-channels and D-channel, as DAHDI numbers them.
 func (s CardSpan) Channels() (b []int, d int) {
+	if s.Signalling == "em" && s.Type == "t1" {
+		for i := 0; i < 24; i++ {
+			b = append(b, s.First+i) // robbed-bit signalling: all 24 carry calls
+		}
+		return b, 0
+	}
 	if s.Type == "bri" {
 		return []int{s.First, s.First + 1}, s.First + 2
 	}
@@ -59,6 +80,9 @@ func (s CardSpan) Channels() (b []int, d int) {
 			if ts != 16 {
 				b = append(b, s.First+ts-1)
 			}
+		}
+		if s.Signalling == "r2" {
+			return b, 0 // timeslot 16 carries the circuits' bits, not a D-channel
 		}
 		return b, s.First + 15
 	}
@@ -145,6 +169,37 @@ func (c *Config) validateCards(p *Problems) {
 				s.Switch = "euroisdn"
 			}
 		}
+		switch s.Signalling {
+		case "", "isdn":
+			s.Signalling = ""
+		case "em":
+			if s.Type != "t1" {
+				p.add(f+".signalling", "E&M is for T1 spans")
+			}
+			switch s.Start {
+			case "":
+				s.Start = "wink"
+			case "wink", "immediate", "delay", "fgd":
+			default:
+				p.add(f+".start", "choose wink, immediate, delay or fgd")
+			}
+			switch s.Address {
+			case "":
+				s.Address = "dtmf"
+			case "dtmf", "mf":
+			default:
+				p.add(f+".address", "choose dtmf or mf")
+			}
+		case "r2":
+			if s.Type != "e1" {
+				p.add(f+".signalling", "MFC-R2 is for E1 spans")
+			}
+		default:
+			p.add(f+".signalling", "choose isdn, em or r2")
+		}
+		if s.Number != "" && !lineNumberRe.MatchString(s.Number) {
+			p.add(f+".number", "use digits, with + in front for an international number")
+		}
 		if s.Type == "bri" && s.Switch != "euroisdn" && s.Switch != "ni2" {
 			p.add(f+".switch", "a BRI is euroisdn, or ni2 in North America")
 		}
@@ -167,7 +222,10 @@ func (c *Config) validateCards(p *Problems) {
 			continue
 		}
 		b, d := s.Channels()
-		for _, ch := range append(b, d) {
+		if d != 0 {
+			b = append(b, d)
+		}
+		for _, ch := range b {
 			if prev, ok := used[ch]; ok {
 				p.add(f+".first", "channel %d is also %s", ch, prev)
 				break

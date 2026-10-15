@@ -146,6 +146,13 @@ func (lc *lineCall) end(hang bool) {
 		lc.pri.Hangup(isdn.CauseNormal)
 		return
 	}
+	lc.p.mu.Lock()
+	r := lc.p.r2
+	lc.p.mu.Unlock()
+	if r != nil {
+		r.Hangup()
+		return
+	}
 	if hang {
 		_ = lc.p.ch.Hook(HookOn)
 	}
@@ -353,7 +360,13 @@ func (p *port) lineDone() {
 	p.line = nil
 	p.out = nil
 	bchan := p.conf.Kind == "bchan"
+	r := p.r2
 	p.mu.Unlock()
+	if r != nil {
+		r.Hangup() // the circuit clears; it is idle again when the far end agrees
+		p.closeRTP()
+		return
+	}
 	if !bchan {
 		_ = p.ch.Hook(HookOn)
 	}
@@ -380,7 +393,7 @@ func (b *Bridge) freeLine() *port {
 	b.mu.Lock()
 	var cands []*port
 	for _, p := range b.ports {
-		if p.conf.Kind == "line" {
+		if p.conf.Kind == "line" || p.conf.Kind == "em" || p.conf.Kind == "r2" {
 			cands = append(cands, p)
 		}
 	}
@@ -421,6 +434,22 @@ func (b *Bridge) lineOut(tx *sip.ServerTx, m *sip.Message) {
 	p := b.freeLine()
 	if p == nil {
 		tx.Respond(sip.NewResponse(m, 486, "All Lines Busy"))
+		return
+	}
+	if p.isR2() {
+		ani := ""
+		if f, err := sip.ParseAddress(m.Get("From")); err == nil && f.URI != nil && !strings.Contains(strings.ToLower(m.Get("Privacy")), "id") {
+			ani = strings.TrimPrefix(f.URI.User, "+")
+		}
+		b.r2Out(p, tx, m, strings.TrimRight(number, ","), ani)
+		return
+	}
+	if p.isEM() {
+		ani := ""
+		if f, err := sip.ParseAddress(m.Get("From")); err == nil && f.URI != nil {
+			ani = strings.TrimPrefix(f.URI.User, "+")
+		}
+		b.emOut(p, tx, m, strings.TrimRight(number, ","), ani)
 		return
 	}
 	conn, err := p.openRTP(remoteOf(m.Body))

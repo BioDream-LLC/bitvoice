@@ -19,6 +19,48 @@ type Fake struct {
 	closed bool
 	wake   chan struct{}
 	law    int
+	rxBits int
+	txBits []int
+	peer   *Fake
+}
+
+// Patch joins two fakes back to back, as two circuits of one E1 looped: what one writes the other
+// hears, and the bits one sets the other reads.
+func Patch(a, b *Fake) {
+	a.mu.Lock()
+	a.peer = b
+	a.mu.Unlock()
+	b.mu.Lock()
+	b.peer = a
+	b.mu.Unlock()
+}
+
+// SetRxBits sets the signalling bits the far end sends (a CAS channel), and raises the event.
+func (f *Fake) SetRxBits(abcd int) {
+	f.mu.Lock()
+	f.rxBits = abcd
+	f.mu.Unlock()
+	f.Raise(EventBitsChanged)
+}
+
+// TxBitsSent is every value of the signalling bits the bridge set.
+func (f *Fake) TxBitsSent() []int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]int(nil), f.txBits...)
+}
+
+func (f *Fake) RxBits() (int, error) { f.mu.Lock(); defer f.mu.Unlock(); return f.rxBits, nil }
+
+func (f *Fake) TxBits(abcd int) error {
+	f.mu.Lock()
+	f.txBits = append(f.txBits, abcd)
+	peer := f.peer
+	f.mu.Unlock()
+	if peer != nil {
+		peer.SetRxBits(abcd)
+	}
+	return nil
 }
 
 // NewFake makes a fake port.
@@ -85,7 +127,11 @@ func (f *Fake) Write(b []byte) (int, error) {
 	if len(f.sent) < 1<<20 {
 		f.sent = append(f.sent, b...)
 	}
+	peer := f.peer
 	f.mu.Unlock()
+	if peer != nil {
+		peer.Speak([][]byte{append([]byte(nil), b...)})
+	}
 	return len(b), nil
 }
 

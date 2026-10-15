@@ -155,7 +155,7 @@ Neither protocol has passwords. Skinny phones are accepted only from the local n
 > Both are tested against BitVoice's own test phone and test gateway, which follow the protocols, but not yet against Cisco phones or gateway hardware.`,
   },
   {
-    id: 'cards', title: 'Telephony cards', route: '/cards', keys: 'telephony card dahdi digium sangoma openvox wildcard fxs fxo analogue analog phone line pstn pots tdm bitvoice-dahdi chan_dahdi pri t1 e1 isdn primary rate did q931 libpri calling name redirecting two b-channel transfer 2bct ect dms-100 rlt release link trunk advice of charge aoc aoc-d aoc-e charging units bri basic rate s0 s-bus tei multipoint ptmp msn overlap',
+    id: 'cards', title: 'Telephony cards', route: '/cards', keys: 'telephony card dahdi digium sangoma openvox wildcard fxs fxo analogue analog phone line pstn pots tdm bitvoice-dahdi chan_dahdi pri t1 e1 isdn primary rate did q931 libpri calling name redirecting two b-channel transfer 2bct ect dms-100 rlt release link trunk advice of charge aoc aoc-d aoc-e charging units bri basic rate s0 s-bus tei multipoint ptmp msn overlap e&m em wink feature group d fgd mf r1 robbed bit mfc-r2 r2 cas openr2 latin america',
     body: `A telephony card in the BitVoice computer (Digium, Sangoma, OpenVox and other cards with Linux DAHDI drivers) can carry analogue phones and phone company lines. A separate program, **bitvoice-dahdi**, drives the card and joins its ports to BitVoice over the computer's own network connection, so BitVoice itself never touches the kernel driver and a card problem cannot stop the phone system.
 
 ## Setting it up
@@ -192,11 +192,27 @@ A BRI carries two calls at once (B1 and B2) and is common in Europe for small of
 
 Names, forwarding, transfers on EuroISDN (explicit call transfer) and advice of charge work on a BRI as on a PRI.
 
+## E&M trunks on a T1
+A T1 whose channels are set up as E&M (robbed-bit signalling: \`e&m=1-24\` in /etc/dahdi/system.conf) gives 24 trunks, each signalled on its own: tie lines to another PBX, channel banks, and long-distance carriers' Feature Group D trunks. Under **Digital lines**, add a T1 and set **Signalling** to **E&M**, then:
+
+- **Start signal**: **Wink start** (the usual: the far end winks when it is ready for the number, and BitVoice winks back at a call coming in), **Immediate start** (the number follows the seizure at once), **Delay dial** (the far end goes off hook while it gets ready, then on hook), or **Feature Group D** (wink start with MF numbers, the caller's number sent first: KP 00 ANI ST, then KP number ST; the ANI becomes the caller ID).
+- **Numbers sent as**: DTMF, or MF (MF R1, KP number ST) as most carrier trunks want.
+- **Number when none is sent**: what a call in reaches if the far end seizes the trunk without dialling (a private line straight to the front desk, say).
+
+A call out takes a free trunk, seizes it, waits for the start signal (no wink within five seconds is "no wink", and the call fails), sends the number, and is answered when the far end goes off hook (answer supervision). A call in is answered by going off hook when the extension answers.
+
+## MFC-R2 on an E1
+In Latin America, parts of Asia and Africa, E1 lines are often MFC-R2 rather than ISDN: 30 circuits, each with its line signals on the A and B bits of timeslot 16 (ITU-T Q.421) and its number, the caller's category and the caller's number exchanged in compelled multifrequency tones (Q.441), forward and backward. Set the span up as CAS in /etc/dahdi/system.conf (\`span=1,1,0,cas,hdb3\`, \`cas=1-15:1101\`, \`cas=17-31:1101\`, \`dchan\` removed), then under **Digital lines** add an E1, set **Signalling** to **MFC-R2** and choose the **Country variant**: ITU-T, Argentina, Brazil, Colombia, Czech Republic, Ecuador, Mexico, Philippines or Venezuela. Each country assigns some signals differently (what means busy, how the end of the number is told, Mexico's extra Group C); the variant holds those.
+
+Every circuit carries calls both ways. A call in reaches the inbound routes with the number dialled and the caller's number (withheld numbers come in as anonymous); a busy extension or a wrong number is signalled back as busy or unallocated, as the variant says. A call out sends the number and the extension's caller ID, or the "number withheld" signal when the caller hides it. China's variant is not offered.
+
+The MFC-R2 signalling is tested against OpenR2 (the R2 library Asterisk's chan_dahdi uses), in every variant offered and in both directions, including a call refused as busy; E&M against BitVoice's own simulated channels.
+
 **Advice of charge.** On a EuroISDN line, switch on **Advice of charge** and BitVoice asks the phone company, with each call out, to say what it costs: during the call (AOC-D) and at its end (AOC-E), in money or in charging units. The last figure goes on the call's record (**charged EUR 1.50** in History, and beside the call on Costs); when it is in your currency (set on Costs) it is the call's cost, instead of the figure from the trunk's rates. The phone company must offer the service on the line. SIP trunks may send the same advice, as the 3GPP AOC XML in an INFO or the BYE, and BitVoice keeps it the same way.
 
 The PRI code is tested against libpri (the ISDN library Asterisk uses), both as the user side and as the network side, for National ISDN-2 and EuroISDN calls, names, redirecting and connected numbers, explicit call transfer, the Two B-Channel Transfer and DMS-100 Release Link Trunk requests byte for byte (with libpri's PBX joined by BitVoice as the DMS-100), and advice of charge in both directions; and on BRI, point to point and multipoint, as the terminal and as the network (TEI assignment, calls broadcast to the bus, numbers dialled digit by digit).
 
-Not yet: caller ID shown on analogue phones or read from analogue lines, hook flash, E&M and MFC/R2 signalling, SS7, and echo cancellation beyond what the card itself does.
+Not yet: caller ID shown on analogue phones or read from analogue lines, hook flash, SS7, and echo cancellation beyond what the card itself does.
 
 > bitvoice-dahdi is tested against a simulated card, not yet against real card hardware. It must run on the same computer as BitVoice: it only talks to 127.0.0.1, and BitVoice answers its token only from there.`,
   },

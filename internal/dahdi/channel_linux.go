@@ -25,6 +25,8 @@ var (
 	ioSetBufinfo   = ioW(27, 24)
 	ioSpecify      = ioW(38, 4)
 	ioSetLaw       = ioW(39, 4)
+	ioGetRxBits    = ioR(43, 4)
+	ioSetTxBits    = ioW(43, 4)
 	_              = ioWR
 )
 
@@ -105,6 +107,17 @@ func (c *linuxChannel) Hook(op int) error {
 func (c *linuxChannel) Tone(t int) error {
 	v := int32(t)
 	return ioctlInt(c.fd, ioSendTone, &v)
+}
+
+func (c *linuxChannel) RxBits() (int, error) {
+	var v int32
+	err := ioctlInt(c.fd, ioGetRxBits, &v)
+	return int(v), err
+}
+
+func (c *linuxChannel) TxBits(abcd int) error {
+	v := int32(abcd)
+	return ioctlInt(c.fd, ioSetTxBits, &v)
 }
 
 func (c *linuxChannel) Close() error {
