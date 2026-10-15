@@ -748,13 +748,15 @@ test('inbox: a WhatsApp template after 24 hours', async ({ page }) => {
     await page.getByRole('button', { name: 'Back to the inbox' }).click()
     await page.getByRole('list', { name: 'Conversations list' }).getByText('Carla Ruiz').click()
     await expect(page.getByText('WhatsApp takes only an approved template now.')).toBeVisible()
-    await expect(page.getByLabel('Template').locator('option', { hasText: 'its header is a picture' })).toBeDisabled()
+    await expect(page.getByLabel('Template').locator('option', { hasText: 'its header is a picture' })).toBeDisabled({ timeout: 15000 })
     await page.getByLabel('Template').selectOption('order_ready|en_US')
     await page.getByLabel('Value 1').fill('Carla')
     await page.getByLabel('Value 2').fill('A-17')
     await expect(page.getByLabel('Template preview')).toContainText('Hi Carla, order A-17 is ready.')
     await page.getByRole('button', { name: 'Send template' }).click()
+    await expect(page.getByLabel('Template preview')).toHaveCount(0) // sent: the picker is cleared
     await expect(page.locator('p', { hasText: 'Hi Carla, order A-17 is ready.' }).first()).toBeVisible()
+    await expect.poll(() => sent.some((m) => m.type === 'template')).toBe(true)
     const t = sent.find((m) => m.type === 'template') as { to: string; template: { name: string } }
     expect(t.to).toBe('34600111222')
     expect(t.template.name).toBe('order_ready')

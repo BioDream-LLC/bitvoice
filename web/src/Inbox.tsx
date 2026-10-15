@@ -132,7 +132,7 @@ function Thread({ id }: { id: string }) {
 
 /** WhatsApp after 24 hours: an approved template, its values filled in, previewed as the customer reads it. */
 function TemplateReply({ id }: { id: string }) {
-  const { data, error } = useInboxTemplatesQuery()
+  const { data, error, isFetching, refetch } = useInboxTemplatesQuery()
   const [send, { isLoading }] = useInboxSendTemplateMutation()
   const [pick, setPick] = useState('')
   const [vals, setVals] = useState<string[]>([])
@@ -145,6 +145,8 @@ function TemplateReply({ id }: { id: string }) {
       <p className="text-xs text-amber-300">Their last message was over 24 hours ago: WhatsApp takes only an approved template now.</p>
       {error ? <p className="text-xs text-rose-300">{(error as { data?: { message?: string } }).data?.message ?? 'The templates could not be read'} (give the business account ID under Channels).</p> : (
         <>
+          {isFetching && !data && <p className="text-xs text-slate-400">Reading your templates from WhatsApp…</p>}
+          {data && !data.length && <p className="text-xs text-amber-300">The account has no templates yet: make one in WhatsApp Manager. <button type="button" className="underline" onClick={() => void refetch()}>Look again</button></p>}
           <select aria-label="Template" className="input" value={pick} onChange={(e) => { setPick(e.target.value); const t = list.find((x) => `${x.name}|${x.language}` === e.target.value); setVals(Array(t?.params ?? 0).fill('')) }}>
             <option value="">Choose a template…</option>
             {list.map((t) => <option key={`${t.name}|${t.language}`} value={`${t.name}|${t.language}`} disabled={!t.usable}>{t.name} ({t.language}, {t.category.toLowerCase()}){t.usable ? '' : ` — ${t.why}`}</option>)}

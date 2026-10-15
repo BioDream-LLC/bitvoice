@@ -132,9 +132,9 @@ Where something has only been tested against stand-ins rather than real equipmen
 <tr><td colspan="2"><b>T.38 fax relay</b> with G.711 fallback through fax gateways and providers</td></tr>
 <tr><td colspan="2"><b>Fax numbers BitVoice answers itself</b>: every fax kept as a PDF and emailed</td></tr>
 <tr><td colspan="2"><b>Faxes sent</b> from the web interface or by emailing a document</td></tr>
-<tr><td colspan="2">Analogue phones, fax machines, door phones and ISDN through SIP gateways: Grandstream HT, Patton SmartNode, AudioCodes; or telephony cards in the server: analogue ports and T1/E1 PRI</td></tr>
+<tr><td colspan="2">Analogue phones, fax machines, door phones and ISDN through SIP gateways: Grandstream HT, Patton SmartNode, AudioCodes; or telephony cards in the server: analogue ports and T1/E1 PRI (caller names, redirecting numbers, transfers handed to the phone company)</td></tr>
 <tr><td colspan="2"><b>Business texting</b> from your numbers through TextMagic, Twilio, SignalWire, Telnyx, Bandwidth, Vonage, Plivo, Flowroute, VoIP.ms or your own webhook, several at once, with a guided US 10DLC registration</td></tr>
-<tr><td colspan="2">One <b>Inbox</b> for the chat box on your website, <b>WhatsApp</b>, <b>Facebook Messenger</b> and texts</td></tr>
+<tr><td colspan="2">One <b>Inbox</b> for the chat box on your website, <b>WhatsApp</b> (templates included), <b>Facebook Messenger</b> and texts</td></tr>
 </tbody></table>
 
 <table width="100%">
@@ -414,7 +414,7 @@ BitVoice too.
 The everyday features, yes: extensions, ring groups, queues, menus, schedules, voicemail, recording, paging,
 parking, conference rooms, forwarding, do not disturb, follow-me, call pickup, intercom, speed dials, a staff
 portal, SIP, IAX2 and H.323 trunks, Skinny (SCCP) phones and MGCP gateways, day/night toggles, PIN sets,
-caller ID lookup, video conference rooms, an outbound dialer, MP3 and streamed hold music, Let's Encrypt
+caller ID lookup, video conference rooms (follow the speaker, or a grid of everyone), an outbound dialer, MP3 and streamed hold music, Let's Encrypt
 certificates, AudioSocket voice bots and ARI external media, and hosting several organisations on one server. Feature codes match the usual FreePBX ones (<code>*72</code>, <code>*78</code>,
 <code>*8</code> and so on) and can be changed. Telephony cards (DAHDI analogue ports, and T1/E1 PRI) work through
 <code>bitvoice-dahdi</code>, a separate program in the Linux download; BRI ISDN connects through SIP gateways.

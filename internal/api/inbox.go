@@ -139,7 +139,9 @@ func (s *Server) whatsAppTemplates(ctx context.Context, fresh bool) ([]inbox.Tem
 	if err != nil {
 		return nil, err
 	}
-	tc.key, tc.at, tc.list = key, time.Now(), list
+	if len(list) > 0 { // an empty answer is asked again next time
+		tc.key, tc.at, tc.list = key, time.Now(), list
+	}
 	return list, nil
 }
 
