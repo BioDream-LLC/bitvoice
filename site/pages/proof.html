@@ -22,12 +22,19 @@
     <thead><tr><th>Part</th><th>Checked against</th></tr></thead>
     <tbody>
       <tr><td>IAX2 trunks</td><td>A real Asterisk 23: registration, calls both ways with sound, busy</td></tr>
-      <tr><td>T1/E1 PRI</td><td>libpri 1.6.1, both sides: calls, caller names, redirecting numbers, hold, and transfers handed to the network</td></tr>
+      <tr><td>T1/E1 PRI and BRI</td><td>libpri 1.6.1, both sides: calls, caller names, redirecting numbers, hold, transfers handed to the network (DMS-100 release link transfer too), advice of charge, BRI point to point and multipoint</td></tr>
+      <tr><td>MFC-R2</td><td>OpenR2 (the library Asterisk uses), every variant offered, calls both ways</td></tr>
+      <tr><td>SS7</td><td>libss7, ITU and ANSI: link alignment, link tests, calls both ways, circuit resets and blocking</td></tr>
+      <tr><td>G.723.1</td><td>ffmpeg, which BitVoice runs to convert it when that is switched on</td></tr>
       <tr><td>SIP over WebSocket</td><td>JsSIP and SIP.js softphones registering and calling each other through BitVoice</td></tr>
       <tr><td>Let's Encrypt</td><td>Pebble, the test authority from the Let's Encrypt project</td></tr>
       <tr><td>MP3 hold music</td><td>minimp3's C decoder, sample for sample</td></tr>
       <tr><td>GSM and G.726</td><td>ffmpeg: GSM decoded sample for sample as ffmpeg does, G.726 streams exchanged with it</td></tr>
       <tr><td>P25 (lab track)</td><td>A real ISSI capture from NIST's public-domain tester, and the standard's own encryption examples</td></tr>
+      <tr><td>TTY (lab track)</td><td>spandsp's V.18 Baudot, both ways</td></tr>
+      <tr><td>Real-time text and text to 911 (lab track)</td><td>Wireshark's RTP, RFC 2198 and MSRP dissectors</td></tr>
+      <tr><td>Caller photos and clips (lab track)</td><td>Files tagged by ExifTool: their time and GPS read back</td></tr>
+      <tr><td>Signed NG911 log events (lab track)</td><td>A JWS signed by OpenSSL</td></tr>
     </tbody>
   </table>
 
@@ -43,12 +50,15 @@
     <li>Let's Encrypt itself (as against its test authority), TURN through real NATs, and Meta's live WhatsApp and Messenger
       APIs</li>
     <li>Published capacity figures on stated hardware</li>
+    <li>The public-safety lab track with a live ESInet, a text control centre, a selective router's CAMA trunks, a P25
+      system, or a CAD: built and tested against stand-ins, waiting on a design partner's lab</li>
   </ul>
 
   <h2 style="margin-top:56px">Not built</h2>
   <ul class="ticks">
-    <li>BRI cards, E&amp;M, MFC-R2 and SS7; DMS-100 release link transfer and advice of charge on PRI</li>
-    <li>Converting G.723.1: no licence allows its reference code to be included</li>
+    <li>SS7 link sets of several links, a signal transfer point, and the SS7 database lookups (number portability,
+      toll-free)</li>
+    <li>MFC-R2's China variant: OpenR2's own one contradicts itself, so there is nothing sound to test against</li>
     <li>P25 Phase 2 half-rate voice (AMBE+2): patented until 2028</li>
   </ul>
 </div></section>
