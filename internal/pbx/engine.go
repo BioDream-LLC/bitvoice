@@ -688,4 +688,8 @@ type Emergency struct {
 	TextVia []string   `json:"textVia,omitempty"`
 	// TextOnly is text to 911 with no voice: a call-taker takes it on the 911 screen.
 	TextOnly bool `json:"textOnly,omitempty"`
+	// CAMA is set for a legacy 911 call from a CAMA trunk: its information digits ("-" when it sent
+	// none). ALILookup says how looking up its location went (looking, found, or the problem).
+	CAMA      string `json:"cama,omitempty"`
+	ALILookup string `json:"aliLookup,omitempty"`
 }

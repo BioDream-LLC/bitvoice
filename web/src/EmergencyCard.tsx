@@ -46,11 +46,13 @@ export function EmergencyCard({ call }: { call: Call }) {
         <Badge status={answered ? 'ok' : 'fail'}>{answered ? `Taken by ${em.takenBy} ${em.takenName ?? ''} ${relTime(em.takenAt!)}` : held || em.textOnly ? `Waiting for a call-taker since ${relTime(call.start)}` : `Ringing since ${relTime(call.start)}`}</Badge>
         {em.esinet && <Badge status="info">ESInet</Badge>}
         {em.textOnly && <Badge status="warn">Text to 911</Badge>}
+        {em.cama && <Badge status="info">CAMA{em.cama !== '-' && !em.cama.startsWith('raw:') ? ` (II ${em.cama})` : ''}</Badge>}
         {em.service && em.service !== 'urn:service:sos' && <Badge status="info">{em.service.replace('urn:service:', '')}</Badge>}
       </header>
 
       {!loc ? (
-        <p className="flex items-center gap-2 text-sm text-amber-300"><AlertTriangle size={14} aria-hidden /> No location came with this call. Ask the caller where they are.</p>
+        <p className="flex items-center gap-2 text-sm text-amber-300"><AlertTriangle size={14} aria-hidden />
+          {em.aliLookup === 'looking' ? 'Looking up the location by the callback number…' : em.aliLookup ? `No location: the lookup by number failed (${em.aliLookup}). Ask the caller where they are.` : 'No location came with this call. Ask the caller where they are.'}</p>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {loc.civic && (
@@ -92,6 +94,7 @@ export function EmergencyCard({ call }: { call: Call }) {
         {em.textOnly && <TextControls id={call.id} taken={answered} />}
         {em.locationUri && <button className="btn" disabled={isLoading} onClick={doRebid}><RefreshCw size={14} className="text-sky-300" aria-hidden /> {isLoading ? 'Fetching…' : 'Rebid location'}</button>}
         {em.rebid && <span className="text-xs text-slate-500">fetched again {relTime(em.rebid)}</span>}
+        {em.aliLookup === 'found' && <span className="text-xs text-slate-500">location from the lookup by number (ALI)</span>}
         <a className="btn" href={`/api/calls/${call.id}/eido`} target="_blank" rel="noreferrer"><FileJson size={14} className="text-violet-300" aria-hidden /> EIDO</a>
       </footer>
     </article>

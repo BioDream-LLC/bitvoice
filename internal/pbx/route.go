@@ -586,6 +586,14 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 		}
 		c.from, c.fromName = cleanNumber(from.URI.User), from.Display
 		c.inTrunkID = trunk.ID
+		if info := m.Get("X-BitVoice-CAMA"); info != "" && trunk.Protocol == "dahdi" {
+			// A 911 call from a selective router's CAMA trunk, on a telephony card (only the card
+			// program can send this): the caller's number came as ANI, the location comes from ALI.
+			c.esinet, c.cama = true, info
+			if c.from == "anonymous" {
+				c.from = ""
+			}
+		}
 		if trunk.ESInet {
 			// The ESInet edge: the BCF checks the source before anything else is done for the call.
 			c.srcIP = in.From.Addr.Addr().Unmap().String()
@@ -625,7 +633,7 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 		p.direction = "inbound"
 		p.trunk = trunk.Name
 		inTrunk = trunk.ID
-		c.esinet = trunk.ESInet
+		c.esinet = trunk.ESInet || c.cama != ""
 	} else if link := e.linkCall(cfg, m, ip); link != nil {
 		// A caller from a call link: no extension, no password; the gateway vouched for the link.
 		name := guestName(m.Get("X-BitVoice-Link-Name"))
@@ -764,6 +772,7 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 	e.mu.Unlock()
 	e.addLeg(a)
 	e.publish("call.started", c.info())
+	go c.locateByNumber()
 
 	if p.reject != 0 {
 		c.reject(p.reject, p.reason)

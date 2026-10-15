@@ -22,6 +22,10 @@ const (
 	StartImmediate = "immediate"
 	StartDelay     = "delay"
 	StartFGD       = "fgd"
+	// StartCAMA is a CAMA trunk from a 911 selective router: wink start, then the caller's number
+	// (ANI) in MF, KP I NPD-NXX-XXXX ST (traditional, 8 digits) or KP II NPA-NXX-XXXX ST (enhanced,
+	// 12), and the call goes to the engine as a 911 call.
+	StartCAMA = "cama"
 )
 
 // E&M timers.
@@ -34,7 +38,9 @@ var (
 
 func (p *port) isEM() bool { return p.conf.Kind == "em" }
 
-func (p *port) emMF() bool { return p.conf.Address == "mf" || p.conf.Start == StartFGD }
+func (p *port) emMF() bool {
+	return p.conf.Address == "mf" || p.conf.Start == StartFGD || p.conf.Start == StartCAMA
+}
 
 // emEvent handles the far end's signalling on an E&M channel.
 func (p *port) emEvent(ev int) {
@@ -118,6 +124,15 @@ func (p *port) emIncoming() {
 		return
 	}
 	ani, dnis := "", got
+	if p.conf.Start == StartCAMA {
+		var info string
+		ani, info = camaANI(got, p.conf.NPD)
+		p.set(stRinging)
+		p.callEngineWith(ani, "911", "", map[string]string{"X-BitVoice-CAMA": firstNonEmpty(info, "-")}, func() {
+			_ = p.ch.Hook(HookOff)
+		})
+		return
+	}
 	if p.emMF() {
 		ani, dnis = splitMF(got)
 	}
@@ -128,6 +143,46 @@ func (p *port) emIncoming() {
 	p.callEngine(ani, dnis, "", func() {
 		_ = p.ch.Hook(HookOff) // answer supervision: the far end sees the call answered
 	})
+}
+
+// camaANI reads a CAMA spill: KP, the information digit(s), the number, ST. Traditional CAMA's one
+// digit is the numbering plan digit (0 to 3: which area code; others mean the number failed), and
+// the seven digits follow; enhanced CAMA sends two information digits and the ten-digit number. It
+// returns the caller's number (empty when there is none) and the information digits, with what the
+// spill carried when it fits neither ("raw:...").
+func camaANI(s string, npd []string) (ani, info string) {
+	body := strings.TrimRight(strings.TrimPrefix(strings.TrimSpace(s), "K"), "SABC")
+	if i := strings.LastIndex(body, "K"); i >= 0 { // a second spill (the router's pANI after the ANI)
+		body = strings.TrimRight(body[i+1:], "SABC")
+	}
+	if strings.Trim(body, "0123456789") != "" {
+		return "", "raw:" + s
+	}
+	switch len(body) {
+	case 12:
+		return body[2:], body[:2]
+	case 8:
+		d := int(body[0] - '0')
+		if d < len(npd) {
+			return npd[d] + body[1:], body[:1]
+		}
+		if d > 3 {
+			return "", body[:1] // ANI failure: the router could not identify the line
+		}
+		return body[1:], body[:1] // no area code set for this digit: the seven digits
+	case 10:
+		return body, ""
+	}
+	return "", "raw:" + s
+}
+
+func firstNonEmpty(s ...string) string {
+	for _, v := range s {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // splitMF reads what MF digits carried: "K ani S K dnis S" (Feature Group D) or "K dnis S".
@@ -175,8 +230,9 @@ func (p *port) emAudio(pcm []int16) {
 			break
 		}
 		p.digits += string(c)
-		// MF: the number ends with ST; with Feature Group D, the second ST.
-		if c == 'S' && (p.conf.Start != StartFGD || strings.Count(p.digits, "S") >= 2) {
+		// MF: the number ends with ST (on CAMA also with one of the other three ST signals, A to C
+		// here); with Feature Group D, the second ST.
+		if (c == 'S' || p.conf.Start == StartCAMA && (c == 'A' || c == 'B' || c == 'C')) && (p.conf.Start != StartFGD || strings.Count(p.digits, "S") >= 2) {
 			end = true
 		}
 	}
@@ -351,6 +407,11 @@ func pcmFrames(pcm []int16, law int) [][]byte {
 // callEngine calls the engine for a call arriving on a line (E&M, R2): from the caller's number to
 // the one dialled; onAnswer runs when the engine answers.
 func (p *port) callEngine(from, to, name string, onAnswer func()) {
+	p.callEngineWith(from, to, name, nil, onAnswer)
+}
+
+// callEngineWith is callEngine with extra headers on the INVITE.
+func (p *port) callEngineWith(from, to, name string, headers map[string]string, onAnswer func()) {
 	b := p.b
 	conn, err := p.openRTP(netip.AddrPort{})
 	if err != nil {
@@ -373,6 +434,9 @@ func (p *port) callEngine(from, to, name string, onAnswer func()) {
 	inv.Set("CSeq", "1 INVITE")
 	inv.Set("Contact", b.contact())
 	inv.Set("Content-Type", "application/sdp")
+	for k, v := range headers {
+		inv.Set(k, v)
+	}
 	inv.Body = p.description(conn).Bytes()
 	p.mu.Lock()
 	p.line = lc

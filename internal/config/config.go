@@ -549,6 +549,10 @@ type PSAP struct {
 	AnswerTarget int `json:"answerTarget"`
 	// TTYOff stops listening for TTYs (deaf callers' text telephones) on 911 calls' voice.
 	TTYOff bool `json:"ttyOff"`
+	// LocationServer is where a 911 call that came with only a callback number (CAMA, or an ESInet
+	// call with no location) is looked up: an ALI database or LIS answering HELD by telephone number
+	// (RFC 6155), https.
+	LocationServer string `json:"locationServer"`
 }
 
 // FaxMail is the mailbox BitVoice reads for email to fax: a message to it with a fax number in
@@ -838,8 +842,13 @@ func (c *Config) PublicSafetyInUse() string {
 		return "the radio console"
 	case c.System.Core.ECRF || len(c.System.Core.PSAPs) > 0 || len(c.System.Core.Rules) > 0:
 		return "NG911 Core Services"
-	case c.System.PSAP.AgencyID != "" || c.System.PSAP.ALIAddress != "" || c.System.PSAP.EIDOURL != "":
+	case c.System.PSAP.AgencyID != "" || c.System.PSAP.ALIAddress != "" || c.System.PSAP.EIDOURL != "" || c.System.PSAP.LocationServer != "":
 		return "the 911 profile"
+	}
+	for _, s := range c.System.Cards.Spans {
+		if s.Signalling == "em" && s.Start == "cama" {
+			return "the 911 profile (a CAMA trunk)"
+		}
 	}
 	for _, tr := range c.Trunks {
 		if tr.ESInet {
@@ -2159,6 +2168,10 @@ func (c *Config) Validate() error {
 		}
 		if ps.AnswerTarget < 0 || ps.AnswerTarget > 120 {
 			p.add("system.psap.answerTarget", "seconds, 1 to 120")
+		}
+		ps.LocationServer = strings.TrimSpace(ps.LocationServer)
+		if ps.LocationServer != "" && !strings.HasPrefix(ps.LocationServer, "https://") && !strings.HasPrefix(ps.LocationServer, "http://") {
+			p.add("system.psap.locationServer", "the location server's https address")
 		}
 	}
 	if m := &c.System.Map; true {

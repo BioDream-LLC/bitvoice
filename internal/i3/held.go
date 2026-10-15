@@ -19,12 +19,40 @@ func Dereference(ctx context.Context, client *http.Client, uri string) (Location
 	if !strings.HasPrefix(strings.ToLower(uri), "https:") && !strings.HasPrefix(strings.ToLower(uri), "http:") {
 		return Location{}, nil, fmt.Errorf("a location reference by %s cannot be fetched here; only https", strings.SplitN(uri, ":", 2)[0])
 	}
-	if client == nil {
-		client = &http.Client{Timeout: 5 * time.Second}
-	}
 	req := `<?xml version="1.0"?>` + "\n" +
 		`<locationRequest xmlns="urn:ietf:params:xml:ns:geopriv:held" responseTime="emergencyDispatch">` +
 		`<locationType exact="false">any</locationType></locationRequest>`
+	return held(ctx, client, uri, req)
+}
+
+// LocateNumber asks a location server (an ALI database or a LIS that speaks HELD) where a telephone
+// number is: a HELD request naming the device by its number (RFC 6155), for a 911 call that came with
+// a callback number and no location, as legacy calls do.
+func LocateNumber(ctx context.Context, client *http.Client, server, number string) (Location, []byte, error) {
+	if !strings.HasPrefix(strings.ToLower(server), "https:") && !strings.HasPrefix(strings.ToLower(server), "http:") {
+		return Location{}, nil, errors.New("the location server's address must be https")
+	}
+	n := strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' || r == '+' {
+			return r
+		}
+		return -1
+	}, number)
+	if len(strings.TrimPrefix(n, "+")) < 7 {
+		return Location{}, nil, errors.New("there is no callback number to look up")
+	}
+	req := `<?xml version="1.0"?>` + "\n" +
+		`<locationRequest xmlns="urn:ietf:params:xml:ns:geopriv:held" responseTime="emergencyDispatch">` +
+		`<locationType exact="false">any</locationType>` +
+		`<device xmlns="urn:ietf:params:xml:ns:geopriv:held:id"><tel>` + n + `</tel></device></locationRequest>`
+	return held(ctx, client, server, req)
+}
+
+// held makes one HELD location request and reads the PIDF-LO out of the answer.
+func held(ctx context.Context, client *http.Client, uri, req string) (Location, []byte, error) {
+	if client == nil {
+		client = &http.Client{Timeout: 5 * time.Second}
+	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	r, err := http.NewRequestWithContext(ctx, http.MethodPost, uri, strings.NewReader(req))

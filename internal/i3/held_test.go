@@ -37,3 +37,24 @@ func TestDereference(t *testing.T) {
 		t.Fatal("sip reference fetched")
 	}
 }
+
+// A lookup by number names the device by its telephone number (RFC 6155).
+func TestLocateNumber(t *testing.T) {
+	var got string
+	lis := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		got = string(b)
+		io.WriteString(w, `<locationResponse xmlns="urn:ietf:params:xml:ns:geopriv:held">`+circlePIDF+`</locationResponse>`)
+	}))
+	defer lis.Close()
+	l, _, err := LocateNumber(context.Background(), lis.Client(), lis.URL, "(717) 555-0100")
+	if err != nil || l.Radius != 35 {
+		t.Fatalf("%+v %v", l, err)
+	}
+	if !strings.Contains(got, `<device xmlns="urn:ietf:params:xml:ns:geopriv:held:id"><tel>7175550100</tel></device>`) {
+		t.Fatalf("request %s", got)
+	}
+	if _, _, err := LocateNumber(context.Background(), nil, lis.URL, "911"); err == nil {
+		t.Fatal("looked up a number that is no number")
+	}
+}

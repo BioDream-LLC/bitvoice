@@ -56,6 +56,8 @@ type Call struct {
 	senders            map[string]func(string) error // how to send text on each of the call's text channels
 	ttySend            sync.Mutex
 	textOnly           bool      // text to 911 with no voice: answered by BitVoice, taken on the 911 screen
+	cama               string    // a CAMA trunk's information digits (a legacy 911 call), "-" when none
+	aliLookup          string    // the ALI lookup's state: "", looking, found, or what went wrong
 	esinet             bool      // arrived on a trunk from the ESInet
 	srcIP              string    // the address an ESInet call came from (for the BCF)
 	suspicious         bool      // the BCF let it through marked suspicious
@@ -128,6 +130,10 @@ func (c *Call) info() CallInfo {
 			em.TextVia = append(em.TextVia, "msrp")
 		}
 		em.TextOnly = c.textOnly
+		em.CAMA, em.ALILookup = c.cama, c.aliLookup
+		if c.cama != "" {
+			em.ESInet = false // the legacy 911 network
+		}
 		slices.Sort(em.TextVia)
 		ci.Emergency = em
 	}

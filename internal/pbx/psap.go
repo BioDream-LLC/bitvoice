@@ -64,3 +64,39 @@ func (e *Engine) Rebid(ctx context.Context, id string) (*i3.Location, error) {
 	e.publish("call.updated", c.info())
 	return &loc, nil
 }
+
+// locateByNumber looks up a 911 call's location by its callback number, when the call brought none
+// and a location server is set (the ALI query of a legacy call). It never holds up the call: what it
+// finds is added when it comes.
+func (c *Call) locateByNumber() {
+	server := c.e.Config().System.PSAP.LocationServer
+	c.mu.Lock()
+	emergency := c.i3 != nil || c.esinet
+	has := c.i3 != nil && (c.i3.Location != nil || c.i3.LocationURI != "")
+	number := c.from
+	if emergency && !has && server != "" {
+		c.aliLookup = "looking"
+	}
+	c.mu.Unlock()
+	if !emergency || has || server == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	loc, raw, err := i3.LocateNumber(ctx, &http.Client{Timeout: 5 * time.Second}, server, number)
+	c.mu.Lock()
+	if err != nil {
+		c.aliLookup = err.Error()
+	} else {
+		c.aliLookup = "found"
+		if c.i3 == nil {
+			c.i3 = &i3.Call{}
+		}
+		c.i3.Location, c.i3.LocationRaw = &loc, raw
+	}
+	c.mu.Unlock()
+	if err != nil {
+		c.e.Log.Warn("911 location lookup failed", "call", c.ID, "number", number, "err", err)
+	}
+	c.e.publish("call.updated", c.info())
+}

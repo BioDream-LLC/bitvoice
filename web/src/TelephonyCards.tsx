@@ -27,6 +27,7 @@ const emHelp: Record<string, string> = {
   immediate: 'Immediate start: the number follows the seizure at once. Some channel banks and older PBXs.',
   delay: 'Delay dial: the far end goes off hook while it gets ready, then on hook when the number may be sent.',
   fgd: 'Feature Group D: wink start with MF numbers, the caller\'s number (ANI) first: KP 00 ANI ST, then KP number ST. Long-distance carriers\' trunks.',
+  cama: 'CAMA: a 911 trunk from the selective router. Wink start, then the caller\'s number (ANI) in MF: KP, information digits, the number, ST. Each call is a 911 call (shown on the 911 page, a lab-track screen), located by its number from the location server set there.',
 }
 
 export function TelephonyCards() {
@@ -158,11 +159,16 @@ export function TelephonyCards() {
                     {sig === 'em' && (
                       <Field label="Start signal" htmlFor={`sp-st-${i}`} error={sp('start')}>
                         <select id={`sp-st-${i}`} className="input" value={s.start || 'wink'} onChange={(e) => setSpan(i, { start: e.target.value })}>
-                          <option value="wink">Wink start</option><option value="immediate">Immediate start</option><option value="delay">Delay dial</option><option value="fgd">Feature Group D</option>
+                          <option value="wink">Wink start</option><option value="immediate">Immediate start</option><option value="delay">Delay dial</option><option value="fgd">Feature Group D</option><option value="cama">CAMA (911 trunk)</option>
                         </select>
                       </Field>
                     )}
-                    {sig === 'em' && s.start !== 'fgd' && (
+                    {sig === 'em' && s.start === 'cama' && (
+                      <Field label="Area codes for NPD 0 to 3" htmlFor={`sp-npd-${i}`} error={sp('npd')} hint="Traditional CAMA sends 7 digits and a numbering plan digit; list the area code each digit stands for, separated by spaces. Enhanced CAMA (10 digits) needs none.">
+                        <input id={`sp-npd-${i}`} className="input font-mono" value={(s.npd ?? []).join(' ')} placeholder="717 570" onChange={(e) => setSpan(i, { npd: e.target.value.split(/[\s,]+/).filter(Boolean) })} />
+                      </Field>
+                    )}
+                    {sig === 'em' && s.start !== 'fgd' && s.start !== 'cama' && (
                       <Field label="Numbers sent as" htmlFor={`sp-ad-${i}`} error={sp('address')}>
                         <select id={`sp-ad-${i}`} className="input" value={s.address || 'dtmf'} onChange={(e) => setSpan(i, { address: e.target.value })}>
                           <option value="dtmf">DTMF</option><option value="mf">MF (R1)</option>

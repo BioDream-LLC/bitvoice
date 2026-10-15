@@ -41,6 +41,8 @@ type ChannelConf struct {
 	Address string `json:"address,omitempty"`
 	// R2: the country variant.
 	Variant string `json:"variant,omitempty"`
+	// CAMA: the area codes for the numbering plan digits 0 to 3.
+	NPD []string `json:"npd,omitempty"`
 }
 
 // DigitTimeout is how long a phone may pause between digits before the number is dialled.

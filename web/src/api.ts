@@ -123,7 +123,7 @@ export interface Additional {
 }
 export type TextVia = 'tty' | 'rtt' | 'msrp' | 'sip'
 export interface TextLine { at: string; from: 'caller' | 'taker'; name?: string; via: TextVia; text: string; open?: boolean }
-export interface Emergency { location?: Location; locationUri?: string; rebid?: string; additional: Additional; service?: string; problems?: string[]; esinet: boolean; takenBy?: string; takenName?: string; takenAt?: string; text?: TextLine[]; textVia?: TextVia[]; textOnly?: boolean }
+export interface Emergency { location?: Location; locationUri?: string; rebid?: string; additional: Additional; service?: string; problems?: string[]; esinet: boolean; takenBy?: string; takenName?: string; takenAt?: string; text?: TextLine[]; textVia?: TextVia[]; textOnly?: boolean; cama?: string; aliLookup?: string }
 export interface CorePSAP { uri: string; name: string; trunk: string; overflow: string }
 export interface CoreRule {
   id: string; name: string; services: string[]; psaps: string[]; schedule: string; whenOpen: boolean
@@ -159,7 +159,7 @@ export interface Transmission {
   id: string; channel: string; channelName: string; direction: 'rx' | 'tx'; start: string; end: string; seconds: number
   unit?: string; unitName?: string; dispatcher?: string; tone?: string; emergency?: boolean; encryption?: string; private?: boolean; recording?: string
 }
-export interface PSAPSettings { agencyId: string; elementId: string; aliAddress: string; eidoUrl: string; eidoToken: string; answerTarget: number; ttyOff: boolean }
+export interface PSAPSettings { agencyId: string; elementId: string; aliAddress: string; eidoUrl: string; eidoToken: string; answerTarget: number; ttyOff: boolean; locationServer: string }
 export interface AnswerReport {
   target: number; calls: number; answered: number; abandoned: number; withinTarget: number; within20: number; average: number; longest: number
   buckets: number[]; byTaker: { ext: string; name: string; calls: number; average: number }[]; byHour: number[]
@@ -364,7 +364,7 @@ export interface ACMEStatus { state: 'off' | 'ok' | 'working' | 'failed'; detail
 /** Telephony cards (DAHDI) on this computer, through bitvoice-dahdi. */
 export interface Cards { enabled: boolean; token: string; linePort: number; alaw: boolean; channels: { channel: number; kind: 'phone' | 'line'; extension: string; number: string }[]; spans?: CardSpan[] | null }
 /** A T1 or E1 line run as PRI. */
-export interface CardSpan { type: 't1' | 'e1' | 'bri'; first: number; role: 'user' | 'network'; switch: string; networkTransfer?: boolean; charges?: boolean; multipoint?: boolean; signalling?: string; start?: string; address?: string; number?: string; variant?: string; opc?: string; apc?: string; ni?: string; slc?: number; firstCic?: number }
+export interface CardSpan { type: 't1' | 'e1' | 'bri'; first: number; role: 'user' | 'network'; switch: string; networkTransfer?: boolean; charges?: boolean; multipoint?: boolean; signalling?: string; start?: string; address?: string; number?: string; npd?: string[]; variant?: string; opc?: string; apc?: string; ni?: string; slc?: number; firstCic?: number }
 
 /** Skinny (SCCP) phones and MGCP gateways: older protocols beside SIP. */
 export interface DeskProtocols {

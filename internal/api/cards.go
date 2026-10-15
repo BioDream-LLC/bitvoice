@@ -67,7 +67,7 @@ func (s *Server) cardsRoutes() {
 				// Each channel is a line of its own, signalled on its own.
 				for _, ch := range bs {
 					out.Channels = append(out.Channels, dahdi.ChannelConf{Channel: ch, Kind: sp.Signalling, Number: sp.Number,
-						Start: sp.Start, Address: sp.Address, Variant: sp.Variant})
+						Start: sp.Start, Address: sp.Address, Variant: sp.Variant, NPD: sp.NPD})
 				}
 				continue
 			}

@@ -8,7 +8,7 @@ import { useDraft } from './useDraft'
 import { Badge, Empty, Field, Page, StaleBanner, problemFor } from './ui'
 
 const blankMap: MapSource = { file: '', url: '', attribution: '' }
-const blankPSAP: PSAPSettings = { agencyId: '', elementId: '', aliAddress: '', eidoUrl: '', eidoToken: '', answerTarget: 15, ttyOff: false }
+const blankPSAP: PSAPSettings = { agencyId: '', elementId: '', aliAddress: '', eidoUrl: '', eidoToken: '', answerTarget: 15, ttyOff: false, locationServer: '' }
 
 export function PSAP() {
   const admin = useIsAdmin()
@@ -127,6 +127,9 @@ function PSAPSetup() {
         <Field label="Element ID" htmlFor="pse" hint="This system's name in the i3 log; blank uses the server's name."><input id="pse" className="input" value={draft.elementId} onChange={(e) => set({ elementId: e.target.value.trim() })} /></Field>
         <Field label="Answer goal (seconds)" htmlFor="psg" error={p('answerTarget')} hint="NENA: 90% of calls within 15 s."><input id="psg" className="input font-mono" inputMode="numeric" value={draft.answerTarget || ''} onChange={(e) => set({ answerTarget: Number(e.target.value.replace(/\D/g, '')) || 0 })} /></Field>
       </div>
+      <Field label="Location lookup (ALI)" htmlFor="psls" error={p('locationServer')} hint="For 911 calls that bring only a callback number (CAMA trunks, or ESInet calls with no location): an ALI database or location server that answers HELD by telephone number (RFC 6155).">
+        <input id="psls" className="input font-mono" value={draft.locationServer} placeholder="https://ali.example.gov/held" onChange={(e) => set({ locationServer: e.target.value.trim() })} />
+      </Field>
       <label className="flex items-center gap-2 text-sm text-slate-300">
         <input type="checkbox" checked={!draft.ttyOff} onChange={(e) => set({ ttyOff: !e.target.checked })} />
         Listen for TTYs on 911 calls <span className="text-xs text-slate-500">(deaf callers' text telephones: their text shows on the call, and replies go back as TTY tones)</span>

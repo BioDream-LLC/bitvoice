@@ -59,6 +59,10 @@ type CardSpan struct {
 	Address string `json:"address,omitempty"`
 	// Number (em, r2) is the number a call in reaches when the far end sends none.
 	Number string `json:"number,omitempty"`
+	// NPD (em, start cama) are the area codes a CAMA trunk's numbering plan digit stands for: the
+	// first for digit 0, the next for 1, and so on (traditional CAMA sends 7 digits and one NPD; enhanced
+	// CAMA sends all 10 digits and needs none).
+	NPD []string `json:"npd,omitempty"`
 	// Variant (r2) is the country's MFC-R2 variant: itu, and the national ones; (ss7) itu or ansi.
 	Variant string `json:"variant,omitempty"`
 	// SS7 (signalling ss7): this end's point code (OPC), the adjacent signalling point's (APC: the
@@ -228,9 +232,20 @@ func (c *Config) validateCards(p *Problems) {
 			switch s.Start {
 			case "":
 				s.Start = "wink"
-			case "wink", "immediate", "delay", "fgd":
+			case "wink", "immediate", "delay", "fgd", "cama":
 			default:
-				p.add(f+".start", "choose wink, immediate, delay or fgd")
+				p.add(f+".start", "choose wink, immediate, delay, fgd or cama")
+			}
+			if s.Start == "cama" {
+				if len(s.NPD) > 4 {
+					p.add(f+".npd", "at most four area codes, for numbering plan digits 0 to 3")
+				}
+				for _, a := range s.NPD {
+					if len(a) != 3 || strings.Trim(a, "0123456789") != "" {
+						p.add(f+".npd", "area codes of three digits, like 717")
+						break
+					}
+				}
 			}
 			switch s.Address {
 			case "":
