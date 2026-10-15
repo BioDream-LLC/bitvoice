@@ -67,7 +67,8 @@ type Engine struct {
 	// FindService is the ESRP's ECRF.
 	FindService FindService
 
-	bcf bcfState
+	bcf   bcfState
+	video videoHub // 911 callers' video
 
 	radioOnce sync.Once
 	radio     *radio
@@ -693,4 +694,6 @@ type Emergency struct {
 	// none). ALILookup says how looking up its location went (looking, found, or the problem).
 	CAMA      string `json:"cama,omitempty"`
 	ALILookup string `json:"aliLookup,omitempty"`
+	// Video is the caller's video: the link sent, live video, its viewers.
+	Video *CallVideo `json:"video,omitempty"`
 }

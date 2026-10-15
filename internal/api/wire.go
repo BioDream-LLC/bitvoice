@@ -71,6 +71,7 @@ func (s *Server) RunBackground(ctx context.Context, main bool) {
 	go s.RunFaxes(ctx)
 	go s.RunFaxMail(ctx)
 	go s.RunPSAPLog(ctx)
+	go s.RunCallMedia(ctx)
 	go s.RunAudit(ctx)
 	go s.RunRadioCAD(ctx)
 	go s.RunGitOps(ctx)

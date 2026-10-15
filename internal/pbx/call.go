@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/biodream-llc/bitvoice/internal/config"
@@ -55,16 +56,17 @@ type Call struct {
 	textAt             time.Time                     // the caller's last character
 	senders            map[string]func(string) error // how to send text on each of the call's text channels
 	ttySend            sync.Mutex
-	textOnly           bool      // text to 911 with no voice: answered by BitVoice, taken on the 911 screen
-	cama               string    // a CAMA trunk's information digits (a legacy 911 call), "-" when none
-	aliLookup          string    // the ALI lookup's state: "", looking, found, or what went wrong
-	esinet             bool      // arrived on a trunk from the ESInet
-	srcIP              string    // the address an ESInet call came from (for the BCF)
-	suspicious         bool      // the BCF let it through marked suspicious
-	inTrunkID          string    // the trunk it came in on (for policy rules)
-	rebidAt            time.Time // the location was last fetched (by reference) at
-	emergencyTold      bool      // the API was told this 911 call was answered
-	takenBy, takenName string    // the call-taker who answered a 911 call
+	textOnly           bool                      // text to 911 with no voice: answered by BitVoice, taken on the 911 screen
+	cama               string                    // a CAMA trunk's information digits (a legacy 911 call), "-" when none
+	video              atomic.Pointer[CallVideo] // the caller's video, as the screens show it
+	aliLookup          string                    // the ALI lookup's state: "", looking, found, or what went wrong
+	esinet             bool                      // arrived on a trunk from the ESInet
+	srcIP              string                    // the address an ESInet call came from (for the BCF)
+	suspicious         bool                      // the BCF let it through marked suspicious
+	inTrunkID          string                    // the trunk it came in on (for policy rules)
+	rebidAt            time.Time                 // the location was last fetched (by reference) at
+	emergencyTold      bool                      // the API was told this 911 call was answered
+	takenBy, takenName string                    // the call-taker who answered a 911 call
 	takenAt            time.Time
 	cancelled          chan struct{}
 	cnlOnce            sync.Once
@@ -131,6 +133,7 @@ func (c *Call) info() CallInfo {
 		}
 		em.TextOnly = c.textOnly
 		em.CAMA, em.ALILookup = c.cama, c.aliLookup
+		em.Video = c.video.Load()
 		if c.cama != "" {
 			em.ESInet = false // the legacy 911 network
 		}

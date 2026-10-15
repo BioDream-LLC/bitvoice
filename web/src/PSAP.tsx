@@ -1,20 +1,20 @@
-import { Download, ScrollText, Save, Siren, Timer } from 'lucide-react'
+import { Download, HeartPulse, ScrollText, Save, Siren, Timer } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { errorOf, useCallsQuery, usePsapLogQuery, usePsapReportQuery, useSaveSettingsMutation, useSettingsQuery, type ApiErrorBody, type MapSource, type PSAPSettings } from './api'
+import { errorOf, useExposureQuery, useCallsQuery, usePsapLogQuery, usePsapReportQuery, useSaveSettingsMutation, useSettingsQuery, type ApiErrorBody, type MapSource, type PSAPSettings } from './api'
 import { useIsAdmin } from './Editor'
 import { EmergencyCard } from './EmergencyCard'
 import { useDraft } from './useDraft'
 import { Badge, Empty, Field, Page, StaleBanner, problemFor } from './ui'
 
 const blankMap: MapSource = { file: '', url: '', attribution: '' }
-const blankPSAP: PSAPSettings = { agencyId: '', elementId: '', aliAddress: '', eidoUrl: '', eidoToken: '', answerTarget: 15, ttyOff: false, locationServer: '' }
+const blankPSAP: PSAPSettings = { agencyId: '', elementId: '', aliAddress: '', eidoUrl: '', eidoToken: '', answerTarget: 15, ttyOff: false, locationServer: '', videoLinkBase: '', videoFrom: '', videoStreams: 0, videoKbps: 0, uploadMb: 0, mediaDays: 0 }
 
 export function PSAP() {
   const admin = useIsAdmin()
   const { data: calls } = useCallsQuery(undefined, { pollingInterval: 2000 })
   const live = (calls?.items ?? []).filter((c) => c.emergency)
-  const [tab, setTab] = useState<'report' | 'log'>('report')
+  const [tab, setTab] = useState<'report' | 'log' | 'exposure'>('report')
   return (
     <Page icon={Siren} title="911 calls" accent="from-rose-400 to-amber-400"
       intro="The 911 profile: calls from the emergency services network (ESInet) with the caller's location and the network's data, the answer-time report, the NENA i3 log, and what CAD is sent when a call is answered.">
@@ -26,8 +26,9 @@ export function PSAP() {
       <div className="mt-6 flex gap-2" role="tablist" aria-label="Reports">
         <button role="tab" aria-selected={tab === 'report'} className={tab === 'report' ? 'btn btn-primary' : 'btn'} onClick={() => setTab('report')}><Timer size={14} aria-hidden /> Answer times</button>
         <button role="tab" aria-selected={tab === 'log'} className={tab === 'log' ? 'btn btn-primary' : 'btn'} onClick={() => setTab('log')}><ScrollText size={14} aria-hidden /> i3 log</button>
+        <button role="tab" aria-selected={tab === 'exposure'} className={tab === 'exposure' ? 'btn btn-primary' : 'btn'} onClick={() => setTab('exposure')}><HeartPulse size={14} aria-hidden /> Exposure</button>
       </div>
-      {tab === 'report' ? <Report /> : <I3Log />}
+      {tab === 'report' ? <Report /> : tab === 'log' ? <I3Log /> : <ExposureReport />}
       {admin && <PSAPSetup />}
     </Page>
   )
@@ -77,6 +78,27 @@ function Report() {
 function Stat({ label, value, note, status }: { label: string; value: string; note?: string; status?: 'ok' | 'warn' | 'fail' }) {
   const color = status === 'ok' ? 'text-emerald-300' : status === 'warn' ? 'text-amber-300' : status === 'fail' ? 'text-rose-300' : 'text-sky-200'
   return <div className="rounded-lg border border-slate-800 p-3"><div className="text-xs text-slate-500">{label}</div><div className={`text-2xl font-semibold ${color}`}>{value}</div>{note && <div className="text-xs text-slate-500">{note}</div>}</div>
+}
+
+/** Who has looked at callers' video and photos, and how often: for the centre's wellness programme. */
+function ExposureReport() {
+  const [from, setFrom] = useState(iso(new Date(Date.now() - 29 * 864e5)))
+  const [to, setTo] = useState(iso(new Date()))
+  const { data } = useExposureQuery({ from, to })
+  const rows = data?.people ?? []
+  return (
+    <section className="card mt-3 space-y-3 p-5" aria-label="Exposure">
+      <p className="text-sm text-slate-400">Every time someone reveals a caller's video or opens a photo or clip, it is counted here: for supervisors and the wellness programme, never for discipline.</p>
+      <div className="flex flex-wrap items-end gap-3">
+        <Field label="From" htmlFor="pxf"><input id="pxf" type="date" className="input" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
+        <Field label="To" htmlFor="pxt"><input id="pxt" type="date" className="input" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
+      </div>
+      {!rows.length ? <p className="text-sm text-slate-400">Nobody has looked at callers' video or photos in these days.</p> : (
+        <table className="w-full text-sm"><thead className="text-left text-xs text-slate-500"><tr><th className="py-1">Who</th><th>Looks</th><th>Calls</th><th>Last</th></tr></thead>
+          <tbody>{rows.map((r) => <tr key={r.who} className="border-t border-slate-800"><td className="py-1 text-slate-200">{r.who}</td><td className={r.looks > 20 ? 'text-amber-300' : 'text-slate-300'}>{r.looks}</td><td>{r.calls}</td><td className="text-xs text-slate-400">{new Date(r.last).toLocaleString()}</td></tr>)}</tbody></table>
+      )}
+    </section>
+  )
 }
 
 function I3Log() {
@@ -139,6 +161,16 @@ function PSAPSetup() {
         <Field label="ALI spill to" htmlFor="psl" error={p('aliAddress')} hint="CAD's address and port: the ALI text goes there over TCP when a call is answered."><input id="psl" className="input font-mono" value={draft.aliAddress} placeholder="10.0.0.20:4000" onChange={(e) => set({ aliAddress: e.target.value.trim() })} /></Field>
         <Field label="EIDO to" htmlFor="psu" error={p('eidoUrl')} hint="CAD's address for EIDOs (NENA-STA-024), sent by HTTPS POST."><input id="psu" className="input font-mono" value={draft.eidoUrl} placeholder="https://cad.example.gov/eido" onChange={(e) => set({ eidoUrl: e.target.value.trim() })} /></Field>
         <Field label="EIDO token" htmlFor="pst2" hint="Sent as a bearer token, if CAD asks for one. Blank keeps the saved one."><input id="pst2" type="password" autoComplete="off" className="input font-mono" value={draft.eidoToken} onChange={(e) => set({ eidoToken: e.target.value })} /></Field>
+      </div>
+      <h3 className="text-sm font-semibold text-violet-300">Caller video and photos</h3>
+      <p className="text-sm text-slate-400">A call-taker can send a 911 caller a link: the caller's phone browser shares its camera live, or sends photos and clips (each hashed as it arrives, with its time and GPS read). Callers' phones must reach this server at the link's address, over HTTPS, and its media ports over UDP.</p>
+      <div className="grid gap-3 md:grid-cols-3">
+        <Field label="Link address" htmlFor="pvb" error={p('videoLinkBase')} hint="The https address callers' phones reach this server at. Blank: the address of the page the call-taker uses."><input id="pvb" className="input font-mono" value={draft.videoLinkBase} placeholder="https://video.psap.example.gov" onChange={(e) => set({ videoLinkBase: e.target.value.trim() })} /></Field>
+        <Field label="Text the link from" htmlFor="pvf" error={p('videoFrom')} hint="A texting number (Texting). Blank: the call-taker reads the link out."><input id="pvf" className="input font-mono" value={draft.videoFrom} placeholder="+17175550100" onChange={(e) => set({ videoFrom: e.target.value.trim() })} /></Field>
+        <Field label="Live videos at once" htmlFor="pvs" error={p('videoStreams')} hint="On this server (4 when blank): never at the expense of calls."><input id="pvs" className="input w-24 font-mono" inputMode="numeric" value={draft.videoStreams || ''} placeholder="4" onChange={(e) => set({ videoStreams: Number(e.target.value.replace(/\D/g, '')) || 0 })} /></Field>
+        <Field label="Video bit rate (kbit/s)" htmlFor="pvk" error={p('videoKbps')} hint="Each caller's video is asked to stay under it (1500 when blank)."><input id="pvk" className="input w-28 font-mono" inputMode="numeric" value={draft.videoKbps || ''} placeholder="1500" onChange={(e) => set({ videoKbps: Number(e.target.value.replace(/\D/g, '')) || 0 })} /></Field>
+        <Field label="Largest file (MB)" htmlFor="pvu" error={p('uploadMb')} hint="200 when blank."><input id="pvu" className="input w-24 font-mono" inputMode="numeric" value={draft.uploadMb || ''} placeholder="200" onChange={(e) => set({ uploadMb: Number(e.target.value.replace(/\D/g, '')) || 0 })} /></Field>
+        <Field label="Keep files and the exposure log (days)" htmlFor="pvd" error={p('mediaDays')} hint="Blank: until deleted. Calls held as evidence are kept."><input id="pvd" className="input w-24 font-mono" inputMode="numeric" value={draft.mediaDays || ''} placeholder="" onChange={(e) => set({ mediaDays: Number(e.target.value.replace(/\D/g, '')) || 0 })} /></Field>
       </div>
       <h3 className="text-sm font-semibold text-violet-300">Map</h3>
       <p className="text-sm text-slate-400">The map on each 911 call and of radio positions. For a map with no internet, give an .mbtiles file of raster tiles on this server (your GIS team or a tile tool such as TileMill or gdal2tiles makes one); or a tile server's address. Leave both empty for no map.</p>

@@ -1790,7 +1790,7 @@ These exports hold no SIP passwords, so each extension gets a new one; voicemail
 Phones and apps that share a video codec (most use H.264) get each other's video as it is. When two parties have none in common (a desk phone with only H.264 and a browser with only VP8), switch on **Convert video between H.264 and VP8** in Settings: BitVoice then offers both codecs, answers each party in its own, and converts each way with **ffmpeg**, which must be installed on the server (apt install ffmpeg, brew install ffmpeg; or give its path). Conversion costs about a processor core per call and adds a little delay, so it is off by default and used only when needed. Settings says whether ffmpeg was found.`,
   },
   {
-    id: 'psap', title: '911 calls (the 911 profile)', route: '/psap', keys: '911 psap ng911 i3 esinet location pidf-lo held rebid ali spill eido cad nena log answer time call-taker tty tdd baudot deaf text rtt real-time text msrp tcc text to 911 sms',
+    id: 'psap', title: '911 calls (the 911 profile)', route: '/psap', keys: '911 psap ng911 i3 esinet location pidf-lo held rebid ali spill eido cad nena log answer time call-taker tty tdd baudot deaf text rtt real-time text msrp tcc text to 911 sms video whip whep camera photo clip evidence sha-256 exposure wellness',
     body: `> **Lab and design-partner track.** Not certified for live 911 or radio dispatch, and not yet tried with a live ESInet, P25 system or CAD. Use it in a lab or in shadow mode beside your current equipment. Switch on **Public-safety profiles (lab)** in [Settings](#/settings) to show it in the menu.
 
 BitVoice answers 911 calls as a PSAP's call-handling system: calls from the emergency services network (the ESInet, NENA i3) arrive with the caller's location and the network's data, the call-taker sees them at once, and CAD is told when the call is answered.
@@ -1813,6 +1813,17 @@ Location comes in the call (by value), or as a reference BitVoice fetches with H
 - **the ALI spill**: the text block CAD systems read (callback number, class of service, address, position and uncertainty, provider), sent over TCP;
 - **the EIDO**, the incident document of NENA-STA-024, by HTTPS POST (with a bearer token if set). **EIDO** on a call shows it.
 
+**Caller video and photos.** On a 911 call, **Send the caller a video link** makes a link only this call opens: texted to the caller from the number under **Text the link from**, or read out. The caller opens it in their phone's browser (no app): **Share live video** sends the back camera live (WebRTC, WHIP: RFC 9725), and **Send photos or videos** sends what they have already taken, dashcam and action-camera files included. On the call:
+- live video shows **LIVE**; **Watch the caller's video** plays it **blurred**, and **Reveal (may be distressing)** shows it; **Blur again** hides it;
+- each file shows its size, when it was taken (by the camera's own clock), where (from its GPS, when it has any), and its **SHA-256**, taken as it arrived, so a copy can later be shown to be the same file; **Reveal** opens it; **Hold as evidence** keeps the call's files past the retention period;
+- the viewing link under it (WHEP) lets CAD, a unit's screen or another position watch the same live video, without signing in: treat it as a key.
+
+Video never takes from the calls: each live video has its own ports, this server takes at most **Live videos at once** of them (4 unless set), each asked to stay under **Video bit rate**, and video that stops for ten seconds is ended. Callers' phones must reach this server at **Link address** (https) and its media ports (UDP). Files are kept **Keep files and the exposure log** days (blank: until deleted), held calls aside.
+
+**Exposure.** Every reveal of a live video and every opening of a photo or clip is counted under **Exposure** on 911 calls: who, how often, over how many calls. It is for supervisors and the centre's wellness programme.
+
+Video a phone sends in the 911 call itself (SIP video over the ESInet) can be watched the same way: **Watch** takes it as the source when no link video is live.
+
 **Calls with only a number.** A 911 call that brings a callback number and no location (from a CAMA trunk, or an ESInet call whose location did not come) can be looked up: give **Location lookup (ALI)** the address of your ALI database's or location server's HELD interface (RFC 5985, asked by telephone number as RFC 6155 has it). BitVoice asks as the call arrives, without holding it up, and the location appears on the call when the answer comes; the call says when the lookup failed and why. ALI databases reached only over a serial ALI link with a vendor's own protocol (PAM, E2) need a gateway that speaks HELD; BitVoice does not speak those links.
 
 **The map.** Under **Map** in the 911 settings, give BitVoice its map tiles: an **.mbtiles file** of raster tiles (PNG, JPEG or WebP) on this server, for a map that works with no internet (your GIS team, TileMill, gdal2tiles or a tile vendor makes one of your area), or **a tile server** with {z}, {x} and {y} in its address (your county's, or a commercial one: mind its terms; the public OpenStreetMap servers are not for this). Either way the call-takers' browsers fetch tiles from BitVoice only: it reads the file, or fetches from the tile server and keeps the last tiles in memory. The same map shows radio positions on the radio console. Vector tiles are not supported.
@@ -1829,7 +1840,7 @@ Location comes in the call (by value), or as a reference BitVoice fetches with H
 
 The whole conversation, whichever way it came, is kept with the call in the call history and in the i3 log.
 
-What is not here yet: MSRP over TLS (TCP only for now), and passing a text session on through the NG911 core (the ESRP routes voice; a text session is answered where it arrives).
+What is not here yet: MSRP over TLS (TCP only for now); passing a text session on through the NG911 core (the ESRP routes voice; a text session is answered where it arrives); recording live caller video (photos and clips are kept; live video is shown, not recorded).
 `,
   },
   {

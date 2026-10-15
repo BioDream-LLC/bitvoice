@@ -568,6 +568,18 @@ type PSAP struct {
 	AnswerTarget int `json:"answerTarget"`
 	// TTYOff stops listening for TTYs (deaf callers' text telephones) on 911 calls' voice.
 	TTYOff bool `json:"ttyOff"`
+	// Caller video (911 calls): the link callers open is VideoLinkBase plus /v/ and a token (the
+	// address callers' phones reach this server at, https); VideoFrom is the texting number that
+	// sends it (empty: the call-taker reads the link out). VideoStreams is the most live caller
+	// videos this server takes at once (4 when 0), VideoKbps the bit rate each is asked to keep
+	// under (1500 when 0), UploadMB the largest photo or clip (200 when 0). MediaDays keeps photos,
+	// clips and the exposure log that many days (0: until deleted); held calls are kept.
+	VideoLinkBase string `json:"videoLinkBase"`
+	VideoFrom     string `json:"videoFrom"`
+	VideoStreams  int    `json:"videoStreams"`
+	VideoKbps     int    `json:"videoKbps"`
+	UploadMB      int    `json:"uploadMb"`
+	MediaDays     int    `json:"mediaDays"`
 	// LocationServer is where a 911 call that came with only a callback number (CAMA, or an ESInet
 	// call with no location) is looked up: an ALI database or LIS answering HELD by telephone number
 	// (RFC 6155), https.
@@ -2199,6 +2211,25 @@ func (c *Config) Validate() error {
 		}
 		if ps.AnswerTarget < 0 || ps.AnswerTarget > 120 {
 			p.add("system.psap.answerTarget", "seconds, 1 to 120")
+		}
+		ps.VideoLinkBase, ps.VideoFrom = strings.TrimRight(strings.TrimSpace(ps.VideoLinkBase), "/"), strings.TrimSpace(ps.VideoFrom)
+		if ps.VideoLinkBase != "" && !strings.HasPrefix(ps.VideoLinkBase, "https://") {
+			p.add("system.psap.videoLinkBase", "the https address callers' phones reach this server at (phones share the camera only over https)")
+		}
+		if ps.VideoFrom != "" && c.SMSNumberOf(ps.VideoFrom) == nil {
+			p.add("system.psap.videoFrom", "choose one of the texting numbers (Texting)")
+		}
+		if ps.VideoStreams < 0 || ps.VideoStreams > 200 {
+			p.add("system.psap.videoStreams", "0 to 200")
+		}
+		if ps.VideoKbps != 0 && (ps.VideoKbps < 100 || ps.VideoKbps > 20000) {
+			p.add("system.psap.videoKbps", "100 to 20000 kbit/s")
+		}
+		if ps.UploadMB < 0 || ps.UploadMB > 4096 {
+			p.add("system.psap.uploadMb", "0 to 4096 MB")
+		}
+		if ps.MediaDays < 0 || ps.MediaDays > 3650 {
+			p.add("system.psap.mediaDays", "0 (keep) to 3650 days")
 		}
 		ps.LocationServer = strings.TrimSpace(ps.LocationServer)
 		if ps.LocationServer != "" && !strings.HasPrefix(ps.LocationServer, "https://") && !strings.HasPrefix(ps.LocationServer, "http://") {

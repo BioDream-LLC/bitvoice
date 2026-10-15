@@ -379,7 +379,7 @@ test('text to 911 from a text control centre', async ({ page }) => {
     await card.getByRole('button', { name: 'Take this text' }).click()
     await expect(card.getByText(/Taken by/)).toBeVisible()
     await card.getByRole('textbox', { name: 'Reply' }).fill('Are the doors locked?')
-    await card.getByRole('button', { name: 'Send' }).click()
+    await card.getByRole('button', { name: 'Send', exact: true }).click()
     await expect.poll(() => tcc.replies.join('|')).toContain('Are the doors locked?')
     await expect(card.getByText('Are the doors locked?')).toBeVisible()
     await card.getByRole('button', { name: 'End conversation' }).click()
@@ -480,4 +480,69 @@ test('core services: location records answer HELD by number', async ({ page }) =
   expect((await lg.json()).reason).toContain('not a compact JWS')
   expect((await page.request.get('/i3log/Versions')).status()).toBe(200)
   await expect(page.locator('section[aria-labelledby="cg-h"]').getByText('No log events on this day.')).toBeVisible()
+})
+
+// Caller video: a 911 conversation from a TCC; the call-taker sends a video link, the caller's
+// phone (a second page, Chromium's fake camera) shares live video over WHIP and sends a photo; the
+// call-taker watches over WHEP, blurred until revealed, sees the photo's hash, time and GPS, holds it,
+// and the exposure report counts the looks.
+test('caller video and photos on a 911 call', async ({ page, browser }) => {
+  await signIn(page)
+  const ok = await page.evaluate(async () => {
+    const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
+    const have = (await (await fetch('./api/trunks')).json()).items.find((t: { name: string }) => t.name === 'ESInet')
+    const t = have ?? (await (await fetch('./api/trunks', { method: 'POST', headers: H, body: JSON.stringify({ name: 'ESInet', enabled: true, host: '127.0.0.1', port: 5099, transport: 'udp', codecs: [], esinet: true, register: false, allowFrom: ['127.0.0.1'] }) })).json()).item
+    const routes = (await (await fetch('./api/inbound-routes')).json()).items
+    if (!routes.some((r: { trunk: string }) => r.trunk === t.id)) await fetch('./api/inbound-routes', { method: 'POST', headers: H, body: JSON.stringify({ name: '911 from the ESInet', did: '', trunk: t.id, destination: { type: 'hangup', target: '' } }) })
+    return !!t.id
+  })
+  expect(ok).toBe(true)
+  const tcc = await standInTCC()
+  try {
+    tcc.send('he is outside, I can film him')
+    await page.goto('./#/psap')
+    const card = page.getByRole('article', { name: /911 call from \+?17175550142/ })
+    await card.getByRole('button', { name: 'Take this text' }).click()
+    await card.getByRole('button', { name: 'Send the caller a video link' }).click()
+    const url = await card.getByLabel("The caller's link").textContent()
+    expect(url).toMatch(/\/v\/[A-Za-z0-9_-]{24}$/)
+
+    // The caller's phone.
+    const phone = await browser.newContext({ ignoreHTTPSErrors: true, permissions: ['camera'] })
+    const caller = await phone.newPage()
+    await caller.goto(url!)
+    await expect(caller.getByRole('heading', { name: 'Show 911 what is happening' })).toBeVisible()
+    await caller.getByRole('button', { name: 'Share live video' }).click()
+    await expect(caller.getByText('911 can see your video.')).toBeVisible({ timeout: 15_000 })
+    await caller.locator('#files').setInputFiles(new URL('./fixtures/caller-photo.jpg', import.meta.url).pathname)
+    await expect(caller.getByText('Sent to 911.')).toBeVisible()
+
+    // The call-taker watches: blurred until revealed.
+    await expect(card.getByRole('region', { name: 'Caller video' }).getByText(/LIVE · (H264|VP8)/)).toBeVisible({ timeout: 10_000 })
+    await card.getByRole('button', { name: "Watch the caller's video" }).click()
+    const video = card.getByLabel("The caller's live video")
+    await expect(video).toHaveClass(/blur-2xl/)
+    await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.videoWidth), { timeout: 15_000 }).toBeGreaterThan(0)
+    await card.getByRole('button', { name: /^Reveal/ }).first().click()
+    await expect(video).not.toHaveClass(/blur-2xl/)
+
+    // The photo: hash, time and GPS, revealed on request, held as evidence.
+    const file = card.getByRole('listitem', { name: 'File 1: caller-photo.jpg' })
+    await expect(file.getByText(/40\.26330, -76\.88230/)).toBeVisible()
+    await expect(file.getByText(/taken 2026-10-15 14:05:30 \(the camera's clock\)/)).toBeVisible()
+    await expect(file.getByText(/SHA-256 [0-9a-f]{64}/)).toBeVisible()
+    await file.getByRole('button', { name: /^Reveal/ }).click()
+    await expect(file.getByRole('img', { name: /Photo caller-photo.jpg/ })).toBeVisible()
+    await card.getByRole('button', { name: 'Hold as evidence' }).click()
+    await expect(card.getByRole('button', { name: 'Held as evidence' })).toBeVisible()
+
+    // The caller stops; the exposure report counts the looks.
+    await caller.getByRole('button', { name: 'Stop sharing' }).click()
+    await expect(caller.getByText('You stopped sharing.')).toBeVisible()
+    await page.getByRole('tab', { name: /Exposure/ }).click()
+    await expect(page.getByRole('region', { name: 'Exposure' }).locator('td').nth(1)).toHaveText(/^[2-9]|\d\d/)
+    await phone.close()
+  } finally {
+    tcc.close()
+  }
 })

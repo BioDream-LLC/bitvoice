@@ -341,6 +341,7 @@ func (s *Session) Close() {
 func (s *Session) receive(pkt []byte, from netip.AddrPort) {
 	if stun.IsSTUN(pkt) {
 		m, err := stun.Parse(pkt)
+
 		if err != nil || m.Type != stun.BindingRequest || !strings.HasPrefix(m.Username(), s.ufrag+":") || m.Check(s.pwd) != nil {
 			return
 		}
@@ -360,6 +361,7 @@ func (s *Session) receive(pkt []byte, from netip.AddrPort) {
 	ok := s.remote.IsValid() && from == s.remote
 	d := s.dtls
 	s.mu.Unlock()
+
 	if !ok || d == nil {
 		return // DTLS only from the address ICE checked, and once the answer is known (the browser resends)
 	}

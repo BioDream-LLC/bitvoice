@@ -97,6 +97,7 @@ type Endpoint struct {
 	recorder func(pkt []byte)
 	// listeners also see every packet received (a TTY decoder, say), each under its own key
 	listeners map[int]func(pkt []byte)
+	onMux     func(pkt []byte) // RTCP that arrives on the RTP port of a WebRTC leg
 	nextKey   int
 	sent      func(pkt []byte) // sees each RTP packet sent (radio channel recording)
 	stats     Stats
@@ -531,7 +532,22 @@ func (e *Endpoint) readRTP() {
 			continue // not RTP version 2
 		}
 		if other != nil && buf[1] >= 192 && buf[1] <= 223 {
-			continue // RTCP multiplexed on the RTP port (RFC 5761): not relayed on WebRTC legs
+			// RTCP multiplexed on the RTP port (RFC 5761): not relayed on WebRTC legs, but given to
+			// whoever asked to see it (a viewer's keyframe request), decrypted.
+			e.mu.Lock()
+			h, in := e.onMux, e.srtpIn
+			e.mu.Unlock()
+			if h != nil {
+				pkt := append([]byte(nil), buf[:n]...)
+				if in != nil {
+					var err error
+					if pkt, err = in.UnprotectRTCP(pkt); err != nil {
+						continue
+					}
+				}
+				h(pkt)
+			}
+			continue
 		}
 		pkt := buf[:n]
 		e.mu.Lock()
@@ -852,6 +868,32 @@ func ListenAt(host string, port int) (*Endpoint, error) {
 	}
 	_ = rtp.SetReadBuffer(1 << 20)
 	return newEndpoint(rtp, rtcp), nil
+}
+
+// OnMuxRTCP sets a function that sees the RTCP a WebRTC party sends on its RTP port (rtcp-mux),
+// decrypted. It must not block.
+func (e *Endpoint) OnMuxRTCP(f func(pkt []byte)) {
+	e.mu.Lock()
+	e.onMux = f
+	e.mu.Unlock()
+}
+
+// SendMuxRTCP sends RTCP to a WebRTC party on its RTP address (rtcp-mux), encrypted when the leg is.
+func (e *Endpoint) SendMuxRTCP(pkt []byte) {
+	e.mu.Lock()
+	to, out := e.remote, e.srtpOut
+	e.mu.Unlock()
+	if !to.IsValid() {
+		return
+	}
+	if out != nil {
+		sp, err := out.ProtectRTCP(pkt)
+		if err != nil {
+			return
+		}
+		pkt = sp
+	}
+	_, _ = e.rtp.WriteToUDPAddrPort(pkt, to)
 }
 
 // OnRTCP sets a function that takes the RTCP this party sends (it is then not relayed); nil relays again.

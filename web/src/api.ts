@@ -121,9 +121,12 @@ export interface Additional {
   subscriber?: { name?: string; phones?: string[]; address?: string; language?: string }
   comments?: string[]; references?: string[]
 }
+export interface CallVideoState { token?: string; viewToken?: string; live: boolean; source?: 'link' | 'call'; codec?: string; since?: string; viewers: string[] }
+export interface MediaItem { n: number; name: string; type: string; size: number; sha256: string; received: string; kind: 'photo' | 'video' | 'file'; taken?: string; takenLocal?: string; hasGps: boolean; lat?: number; lon?: number }
+export interface ExposureRow { who: string; looks: number; calls: number; last: string }
 export type TextVia = 'tty' | 'rtt' | 'msrp' | 'sip'
 export interface TextLine { at: string; from: 'caller' | 'taker'; name?: string; via: TextVia; text: string; open?: boolean }
-export interface Emergency { location?: Location; locationUri?: string; rebid?: string; additional: Additional; service?: string; problems?: string[]; esinet: boolean; takenBy?: string; takenName?: string; takenAt?: string; text?: TextLine[]; textVia?: TextVia[]; textOnly?: boolean; cama?: string; aliLookup?: string }
+export interface Emergency { location?: Location; locationUri?: string; rebid?: string; additional: Additional; service?: string; problems?: string[]; esinet: boolean; takenBy?: string; takenName?: string; takenAt?: string; text?: TextLine[]; textVia?: TextVia[]; textOnly?: boolean; cama?: string; aliLookup?: string; video?: CallVideoState }
 export interface CorePSAP { uri: string; name: string; trunk: string; overflow: string }
 export interface CoreRule {
   id: string; name: string; services: string[]; psaps: string[]; schedule: string; whenOpen: boolean
@@ -160,7 +163,7 @@ export interface Transmission {
   id: string; channel: string; channelName: string; direction: 'rx' | 'tx'; start: string; end: string; seconds: number
   unit?: string; unitName?: string; dispatcher?: string; tone?: string; emergency?: boolean; encryption?: string; private?: boolean; recording?: string
 }
-export interface PSAPSettings { agencyId: string; elementId: string; aliAddress: string; eidoUrl: string; eidoToken: string; answerTarget: number; ttyOff: boolean; locationServer: string }
+export interface PSAPSettings { agencyId: string; elementId: string; aliAddress: string; eidoUrl: string; eidoToken: string; answerTarget: number; ttyOff: boolean; locationServer: string; videoLinkBase: string; videoFrom: string; videoStreams: number; videoKbps: number; uploadMb: number; mediaDays: number }
 export interface AnswerReport {
   target: number; calls: number; answered: number; abandoned: number; withinTarget: number; within20: number; average: number; longest: number
   buckets: number[]; byTaker: { ext: string; name: string; calls: number; average: number }[]; byHour: number[]
@@ -453,6 +456,11 @@ export const api = createApi({
       psapReport: b.query<AnswerReport, { from?: string; to?: string }>({ query: ({ from, to }) => `psap/report?from=${from ?? ''}&to=${to ?? ''}`, providesTags: ['CDR'] }),
       psapLog: b.query<{ day: string; days: string[]; items: I3Event[] }, string>({ query: (day) => `psap/log?day=${day}`, providesTags: ['CDR'] }),
       rebid: b.mutation<{ location: Location }, string>({ query: (id) => ({ url: `calls/${id}/rebid`, method: 'POST' }), invalidatesTags: ['Calls'] }),
+      videoLink: b.mutation<{ url: string; viewUrl: string; sent: boolean; problem?: string }, string>({ query: (id) => ({ url: `calls/${id}/video/link`, method: 'POST' }), invalidatesTags: ['Calls'] }),
+      callMedia: b.query<{ call: string; held: boolean; items: MediaItem[] }, string>({ query: (id) => `calls/${id}/media`, providesTags: ['Calls'] }),
+      holdMedia: b.mutation<unknown, { id: string; hold: boolean }>({ query: ({ id, hold }) => ({ url: `calls/${id}/media/hold`, method: 'POST', body: { hold } }), invalidatesTags: ['Calls'] }),
+      reveal: b.mutation<void, { id: string; item: string }>({ query: ({ id, item }) => ({ url: `calls/${id}/video/reveal`, method: 'POST', body: { item } }) }),
+      exposure: b.query<{ people: ExposureRow[] }, { from: string; to: string }>({ query: (p) => ({ url: 'psap/exposure', params: p }), providesTags: ['Calls'] }),
       takeTextCall: b.mutation<{ taken: boolean }, string>({ query: (id) => ({ url: `calls/${id}/take`, method: 'POST' }), invalidatesTags: ['Calls'] }),
       endTextCall: b.mutation<{ ended: boolean }, string>({ query: (id) => ({ url: `calls/${id}/end-text`, method: 'POST' }), invalidatesTags: ['Calls'] }),
       sendCallText: b.mutation<TextLine, { id: string; via?: TextVia; text: string }>({ query: ({ id, ...body }) => ({ url: `calls/${id}/text`, method: 'POST', body }), invalidatesTags: ['Calls'] }),
@@ -822,7 +830,7 @@ export const api = createApi({
 })
 
 export const {
-  useFaxBoxesQuery, useCreateFaxBoxMutation, useUpdateFaxBoxMutation, useDeleteFaxBoxMutation, useFaxesQuery, useDeleteFaxMutation, useFaxKindsQuery, useSendFaxMutation, useRetryFaxMutation, useTestFaxMailMutation, usePsapReportQuery, usePsapLogQuery, useRebidMutation, useSendCallTextMutation, useTakeTextCallMutation, useEndTextCallMutation, useBoundariesQuery, useSaveBoundaryMutation, useDeleteBoundaryMutation, useLazyFindAreaQuery, useAddressDataQuery, useLisDataQuery, useLazyLisDataQuery, useReceivedLogQuery, useDeleteLISMutation, useDeleteAddressesMutation, useValidateAddressMutation, useBcfLogQuery, useRadioQuery, usePttMutation, useSimulSelectMutation, useAckEmergencyMutation, useMonitorMutation, usePatchMutation, useAlertToneMutation, useUnitCallMutation, useHangUpMutation, useRadioLogQuery, useRadioLocationsQuery, useMapSourceQuery,
+  useFaxBoxesQuery, useCreateFaxBoxMutation, useUpdateFaxBoxMutation, useDeleteFaxBoxMutation, useFaxesQuery, useDeleteFaxMutation, useFaxKindsQuery, useSendFaxMutation, useRetryFaxMutation, useTestFaxMailMutation, usePsapReportQuery, usePsapLogQuery, useRebidMutation, useSendCallTextMutation, useTakeTextCallMutation, useEndTextCallMutation, useVideoLinkMutation, useCallMediaQuery, useHoldMediaMutation, useRevealMutation, useExposureQuery, useBoundariesQuery, useSaveBoundaryMutation, useDeleteBoundaryMutation, useLazyFindAreaQuery, useAddressDataQuery, useLisDataQuery, useLazyLisDataQuery, useReceivedLogQuery, useDeleteLISMutation, useDeleteAddressesMutation, useValidateAddressMutation, useBcfLogQuery, useRadioQuery, usePttMutation, useSimulSelectMutation, useAckEmergencyMutation, useMonitorMutation, usePatchMutation, useAlertToneMutation, useUnitCallMutation, useHangUpMutation, useRadioLogQuery, useRadioLocationsQuery, useMapSourceQuery,
   useTextingKindsQuery,
   useMeQuery, useAuthOptionsQuery, useLoginMutation, useLogoutMutation, useSetupStatusQuery, useCompleteSetupMutation,
   useExtensionsQuery, useCreateExtensionMutation, useUpdateExtensionMutation, useDeleteExtensionMutation, useLazyNextExtensionQuery,

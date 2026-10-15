@@ -2,6 +2,7 @@ import { AlertTriangle, Building2, Crosshair, ExternalLink, FileJson, Hand, Keyb
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { errorOf, useEndTextCallMutation, useRebidMutation, useSendCallTextMutation, useTakeTextCallMutation, type Call, type Civic, type Location, type TextLine, type TextVia } from './api'
+import { CallVideoPanel } from './CallVideo'
 import { LazyMap as MapView } from './LazyMap'
 import { Badge, relTime } from './ui'
 
@@ -89,6 +90,7 @@ export function EmergencyCard({ call }: { call: Call }) {
       {em.problems?.map((p, i) => <p key={i} className="flex items-center gap-2 text-xs text-amber-300"><AlertTriangle size={12} aria-hidden />{p}</p>)}
 
       <Conversation call={call} answered={answered} />
+      <CallVideoPanel call={call} />
 
       <footer className="flex flex-wrap items-center gap-2">
         {em.textOnly && <TextControls id={call.id} taken={answered} />}
