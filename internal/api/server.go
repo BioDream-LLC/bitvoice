@@ -45,6 +45,7 @@ type Server struct {
 	faxMailErr     string
 	i3Mu           sync.Mutex
 	core           boundaryStore
+	lis            lisStore
 	lvf            addressStore
 	Bus            *events.Bus
 	Log            *slog.Logger

@@ -325,6 +325,7 @@ func (s *Server) routes() {
 	s.lvfRoutes()
 	s.radioRoutes()
 	s.mapRoutes()
+	s.lisRoutes()
 	s.radioLogRoutes()
 	s.mfaRoutes()
 }

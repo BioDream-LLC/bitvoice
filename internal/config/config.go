@@ -473,6 +473,9 @@ type Core struct {
 	Source string `json:"source"` // this ECRF's name in answers; the server's name when empty
 	// AllowFrom is the addresses and ranges (the ESInet) that may query; LoST answers nobody else.
 	AllowFrom []string `json:"allowFrom"`
+	// LIS answers HELD location requests by telephone number at /held (the same addresses only),
+	// from the location records uploaded on the Core services page.
+	LIS bool `json:"lis"`
 	// ESRP: calls sent to the "esrp" destination go to the PSAP serving the caller's location.
 	PSAPs []CorePSAP `json:"psaps"`
 	// Default is the PSAP URI for calls with no location, or one no area covers (the policy's

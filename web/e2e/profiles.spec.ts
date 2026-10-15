@@ -438,3 +438,28 @@ test('map of radio positions from the chosen tiles', async ({ page }) => {
     srv.close()
   }
 })
+
+// The LIS: location records uploaded on the Core services page answer HELD requests by number.
+test('core services: location records answer HELD by number', async ({ page }) => {
+  await signIn(page)
+  await page.goto('./#/core')
+  const setup = page.locator('section[aria-labelledby="cs-h"]')
+  await setup.getByRole('switch', { name: /Answer location requests by telephone number/ }).click()
+  await page.locator('#csa').fill('127.0.0.1')
+  await setup.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText('Core services saved')).toBeVisible()
+  const recs = page.locator('section[aria-labelledby="cr-h"]')
+  await recs.getByLabel('Location records').setInputFiles({ name: 'lis.csv', mimeType: 'text/csv', buffer: Buffer.from('number,hno,rd,sts,a3,a1,lat,lon\n7175550100,123,Front,St,Harrisburg,PA,40.2633,-76.8823\nnot a number,1,Main,St,Here,PA,,\n') })
+  await expect(page.getByText(/line 3: "not a number" is not a telephone number/)).toBeVisible()
+  await recs.getByLabel('Location records').setInputFiles({ name: 'lis.csv', mimeType: 'text/csv', buffer: Buffer.from('number,hno,rd,sts,a3,a1,lat,lon\n7175550100,123,Front,St,Harrisburg,PA,40.2633,-76.8823\n') })
+  await expect(page.getByText('1 location record read, 1 in all')).toBeVisible()
+  await recs.locator('#crn').fill('(717) 555-0100')
+  await recs.getByRole('button', { name: 'Look up' }).click()
+  await expect(recs.getByText(/123 Front St, Harrisburg PA/)).toBeVisible()
+  const res = await page.request.post('/held', { headers: { 'Content-Type': 'application/held+xml' },
+    data: '<locationRequest xmlns="urn:ietf:params:xml:ns:geopriv:held"><locationType>any</locationType><device xmlns="urn:ietf:params:xml:ns:geopriv:held:id"><tel>7175550100</tel></device></locationRequest>' })
+  const xml = await res.text()
+  expect(xml).toContain('<locationResponse')
+  expect(xml).toContain('<ca:HNO>123</ca:HNO>')
+  expect(xml).toContain('<gml:pos>40.2633 -76.8823</gml:pos>')
+})

@@ -3,7 +3,7 @@ import { useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   api, errorOf, useBoundariesQuery, useDeleteBoundaryMutation, useLazyFindAreaQuery, useSaveBoundaryMutation, useSaveSettingsMutation, useSettingsQuery, useTrunksQuery, useSchedulesQuery,
-  useAddressDataQuery, useDeleteAddressesMutation, useValidateAddressMutation, useBcfLogQuery,
+  useAddressDataQuery, useDeleteAddressesMutation, useValidateAddressMutation, useBcfLogQuery, useLisDataQuery, useLazyLisDataQuery, useDeleteLISMutation,
   type ApiErrorBody, type Boundary, type CoreRule, type CoreSettings, type Validation,
 } from './api'
 import { attempt, useIsAdmin } from './Editor'
@@ -12,7 +12,7 @@ import { useDraft } from './useDraft'
 import { Badge, Empty, Field, Page, StaleBanner, Toggle, problemFor } from './ui'
 
 const blankBCF = { enabled: false, perMinute: 0, concurrent: 0, deny: [] as string[], mark: false }
-const blankCore: CoreSettings = { ecrf: false, source: '', allowFrom: [], psaps: [], default: '', lostUrl: '', rules: [], bcf: blankBCF }
+const blankCore: CoreSettings = { ecrf: false, lis: false, source: '', allowFrom: [], psaps: [], default: '', lostUrl: '', rules: [], bcf: blankBCF }
 /** Place names may have spaces in them: split on commas only. */
 const commas = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean)
 const list = (s: string) => s.split(/[,\s]+/).map((x) => x.trim()).filter(Boolean)
@@ -26,6 +26,7 @@ export function CoreServices() {
       <Areas />
       <TryPlace />
       <AddressData />
+      <LocationRecords />
       <BCFLog />
     </Page>
   )
@@ -59,6 +60,8 @@ function CoreSetup() {
       <div className="space-y-3">
         <Toggle checked={draft.ecrf} onChange={(v) => set({ ecrf: v })} label="Answer LoST queries (ECRF)" />
         <p className="text-sm text-slate-400">Other NG911 elements ask at <span className="font-mono text-amber-300">{origin}/lost</span> (LoST, RFC 5222). Only the addresses below get an answer.</p>
+        <Toggle checked={draft.lis} onChange={(v) => set({ lis: v })} label="Answer location requests by telephone number (LIS)" />
+        <p className="text-sm text-slate-400">PSAPs and legacy network gateways ask at <span className="font-mono text-amber-300">{origin}/held</span> (HELD, RFC 5985, by number as RFC 6155 has it), from the location records below. The same addresses only.</p>
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="May ask (your ESInet)" htmlFor="csa" error={p('allowFrom') ?? err?.problems?.find((x) => x.field.startsWith('system.core.allowFrom['))?.message} hint="Addresses or ranges, separated by commas.">
             <input id="csa" className="input font-mono" value={allow ?? draft.allowFrom.join(', ')} placeholder="10.20.0.0/16" onChange={(e) => setAllow(e.target.value)} />
@@ -351,6 +354,54 @@ function AddressData() {
           <button className="btn btn-primary" disabled={checking}><Search size={15} aria-hidden /> Check</button>
           {error && <p className="text-sm text-rose-300">{errorOf(error).message}</p>}
           {result && <ValidationResult v={result} />}
+        </form>
+      )}
+    </section>
+  )
+}
+
+/** The LIS's location records: a spreadsheet of numbers and their addresses. */
+function LocationRecords() {
+  const admin = useIsAdmin()
+  const { data } = useLisDataQuery()
+  const [remove] = useDeleteLISMutation()
+  const [find, { data: found, isFetching }] = useLazyLisDataQuery()
+  const [replace, setReplace] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [num, setNum] = useState('')
+  const file = useRef<HTMLInputElement>(null)
+  const upload = async (f: File) => {
+    setBusy(true)
+    try {
+      const r = await fetch(`./api/core/lis?replace=${replace}`, { method: 'POST', body: await f.arrayBuffer(), headers: { 'X-BitVoice': '1' } })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) throw { data: d }
+      toast.success(`${plural(d.added, 'location record')} read, ${d.records.toLocaleString()} in all`)
+      store.dispatch(api.util.invalidateTags(['Settings']))
+    } catch (e) { toast.error(errorOf(e).message) }
+    setBusy(false)
+  }
+  const n = data?.records ?? 0
+  return (
+    <section className="card mt-6 space-y-4 p-5" aria-labelledby="cr-h">
+      <h2 id="cr-h" className="flex items-center gap-2 font-semibold text-slate-100"><MapPinCheck size={17} className="text-amber-300" aria-hidden /> Location records (LIS)</h2>
+      <p className="text-sm text-slate-400">What the LIS answers with: a spreadsheet (CSV) with a header row, a <span className="font-mono text-slate-300">number</span> column and the address as <span className="font-mono text-slate-300">hno, rd, sts, unit, floor, a3 (city), a1 (state), pc, country</span>, with <span className="font-mono text-slate-300">lat, lon, radius</span> when known. A number listed again replaces its old record.</p>
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-sm text-slate-300">{n ? <><span className="font-semibold text-emerald-300">{n.toLocaleString()}</span> numbers</> : 'No location records yet.'}</span>
+        {admin && <>
+          <Toggle checked={replace} onChange={setReplace} label="Replace every record" />
+          <button className="btn btn-primary" disabled={busy} onClick={() => file.current?.click()}><Upload size={15} aria-hidden /> {busy ? 'Reading…' : 'Upload CSV'}</button>
+          <input ref={file} type="file" className="hidden" accept=".csv,text/csv" aria-label="Location records" onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = '' }} />
+          {n > 0 && <button className="btn" onClick={() => attempt(() => remove().unwrap(), 'Location records removed')}><Trash2 size={14} className="text-rose-300" aria-hidden /> Remove all</button>}
+        </>}
+      </div>
+      {n > 0 && (
+        <form className="flex flex-wrap items-end gap-3" aria-label="Look up a number" onSubmit={(e) => { e.preventDefault(); if (num.trim()) find(num.trim()) }}>
+          <Field label="Look up a number" htmlFor="crn"><input id="crn" className="input w-48 font-mono" value={num} placeholder="7175550100" onChange={(e) => setNum(e.target.value)} /></Field>
+          <button className="btn" disabled={isFetching}><Search size={14} aria-hidden /> Look up</button>
+          {found && (found.found
+            ? <span className="text-sm text-emerald-200">{[found.found.civic.number, found.found.civic.preDir, found.found.civic.street, found.found.civic.streetType].filter(Boolean).join(' ')}{found.found.civic.unit ? `, ${found.found.civic.unit}` : ''}, {found.found.civic.city} {found.found.civic.state}{found.found.lat ? <span className="ml-2 font-mono text-xs text-slate-400">{found.found.lat}, {found.found.lon}</span> : null}</span>
+            : <span className="text-sm text-amber-300">No record for this number.</span>)}
         </form>
       )}
     </section>
