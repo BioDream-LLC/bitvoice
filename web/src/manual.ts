@@ -1820,6 +1820,8 @@ Location comes in the call (by value), or as a reference BitVoice fetches with H
 
 Video never takes from the calls: each live video has its own ports, this server takes at most **Live videos at once** of them (4 unless set), each asked to stay under **Video bit rate**, and video that stops for ten seconds is ended. Callers' phones must reach this server at **Link address** (https) and its media ports (UDP). Files are kept **Keep files and the exposure log** days (blank: until deleted), held calls aside.
 
+**Into CAD.** CAD learns of each photo and clip as it arrives from the event stream (\`GET /api/events\`, events \`call.media\`, with the file's name, hash, time and GPS), and can take the viewing link from the call (\`GET /api/calls\`, \`emergency.video.viewToken\`, watched at \`/whep/{viewToken}\`). The EIDO itself does not carry them yet: its media components are not settled in a form BitVoice could check against a CAD.
+
 **Exposure.** Every reveal of a live video and every opening of a photo or clip is counted under **Exposure** on 911 calls: who, how often, over how many calls. It is for supervisors and the centre's wellness programme.
 
 Video a phone sends in the 911 call itself (SIP video over the ESInet) can be watched the same way: **Watch** takes it as the source when no link video is live.

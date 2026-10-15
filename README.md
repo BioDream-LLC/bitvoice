@@ -211,7 +211,11 @@ feature on this list. [Open an issue](https://github.com/BioDream-LLC/bitvoice/i
 <tr><td colspan="2"><b>NENA i3 calls</b> from the ESInet with the caller's <b>PIDF-LO location</b> and the network's additional data, shown to the call-taker as the call rings</td></tr>
 <tr><td colspan="2"><b>ALI spill</b> over TCP and <b>EIDO</b> over HTTPS to any CAD when a call is answered</td></tr>
 <tr><td colspan="2">Location <b>rebids</b> and <b>transfers between PSAPs</b> with the data kept</td></tr>
-<tr><td colspan="2">The <b>NENA i3 log</b>, and <b>answer-time reports</b> by call-taker and hour against your goal</td></tr>
+<tr><td colspan="2">The <b>NENA i3 log</b>, and <b>answer-time reports</b> by call-taker and hour against your goal, as CSV too</td></tr>
+<tr><td colspan="2"><b>TTY</b> (deaf callers' text telephones) decoded and answered on every 911 call, <b>real-time text</b> (RFC 4103) and <b>text to 911</b> from a text control centre (MSRP), in one conversation on the call</td></tr>
+<tr><td colspan="2"><b>Caller video and photos</b> by a link, no app: live camera (WHIP), photos and clips kept with their <b>SHA-256</b>, time and GPS; opened <b>blurred</b> until revealed, with an <b>exposure</b> report for the wellness programme; CAD and units watch by link (WHEP)</td></tr>
+<tr><td colspan="2">A <b>map</b> of the caller's position and its uncertainty, from your own tiles (works offline)</td></tr>
+<tr><td colspan="2"><b>Legacy 911</b>: CAMA trunks on telephony cards, and location looked up by callback number (HELD) for calls that bring none</td></tr>
 </tbody></table>
 
 <table width="100%">
@@ -223,6 +227,7 @@ feature on this list. [Open an issue](https://github.com/BioDream-LLC/bitvoice/i
 <tr><td colspan="2"><b>Private calls</b>: a dispatcher calls a radio by unit ID, and radios call the console</td></tr>
 <tr><td colspan="2"><b>Alert tones</b>: steady, warble, pulsed and beep</td></tr>
 <tr><td colspan="2">Every transmission <b>recorded in a radio log</b> with unit, dispatcher, tone, emergency and encryption, played back from the log</td></tr>
+<tr><td colspan="2"><b>Emergencies stay raised</b> until a dispatcher acknowledges them; <b>simulselect</b>; <b>radio names</b> (Engine 5, not 1205); <b>radio positions</b> from your radio data gateway on a map</td></tr>
 <tr><td colspan="2"><b>Radio data to CAD</b>: who is talking where, emergencies and each transmission, as JSON</td></tr>
 </tbody></table>
 
@@ -232,7 +237,8 @@ feature on this list. [Open an issue](https://github.com/BioDream-LLC/bitvoice/i
 <tr><td colspan="2">An <b>ESRP</b> with policy rules by service, PSAP, schedule and missing or suspicious location, with overflow and a default PSAP</td></tr>
 <tr><td colspan="2">An <b>ECRF</b> answering <b>LoST</b> (RFC 5222) from your service boundaries</td></tr>
 <tr><td colspan="2">An <b>LVF</b> validating civic addresses against NENA address points and road centrelines</td></tr>
-<tr><td colspan="2">A <b>BCF</b> at the ESInet edge: calls per minute and at once per source, deny lists, suspicious calls marked for the policy rules</td></tr>
+<tr><td colspan="2">A <b>BCF</b> at the ESInet edge: calls per minute and at once per source, deny lists, <b>STIR/SHAKEN</b> checks, suspicious calls marked for the policy rules</td></tr>
+<tr><td colspan="2">A <b>LIS</b> answering HELD by telephone number, a <b>forest guide</b> for places outside your areas, and an <b>i3 logging service</b> that takes signed log events, checked against the <b>PSAP Credentialing Agency</b></td></tr>
 </tbody></table>
 
 **Radio console**: radio channels and P25 talkgroups beside the phones, with the radio log.

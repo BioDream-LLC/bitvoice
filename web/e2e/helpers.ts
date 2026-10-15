@@ -22,5 +22,6 @@ export async function signIn(page: Page) {
     await page.getByLabel('Password').fill('a very good password')
     await login.click()
   }
-  await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible()
+  // a sign-in hashes the password (deliberately slow): give it room on a busy machine
+  await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible({ timeout: 15_000 })
 }
