@@ -17,16 +17,16 @@ type Cards struct {
 	ALaw     bool `json:"alaw"` // A-law (Europe and most of the world) rather than µ-law (North America, Japan)
 	// Channels are the card's ports BitVoice uses, by DAHDI channel number.
 	Channels []CardChannel `json:"channels"`
-	// Spans are the card's digital lines: T1 or E1 primary rate ISDN (PRI). Their B-channels are lines
-	// of the card trunk, with the called number (DID) and caller ID carried.
+	// Spans are the card's digital lines: T1 or E1 primary rate ISDN (PRI), or basic rate ISDN (BRI).
+	// Their B-channels are lines of the card trunk, with the called number (DID) and caller ID carried.
 	Spans []CardSpan `json:"spans"`
 }
 
-// CardSpan is one T1 or E1 line run as PRI. Its channels are the ones dahdi_cfg gives the span:
-// First is the first (a T1's 24 channels are First to First+23, the D-channel last; an E1's 31 are
-// First to First+30, the D-channel the 16th).
+// CardSpan is one T1 or E1 line run as PRI, or one BRI. Its channels are the ones dahdi_cfg gives
+// the span: First is the first (a T1's 24 channels are First to First+23, the D-channel last; an E1's
+// 31 are First to First+30, the D-channel the 16th; a BRI's are B1, B2 and the D-channel).
 type CardSpan struct {
-	Type  string `json:"type"`  // t1 or e1
+	Type  string `json:"type"`  // t1, e1 or bri
 	First int    `json:"first"` // the span's first DAHDI channel
 	// Role: user (BitVoice is the PBX on a phone company's PRI, the usual) or network (another PBX
 	// connects to BitVoice as if it were the phone company).
@@ -43,10 +43,17 @@ type CardSpan struct {
 	// Charges asks the phone company for advice of charge on calls out (euroisdn, user side): its own
 	// figure for each call, kept on the call's record.
 	Charges bool `json:"charges,omitempty"`
+	// Multipoint (BRI): several terminals share the line, each given a TEI, and calls to the line are
+	// offered to all (a "multi-device" line; or, on the network side, ISDN phones on BitVoice's bus).
+	// Off: point to point (a PBX line, one device).
+	Multipoint bool `json:"multipoint,omitempty"`
 }
 
 // Channels of a span: its B-channels and D-channel, as DAHDI numbers them.
 func (s CardSpan) Channels() (b []int, d int) {
+	if s.Type == "bri" {
+		return []int{s.First, s.First + 1}, s.First + 2
+	}
 	if s.Type == "e1" {
 		for ts := 1; ts <= 31; ts++ {
 			if ts != 16 {
@@ -122,9 +129,9 @@ func (c *Config) validateCards(p *Problems) {
 		s := &k.Spans[i]
 		f := fmt.Sprintf("system.cards.spans[%d]", i)
 		switch s.Type {
-		case "t1", "e1":
+		case "t1", "e1", "bri":
 		default:
-			p.add(f+".type", "choose T1 or E1")
+			p.add(f+".type", "choose T1, E1 or BRI")
 		}
 		if s.Role == "" {
 			s.Role = "user"
@@ -134,9 +141,15 @@ func (c *Config) validateCards(p *Problems) {
 		}
 		if s.Switch == "" {
 			s.Switch = "ni2"
-			if s.Type == "e1" {
+			if s.Type == "e1" || s.Type == "bri" {
 				s.Switch = "euroisdn"
 			}
+		}
+		if s.Type == "bri" && s.Switch != "euroisdn" && s.Switch != "ni2" {
+			p.add(f+".switch", "a BRI is euroisdn, or ni2 in North America")
+		}
+		if s.Multipoint && s.Type != "bri" {
+			s.Multipoint = false // only a BRI has several terminals on one line
 		}
 		switch s.Switch {
 		case "ni2", "5ess", "dms100", "euroisdn", "qsig":

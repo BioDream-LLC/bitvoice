@@ -62,10 +62,14 @@ const (
 
 // Message is one Q.931 message.
 type Message struct {
-	CallRef  int  // 15 bits
+	CallRef  int  // 15 bits (7 on a BRI)
 	FromSide bool // the call reference flag: set by the side that did not allocate the reference
 	Type     byte
 	IEs      []IE
+	Short    bool // a one-octet call reference (basic rate)
+
+	tei       int  // the terminal it came from or goes to (multipoint BRI)
+	broadcast bool // to every terminal (a multipoint BRI's SETUP)
 }
 
 // IE is one information element: Single octet ones have no Data.
@@ -86,7 +90,7 @@ func Parse(b []byte) (*Message, error) {
 	if crl > 2 || len(b) < 3+crl {
 		return nil, ErrShort
 	}
-	m := &Message{}
+	m := &Message{Short: crl == 1}
 	if crl > 0 {
 		m.FromSide = b[2]&0x80 != 0
 		v := int(b[2] & 0x7F)
@@ -128,8 +132,24 @@ func Parse(b []byte) (*Message, error) {
 	return m, nil
 }
 
-// Bytes writes the message with a two-octet call reference (primary rate).
+// Bytes writes the message with a two-octet call reference (primary rate), or one octet when Short.
 func (m *Message) Bytes() []byte {
+	if m.Short {
+		b := []byte{0x08, 0x01, byte(m.CallRef & 0x7F)}
+		if m.FromSide {
+			b[2] |= 0x80
+		}
+		b = append(b, m.Type)
+		for _, ie := range m.IEs {
+			if ie.ID&0x80 != 0 {
+				b = append(b, ie.ID)
+				continue
+			}
+			b = append(b, ie.ID, byte(len(ie.Data)))
+			b = append(b, ie.Data...)
+		}
+		return b
+	}
 	b := []byte{0x08, 0x02, byte(m.CallRef >> 8 & 0x7F), byte(m.CallRef)}
 	if m.FromSide {
 		b[2] |= 0x80
@@ -193,6 +213,15 @@ func channelID(ch int, exclusive bool) []byte {
 	return []byte{o3, 0x83, 0x80 | byte(ch)}
 }
 
+// briChannelID names B1 or B2 of a basic rate interface.
+func briChannelID(ch int, exclusive bool) []byte {
+	o3 := byte(0x80 | ch&3)
+	if exclusive {
+		o3 |= 0x08
+	}
+	return []byte{o3}
+}
+
 // parseChannel reads a channel identification: the B-channel and whether only that one will do.
 // ch is 0 when none is named ("any").
 func parseChannel(d []byte) (ch int, exclusive bool, ok bool) {
@@ -205,6 +234,9 @@ func parseChannel(d []byte) (ch int, exclusive bool, ok bool) {
 	}
 	if d[0]&0x03 == 3 {
 		return 0, false, true // any channel
+	}
+	if d[0]&0x20 == 0 { // basic rate: B1 or B2 in this octet
+		return int(d[0] & 3), exclusive, true
 	}
 	i := 1
 	if d[0]&0x40 != 0 { // an interface identifier is present: skip it

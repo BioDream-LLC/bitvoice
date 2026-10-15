@@ -285,7 +285,7 @@ func (c *Call) holdOp(t, ack byte, hold bool) error {
 	p.mu.Unlock()
 	m := c.msg(t)
 	if !hold {
-		m.add(ieChannelID, channelID(c.Channel, true))
+		m.add(ieChannelID, p.chanID(c.Channel, true))
 	}
 	if err := p.send(m); err != nil {
 		return err
@@ -417,7 +417,7 @@ func (c *Call) supplementary(m *Message) bool {
 				_ = p.send(c.msg(MsgHoldAck))
 			} else {
 				r := c.msg(MsgRetrieveAck)
-				r.add(ieChannelID, channelID(c.Channel, true))
+				r.add(ieChannelID, p.chanID(c.Channel, true))
 				_ = p.send(r)
 			}
 			return true
@@ -512,7 +512,7 @@ func (c *Call) transferAsked(comp Component, d []byte) bool {
 			if t, iv, _, ok := berNext(seq); ok && t == 0x02 {
 				ref := berIntVal(iv)
 				p.mu.Lock()
-				other = p.calls[callKey{ref & 0x7FFF, ref&0x8000 != 0}]
+				other = p.calls[callKey{ref & 0x7FFF, ref&0x8000 != 0, 0}]
 				p.mu.Unlock()
 			}
 		}

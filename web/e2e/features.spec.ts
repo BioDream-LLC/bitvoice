@@ -615,7 +615,7 @@ test('T1 and E1 PRI on a telephony card', async ({ page }) => {
   await page.goto('/#/cards')
   const on = page.getByRole('switch', { name: 'Telephony cards' })
   if (!(await on.isChecked())) await on.click()
-  await page.getByRole('button', { name: 'Add a T1 or E1' }).click()
+  await page.getByRole('button', { name: 'Add a T1, E1 or BRI' }).click()
   await page.getByLabel('First channel').fill('1')
   await expect(page.getByText('Channels 1 to 24, D-channel 24.')).toBeVisible()
   await page.getByLabel('Line', { exact: true }).selectOption('e1')
@@ -643,6 +643,34 @@ test('T1 and E1 PRI on a telephony card', async ({ page }) => {
   expect(cfg2.spans[0].switch).toBe('dms100')
   expect(cfg2.spans[0].networkTransfer).toBe(true)
   expect(cfg2.spans[0].charges ?? false).toBe(false)
+})
+
+// A BRI on the card: B1, B2 and the D-channel, multipoint for ISDN phones on BitVoice's bus.
+test('BRI on a telephony card', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/#/cards')
+  const on = page.getByRole('switch', { name: 'Telephony cards' })
+  if (!(await on.isChecked())) await on.click()
+  await page.getByRole('button', { name: 'Add a T1, E1 or BRI' }).click()
+  const n = await page.getByLabel('Line', { exact: true }).count()
+  await page.getByLabel('Line', { exact: true }).nth(n - 1).selectOption('bri')
+  await page.getByLabel('First channel').nth(n - 1).fill('201')
+  await expect(page.getByText('Channels 201 to 203, D-channel 203.')).toBeVisible()
+  await expect(page.getByLabel('Switch type').nth(n - 1)).toHaveValue('euroisdn')
+  await page.getByLabel('BitVoice is').nth(n - 1).selectOption('network')
+  await page.getByRole('switch', { name: `Multipoint on span ${n}` }).click()
+  await expect(page.getByText(/ISDN phones on BitVoice's S-bus/)).toBeVisible()
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText('Telephony cards saved')).toBeVisible()
+  const token = await page.getByRole('textbox', { name: 'Token' }).inputValue()
+  const cfg = await page.evaluate(async (tok) => (await (await fetch('./api/cards/bridge', { headers: { Authorization: 'Bearer ' + tok } })).json()), token)
+  const s = cfg.spans[cfg.spans.length - 1]
+  expect(s.bri).toBe(true)
+  expect(s.multipoint).toBe(true)
+  expect(s.network).toBe(true)
+  expect(s.b).toEqual([201, 202])
+  expect(s.d).toBe(203)
+  expect(s.q931).toEqual([1, 2])
 })
 
 // The outbound dialer: a campaign is made for a queue, a CSV list is loaded (one number on the

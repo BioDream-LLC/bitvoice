@@ -1,8 +1,9 @@
-// Package isdn speaks ISDN primary rate (PRI) signalling on a T1 or E1 line's D-channel: the data link
-// (Q.921 LAPD, point to point, TEI 0) and basic call control (Q.931, with the parts National ISDN-2,
+// Package isdn speaks ISDN signalling on a D-channel: primary rate (PRI, a T1 or E1 line) and basic
+// rate (BRI, two B-channels, point to point or point to multipoint): the data link (Q.921 LAPD, with
+// TEI management on a multipoint BRI) and basic call control (Q.931, with the parts National ISDN-2,
 // 5ESS, DMS-100 and EuroISDN share for ordinary calls), as either the user side (a PBX on a phone
-// company's PRI) or the network side (BitVoice as the network for another PBX). Written from the ITU-T
-// recommendations; tested against libpri.
+// company's line) or the network side (BitVoice as the network for another PBX, or for ISDN phones).
+// Written from the ITU-T recommendations; tested against libpri.
 package isdn
 
 import (
@@ -41,10 +42,14 @@ const (
 // ErrDown is returned when the data link is not established.
 var ErrDown = errors.New("isdn: the D-channel is down")
 
-// lapd is one Q.921 data link, SAPI 0, TEI 0.
+// lapd is one Q.921 data link, SAPI 0, on one TEI (0 on a PRI or a point-to-point BRI).
 type lapd struct {
-	link    Link
+	write   func([]byte)
 	network bool
+	tei     int
+	// onDemand (a multipoint BRI): the link is set up when there is something to send and stays
+	// released when the other side releases it, rather than being kept up.
+	onDemand bool
 	deliver func([]byte) // a received layer 3 message
 	up      func(bool)
 
@@ -62,18 +67,18 @@ type lapd struct {
 	n200       int
 }
 
-func newLAPD(link Link, network bool, deliver func([]byte), up func(bool)) *lapd {
-	return &lapd{link: link, network: network, deliver: deliver, up: up, unacked: map[int][]byte{}, d200: T200, d203: T203, n200: N200}
+func newLAPD(write func([]byte), network bool, tei int, deliver func([]byte), up func(bool)) *lapd {
+	return &lapd{write: write, network: network, tei: tei, deliver: deliver, up: up, unacked: map[int][]byte{}, d200: T200, d203: T203, n200: N200}
 }
 
 // address: SAPI 0, C/R as Q.921 table 1 says (commands from the network and responses from the user
-// carry 1), TEI 0.
+// carry 1), the link's TEI.
 func (l *lapd) addr(command bool) []byte {
 	cr := byte(0)
 	if command == l.network {
 		cr = 2
 	}
-	return []byte{cr, 0x01}
+	return []byte{cr, byte(l.tei<<1 | 1)}
 }
 
 func (l *lapd) isCommand(a byte) bool {
@@ -81,7 +86,7 @@ func (l *lapd) isCommand(a byte) bool {
 	return cr != l.network // the network's commands have C/R 1, so a 1 arriving at the user is a command
 }
 
-func (l *lapd) send(f []byte) { _ = l.link.WriteFrame(f) }
+func (l *lapd) send(f []byte) { l.write(f) }
 
 func (l *lapd) sendU(ctl byte, command bool) { l.send(append(l.addr(command), ctl)) }
 
@@ -141,6 +146,11 @@ func (l *lapd) onT200() {
 	l.retries++
 	switch l.state {
 	case 1:
+		if l.retries > l.n200 && l.onDemand {
+			l.state = 0
+			l.queue = nil // what was waiting cannot be sent
+			return
+		}
 		if l.retries > l.n200 {
 			// Nobody answers: try again in a while, for as long as the program runs.
 			l.state = 0
@@ -152,7 +162,9 @@ func (l *lapd) onT200() {
 	case 2:
 		if l.retries > l.n200 {
 			l.down()
-			l.establish()
+			if !l.onDemand {
+				l.establish()
+			}
 			return
 		}
 		// Timer recovery: ask the other side where it is (RR with poll), and resend what it lacks.
@@ -190,15 +202,23 @@ func (l *lapd) established() {
 	l.peerBusy, l.rejected, l.retries = false, false, 0
 	l.stopT200()
 	l.armT203()
+	l.pump() // what waited for the link (set up on demand)
 	if !was {
 		go l.up(true)
 	}
 }
 
-// Send queues a layer 3 message.
+// Send queues a layer 3 message. A link set up on demand is set up for it.
 func (l *lapd) Send(msg []byte) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if l.state != 2 && l.onDemand && !l.closed {
+		l.queue = append(l.queue, msg)
+		if l.state == 0 {
+			l.establish()
+		}
+		return nil
+	}
 	if l.state != 2 {
 		return ErrDown
 	}
@@ -259,22 +279,15 @@ func (l *lapd) resend(from int) {
 	}
 }
 
-// run reads frames until the link fails.
-func (l *lapd) run() error {
-	for {
-		f, err := l.link.ReadFrame()
-		if err != nil {
-			l.mu.Lock()
-			l.closed = true
-			l.down()
-			if l.t203 != nil {
-				l.t203.Stop()
-			}
-			l.mu.Unlock()
-			return err
-		}
-		l.receive(f)
+// fail is the frame link failing: the data link is down for good.
+func (l *lapd) fail() {
+	l.mu.Lock()
+	l.closed = true
+	l.down()
+	if l.t203 != nil {
+		l.t203.Stop()
 	}
+	l.mu.Unlock()
 }
 
 func (l *lapd) close() {
@@ -287,13 +300,8 @@ func (l *lapd) close() {
 	l.mu.Unlock()
 }
 
+// receive takes a frame for this link (SAPI 0, its TEI).
 func (l *lapd) receive(f []byte) {
-	if len(f) < 3 || f[0]&1 != 0 || f[1]&1 != 1 {
-		return
-	}
-	if f[0]>>2 != 0 || f[1]>>1 != 0 {
-		return // another SAPI (management) or TEI: point-to-point PRI uses SAPI 0, TEI 0 only
-	}
 	cmd := l.isCommand(f[0])
 	ctl := f[2]
 	l.mu.Lock()
@@ -368,17 +376,21 @@ func (l *lapd) receive(f []byte) {
 		case ctlDISC:
 			l.sendU(ctlUA|ctl&pfU, false)
 			l.down()
-			l.establish()
+			if !l.onDemand {
+				l.establish()
+			}
 		case ctlDM:
 			if l.state == 2 {
 				l.down()
 			}
-			if l.state != 1 {
+			if l.state != 1 && !l.onDemand {
 				l.establish()
 			}
 		case ctlFRMR:
 			l.down()
-			l.establish()
+			if !l.onDemand {
+				l.establish()
+			}
 		}
 	}
 }

@@ -27,6 +27,9 @@ type SpanConf struct {
 	NetworkTransfer bool `json:"networkTransfer,omitempty"`
 	// Charges asks the phone company for advice of charge on calls out (EuroISDN).
 	Charges bool `json:"charges,omitempty"`
+	// BRI is a basic rate span; Multipoint, several terminals on it.
+	BRI        bool `json:"bri,omitempty"`
+	Multipoint bool `json:"multipoint,omitempty"`
 }
 
 // OpenD opens a span's D-channel (HDLC frames); tests replace it.
@@ -82,9 +85,9 @@ func (s *span) run(i int) {
 			continue
 		}
 		p := isdn.New(link, isdn.Config{Network: s.conf.Network, Channels: s.conf.Q931, ALaw: b.cfg.ALaw, Log: b.log, Switch: s.conf.Switch,
-			RequestCharge: s.conf.Charges && !s.conf.Network})
+			RequestCharge: s.conf.Charges && !s.conf.Network, BRI: s.conf.BRI, PTMP: s.conf.Multipoint})
 		p.Incoming = s.incoming
-		p.Up = func(up bool) { b.log.Info("dahdi: PRI D-channel", "span", i+1, "up", up) }
+		p.Up = func(up bool) { b.log.Info("dahdi: ISDN D-channel", "span", i+1, "up", up) }
 		b.mu.Lock()
 		s.pri, s.err = p, ""
 		b.mu.Unlock()

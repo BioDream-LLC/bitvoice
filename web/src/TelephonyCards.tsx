@@ -118,18 +118,18 @@ export function TelephonyCards() {
         )}
         {k.enabled && (
           <section className="card space-y-4 p-5" aria-labelledby="cspan-h">
-            <h2 id="cspan-h" className="flex items-center gap-2 font-semibold text-slate-100"><Network size={17} className="text-violet-300" aria-hidden /> Digital lines (T1 and E1 PRI)</h2>
-            <p className="text-sm text-slate-400">A T1 (23 calls) or E1 (30 calls) line from the phone company, run as primary rate ISDN: its calls come in with the number dialled (for the inbound routes), the caller ID and name, and the number they were forwarded from, and go out with yours. Set the span up as PRI in /etc/dahdi/system.conf, then give its first DAHDI channel here.</p>
+            <h2 id="cspan-h" className="flex items-center gap-2 font-semibold text-slate-100"><Network size={17} className="text-violet-300" aria-hidden /> Digital lines (T1, E1 and BRI)</h2>
+            <p className="text-sm text-slate-400">A T1 (23 calls) or E1 (30 calls) line from the phone company run as primary rate ISDN, or a basic rate ISDN line (BRI, 2 calls): its calls come in with the number dialled (for the inbound routes), the caller ID and name, and the number they were forwarded from, and go out with yours. Set the span up in /etc/dahdi/system.conf, then give its first DAHDI channel here.</p>
             {spans.map((s, i) => {
-              const last = s.first + (s.type === 'e1' ? 30 : 23)
-              const d = s.first + (s.type === 'e1' ? 15 : 23)
+              const last = s.first + (s.type === 'e1' ? 30 : s.type === 'bri' ? 2 : 23)
+              const d = s.first + (s.type === 'e1' ? 15 : s.type === 'bri' ? 2 : 23)
               const sp = (f: string) => p(`spans[${i}].${f}`)
               return (
                 <div key={i} className="space-y-1 rounded-lg border border-slate-800 p-3">
                   <div className="grid items-end gap-2 sm:grid-cols-[7rem_7rem_11rem_10rem_auto]">
                     <Field label="Line" htmlFor={`sp-t-${i}`}>
-                      <select id={`sp-t-${i}`} className="input" value={s.type} onChange={(e) => setSpan(i, { type: e.target.value as CardSpan['type'], switch: e.target.value === 'e1' ? 'euroisdn' : 'ni2' })}>
-                        <option value="t1">T1</option><option value="e1">E1</option>
+                      <select id={`sp-t-${i}`} className="input" value={s.type} onChange={(e) => setSpan(i, { type: e.target.value as CardSpan['type'], switch: e.target.value === 't1' ? 'ni2' : 'euroisdn', multipoint: false })}>
+                        <option value="t1">T1</option><option value="e1">E1</option><option value="bri">BRI</option>
                       </select>
                     </Field>
                     <Field label="First channel" htmlFor={`sp-f-${i}`} error={sp('first')}>
@@ -142,11 +142,21 @@ export function TelephonyCards() {
                     </Field>
                     <Field label="Switch type" htmlFor={`sp-s-${i}`} error={sp('switch')}>
                       <select id={`sp-s-${i}`} className="input" value={s.switch} onChange={(e) => setSpan(i, { switch: e.target.value, networkTransfer: ['ni2', '5ess', 'dms100', 'euroisdn'].includes(e.target.value) && s.networkTransfer, charges: e.target.value === 'euroisdn' && s.charges })}>
-                        <option value="ni2">National ISDN-2</option><option value="5ess">AT&amp;T 5ESS</option><option value="dms100">Nortel DMS-100</option><option value="euroisdn">EuroISDN</option><option value="qsig">QSIG</option>
+                        {s.type === 'bri'
+                          ? <><option value="euroisdn">EuroISDN</option><option value="ni2">National ISDN</option></>
+                          : <><option value="ni2">National ISDN-2</option><option value="5ess">AT&amp;T 5ESS</option><option value="dms100">Nortel DMS-100</option><option value="euroisdn">EuroISDN</option><option value="qsig">QSIG</option></>}
                       </select>
                     </Field>
                     <button type="button" className="btn" aria-label={`Remove span ${i + 1}`} onClick={() => set({ spans: spans.filter((_, j) => j !== i) })}><Trash2 size={14} className="text-rose-300" aria-hidden /></button>
                   </div>
+                  {s.type === 'bri' && (
+                    <label className="flex items-center gap-3 pt-1 text-sm text-slate-300">
+                      <Toggle checked={!!s.multipoint} onChange={(v) => setSpan(i, { multipoint: v })} label={`Multipoint on span ${i + 1}`} />
+                      Several devices on the line (multipoint) <span className="text-xs text-slate-500">({s.role === 'user'
+                        ? 'a "multi-device" line: BitVoice asks the network for its own TEI and answers calls to it beside any other devices; off for a PBX line (point to point)'
+                        : 'ISDN phones on BitVoice\'s S-bus: each gets a TEI, calls to the line ring them all and the first to answer takes the call, numbers dialled digit by digit are collected'})</span>
+                    </label>
+                  )}
                   {s.role === 'user' && ['ni2', '5ess', 'dms100', 'euroisdn'].includes(s.switch) && (
                     <label className="flex items-center gap-3 pt-1 text-sm text-slate-300">
                       <Toggle checked={!!s.networkTransfer} onChange={(v) => setSpan(i, { networkTransfer: v })} label={`Transfers through the phone company on span ${i + 1}`} />
@@ -167,7 +177,7 @@ export function TelephonyCards() {
                 </div>
               )
             })}
-            <button type="button" className="btn" onClick={() => set({ spans: [...spans, { type: 't1', first: Math.max(1, ...k.channels.map((c) => c.channel + 1), ...spans.map((s) => s.first + (s.type === 'e1' ? 31 : 24))), role: 'user', switch: 'ni2' }] })}><Plus size={14} aria-hidden /> Add a T1 or E1</button>
+            <button type="button" className="btn" onClick={() => set({ spans: [...spans, { type: 't1', first: Math.max(1, ...k.channels.map((c) => c.channel + 1), ...spans.map((s) => s.first + (s.type === 'e1' ? 31 : s.type === 'bri' ? 3 : 24))), role: 'user', switch: 'ni2' }] })}><Plus size={14} aria-hidden /> Add a T1, E1 or BRI</button>
           </section>
         )}
         <button type="button" className="btn btn-primary" disabled={isLoading || !edit} onClick={submit}><Save size={14} aria-hidden /> Save</button>

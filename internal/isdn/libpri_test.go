@@ -49,7 +49,7 @@ type oracle struct {
 }
 
 // startOracle runs libpri (BITVOICE_TEST_LIBPRI names the harness) as the other side.
-func startOracle(t *testing.T, role, sw, script string) (*gramLink, *oracle) {
+func startOracle(t *testing.T, role, sw, script string, mode ...string) (*gramLink, *oracle) {
 	bin := os.Getenv("BITVOICE_TEST_LIBPRI")
 	if bin == "" {
 		t.Skip("set BITVOICE_TEST_LIBPRI to the libpri harness")
@@ -62,7 +62,7 @@ func startOracle(t *testing.T, role, sw, script string) (*gramLink, *oracle) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { c.Close() })
-	cmd := exec.Command(bin, path, role, sw, script)
+	cmd := exec.Command(bin, append([]string{path, role, sw, script}, mode...)...)
 	out, _ := cmd.StdoutPipe()
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {

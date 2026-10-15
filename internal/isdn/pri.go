@@ -2,6 +2,7 @@ package isdn
 
 import (
 	"errors"
+	"strings"
 	"log/slog"
 	"slices"
 	"sync"
@@ -14,12 +15,24 @@ var (
 	T305 = 30 * time.Second // DISCONNECT sent, no RELEASE
 	T308 = 4 * time.Second  // RELEASE sent, no RELEASE COMPLETE
 	T310 = 30 * time.Second // CALL PROCEEDING heard, nothing more (ten seconds for some switches: kept generous)
+	// T302 is how long the network side waits for the next digit of a number dialled digit by digit
+	// (overlap sending, as ISDN phones dial). Q.931 allows 10 to 15 s; phones on a PBX want less.
+	T302 = 4 * time.Second
 )
 
-// Config describes one PRI.
+// Config.Channels for a basic rate interface.
+var BRIChannels = []int{1, 2}
+
+// Config describes one PRI or BRI.
 type Config struct {
 	Network  bool  // BitVoice is the network side (another PBX connects to it); else the user side
-	Channels []int // the B-channels in use, numbered as Q.931 numbers them (1-23 on T1; 1-15 and 17-31 on E1)
+	Channels []int // the B-channels in use, numbered as Q.931 numbers them (1-23 on T1; 1-15 and 17-31 on E1; 1 and 2 on a BRI)
+	// BRI is a basic rate interface (one-octet call references, B1 and B2). PTMP makes it point to
+	// multipoint: several terminals on the line, each with a TEI the network assigns, calls to them
+	// offered to all at once (a European "multi-device" line, or ISDN phones on BitVoice's network
+	// side); else point to point (TEI 0, a PBX line).
+	BRI  bool
+	PTMP bool
 	ALaw     bool  // E1: G.711 A-law; T1: µ-law
 	Log      *slog.Logger
 	// Switch is the switch type: ni2 (National ISDN-2, the default), 5ess, dms100, euroisdn or qsig.
@@ -55,6 +68,7 @@ const (
 	stDisconnectReq = 11
 	stDisconnectInd = 12
 	stReleaseReq    = 19
+	stOverlapRecv   = 25
 )
 
 // Call is one call on the PRI.
@@ -86,8 +100,14 @@ type Call struct {
 	state   int
 	timer   *time.Timer
 	retried bool
-	setup   []byte // the SETUP, for T303's one resend
+	setup   *Message // the SETUP, for T303's one resend
 	done    bool
+
+	// tei is the terminal the call is with on the network side of a multipoint BRI; a call offered
+	// to every terminal is teiBroadcast until one answers, responders the terminals that replied.
+	tei        int
+	responders map[int]bool
+	declined   int // the cause a terminal declined with
 
 	held       bool
 	waitFor    byte // the acknowledgement a HOLD or RETRIEVE waits for
@@ -100,12 +120,13 @@ type Call struct {
 type callKey struct {
 	ref  int
 	ours bool
+	tei  int // the network side of a multipoint BRI: each terminal numbers its own calls
 }
 
 // PRI is call control on one D-channel.
 type PRI struct {
 	cfg Config
-	l   *lapd
+	dl  *datalink
 
 	// Incoming is told of each call arriving (in its own goroutine), after CALL PROCEEDING went back.
 	Incoming func(*Call)
@@ -133,18 +154,31 @@ func New(link Link, cfg Config) *PRI {
 		cfg.Log = slog.Default()
 	}
 	p := &PRI{cfg: cfg, calls: map[callKey]*Call{}, busy: map[int]*Call{}, next: 1}
-	p.l = newLAPD(link, cfg.Network, p.receive, p.linkUp)
+	if cfg.BRI && len(cfg.Channels) == 0 {
+		p.cfg.Channels = BRIChannels
+	}
+	p.dl = newDatalink(link, cfg.Network, cfg.BRI && cfg.PTMP, p.receive, p.linkUp)
 	return p
 }
 
 // Run brings the D-channel up and serves it until the link fails.
 func (p *PRI) Run() error {
-	p.l.start()
-	return p.l.run()
+	p.dl.start()
+	return p.dl.run()
 }
 
 // Close stops the timers.
-func (p *PRI) Close() { p.l.close() }
+func (p *PRI) Close() { p.dl.close() }
+
+// multipointNet says whether this is the network side of a multipoint BRI.
+func (p *PRI) multipointNet() bool { return p.cfg.BRI && p.cfg.PTMP && p.cfg.Network }
+
+func (p *PRI) chanID(ch int, exclusive bool) []byte {
+	if p.cfg.BRI {
+		return briChannelID(ch, exclusive)
+	}
+	return channelID(ch, exclusive)
+}
 
 // IsUp says whether the D-channel is up.
 func (p *PRI) IsUp() bool {
@@ -184,15 +218,19 @@ func (p *PRI) linkUp(up bool) {
 }
 
 func (p *PRI) send(m *Message) error {
+	m.Short = p.cfg.BRI
 	b := m.Bytes()
 	if p.cfg.Trace != nil {
 		p.cfg.Trace(false, b)
 	}
-	return p.l.Send(b)
+	if m.broadcast {
+		return p.dl.Broadcast(b)
+	}
+	return p.dl.Send(m.tei, b)
 }
 
 func (c *Call) msg(t byte) *Message {
-	return &Message{CallRef: c.ref, FromSide: !c.ours, Type: t}
+	return &Message{CallRef: c.ref, FromSide: !c.ours, Type: t, tei: c.tei}
 }
 
 func (c *Call) event(e Event) {
@@ -231,7 +269,7 @@ func (c *Call) free(cause int) {
 	if c.timer != nil {
 		c.timer.Stop()
 	}
-	delete(p.calls, callKey{c.ref, c.ours})
+	delete(p.calls, c.key())
 	if p.busy[c.Channel] == c {
 		delete(p.busy, c.Channel)
 	}
@@ -270,19 +308,27 @@ func (p *PRI) DialWith(s Setup) (*Call, error) {
 		p.mu.Unlock()
 		return nil, ErrNoChannel
 	}
-	ref := p.next
-	for p.calls[callKey{ref, true}] != nil {
-		ref = ref%0x7FFF + 1
+	max := 0x7FFF
+	if p.cfg.BRI {
+		max = 0x7F
 	}
-	p.next = ref%0x7FFF + 1
+	ref := p.next
+	for p.calls[callKey{ref, true, 0}] != nil {
+		ref = ref%max + 1
+	}
+	p.next = ref%max + 1
 	name := clipName(s.Name)
 	c := &Call{p: p, ref: ref, ours: true, Channel: ch, Called: called, Calling: calling, Outgoing: true, Name: name,
 		Events: make(chan Event, 16), state: stCallInit}
-	p.calls[callKey{ref, true}] = c
+	if p.multipointNet() {
+		c.tei, c.responders = teiBroadcast, map[int]bool{}
+	}
+	p.calls[c.key()] = c
 	p.busy[ch] = c
 	m := c.msg(MsgSetup)
+	m.broadcast = c.tei == teiBroadcast
 	m.add(ieBearer, bearer(p.cfg.ALaw))
-	m.add(ieChannelID, channelID(ch, true))
+	m.add(ieChannelID, p.chanID(ch, true))
 	if p.dms() && !p.cfg.Network {
 		m.add(ieFacility, rltAbility())
 	}
@@ -307,19 +353,32 @@ func (p *PRI) DialWith(s Setup) (*Call, error) {
 	if s.Redirecting != "" {
 		m.add(ieRedirectingNum, redirectingIE(s.Redirecting, s.RedirectReason))
 	}
-	m.IEs = append(m.IEs, IE{ID: ieSendingComplete})
-	c.setup = m.Bytes()
+	m.IEs = append([]IE{{ID: ieSendingComplete}}, m.IEs...) // a single-octet element: first, as libpri sends it
+	c.setup = m
 	c.arm(T303, c.onT303)
 	p.mu.Unlock()
-	if err := p.l.Send(c.setup); err != nil {
+	if err := p.send(m); err != nil {
 		c.free(CauseTemporaryFailure)
 		return nil, err
 	}
 	return c, nil
 }
 
+func (c *Call) key() callKey {
+	if c.ours {
+		return callKey{c.ref, true, 0}
+	}
+	return callKey{c.ref, false, c.tei}
+}
+
 func (c *Call) onT303() {
 	c.p.mu.Lock()
+	if c.responders != nil && len(c.responders) == 0 && c.declined != 0 {
+		cause := c.declined
+		c.p.mu.Unlock()
+		c.free(cause) // every terminal that answered declined
+		return
+	}
 	if c.retried {
 		c.p.mu.Unlock()
 		c.free(CauseNoCircuit)
@@ -329,7 +388,7 @@ func (c *Call) onT303() {
 	c.arm(T303, c.onT303)
 	setup := c.setup
 	c.p.mu.Unlock()
-	_ = c.p.l.Send(setup)
+	_ = c.p.send(setup)
 }
 
 // PRI says which D-channel the call is on.
@@ -369,6 +428,22 @@ func (c *Call) Answer() error {
 func (c *Call) Hangup(cause int) {
 	p := c.p
 	p.mu.Lock()
+	if c.tei == teiBroadcast && c.ours {
+		// Offered to every terminal and taken by none yet: release the ones that replied.
+		var to []int
+		for t := range c.responders {
+			to = append(to, t)
+		}
+		p.mu.Unlock()
+		for _, t := range to {
+			r := c.msg(MsgRelease)
+			r.tei = t
+			r.add(ieCause, causeIE(cause, p.cfg.Network))
+			_ = p.send(r)
+		}
+		c.free(cause)
+		return
+	}
 	st := c.state
 	if c.done || st == stDisconnectReq || st == stReleaseReq {
 		p.mu.Unlock()
@@ -401,8 +476,8 @@ func (c *Call) Hangup(cause int) {
 	_ = p.send(m)
 }
 
-// receive handles one Q.931 message from the D-channel.
-func (p *PRI) receive(b []byte) {
+// receive handles one Q.931 message from the D-channel, from a terminal's TEI (127: broadcast).
+func (p *PRI) receive(tei int, b []byte) {
 	if p.cfg.Trace != nil {
 		p.cfg.Trace(true, b)
 	}
@@ -410,11 +485,17 @@ func (p *PRI) receive(b []byte) {
 	if err != nil {
 		return
 	}
+	m.tei = tei
 	if m.CallRef == 0 {
-		p.global(m)
+		if tei != teiBroadcast {
+			p.global(m)
+		}
 		return
 	}
-	key := callKey{m.CallRef, m.FromSide}
+	key := callKey{m.CallRef, m.FromSide, 0}
+	if p.multipointNet() && !m.FromSide {
+		key.tei = tei
+	}
 	p.mu.Lock()
 	c := p.calls[key]
 	p.mu.Unlock()
@@ -438,7 +519,10 @@ func (p *PRI) receive(b []byte) {
 
 // reply answers a message with no call behind it.
 func (p *PRI) reply(to *Message, t byte, cause int) {
-	r := &Message{CallRef: to.CallRef, FromSide: !to.FromSide, Type: t}
+	if to.tei == teiBroadcast {
+		return // a broadcast SETUP refused by staying silent: another terminal may take it
+	}
+	r := &Message{CallRef: to.CallRef, FromSide: !to.FromSide, Type: t, tei: to.tei}
 	r.add(ieCause, causeIE(cause, p.cfg.Network))
 	_ = p.send(r)
 }
@@ -471,7 +555,7 @@ func (p *PRI) global(m *Message) {
 	for _, c := range gone {
 		c.free(CauseTemporaryFailure)
 	}
-	r := &Message{CallRef: 0, FromSide: true, Type: MsgRestartAck}
+	r := &Message{CallRef: 0, FromSide: true, Type: MsgRestartAck, tei: m.tei}
 	for _, ie := range m.IEs {
 		if ie.ID == ieChannelID || ie.ID == ieRestartInd {
 			r.IEs = append(r.IEs, ie)
@@ -502,6 +586,9 @@ func (p *PRI) setup(m *Message) {
 		return
 	}
 	c := &Call{p: p, ref: m.CallRef, ours: false, Channel: ch, Events: make(chan Event, 16), state: stCallPresent}
+	if p.multipointNet() {
+		c.tei = m.tei
+	}
 	if d, ok := m.Get(ieCalledNumber); ok {
 		c.Called = parseNumber(d)
 	}
@@ -517,7 +604,7 @@ func (p *PRI) setup(m *Message) {
 	if d, ok := m.Get(ieRedirectingNum); ok {
 		c.Redirecting, c.RedirectReason = parseRedirecting(d)
 	}
-	p.calls[callKey{c.ref, false}] = c
+	p.calls[c.key()] = c
 	p.busy[ch] = c
 	p.mu.Unlock()
 	// What SETUP's facilities ask (a DMS-100 transfer identifier, advice of charge) is answered after
@@ -525,13 +612,37 @@ func (p *PRI) setup(m *Message) {
 	for _, d := range m.GetAll(ieFacility) {
 		c.facility(d, true)
 	}
+	// The network side takes a number dialled digit by digit (ISDN phones, and PBXes set to overlap
+	// dialling): SETUP ACKNOWLEDGE, then INFORMATION messages until the number is complete.
+	_, complete := m.Get(ieSendingComplete)
+	if p.cfg.Network && !complete && (p.cfg.BRI || c.Called == "") {
+		p.mu.Lock()
+		c.state = stOverlapRecv
+		later := c.afterProceeding
+		c.afterProceeding = nil
+		c.arm(T302, c.overlapDone)
+		p.mu.Unlock()
+		r := c.msg(MsgSetupAck)
+		r.add(ieChannelID, p.chanID(ch, true))
+		_ = p.send(r)
+		for _, x := range later {
+			_ = p.send(x)
+		}
+		return
+	}
+	c.proceed()
+}
+
+// proceed sends CALL PROCEEDING (and the replies SETUP asked for) and hands the call on.
+func (c *Call) proceed() {
+	p := c.p
 	p.mu.Lock()
 	c.state = stInProceeding
 	later := c.afterProceeding
 	c.afterProceeding = nil
 	p.mu.Unlock()
 	r := c.msg(MsgCallProceeding)
-	r.add(ieChannelID, channelID(ch, true))
+	r.add(ieChannelID, p.chanID(c.Channel, true))
 	_ = p.send(r)
 	for _, x := range later {
 		_ = p.send(x)
@@ -543,6 +654,49 @@ func (p *PRI) setup(m *Message) {
 	}
 }
 
+// overlapDone ends a number dialled digit by digit (T302 ran out, or it was marked complete).
+func (c *Call) overlapDone() {
+	c.p.mu.Lock()
+	ok := c.state == stOverlapRecv
+	if c.timer != nil {
+		c.timer.Stop()
+	}
+	c.p.mu.Unlock()
+	if ok {
+		c.proceed()
+	}
+}
+
+// information takes digits dialled one by one: from the called number or keypad elements; a
+// sending-complete element or a closing # ends the number.
+func (c *Call) information(m *Message) {
+	p := c.p
+	p.mu.Lock()
+	if c.state != stOverlapRecv {
+		p.mu.Unlock()
+		return
+	}
+	if d, ok := m.Get(ieCalledNumber); ok {
+		c.Called += parseNumber(d)
+	}
+	if d, ok := m.Get(ieKeypad); ok {
+		c.Called += string(d)
+	}
+	_, done := m.Get(ieSendingComplete)
+	if strings.HasSuffix(c.Called, "#") {
+		c.Called, done = strings.TrimSuffix(c.Called, "#"), true
+	}
+	if !done {
+		c.arm(T302, c.overlapDone)
+	}
+	p.mu.Unlock()
+	if done {
+		c.overlapDone()
+	}
+}
+
+const ieKeypad = 0x2C
+
 // message handles a message for a call that exists.
 func (c *Call) message(m *Message) {
 	p := c.p
@@ -550,10 +704,15 @@ func (c *Call) message(m *Message) {
 	if d, ok := m.Get(ieCause); ok {
 		cause = parseCause(d)
 	}
+	if c.multipoint(m) {
+		return
+	}
 	if c.supplementary(m) {
 		return
 	}
 	switch m.Type {
+	case MsgInformation:
+		c.information(m)
 	case MsgCallProceeding, MsgSetupAck:
 		p.mu.Lock()
 		if c.state == stCallInit {

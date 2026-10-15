@@ -357,7 +357,7 @@ export interface ACMEStatus { state: 'off' | 'ok' | 'working' | 'failed'; detail
 /** Telephony cards (DAHDI) on this computer, through bitvoice-dahdi. */
 export interface Cards { enabled: boolean; token: string; linePort: number; alaw: boolean; channels: { channel: number; kind: 'phone' | 'line'; extension: string; number: string }[]; spans?: CardSpan[] | null }
 /** A T1 or E1 line run as PRI. */
-export interface CardSpan { type: 't1' | 'e1'; first: number; role: 'user' | 'network'; switch: string; networkTransfer?: boolean; charges?: boolean }
+export interface CardSpan { type: 't1' | 'e1' | 'bri'; first: number; role: 'user' | 'network'; switch: string; networkTransfer?: boolean; charges?: boolean; multipoint?: boolean }
 
 /** Skinny (SCCP) phones and MGCP gateways: older protocols beside SIP. */
 export interface DeskProtocols {
