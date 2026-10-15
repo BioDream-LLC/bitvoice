@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestCardsValidation(t *testing.T) {
 	c := Default()
@@ -33,5 +36,27 @@ func TestCardsValidation(t *testing.T) {
 	}
 	if !found {
 		t.Error("a card trunk with cards off was accepted")
+	}
+}
+
+func TestCardSpans(t *testing.T) {
+	c := Default()
+	c.System.Cards = Cards{Enabled: true, Token: "abcdefghijklmnopqrstuvwxyz012345",
+		Channels: []CardChannel{{Channel: 5, Kind: "line"}},
+		Spans:    []CardSpan{{Type: "t1", First: 1}}}
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "channel 5 is also a port") {
+		t.Fatalf("an overlap with a port: %v", err)
+	}
+	c.System.Cards.Channels = nil
+	c.System.Cards.Spans = []CardSpan{{Type: "e1", First: 32}, {Type: "t1", First: 1}}
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if s := c.System.Cards.Spans[0]; s.Role != "user" || s.Switch != "euroisdn" {
+		t.Fatalf("defaults %+v", s)
+	}
+	c.System.Cards.Spans = append(c.System.Cards.Spans, CardSpan{Type: "j1", First: 100})
+	if c.Validate() == nil {
+		t.Fatal("a J1 accepted")
 	}
 }

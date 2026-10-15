@@ -60,6 +60,14 @@ func (s *Server) cardsRoutes() {
 			}
 			out.Channels = append(out.Channels, cc)
 		}
+		for _, sp := range k.Spans {
+			bs, d := sp.Channels()
+			sc := dahdi.SpanConf{D: d, B: bs, Network: sp.Role == "network", Switch: sp.Switch}
+			for _, ch := range bs {
+				sc.Q931 = append(sc.Q931, ch-sp.First+1)
+			}
+			out.Spans = append(out.Spans, sc)
+		}
 		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, 200, out)
 	})

@@ -155,7 +155,7 @@ Neither protocol has passwords. Skinny phones are accepted only from the local n
 > Both are tested against BitVoice's own test phone and test gateway, which follow the protocols, but not yet against Cisco phones or gateway hardware.`,
   },
   {
-    id: 'cards', title: 'Telephony cards', route: '/cards', keys: 'telephony card dahdi digium sangoma openvox wildcard fxs fxo analogue analog phone line pstn pots tdm bitvoice-dahdi chan_dahdi',
+    id: 'cards', title: 'Telephony cards', route: '/cards', keys: 'telephony card dahdi digium sangoma openvox wildcard fxs fxo analogue analog phone line pstn pots tdm bitvoice-dahdi chan_dahdi pri t1 e1 isdn primary rate did q931 libpri',
     body: `A telephony card in the BitVoice computer (Digium, Sangoma, OpenVox and other cards with Linux DAHDI drivers) can carry analogue phones and phone company lines. A separate program, **bitvoice-dahdi**, drives the card and joins its ports to BitVoice over the computer's own network connection, so BitVoice itself never touches the kernel driver and a card problem cannot stop the phone system.
 
 ## Setting it up
@@ -170,7 +170,18 @@ Neither protocol has passwords. Skinny phones are accepted only from the local n
 - Lines: a ringing line calls its number here and is answered when the call is; calls out take a free line, wait for the exchange's dial tone and dial the number as tones. The far end hanging up is noticed when the line reports it (loop current or polarity, depending on the line). Analogue lines do not say when the far end answers, so a call out counts as answered once the number is dialled.
 - Sound is G.711 to and from the card; BitVoice converts to whatever the other party uses.
 
-Not yet: caller ID shown on the phones or read from the lines, hook flash, ISDN cards (use a SIP gateway for ISDN), and echo cancellation beyond what the card itself does.
+## Digital lines: T1 and E1 PRI
+A T1 (23 calls at once) or E1 (30) line run as primary rate ISDN plugs into a digital card (Digium/Sangoma TE-series, OpenVox D-series and the like). BitVoice speaks the PRI itself (Q.921 on the D-channel, and Q.931 call control), so every call comes in with the number dialled and the caller ID, goes out with the extension's caller ID, and the phone company says when the far end answers, rings or is busy.
+
+1. In /etc/dahdi/system.conf, set the span up for PRI as usual (\`span=1,1,0,esf,b8zs\`, \`bchan=1-23\`, \`hardhdlc=24\` for a T1; \`span=1,1,0,ccs,hdb3,crc4\`, \`bchan=1-15,17-31\`, \`hardhdlc=16\` for an E1), and run \`dahdi_cfg\`.
+2. Under **Digital lines** on [Telephony cards](#/cards), add the span: T1 or E1, its first DAHDI channel, whether BitVoice is the PBX on the phone company's line (the usual) or the network (another PBX connects to BitVoice as if to the phone company), and the switch type the phone company gave you.
+3. Add the card trunk on Trunks if there is none yet, and inbound routes for the numbers (DIDs) the phone company sends.
+
+Calls out take a PRI first, the analogue lines after; a busy number, a wrong number or no free channel comes back as busy, not found or unavailable, as the network says. The page shows whether each span's D-channel is up and how many of its channels are in calls. T1 channels set up with robbed-bit signalling (\`fxsks\`, \`fxoks\`) work as the analogue ports above.
+
+The PRI code is tested against libpri (the ISDN library Asterisk uses), both as the user side and as the network side, for National ISDN-2 and EuroISDN calls.
+
+Not yet: caller ID shown on analogue phones or read from analogue lines, hook flash, BRI (basic rate ISDN), E&M and MFC/R2 signalling, SS7, supplementary services on PRI (transfer, AOC, two B-channel transfer), and echo cancellation beyond what the card itself does.
 
 > bitvoice-dahdi is tested against a simulated card, not yet against real card hardware. It must run on the same computer as BitVoice: it only talks to 127.0.0.1, and BitVoice answers its token only from there.`,
   },

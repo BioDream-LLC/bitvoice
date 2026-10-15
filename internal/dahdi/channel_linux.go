@@ -7,6 +7,8 @@ import (
 	"os"
 	"syscall"
 	"unsafe"
+
+	"github.com/biodream-llc/bitvoice/internal/isdn"
 )
 
 // Linux ioctl numbers: direction in the top two bits, then the argument's size, the type, the number.
@@ -112,3 +114,57 @@ func (c *linuxChannel) Close() error {
 }
 
 var _ = eventPoll
+
+// dChannel is a PRI's D-channel: the driver frames it (HDLC flags and FCS), and every frame read
+// carries two FCS octets at its end, and every frame written two places for them, as libpri has it.
+type dChannel struct {
+	f  *os.File
+	fd uintptr
+}
+
+func openDChannel(number int) (isdn.Link, error) {
+	f, err := os.OpenFile("/dev/dahdi/channel", os.O_RDWR, 0)
+	if err != nil {
+		return nil, fmt.Errorf("dahdi: %w (are the DAHDI drivers loaded?)", err)
+	}
+	c := &dChannel{f: f, fd: f.Fd()}
+	n := int32(number)
+	if err := ioctlInt(c.fd, ioSpecify, &n); err != nil {
+		f.Close()
+		return nil, fmt.Errorf("dahdi: D-channel %d: %w (is it a dchan, hardhdlc or bchan in /etc/dahdi/system.conf?)", number, err)
+	}
+	bi := [6]int32{0, 0, 16, 1024, 0, 0}
+	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, c.fd, ioSetBufinfo, uintptr(unsafe.Pointer(&bi[0]))); e != 0 {
+		f.Close()
+		return nil, fmt.Errorf("dahdi: D-channel %d buffers: %w", number, e)
+	}
+	return c, nil
+}
+
+func (c *dChannel) ReadFrame() ([]byte, error) {
+	buf := make([]byte, 1024)
+	for {
+		n, err := syscall.Read(int(c.fd), buf)
+		if err == errLast {
+			var v int32
+			_ = ioctlInt(c.fd, ioGetEvent, &v) // alarms: the link layer notices by itself
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if n > 2 {
+			return append([]byte(nil), buf[:n-2]...), nil
+		}
+	}
+}
+
+func (c *dChannel) WriteFrame(f []byte) error {
+	_, err := syscall.Write(int(c.fd), append(append([]byte(nil), f...), 0, 0))
+	if err == errLast {
+		return nil
+	}
+	return err
+}
+
+func (c *dChannel) Close() error { return c.f.Close() }

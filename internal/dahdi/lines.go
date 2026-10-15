@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/biodream-llc/bitvoice/internal/isdn"
 	"github.com/biodream-llc/bitvoice/internal/sdp"
 	"github.com/biodream-llc/bitvoice/internal/sip"
 )
@@ -30,6 +31,7 @@ type lineCall struct {
 	cseq                int
 	answered            bool
 	ended               bool
+	pri                 *isdn.Call // a call on a PRI B-channel
 	mu                  sync.Mutex
 }
 
@@ -103,6 +105,10 @@ func (lc *lineCall) end(hang bool) {
 		r := sip.NewResponse(invite.Req, 480, "")
 		r.Set("To", lc.localURI)
 		invite.Respond(r)
+	}
+	if lc.pri != nil {
+		lc.pri.Hangup(isdn.CauseNormal)
+		return
 	}
 	if hang {
 		_ = lc.p.ch.Hook(HookOn)
@@ -278,6 +284,9 @@ func (b *Bridge) handleLine(tx *sip.ServerTx, in *sip.Incoming) {
 				r.Set("To", lc.localURI)
 				inv.Respond(r)
 			}
+			if lc.pri != nil {
+				lc.pri.Hangup(isdn.CauseNormal)
+			}
 			p.lineDone()
 		}
 	case sip.BYE:
@@ -286,6 +295,9 @@ func (b *Bridge) handleLine(tx *sip.ServerTx, in *sip.Incoming) {
 			lc.mu.Lock()
 			lc.ended = true
 			lc.mu.Unlock()
+			if lc.pri != nil {
+				lc.pri.Hangup(isdn.CauseNormal)
+			}
 			p.lineDone()
 		}
 	case sip.ACK:
@@ -298,8 +310,11 @@ func (p *port) lineDone() {
 	p.mu.Lock()
 	p.line = nil
 	p.out = nil
+	bchan := p.conf.Kind == "bchan"
 	p.mu.Unlock()
-	_ = p.ch.Hook(HookOn)
+	if !bchan {
+		_ = p.ch.Hook(HookOn)
+	}
 	p.closeRTP()
 	p.set(stIdle)
 }
@@ -355,6 +370,10 @@ func (b *Bridge) lineOut(tx *sip.ServerTx, m *sip.Message) {
 	}, number)
 	if number == "" {
 		tx.Respond(sip.NewResponse(m, 484, ""))
+		return
+	}
+	// A PRI first: it carries the caller ID and says when the far end answers.
+	if b.priOut(tx, m, strings.TrimRight(number, ",")) {
 		return
 	}
 	p := b.freeLine()

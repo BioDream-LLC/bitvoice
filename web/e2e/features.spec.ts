@@ -577,3 +577,26 @@ test('video conference room', async ({ page }) => {
   expect(r.video).toBe('talker')
   expect(r.videoCodec).toBe('VP8')
 })
+
+// A T1 PRI on the card: its channels are worked out, overlaps with ports are refused, and
+// bitvoice-dahdi is told the span's D- and B-channels.
+test('T1 and E1 PRI on a telephony card', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/#/cards')
+  const on = page.getByRole('switch', { name: 'Telephony cards' })
+  if (!(await on.isChecked())) await on.click()
+  await page.getByRole('button', { name: 'Add a T1 or E1' }).click()
+  await page.getByLabel('First channel').fill('1')
+  await expect(page.getByText('Channels 1 to 24, D-channel 24.')).toBeVisible()
+  await page.getByLabel('Line', { exact: true }).selectOption('e1')
+  await expect(page.getByText('Channels 1 to 31, D-channel 16.')).toBeVisible()
+  await expect(page.getByLabel('Switch type')).toHaveValue('euroisdn')
+  await page.getByLabel('First channel').fill('101')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('Telephony cards saved')).toBeVisible()
+  const token = await page.getByRole('textbox', { name: 'Token' }).inputValue()
+  const cfg = await page.evaluate(async (tok) => (await (await fetch('./api/cards/bridge', { headers: { Authorization: 'Bearer ' + tok } })).json()), token)
+  expect(cfg.spans[0].d).toBe(116)
+  expect(cfg.spans[0].b).toHaveLength(30)
+  expect(cfg.spans[0].q931[15]).toBe(17) // timeslot 16 is the D-channel
+})

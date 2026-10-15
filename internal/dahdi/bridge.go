@@ -24,6 +24,7 @@ type Config struct {
 	LinePort int           `json:"linePort"` // where the card trunk reaches this program
 	ALaw     bool          `json:"alaw"`
 	Channels []ChannelConf `json:"channels"`
+	Spans    []SpanConf    `json:"spans,omitempty"`
 }
 
 // ChannelConf is one port as the bridge needs it.
@@ -51,6 +52,7 @@ type Bridge struct {
 
 	mu    sync.Mutex
 	ports map[int]*port
+	spans []*span
 }
 
 type portState int
@@ -132,6 +134,7 @@ func New(ctx context.Context, cfg Config, open func(int, bool) (Channel, error),
 	for _, p := range b.ports {
 		go p.run()
 	}
+	b.startSpans()
 	return b, nil
 }
 
@@ -151,6 +154,12 @@ func (b *Bridge) Status() map[string]string {
 		}
 		p.mu.Unlock()
 		out[strconv.Itoa(n)] = s
+	}
+	for i, s := range b.spans {
+		b.mu.Unlock()
+		st := s.status()
+		b.mu.Lock()
+		out["span"+strconv.Itoa(i+1)] = st
 	}
 	return out
 }
@@ -440,6 +449,9 @@ func (p *port) hangup() {
 }
 
 func (p *port) event(ev int) {
+	if p.conf.Kind == "bchan" {
+		return // a PRI B-channel: its signalling is on the D-channel
+	}
 	if p.conf.Kind == "phone" {
 		p.phoneEvent(ev)
 	} else {

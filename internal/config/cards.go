@@ -17,6 +17,39 @@ type Cards struct {
 	ALaw     bool `json:"alaw"` // A-law (Europe and most of the world) rather than µ-law (North America, Japan)
 	// Channels are the card's ports BitVoice uses, by DAHDI channel number.
 	Channels []CardChannel `json:"channels"`
+	// Spans are the card's digital lines: T1 or E1 primary rate ISDN (PRI). Their B-channels are lines
+	// of the card trunk, with the called number (DID) and caller ID carried.
+	Spans []CardSpan `json:"spans"`
+}
+
+// CardSpan is one T1 or E1 line run as PRI. Its channels are the ones dahdi_cfg gives the span:
+// First is the first (a T1's 24 channels are First to First+23, the D-channel last; an E1's 31 are
+// First to First+30, the D-channel the 16th).
+type CardSpan struct {
+	Type  string `json:"type"`  // t1 or e1
+	First int    `json:"first"` // the span's first DAHDI channel
+	// Role: user (BitVoice is the PBX on a phone company's PRI, the usual) or network (another PBX
+	// connects to BitVoice as if it were the phone company).
+	Role string `json:"role"`
+	// Switch is the phone company's switch type: ni2, 5ess, dms100 (North America), euroisdn, qsig.
+	// Basic calls are the same on all of them; it is noted for the support desk and for what comes.
+	Switch string `json:"switch"`
+}
+
+// Channels of a span: its B-channels and D-channel, as DAHDI numbers them.
+func (s CardSpan) Channels() (b []int, d int) {
+	if s.Type == "e1" {
+		for ts := 1; ts <= 31; ts++ {
+			if ts != 16 {
+				b = append(b, s.First+ts-1)
+			}
+		}
+		return b, s.First + 15
+	}
+	for i := 0; i < 23; i++ {
+		b = append(b, s.First+i)
+	}
+	return b, s.First + 23
 }
 
 // CardChannel is one port: phone (an FXS port, a phone plugged in) or line (an FXO port, a phone
@@ -70,6 +103,48 @@ func (c *Config) validateCards(p *Problems) {
 			}
 		default:
 			p.add(f+".kind", "choose phone or line")
+		}
+	}
+	used := map[int]string{}
+	for ch := range seen {
+		used[ch] = "a port"
+	}
+	for i := range k.Spans {
+		s := &k.Spans[i]
+		f := fmt.Sprintf("system.cards.spans[%d]", i)
+		switch s.Type {
+		case "t1", "e1":
+		default:
+			p.add(f+".type", "choose T1 or E1")
+		}
+		if s.Role == "" {
+			s.Role = "user"
+		}
+		if s.Role != "user" && s.Role != "network" {
+			p.add(f+".role", "choose user (on a phone company's line) or network")
+		}
+		if s.Switch == "" {
+			s.Switch = "ni2"
+			if s.Type == "e1" {
+				s.Switch = "euroisdn"
+			}
+		}
+		switch s.Switch {
+		case "ni2", "5ess", "dms100", "euroisdn", "qsig":
+		default:
+			p.add(f+".switch", "choose ni2, 5ess, dms100, euroisdn or qsig")
+		}
+		if s.First < 1 || s.First > 1000 {
+			p.add(f+".first", "use the span's first DAHDI channel number")
+			continue
+		}
+		b, d := s.Channels()
+		for _, ch := range append(b, d) {
+			if prev, ok := used[ch]; ok {
+				p.add(f+".first", "channel %d is also %s", ch, prev)
+				break
+			}
+			used[ch] = fmt.Sprintf("in span %d", i+1)
 		}
 	}
 	for i, t := range c.Trunks {

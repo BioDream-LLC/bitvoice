@@ -413,8 +413,8 @@ The everyday features, yes: extensions, ring groups, queues, menus, schedules, v
 parking, conference rooms, forwarding, do not disturb, follow-me, call pickup, intercom, speed dials, a staff
 portal, SIP, IAX2 and H.323 trunks, Skinny (SCCP) phones and MGCP gateways, and hosting several
 organisations on one server. Feature codes match the usual FreePBX ones (<code>*72</code>, <code>*78</code>,
-<code>*8</code> and so on) and can be changed. Telephony cards (DAHDI analogue ports) work through
-<code>bitvoice-dahdi</code>, a separate program in the Linux download; ISDN connects through SIP gateways.
+<code>*8</code> and so on) and can be changed. Telephony cards (DAHDI analogue ports, and T1/E1 PRI) work through
+<code>bitvoice-dahdi</code>, a separate program in the Linux download; BRI ISDN connects through SIP gateways.
 G.723.1 is passed through but not converted.
 
 </details>
