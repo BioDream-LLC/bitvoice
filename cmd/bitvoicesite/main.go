@@ -95,6 +95,10 @@ func build(root, out, base string) error {
 	fill := strings.NewReplacer(
 		"{{VERSION}}", version,
 		"{{RELEASED}}", released(root, version),
+		"{{NEWER_FEATURES}}", newer(root, version, `<p class="hero-note">This page follows the main branch: some of it is newer than the `+
+			version+` download (released `+released(root, version)+`) and comes in the next release.</p>`),
+		"{{NEWER_DOWNLOAD}}", newer(root, version, `<p class="lab-note"><b>Newer than `+version+`.</b> This site and its manual describe the main branch, `+
+			`which has changes since `+version+` was released (`+released(root, version)+`). They come in the next release; until then, build from source (below) to have them.</p>`),
 		"{{FEATURES}}", tables(features),
 		"{{LAB}}", tables(lab),
 	)
@@ -161,6 +165,17 @@ func released(root, version string) string {
 		return "recently"
 	}
 	return strings.TrimSpace(string(out))
+}
+
+// newer is note when the checkout has code changes since the release (anything outside the
+// README, docs and the site itself), and nothing when it is the release.
+func newer(root, version, note string) string {
+	out, err := exec.Command("git", "-C", root, "diff", "--name-only", version, "HEAD", "--", ".",
+		":(exclude)README.md", ":(exclude)docs", ":(exclude)site", ":(exclude)cmd/bitvoicesite").Output()
+	if err != nil || strings.TrimSpace(string(out)) == "" {
+		return ""
+	}
+	return note
 }
 
 // section is the README between two headings.

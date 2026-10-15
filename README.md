@@ -10,14 +10,14 @@
 100% from its web interface.** No Asterisk or FreeSWITCH underneath. No configuration files to edit. No
 paid modules. No licence meter.
 
-**One 34 MB file. 47 MB of memory carrying four live calls and eight phones.** Double-click it and a
+**One 37 MB file. 47 MB of memory carrying four live calls and eight phones.** Double-click it and a
 browser opens on a setup wizard; a few minutes later a phone rings.
 
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go](https://img.shields.io/badge/Go-1.26%2B-00ADD8.svg?logo=go&logoColor=white)](https://go.dev) [![Release](https://img.shields.io/badge/release-v0.1.3-success.svg)](#download) [![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)](#download) [![CI](https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml/badge.svg)](https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go](https://img.shields.io/badge/Go-1.26%2B-00ADD8.svg?logo=go&logoColor=white)](https://go.dev) [![Release](https://img.shields.io/badge/release-v0.1.4-success.svg)](#download) [![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)](#download) [![CI](https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml/badge.svg)](https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml)
 
-### Download v0.1.3
+### Download v0.1.4
 
-<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.3/bitvoice-v0.1.3-linux-amd64.tar.gz"><img src="docs/assets/buttons/download-linux.svg" alt="Download BitVoice for Linux, x86-64" width="240"></a>&nbsp;<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.3/bitvoice-v0.1.3-darwin-arm64.tar.gz"><img src="docs/assets/buttons/download-macos.svg" alt="Download BitVoice for macOS, Apple Silicon" width="240"></a>&nbsp;<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.3/bitvoice-v0.1.3-windows-amd64.zip"><img src="docs/assets/buttons/download-windows.svg" alt="Download BitVoice for Windows, x64" width="240"></a>
+<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.4/bitvoice-v0.1.4-linux-amd64.tar.gz"><img src="docs/assets/buttons/download-linux.svg" alt="Download BitVoice for Linux, x86-64" width="240"></a>&nbsp;<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.4/bitvoice-v0.1.4-darwin-arm64.tar.gz"><img src="docs/assets/buttons/download-macos.svg" alt="Download BitVoice for macOS, Apple Silicon" width="240"></a>&nbsp;<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.4/bitvoice-v0.1.4-windows-amd64.zip"><img src="docs/assets/buttons/download-windows.svg" alt="Download BitVoice for Windows, x64" width="240"></a>
 
 <a href="https://biodream-llc.github.io/bitvoice/manual/"><img src="docs/assets/buttons/manual.svg" alt="Read the BitVoice manual" width="240"></a>
 
@@ -274,17 +274,17 @@ calls in progress.
 
 ## Download
 
-**Version 0.1.0**: one binary, nothing to install. Each archive holds the program, the licence, the notice
+**Version 0.1.4**: one binary, nothing to install. Each archive holds the program, the licence, the notice
 and the manual as a PDF.
 
 | Platform | Architecture | Download |
 |---|---|---|
-| **Windows** | x64 (Intel/AMD) | [`bitvoice-v0.1.3-windows-amd64.zip`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.3/bitvoice-v0.1.3-windows-amd64.zip) |
-| **Windows** | ARM64 | [`bitvoice-v0.1.3-windows-arm64.zip`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.3/bitvoice-v0.1.3-windows-arm64.zip) |
-| **macOS** | Apple Silicon | [`bitvoice-v0.1.3-darwin-arm64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.3/bitvoice-v0.1.3-darwin-arm64.tar.gz) |
-| **macOS** | Intel | [`bitvoice-v0.1.3-darwin-amd64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.3/bitvoice-v0.1.3-darwin-amd64.tar.gz) |
-| **Linux** | x86-64 | [`bitvoice-v0.1.3-linux-amd64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.3/bitvoice-v0.1.3-linux-amd64.tar.gz) |
-| **Linux** | ARM64 / aarch64 | [`bitvoice-v0.1.3-linux-arm64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.3/bitvoice-v0.1.3-linux-arm64.tar.gz) |
+| **Windows** | x64 (Intel/AMD) | [`bitvoice-v0.1.4-windows-amd64.zip`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.4/bitvoice-v0.1.4-windows-amd64.zip) |
+| **Windows** | ARM64 | [`bitvoice-v0.1.4-windows-arm64.zip`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.4/bitvoice-v0.1.4-windows-arm64.zip) |
+| **macOS** | Apple Silicon | [`bitvoice-v0.1.4-darwin-arm64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.4/bitvoice-v0.1.4-darwin-arm64.tar.gz) |
+| **macOS** | Intel | [`bitvoice-v0.1.4-darwin-amd64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.4/bitvoice-v0.1.4-darwin-amd64.tar.gz) |
+| **Linux** | x86-64 | [`bitvoice-v0.1.4-linux-amd64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.4/bitvoice-v0.1.4-linux-amd64.tar.gz) |
+| **Linux** | ARM64 / aarch64 | [`bitvoice-v0.1.4-linux-arm64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.4/bitvoice-v0.1.4-linux-arm64.tar.gz) |
 
 **On Windows, unzip and double-click `bitvoice.exe`.** A window opens and your browser opens on the setup
 wizard. Keep the window open while you use BitVoice: closing it stops it. Windows asks once whether BitVoice
@@ -294,7 +294,7 @@ the same way but has not been run on an ARM Windows machine. BitVoice does not i
 service yet.
 
 **Verify what you downloaded** against
-[`SHA256SUMS`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.3/SHA256SUMS):
+[`SHA256SUMS`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.4/SHA256SUMS):
 
 ```sh
 shasum -a 256 -c SHA256SUMS --ignore-missing
@@ -374,7 +374,7 @@ today.
 | | |
 |---|---|
 | [**Website**](https://bitvoice.org) | Features, the FreePBX comparison, how it is tested, downloads; built from this README and the manual by `make site` |
-| [**Manual**](https://biodream-llc.github.io/bitvoice/manual/) | 63 chapters in six parts, with 63 diagrams, step-by-step set-up and reference tables. Also `docs/manual/index.html` in a checkout |
+| [**Manual**](https://biodream-llc.github.io/bitvoice/manual/) | 75 chapters in six parts, with 63 diagrams, step-by-step set-up and reference tables. Also `docs/manual/index.html` in a checkout |
 | [**Manual (PDF)**](docs/manual/bitvoice-manual.pdf) | The same, about 90 pages with a contents page, for printing; also in every release archive |
 | **Help in the program** | Every screen has a Help button that opens its article; <kbd>⌘K</kbd> searches screens and articles |
 | **API** | `/api/openapi.json` on any running BitVoice describes every call the web interface makes |
