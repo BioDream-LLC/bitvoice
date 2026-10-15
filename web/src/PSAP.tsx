@@ -7,7 +7,7 @@ import { EmergencyCard } from './EmergencyCard'
 import { useDraft } from './useDraft'
 import { Badge, Empty, Field, Page, StaleBanner, problemFor } from './ui'
 
-const blankPSAP: PSAPSettings = { agencyId: '', elementId: '', aliAddress: '', eidoUrl: '', eidoToken: '', answerTarget: 15 }
+const blankPSAP: PSAPSettings = { agencyId: '', elementId: '', aliAddress: '', eidoUrl: '', eidoToken: '', answerTarget: 15, ttyOff: false }
 
 export function PSAP() {
   const admin = useIsAdmin()
@@ -121,6 +121,10 @@ function PSAPSetup() {
         <Field label="Element ID" htmlFor="pse" hint="This system's name in the i3 log; blank uses the server's name."><input id="pse" className="input" value={draft.elementId} onChange={(e) => set({ elementId: e.target.value.trim() })} /></Field>
         <Field label="Answer goal (seconds)" htmlFor="psg" error={p('answerTarget')} hint="NENA: 90% of calls within 15 s."><input id="psg" className="input font-mono" inputMode="numeric" value={draft.answerTarget || ''} onChange={(e) => set({ answerTarget: Number(e.target.value.replace(/\D/g, '')) || 0 })} /></Field>
       </div>
+      <label className="flex items-center gap-2 text-sm text-slate-300">
+        <input type="checkbox" checked={!draft.ttyOff} onChange={(e) => set({ ttyOff: !e.target.checked })} />
+        Listen for TTYs on 911 calls <span className="text-xs text-slate-500">(deaf callers' text telephones: their text shows on the call, and replies go back as TTY tones)</span>
+      </label>
       <h3 className="text-sm font-semibold text-violet-300">CAD</h3>
       <div className="grid gap-3 md:grid-cols-3">
         <Field label="ALI spill to" htmlFor="psl" error={p('aliAddress')} hint="CAD's address and port: the ALI text goes there over TCP when a call is answered."><input id="psl" className="input font-mono" value={draft.aliAddress} placeholder="10.0.0.20:4000" onChange={(e) => set({ aliAddress: e.target.value.trim() })} /></Field>

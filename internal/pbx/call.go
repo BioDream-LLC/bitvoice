@@ -5,6 +5,7 @@ import (
 	"github.com/biodream-llc/bitvoice/internal/i3"
 	"github.com/biodream-llc/bitvoice/internal/isdn"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -49,6 +50,11 @@ type Call struct {
 	place *Place
 	// i3 is what an NG911 call brought: the caller's location, Additional Data (nil otherwise).
 	i3                 *i3.Call
+	text               []TextLine                    // a 911 call's text conversation
+	textOn             map[string]bool               // the ways text has come: tty, rtt, msrp, sip
+	textAt             time.Time                     // the caller's last character
+	senders            map[string]func(string) error // how to send text on each of the call's text channels
+	ttySend            sync.Mutex
 	esinet             bool      // arrived on a trunk from the ESInet
 	srcIP              string    // the address an ESInet call came from (for the BCF)
 	suspicious         bool      // the BCF let it through marked suspicious
@@ -110,6 +116,11 @@ func (c *Call) info() CallInfo {
 			em.Location, em.LocationURI, em.Additional, em.Service, em.Problems = d.Location, d.LocationURI, d.Additional, d.Service, d.Problems
 			em.PIDF = d.LocationRaw
 		}
+		em.Text = append([]TextLine(nil), c.text...)
+		for v := range c.textOn {
+			em.TextVia = append(em.TextVia, v)
+		}
+		slices.Sort(em.TextVia)
 		ci.Emergency = em
 	}
 	legs := []*Leg{c.caller}
@@ -1233,6 +1244,12 @@ func (c *Call) writeRecord(info CallInfo, recording string) {
 	r.Ext = c.callerExt
 	r.CallerID, r.Code = c.presented, c.endCode
 	r.Emergency = c.i3 != nil || c.esinet
+	if len(c.text) > 0 {
+		r.Text = append([]TextLine(nil), c.text...)
+		for i := range r.Text {
+			r.Text[i].Open = false
+		}
+	}
 	if !c.takenAt.IsZero() {
 		r.Taken = c.takenAt.UTC()
 	}

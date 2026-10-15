@@ -1788,7 +1788,7 @@ These exports hold no SIP passwords, so each extension gets a new one; voicemail
 Phones and apps that share a video codec (most use H.264) get each other's video as it is. When two parties have none in common (a desk phone with only H.264 and a browser with only VP8), switch on **Convert video between H.264 and VP8** in Settings: BitVoice then offers both codecs, answers each party in its own, and converts each way with **ffmpeg**, which must be installed on the server (apt install ffmpeg, brew install ffmpeg; or give its path). Conversion costs about a processor core per call and adds a little delay, so it is off by default and used only when needed. Settings says whether ffmpeg was found.`,
   },
   {
-    id: 'psap', title: '911 calls (the 911 profile)', route: '/psap', keys: '911 psap ng911 i3 esinet location pidf-lo held rebid ali spill eido cad nena log answer time call-taker',
+    id: 'psap', title: '911 calls (the 911 profile)', route: '/psap', keys: '911 psap ng911 i3 esinet location pidf-lo held rebid ali spill eido cad nena log answer time call-taker tty tdd baudot deaf text',
     body: `> **Lab and design-partner track.** Not certified for live 911 or radio dispatch, and not yet tried with a live ESInet, P25 system or CAD. Use it in a lab or in shadow mode beside your current equipment. Switch on **Public-safety profiles (lab)** in [Settings](#/settings) to show it in the menu.
 
 BitVoice answers 911 calls as a PSAP's call-handling system: calls from the emergency services network (the ESInet, NENA i3) arrive with the caller's location and the network's data, the call-taker sees them at once, and CAD is told when the call is answered.
@@ -1813,7 +1813,11 @@ Location comes in the call (by value), or as a reference BitVoice fetches with H
 
 **The i3 log** keeps the NENA i3 events of each call (call start, answer, location, EIDO sent), one file a day. **Answer times** shows how many calls were answered within your goal (NENA: 90% within 15 seconds, 95% within 20), the abandoned ones, and each call-taker's average.
 
-What is not here yet: text to 911 (RTT and SMS), TTY, and transfer to another PSAP with the location carried along.
+**TTY calls.** Deaf and hard-of-hearing callers may call 911 with a TTY (a text telephone, Baudot at 45.45 bit/s). BitVoice listens for one on every 911 call's voice, from the first moment: what the caller types appears on the call as they type it, under **Text**, with a pause or a new line starting a fresh line. A silent call may be a TTY waiting for you: once you answer, **Reply by TTY** sends text even before any has come. Type the reply and press **Send**: it goes to the caller as TTY tones (the call-taker's voice is muted while it plays, as TTYs take turns), in capitals, and TTY etiquette applies: end each turn with GA ("go ahead"), and SK when signing off. Characters a TTY cannot show are left out. Speech, music and touch tones are never taken for TTY text: a character counts only when every bit of it is a clean TTY tone. The conversation is kept with the call in the call history and in the i3 log (one MessageLogEvent a turn). Untick **Listen for TTYs on 911 calls** in the 911 settings to stop listening.
+
+**Transfers.** A 911 call sent on to another PSAP keeps its location: the PIDF-LO goes with the call.
+
+What is not here yet: text to 911 and real-time text (RTT).
 `,
   },
   {

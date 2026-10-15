@@ -95,10 +95,13 @@ type Endpoint struct {
 	peer     *Endpoint // where received packets go; nil drops them
 	echo     bool
 	recorder func(pkt []byte)
-	sent     func(pkt []byte) // sees each RTP packet sent (radio channel recording)
-	stats    Stats
-	lastSeq  uint16
-	haveSeq  bool
+	// listeners also see every packet received (a TTY decoder, say), each under its own key
+	listeners map[int]func(pkt []byte)
+	nextKey   int
+	sent      func(pkt []byte) // sees each RTP packet sent (radio channel recording)
+	stats     Stats
+	lastSeq   uint16
+	haveSeq   bool
 	// Loss as RFC 3550 A.3 counts it: packets expected (highest sequence number seen, with wraps,
 	// less the first) less packets received, so a packet arriving late is not lost.
 	cycles   uint32
@@ -373,6 +376,24 @@ func (e *Endpoint) Record(f func(pkt []byte)) {
 	e.mu.Unlock()
 }
 
+// Listen adds a function that sees every RTP packet received on this leg, beside the recorder; the
+// function returned removes it. It must not keep the slice, nor block.
+func (e *Endpoint) Listen(f func(pkt []byte)) (remove func()) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.listeners == nil {
+		e.listeners = map[int]func(pkt []byte){}
+	}
+	k := e.nextKey
+	e.nextKey++
+	e.listeners[k] = f
+	return func() {
+		e.mu.Lock()
+		delete(e.listeners, k)
+		e.mu.Unlock()
+	}
+}
+
 // RecordSent sets a function that sees every RTP packet sent on this leg, as sent (before SRTP).
 // It must not keep the slice.
 func (e *Endpoint) RecordSent(f func(pkt []byte)) {
@@ -544,6 +565,10 @@ func (e *Endpoint) readRTP() {
 			key = e.event(pkt)
 		}
 		dtmf, cl, tap := e.dtmf, e.cleaner, e.tap
+		var ls []func(pkt []byte)
+		for _, f := range e.listeners {
+			ls = append(ls, f)
+		}
 		e.mu.Unlock()
 		if cl != nil && !echo {
 			pkt = clean(cl, pkt) // recorded and forwarded clean
@@ -556,6 +581,9 @@ func (e *Endpoint) readRTP() {
 		}
 		if rec != nil {
 			rec(pkt)
+		}
+		for _, f := range ls {
+			f(pkt)
 		}
 		if on != nil {
 			on()

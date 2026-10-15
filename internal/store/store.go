@@ -116,6 +116,20 @@ type CDR struct {
 	// Charged is what the phone company said the call cost (advice of charge), in its own words:
 	// "EUR 1.50", "5 units". When it is in the system currency, Cost is that figure.
 	Charged string `json:"charged,omitempty"`
+	// Text is a 911 call's text conversation: TTY, real-time text or text-to-911.
+	Text []TextLine `json:"text,omitempty"`
+}
+
+// TextLine is one turn of a 911 call's text conversation.
+type TextLine struct {
+	At   time.Time `json:"at"`
+	From string    `json:"from"`           // caller or taker
+	Name string    `json:"name,omitempty"` // the call-taker
+	// Via is how it travelled: tty (tones on the voice line), rtt (real-time text, RFC 4103), msrp or
+	// sip (text-to-911 through a text control centre).
+	Via  string `json:"via"`
+	Text string `json:"text"`
+	Open bool   `json:"open,omitempty"` // the caller is still typing it
 }
 
 // LegQuality is one side of a call as BitVoice heard it.

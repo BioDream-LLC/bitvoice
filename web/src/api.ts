@@ -121,7 +121,9 @@ export interface Additional {
   subscriber?: { name?: string; phones?: string[]; address?: string; language?: string }
   comments?: string[]; references?: string[]
 }
-export interface Emergency { location?: Location; locationUri?: string; rebid?: string; additional: Additional; service?: string; problems?: string[]; esinet: boolean; takenBy?: string; takenName?: string; takenAt?: string }
+export type TextVia = 'tty' | 'rtt' | 'msrp' | 'sip'
+export interface TextLine { at: string; from: 'caller' | 'taker'; name?: string; via: TextVia; text: string; open?: boolean }
+export interface Emergency { location?: Location; locationUri?: string; rebid?: string; additional: Additional; service?: string; problems?: string[]; esinet: boolean; takenBy?: string; takenName?: string; takenAt?: string; text?: TextLine[]; textVia?: TextVia[] }
 export interface CorePSAP { uri: string; name: string; trunk: string; overflow: string }
 export interface CoreRule {
   id: string; name: string; services: string[]; psaps: string[]; schedule: string; whenOpen: boolean
@@ -152,7 +154,7 @@ export interface Transmission {
   id: string; channel: string; channelName: string; direction: 'rx' | 'tx'; start: string; end: string; seconds: number
   unit?: string; dispatcher?: string; tone?: string; emergency?: boolean; encryption?: string; private?: boolean; recording?: string
 }
-export interface PSAPSettings { agencyId: string; elementId: string; aliAddress: string; eidoUrl: string; eidoToken: string; answerTarget: number }
+export interface PSAPSettings { agencyId: string; elementId: string; aliAddress: string; eidoUrl: string; eidoToken: string; answerTarget: number; ttyOff: boolean }
 export interface AnswerReport {
   target: number; calls: number; answered: number; abandoned: number; withinTarget: number; within20: number; average: number; longest: number
   buckets: number[]; byTaker: { ext: string; name: string; calls: number; average: number }[]; byHour: number[]
@@ -445,6 +447,7 @@ export const api = createApi({
       psapReport: b.query<AnswerReport, { from?: string; to?: string }>({ query: ({ from, to }) => `psap/report?from=${from ?? ''}&to=${to ?? ''}`, providesTags: ['CDR'] }),
       psapLog: b.query<{ day: string; days: string[]; items: I3Event[] }, string>({ query: (day) => `psap/log?day=${day}`, providesTags: ['CDR'] }),
       rebid: b.mutation<{ location: Location }, string>({ query: (id) => ({ url: `calls/${id}/rebid`, method: 'POST' }), invalidatesTags: ['Calls'] }),
+      sendCallText: b.mutation<TextLine, { id: string; via?: TextVia; text: string }>({ query: ({ id, ...body }) => ({ url: `calls/${id}/text`, method: 'POST', body }), invalidatesTags: ['Calls'] }),
       boundaries: b.query<List<Boundary>, void>({ query: () => 'core/boundaries', providesTags: ['Settings'] }),
       saveBoundary: b.mutation<void, Boundary>({ query: (x) => ({ url: `core/boundaries/${x.id}`, method: 'PUT', body: x }), invalidatesTags: ['Settings'] }),
       deleteBoundary: b.mutation<void, string>({ query: (id) => ({ url: `core/boundaries/${id}`, method: 'DELETE' }), invalidatesTags: ['Settings'] }),
@@ -804,7 +807,7 @@ export const api = createApi({
 })
 
 export const {
-  useFaxBoxesQuery, useCreateFaxBoxMutation, useUpdateFaxBoxMutation, useDeleteFaxBoxMutation, useFaxesQuery, useDeleteFaxMutation, useFaxKindsQuery, useSendFaxMutation, useRetryFaxMutation, useTestFaxMailMutation, usePsapReportQuery, usePsapLogQuery, useRebidMutation, useBoundariesQuery, useSaveBoundaryMutation, useDeleteBoundaryMutation, useLazyFindAreaQuery, useAddressDataQuery, useDeleteAddressesMutation, useValidateAddressMutation, useBcfLogQuery, useRadioQuery, usePttMutation, useMonitorMutation, usePatchMutation, useAlertToneMutation, useUnitCallMutation, useHangUpMutation, useRadioLogQuery,
+  useFaxBoxesQuery, useCreateFaxBoxMutation, useUpdateFaxBoxMutation, useDeleteFaxBoxMutation, useFaxesQuery, useDeleteFaxMutation, useFaxKindsQuery, useSendFaxMutation, useRetryFaxMutation, useTestFaxMailMutation, usePsapReportQuery, usePsapLogQuery, useRebidMutation, useSendCallTextMutation, useBoundariesQuery, useSaveBoundaryMutation, useDeleteBoundaryMutation, useLazyFindAreaQuery, useAddressDataQuery, useDeleteAddressesMutation, useValidateAddressMutation, useBcfLogQuery, useRadioQuery, usePttMutation, useMonitorMutation, usePatchMutation, useAlertToneMutation, useUnitCallMutation, useHangUpMutation, useRadioLogQuery,
   useTextingKindsQuery,
   useMeQuery, useAuthOptionsQuery, useLoginMutation, useLogoutMutation, useSetupStatusQuery, useCompleteSetupMutation,
   useExtensionsQuery, useCreateExtensionMutation, useUpdateExtensionMutation, useDeleteExtensionMutation, useLazyNextExtensionQuery,

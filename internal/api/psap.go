@@ -225,6 +225,28 @@ func (s *Server) psapRoutes() {
 		}
 		writeJSON(w, 200, map[string]any{"location": loc})
 	})
+	s.handle("POST /api/calls/{id}/text", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		var b struct {
+			Via  string `json:"via"`
+			Text string `json:"text"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&b); err != nil {
+			writeError(w, 400, "send {\"text\": ...}")
+			return
+		}
+		switch b.Via {
+		case "", "tty", "rtt", "msrp", "sip":
+		default:
+			writeError(w, 400, "via is tty, rtt, msrp or sip")
+			return
+		}
+		l, err := s.Engine.SendCallText(r.PathValue("id"), b.Via, b.Text, "", firstNonEmpty(u.Name, u.Username))
+		if err != nil {
+			writeError(w, 409, err.Error())
+			return
+		}
+		writeJSON(w, 200, l)
+	})
 	s.handle("GET /api/calls/{id}/eido", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
 		for _, c := range s.Engine.Calls() {
 			if c.ID == r.PathValue("id") && c.Emergency != nil {
@@ -392,6 +414,15 @@ func (s *Server) RunPSAPLog(ctx context.Context) {
 					s.logI3(le)
 				}
 				continue
+			}
+			for _, l := range c.Emergency.Text { // the text conversation, one MessageLogEvent a turn
+				le := i3.NewEvent("MessageLogEvent", in, l.At)
+				le.Direction = map[string]string{"caller": "incoming", "taker": "outgoing"}[l.From]
+				le.Extra = map[string]any{"text": l.Text, "via": l.Via}
+				if l.From == "taker" {
+					le.AgentID = l.Name
+				}
+				s.logI3(le)
 			}
 			end := i3.NewEvent("CallEndLogEvent", in, time.Now())
 			if c.Emergency.TakenBy == "" {

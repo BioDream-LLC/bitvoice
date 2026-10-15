@@ -519,6 +519,8 @@ type PSAP struct {
 	EIDOToken string `json:"eidoToken"`
 	// AnswerTarget is the answer time goal in seconds (NENA: 90% within 15 s); 15 when empty.
 	AnswerTarget int `json:"answerTarget"`
+	// TTYOff stops listening for TTYs (deaf callers' text telephones) on 911 calls' voice.
+	TTYOff bool `json:"ttyOff"`
 }
 
 // FaxMail is the mailbox BitVoice reads for email to fax: a message to it with a fax number in

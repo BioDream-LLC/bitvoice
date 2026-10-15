@@ -683,4 +683,7 @@ type Emergency struct {
 	TakenAt     time.Time     `json:"takenAt,omitzero"`
 	// PIDF is the location document as it came, for CAD and transfers (not sent to screens).
 	PIDF []byte `json:"-"`
+	// Text is the call's text conversation; TextVia the ways text has come (tty, rtt, msrp, sip).
+	Text    []TextLine `json:"text,omitempty"`
+	TextVia []string   `json:"textVia,omitempty"`
 }

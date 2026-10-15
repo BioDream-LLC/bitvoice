@@ -256,3 +256,24 @@ test('911 calls page: settings and reports', async ({ page }) => {
   await page.getByRole('tab', { name: /i3 log/ }).click()
   await expect(page.getByRole('region', { name: 'i3 log' })).toBeVisible()
 })
+
+// TTY on 911 calls: the setting saves, and text to a call that does not exist is refused plainly.
+test('911 calls page: TTY setting and text replies', async ({ page }) => {
+  await signIn(page)
+  await page.goto('./#/psap')
+  const box = page.getByRole('checkbox', { name: /Listen for TTYs on 911 calls/ })
+  await expect(box).toBeChecked()
+  await box.uncheck()
+  await page.locator('section[aria-labelledby="pss-h"]').getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText(/911 settings saved/).first()).toBeVisible()
+  expect((await page.evaluate(async () => (await (await fetch('./api/settings')).json()).system.psap)).ttyOff).toBe(true)
+  await box.check()
+  await page.locator('section[aria-labelledby="pss-h"]').getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText(/911 settings saved/).first()).toBeVisible()
+  const r = await page.evaluate(async () => {
+    const x = await fetch('./api/calls/nope/text', { method: 'POST', headers: { 'X-BitVoice': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ text: 'HELLO GA' }) })
+    return { status: x.status, body: await x.json() }
+  })
+  expect(r.status).toBe(409)
+  expect(JSON.stringify(r.body)).toContain('no such call')
+})

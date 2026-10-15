@@ -742,6 +742,7 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 	c.caller = a
 	c.offer = offer
 	ep.Start()
+	c.startText()
 	tx.NoAck = func() { c.hangup("caller never acknowledged the answer", "caller") }
 
 	e.mu.Lock()

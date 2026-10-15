@@ -1,6 +1,7 @@
-import { AlertTriangle, Building2, Crosshair, ExternalLink, FileJson, MapPin, Phone, RefreshCw, Smartphone, User } from 'lucide-react'
+import { AlertTriangle, Building2, Crosshair, ExternalLink, FileJson, Keyboard, MapPin, MessageSquareText, Phone, RefreshCw, Send, Smartphone, User } from 'lucide-react'
+import { useState } from 'react'
 import { toast } from 'sonner'
-import { errorOf, useRebidMutation, type Call, type Civic, type Location } from './api'
+import { errorOf, useRebidMutation, useSendCallTextMutation, type Call, type Civic, type Location, type TextLine, type TextVia } from './api'
 import { Badge, relTime } from './ui'
 
 export function streetLine(c: Civic) {
@@ -80,11 +81,63 @@ export function EmergencyCard({ call }: { call: Call }) {
       {add.comments?.map((c, i) => <p key={i} className="text-sm text-amber-200">Note: {c}</p>)}
       {em.problems?.map((p, i) => <p key={i} className="flex items-center gap-2 text-xs text-amber-300"><AlertTriangle size={12} aria-hidden />{p}</p>)}
 
+      <Conversation call={call} answered={answered} />
+
       <footer className="flex flex-wrap items-center gap-2">
         {em.locationUri && <button className="btn" disabled={isLoading} onClick={doRebid}><RefreshCw size={14} className="text-sky-300" aria-hidden /> {isLoading ? 'Fetching…' : 'Rebid location'}</button>}
         {em.rebid && <span className="text-xs text-slate-500">fetched again {relTime(em.rebid)}</span>}
         <a className="btn" href={`/api/calls/${call.id}/eido`} target="_blank" rel="noreferrer"><FileJson size={14} className="text-violet-300" aria-hidden /> EIDO</a>
       </footer>
     </article>
+  )
+}
+
+const viaName: Record<TextVia, string> = { tty: 'TTY', rtt: 'Real-time text', msrp: 'Text to 911', sip: 'Text to 911' }
+
+/** The call's text conversation (a TTY on the line, real-time text, or text to 911) and the reply box.
+ * A call with no text yet still offers TTY, for a silent caller who may be using one. */
+function Conversation({ call, answered }: { call: Call; answered: boolean }) {
+  const em = call.emergency!
+  const lines: TextLine[] = em.text ?? []
+  const vias = em.textVia ?? []
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [via, setVia] = useState<TextVia | ''>('')
+  const [send, { isLoading }] = useSendCallTextMutation()
+  const has = lines.length > 0
+  if (!has && !open) {
+    return answered ? <button className="btn self-start" onClick={() => setOpen(true)}><Keyboard size={14} className="text-teal-300" aria-hidden /> Reply by TTY</button> : null
+  }
+  const choices: TextVia[] = vias.length ? vias : ['tty']
+  const chosen = (via || choices[0]) as TextVia
+  const doSend = async () => {
+    if (!draft.trim()) return
+    try { await send({ id: call.id, via: chosen, text: draft }).unwrap(); setDraft('') }
+    catch (e) { toast.error('Text not sent', { description: errorOf(e).message }) }
+  }
+  return (
+    <section className="rounded-lg border border-teal-900/60 bg-slate-900/40 p-3" aria-label="Text conversation">
+      <div className="mb-2 flex items-center gap-2 text-xs text-teal-300"><MessageSquareText size={13} aria-hidden /> Text {vias.map((v) => <Badge key={v} status="info">{viaName[v]}</Badge>)}</div>
+      <ol className="max-h-60 space-y-1 overflow-y-auto text-sm" aria-live="polite">
+        {lines.map((l, i) => (
+          <li key={i} className={l.from === 'caller' ? 'text-amber-100' : 'text-sky-200'}>
+            <span className="mr-2 font-mono text-xs text-slate-500">{new Date(l.at).toLocaleTimeString()}</span>
+            <span className={`mr-1 text-xs font-semibold ${l.from === 'caller' ? 'text-amber-300' : 'text-sky-300'}`}>{l.from === 'caller' ? 'Caller' : (l.name || 'Call-taker')}:</span>
+            <span className="font-mono">{l.text}</span>{l.open && <span className="ml-1 animate-pulse text-amber-300" aria-label="typing">▌</span>}
+          </li>
+        ))}
+        {!has && <li className="text-slate-500">No text yet. A TTY caller types GA (go ahead) when done; reply in capitals, ending with GA.</li>}
+      </ol>
+      {answered && (
+        <div className="mt-2 flex gap-2">
+          {choices.length > 1 && (
+            <select aria-label="Send by" className="input w-40" value={chosen} onChange={(e) => setVia(e.target.value as TextVia)}>{choices.map((v) => <option key={v} value={v}>{viaName[v]}</option>)}</select>
+          )}
+          <input aria-label="Reply" className="input flex-1 font-mono" value={draft} maxLength={4000} placeholder={chosen === 'tty' ? 'WHAT IS YOUR ADDRESS? GA' : 'Type a reply'}
+            onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') doSend() }} />
+          <button className="btn btn-primary" disabled={isLoading || !draft.trim()} onClick={doSend}><Send size={14} aria-hidden /> Send</button>
+        </div>
+      )}
+    </section>
   )
 }
