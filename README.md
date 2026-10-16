@@ -381,7 +381,7 @@ setting in the web interface.
 
 ### Capacity
 
-Measured with BitVoice's own call generator (Health, **Call generator**) on an Apple M4 Mac mini (10 cores,
+Measured with BitVoice's own call generator (Health, **Call generator**) on an Apple M4 desktop (10 cores,
 16 GB), v0.1.5: one extension calls another, which the generator answers and sends the audio back, G.711
 with media relayed through BitVoice, 45 seconds a call. The generator runs inside the same process, so each
 call is carried three times over (caller, PBX, answerer): the PBX alone needs less.
