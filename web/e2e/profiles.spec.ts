@@ -139,8 +139,14 @@ async function standInRFSS() {
     byes: () => byes,
     requests: () => requests,
     linked: () => !!peer,
-    replay: async () => {
-      for (const b of spurt) {
+    replay: async (undecodable = false) => {
+      for (const orig of spurt) {
+        const b = Buffer.from(orig)
+        if (undecodable) {
+          // voice blocks relabelled to a type this console does not know, as half-rate voice would come
+          const nb = b[0] & 0x3f
+          for (let i = 0; i < nb; i++) if ((b[1 + 4 * i] & 0x7f) === 0) b[1 + 4 * i] = (b[1 + 4 * i] & 0x80) | 99
+        }
         rtp.send(Buffer.concat([Buffer.from([0x80, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]), b]), peer!.port, peer!.address)
         await new Promise((r) => setTimeout(r, 20))
       }
@@ -213,6 +219,11 @@ test('radio console: a P25 talkgroup over the ISSI', async ({ page }) => {
     await expect(tile.getByText('Engine 5')).toBeVisible({ timeout: 5_000 })
     await expect(tile.getByText('(bee07.ad5.0000c5)')).toBeVisible()
     await replay
+    await expect(tile.getByText('Engine 5')).toBeHidden({ timeout: 5_000 })
+    // Voice this console cannot decode (Phase 2 half-rate sent untranscoded): the tile says so.
+    const odd = rfss.replay(true)
+    await expect(tile.getByText(/Silent here: this talkgroup's voice comes as P25 Phase 2 half-rate/)).toBeVisible({ timeout: 5_000 })
+    await odd
     await expect(tile.getByText('Engine 5')).toBeHidden({ timeout: 5_000 })
     // ... and is in the radio log, recorded, by name.
     const log = page.getByRole('region', { name: 'Radio log' })
@@ -676,7 +687,7 @@ test('caller video and photos on a 911 call', async ({ page, browser }) => {
   // Recording on (Settings › 911 calls), with the link address CAD is given in the EIDO.
   await page.goto('./#/psap')
   const setup = page.locator('section[aria-labelledby="pss-h"]')
-  await setup.getByLabel('Link address').fill('https://127.0.0.1:18380')
+  await setup.getByLabel('Link address', { exact: true }).fill('https://127.0.0.1:18380')
   await setup.getByRole('checkbox', { name: /Record callers' live video/ }).check()
   await setup.getByRole('button', { name: 'Save' }).click()
   await expect(page.getByText('911 settings saved').first()).toBeVisible()

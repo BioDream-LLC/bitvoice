@@ -104,6 +104,7 @@ type ChannelState struct {
 	AckAt          time.Time `json:"ackAt,omitzero"`
 	Encryption     string    `json:"encryption,omitempty"`
 	NoKey          bool      `json:"noKey,omitempty"`
+	Undecodable    bool      `json:"undecodable,omitempty"` // voice this console cannot play (Phase 2 half-rate)
 	TxEncrypt      string    `json:"txEncryption,omitempty"`
 }
 
@@ -398,7 +399,7 @@ func (e *Engine) Console() ConsoleState {
 		if c := ch.p25; c != nil {
 			s.Linked, s.Talker = c.up, c.talker
 			s.TalkerName = c.talkerName
-			s.Encryption, s.NoKey, s.TxEncrypt = c.enc, c.noKey, c.txEnc
+			s.Encryption, s.NoKey, s.TxEncrypt, s.Undecodable = c.enc, c.noKey, c.txEnc, c.odd
 			s.Waiting = ch.tx != "" && !c.group.Transmitting()
 			if !c.up && c.why != "" && s.Problem == "" {
 				s.Problem = c.why

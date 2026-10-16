@@ -333,3 +333,25 @@ func TestGroupCallEncrypted(t *testing.T) {
 		t.Fatalf("header word %+v", hdr)
 	}
 }
+
+// Voice in blocks the console does not decode (as Phase 2 half-rate voice sent untranscoded would
+// come): after a few such packets the talker is marked undecodable, and full-rate voice clears it.
+func TestUndecodableVoice(t *testing.T) {
+	var last *Talker
+	g := NewReceiver(1, nil, Events{Talker: func(t *Talker) { last = t }})
+	ptt := &PTTWord{Unit: Unit{ID: 1205}}
+	odd := func() *Payload {
+		return &Payload{Packet: PacketType{Type: PTTProgress}, PTT: ptt, Other: map[int][]byte{99: make([]byte, 9)}}
+	}
+	g.Receive(&Payload{Packet: PacketType{Type: PTTStart}, PTT: ptt})
+	for i := 0; i < 3; i++ {
+		g.Receive(odd())
+	}
+	if last == nil || !last.Undecodable {
+		t.Fatalf("not marked: %+v", last)
+	}
+	g.Receive(&Payload{Packet: PacketType{Type: PTTProgress}, PTT: ptt, Voice: []IMBEBlock{{FT: 0x62, Mute: true}}})
+	if last == nil || last.Undecodable {
+		t.Fatalf("not cleared: %+v", last)
+	}
+}

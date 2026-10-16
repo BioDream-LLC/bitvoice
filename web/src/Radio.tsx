@@ -167,6 +167,7 @@ function Channels({ st, pos, admin }: { st: ConsoleState; pos?: Position; admin:
                   : <span className="ml-1 flex items-center gap-1 text-sky-300"><Lock size={11} aria-hidden /> {c.encryption}</span>)}
               </p>
             )}
+            {c.talker && c.undecodable && <p className="text-xs text-amber-300" role="status">Silent here: this talkgroup's voice comes as P25 Phase 2 half-rate, which this console does not decode. Ask your P25 administrator to send it full rate on the ISSI.</p>}
             {c.notice && <p className="text-xs text-amber-300">{c.notice}</p>}
             {c.problem && <p className="text-xs text-rose-300">{c.problem}</p>}
             {c.patched.length > 0 && <p className="flex items-center gap-1 text-xs text-violet-300"><Link2 size={12} aria-hidden /> patched to {c.patched.map(nameOf).join(', ')}</p>}

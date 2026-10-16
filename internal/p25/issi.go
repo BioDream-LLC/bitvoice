@@ -128,6 +128,9 @@ type Talker struct {
 	Alg   int
 	KeyID int
 	NoKey bool
+	// Undecodable: the transmission's voice comes in blocks this console does not decode (most
+	// likely P25 Phase 2 half-rate voice, sent untranscoded): it is silent here.
+	Undecodable bool
 }
 
 // Events are what the group call tells its owner. Each may be nil.
@@ -140,11 +143,12 @@ type Events struct {
 
 // Group is one ISSI group call.
 type Group struct {
-	cfg   Config
-	stack *sip.Stack
-	rtp   *net.UDPConn
-	ev    Events
-	home  sip.Peer
+	oddVoice int // talk-spurt packets in a row whose voice is in blocks not decoded here
+	cfg      Config
+	stack    *sip.Stack
+	rtp      *net.UDPConn
+	ev       Events
+	home     sip.Peer
 
 	mu       sync.Mutex
 	up       bool
@@ -767,6 +771,16 @@ func (g *Group) receive(p *Payload) {
 		return
 	}
 	dec := g.dec
+	if (t == PTTStart || t == PTTProgress) && len(p.Voice) == 0 && len(p.Other) > 0 {
+		g.oddVoice++
+	} else if len(p.Voice) > 0 {
+		g.oddVoice = 0
+	}
+	if g.talker != nil && g.talker.Undecodable != (g.oddVoice >= 3) {
+		c := *g.talker
+		c.Undecodable = g.oddVoice >= 3
+		g.talker, talker, changed = &c, &c, true
+	}
 	var frames [][]byte
 	for _, v := range p.Voice {
 		if v.Mute {

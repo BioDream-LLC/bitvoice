@@ -162,7 +162,7 @@ export interface RadioSettings { console: string; channels: RadioChannel[]; p25:
 export interface ConsoleState {
   channels: {
     id: string; name: string; color: string; receive: boolean; lastRx?: string; txBy?: string; patched: string[]; problem?: string; kind: 'roip' | 'p25'
-    linked: boolean; talker?: string; waiting?: boolean; notice?: string; encryption?: string; noKey?: boolean; txEncryption?: string
+    linked: boolean; talker?: string; waiting?: boolean; notice?: string; encryption?: string; noKey?: boolean; undecodable?: boolean; txEncryption?: string
     private?: boolean; unit?: number; incoming?: boolean; emergency?: boolean; tone?: boolean
     talkerName?: string; emergencyUnit?: string; emergencyAlias?: string; emergencyAt?: string; ackBy?: string; ackAt?: string
   }[]

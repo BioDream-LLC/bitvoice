@@ -33,6 +33,7 @@ type p25Channel struct {
 	talkerName string // its alias
 	enc        string // the talker's encryption ("AES-256"); empty when clear
 	noKey      bool   // encrypted with a key this console does not have
+	odd        bool   // voice in blocks this console does not decode (Phase 2 half-rate, most likely)
 	txEnc      string // what dispatchers transmit with ("AES-256"; empty: clear)
 }
 
@@ -174,8 +175,9 @@ func (e *Engine) openP25(r *radio, ch *radioChannel, cfg *config.Config) error {
 				}
 			}
 			if c := r.channels[id]; c != nil && c.p25 != nil {
-				c.p25.talker, c.p25.enc, c.p25.noKey = "", "", false
+				c.p25.talker, c.p25.enc, c.p25.noKey, c.p25.odd = "", "", false, false
 				if t != nil {
+					c.p25.odd = t.Undecodable
 					if t.Alg != p25.AlgClear {
 						c.p25.enc, c.p25.noKey = p25.AlgName(t.Alg), t.NoKey
 					}
