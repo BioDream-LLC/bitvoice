@@ -68,6 +68,8 @@ type Leg struct {
 	rttOn      atomic.Bool   // a text stream is open
 	msrp       *msrp.Session // text to 911 (MSRP), on a 911 caller's leg
 	msrpActive bool          // BitVoice connects to the TCC, rather than the TCC to BitVoice
+	msrpTLS    bool          // the session runs over TLS (msrps)
+	msrpPeerFP string        // the TCC's certificate fingerprint from its SDP, when it gave one
 	msrpOn     atomic.Bool
 	textKey    []byte // its SRTP key, when the caller encrypts it
 	textTag    int

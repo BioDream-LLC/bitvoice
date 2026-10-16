@@ -8,6 +8,8 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -91,11 +93,45 @@ type partial struct {
 }
 
 // Path makes an MSRP path for a host and port, with a new session ID.
-func Path(host string, port int) string {
+func Path(host string, port int) string { return path("msrp", host, port) }
+
+// SecurePath makes an msrps: path, for a session over TLS (RFC 4975 section 14).
+func SecurePath(host string, port int) string { return path("msrps", host, port) }
+
+func path(scheme, host string, port int) string {
 	if strings.Contains(host, ":") {
 		host = "[" + host + "]"
 	}
-	return "msrp://" + host + ":" + strconv.Itoa(port) + "/" + NewID() + ";tcp"
+	return scheme + "://" + host + ":" + strconv.Itoa(port) + "/" + NewID() + ";tcp"
+}
+
+// Secure says whether a path is an msrps: one (TLS).
+func Secure(path string) bool { return len(path) >= 8 && strings.EqualFold(path[:8], "msrps://") }
+
+// Fingerprint is a certificate's SHA-256 fingerprint as SDP carries it (RFC 8122: a=fingerprint),
+// "sha-256 AB:CD:...".
+func Fingerprint(der []byte) string {
+	sum := sha256.Sum256(der)
+	var b strings.Builder
+	b.WriteString("sha-256 ")
+	for i, x := range sum {
+		if i > 0 {
+			b.WriteByte(':')
+		}
+		fmt.Fprintf(&b, "%02X", x)
+	}
+	return b.String()
+}
+
+// FingerprintMatches says whether a certificate is the one an a=fingerprint value names. Only
+// SHA-256 is taken: older hashes are not enough to trust a certificate by.
+func FingerprintMatches(attr string, der []byte) bool {
+	alg, want, ok := strings.Cut(strings.TrimSpace(attr), " ")
+	if !ok || !strings.EqualFold(alg, "sha-256") {
+		return false
+	}
+	_, have, _ := strings.Cut(Fingerprint(der), " ")
+	return subtle.ConstantTimeCompare([]byte(strings.ToUpper(strings.TrimSpace(want))), []byte(have)) == 1
 }
 
 // sessionID is the session part of a path.
@@ -110,10 +146,16 @@ func sessionID(path string) string {
 
 // HostPort is where a path says to connect.
 func HostPort(path string) (string, error) {
-	if len(path) < 7 || !strings.EqualFold(path[:7], "msrp://") {
-		return "", errors.New("not an msrp:// path")
+	rest := ""
+	switch {
+	case Secure(path):
+		rest = path[8:]
+	case len(path) >= 7 && strings.EqualFold(path[:7], "msrp://"):
+		rest = path[7:]
+	default:
+		return "", errors.New("not an msrp:// or msrps:// path")
 	}
-	hp, _, _ := strings.Cut(path[7:], "/")
+	hp, _, _ := strings.Cut(rest, "/")
 	if _, _, err := net.SplitHostPort(hp); err != nil {
 		return "", err
 	}

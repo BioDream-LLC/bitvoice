@@ -1844,9 +1844,11 @@ Video a phone sends in the 911 call itself (SIP video over the ESInet) can be wa
 
 **Text to 911.** A text control centre (TCC) sends texts to the PSAP as a session with no voice (MSRP, RFC 4975, over the ESInet trunk). BitVoice answers it and it waits on **911 calls** marked **Text to 911**, with the texts that have come; nobody's phone rings. **Take this text** makes you the call-taker (the answer time is counted then, and CAD gets the ALI spill and the EIDO then); reply in the box under the conversation, and **End conversation** when done. The TCC closing the session ends it too. A SIP MESSAGE sent inside a 911 call's dialog is taken as the caller's text the same way, and replies go back by SIP MESSAGE. Texts are taken only from trunks marked **From the ESInet**.
 
+A TCC that offers the session over TLS (\`TCP/TLS/MSRP\`, msrps: paths, RFC 4975 section 14) gets it over TLS, with this server's certificate (Settings › Certificates; without one such an offer is refused). The TCC's certificate must be the one its offer names (\`a=fingerprint\`, SHA-256); when it names none, it must be traced to the PSAP Credentialing Agency roots set under Core services, if any are set. BitVoice's answer names its own certificate the same way.
+
 The whole conversation, whichever way it came, is kept with the call in the call history and in the i3 log.
 
-What is not here yet: MSRP over TLS (TCP only for now); passing a text session on through the NG911 core (the ESRP routes voice; a text session is answered where it arrives); the EIDO conveyance standard's own subscriptions (NENA-STA-024 WebSocket): BitVoice posts EIDOs to one address.
+What is not here yet: passing a text session on through the NG911 core (the ESRP routes voice; a text session is answered where it arrives); the EIDO conveyance standard's own subscriptions (NENA-STA-024 WebSocket): BitVoice posts EIDOs to one address.
 `,
   },
   {

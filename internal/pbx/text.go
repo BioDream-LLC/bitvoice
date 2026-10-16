@@ -1,6 +1,8 @@
 package pbx
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"net"
@@ -259,8 +261,8 @@ func (l *Leg) describeText(s, offer *sdp.Session) {
 		}
 		o := offer.Media[i]
 		if o.Type == "message" && strings.Contains(strings.ToUpper(o.Proto), "MSRP") {
-			if o.Port == 0 || !l.textOK || strings.Contains(strings.ToUpper(o.Proto), "TLS") || !l.msrpFor(m, o) {
-				m.Port = 0 // MSRP over TLS is not offered yet
+			if o.Port == 0 || !l.textOK || !l.msrpFor(m, o) {
+				m.Port = 0
 			}
 			continue
 		}
@@ -503,6 +505,11 @@ func (l *Leg) msrpFor(m, o *sdp.Media) bool {
 	if ended || path == "" {
 		return false
 	}
+	secure := strings.EqualFold(o.Proto, "TCP/TLS/MSRP") || msrp.Secure(strings.Fields(path)[0])
+	if secure && l.e.TLS == nil {
+		l.e.Log.Warn("text to 911 over TLS refused: this server has no certificate (Settings › Certificates)", "call", l.call.ID)
+		return false
+	}
 	if ss == nil {
 		host := l.e.mediaHost(l.peer)
 		active := setup == "passive"
@@ -516,7 +523,18 @@ func (l *Leg) msrpFor(m, o *sdp.Media) bool {
 			}
 			port = ln.Addr().(*net.TCPAddr).Port
 		}
-		ss = msrp.New(msrp.Path(host, port), strings.Fields(path)[0])
+		local := msrp.Path(host, port)
+		if secure {
+			local = msrp.SecurePath(host, port)
+			fp, _ := o.Attr("fingerprint")
+			l.mu.Lock()
+			l.msrpTLS, l.msrpPeerFP = true, fp
+			l.mu.Unlock()
+			if ln != nil {
+				ln = &tlsListener{Listener: tls.NewListener(ln, l.msrpServerTLS(fp)), tcp: ln.(*net.TCPListener)}
+			}
+		}
+		ss = msrp.New(local, strings.Fields(path)[0])
 		c := l.call
 		ss.OnMessage = func(msg msrp.Message) {
 			if s, ok := msg.Text(); ok && strings.TrimSpace(s) != "" {
@@ -531,6 +549,11 @@ func (l *Leg) msrpFor(m, o *sdp.Media) bool {
 	m.Type, m.Port, m.Proto = "message", portOf(ss.Local), o.Proto
 	m.Formats = []string{"*"}
 	m.Lines = []sdp.Line{{Type: 'a', Value: "accept-types:text/plain message/cpim"}, {Type: 'a', Value: "path:" + ss.Local}}
+	if l.msrpTLS {
+		if der := l.e.ownCertificate(l.e.mediaHost(l.peer)); der != nil {
+			m.Lines = append(m.Lines, sdp.Line{Type: 'a', Value: "fingerprint:" + msrp.Fingerprint(der)})
+		}
+	}
 	if l.msrpActive {
 		m.Lines = append(m.Lines, sdp.Line{Type: 'a', Value: "setup:active"})
 	} else if setup != "" {
@@ -557,14 +580,28 @@ func (l *Leg) serveMSRP(ss *msrp.Session, ln net.Listener) {
 	var conn net.Conn
 	var err error
 	if ln != nil {
-		_ = ln.(*net.TCPListener).SetDeadline(time.Now().Add(30 * time.Second))
+		deadline := time.Now().Add(30 * time.Second)
+		if tl, ok := ln.(*tlsListener); ok {
+			_ = tl.tcp.SetDeadline(deadline)
+		} else {
+			_ = ln.(*net.TCPListener).SetDeadline(deadline)
+		}
 		conn, err = ln.Accept()
 		ln.Close()
+		if tc, ok := conn.(*tls.Conn); ok && err == nil {
+			// the handshake (and the TCC's certificate check) before any MSRP is read
+			_ = tc.SetDeadline(deadline)
+			if err = tc.Handshake(); err != nil {
+				tc.Close()
+			} else {
+				_ = tc.SetDeadline(time.Time{})
+			}
+		}
 	} else {
 		hp, herr := msrp.HostPort(ss.Remote)
 		if herr != nil {
 			err = herr
-		} else if conn, err = net.DialTimeout("tcp", hp, 10*time.Second); err == nil {
+		} else if conn, err = l.dialMSRP(ss.Remote, hp); err == nil {
 			go func() {
 				if ss.Wait(5 * time.Second) {
 					_ = ss.Bind()
@@ -614,4 +651,111 @@ func (l *Leg) textMessage(m *sip.Message) bool {
 	c.mu.Unlock()
 	c.textHeard("sip", strings.TrimRight(s, "\r\n")+"\n")
 	return true
+}
+
+// msrpServerTLS is the TLS a TCC connects to for msrps: this server's certificate, and the TCC's
+// own certificate asked for: it must be the one its SDP named (a=fingerprint), or, when it named
+// none, one traced to the PSAP Credentialing Agency (Core services) when those roots are set.
+func (l *Leg) msrpServerTLS(fp string) *tls.Config {
+	cfg := l.e.TLS.Clone()
+	cfg.MinVersion = tls.VersionTLS12
+	cfg.ClientAuth = tls.RequestClientCert
+	roots := l.e.pcaRoots()
+	cfg.VerifyPeerCertificate = func(raw [][]byte, _ [][]*x509.Certificate) error {
+		return checkTCCCert(raw, fp, roots, "")
+	}
+	return cfg
+}
+
+// dialMSRP connects to a passive TCC: over TLS for an msrps path, checking its certificate the same
+// way (and its name, when it is checked against roots).
+func (l *Leg) dialMSRP(path, hp string) (net.Conn, error) {
+	d := &net.Dialer{Timeout: 10 * time.Second}
+	if !msrp.Secure(path) {
+		return d.Dial("tcp", hp)
+	}
+	l.mu.Lock()
+	fp := l.msrpPeerFP
+	l.mu.Unlock()
+	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
+	if l.e.TLSClient != nil {
+		cfg = l.e.TLSClient.Clone()
+	}
+	host, _, _ := net.SplitHostPort(hp)
+	roots := l.e.pcaRoots()
+	cfg.InsecureSkipVerify = true // checked below: by fingerprint, or against the roots by name
+	cfg.VerifyPeerCertificate = func(raw [][]byte, _ [][]*x509.Certificate) error {
+		return checkTCCCert(raw, fp, roots, host)
+	}
+	return tls.DialWithDialer(d, "tcp", hp, cfg)
+}
+
+// checkTCCCert: by its SDP fingerprint when there is one; else chained to the PCA roots (or, for a
+// TCC this server connects to, the system's roots) and, when this server connected, for its name.
+// A TCC that connects with no certificate and no fingerprint is taken only when no roots are set:
+// the session is then encrypted, its far end known only from SIP.
+func checkTCCCert(raw [][]byte, fp string, roots *x509.CertPool, host string) error {
+	if fp != "" {
+		if len(raw) == 0 || !msrp.FingerprintMatches(fp, raw[0]) {
+			return errors.New("msrps: the text control centre's certificate is not the one its SDP named")
+		}
+		return nil
+	}
+	if len(raw) == 0 {
+		if roots != nil || host != "" {
+			return errors.New("msrps: the text control centre presented no certificate")
+		}
+		return nil
+	}
+	certs := make([]*x509.Certificate, 0, len(raw))
+	for _, b := range raw {
+		c, err := x509.ParseCertificate(b)
+		if err != nil {
+			return err
+		}
+		certs = append(certs, c)
+	}
+	opts := x509.VerifyOptions{Roots: roots, Intermediates: x509.NewCertPool(), DNSName: host,
+		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny}}
+	for _, c := range certs[1:] {
+		opts.Intermediates.AddCert(c)
+	}
+	_, err := certs[0].Verify(opts)
+	return err
+}
+
+// pcaRoots are the PSAP Credentialing Agency roots from Core services, or nil.
+func (e *Engine) pcaRoots() *x509.CertPool {
+	r := strings.TrimSpace(e.Config().System.Core.PCARoots)
+	if r == "" {
+		return nil
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM([]byte(r)) {
+		return nil
+	}
+	return pool
+}
+
+// ownCertificate is this server's certificate for a name (DER), or nil.
+func (e *Engine) ownCertificate(host string) []byte {
+	if e.TLS == nil {
+		return nil
+	}
+	var c *tls.Certificate
+	if e.TLS.GetCertificate != nil {
+		c, _ = e.TLS.GetCertificate(&tls.ClientHelloInfo{ServerName: host})
+	} else if len(e.TLS.Certificates) > 0 {
+		c = &e.TLS.Certificates[0]
+	}
+	if c == nil || len(c.Certificate) == 0 {
+		return nil
+	}
+	return c.Certificate[0]
+}
+
+// tlsListener is a TLS listener that keeps its TCP listener, for the accept deadline.
+type tlsListener struct {
+	net.Listener
+	tcp *net.TCPListener
 }
