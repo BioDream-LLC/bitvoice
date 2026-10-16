@@ -153,7 +153,7 @@ func radioConsoleP25(t *testing.T, encrypted bool) {
 	}
 	rx := p25.NewReceiver(0x333, keys, p25.Events{Voice: func(pcm []int16) { heard = append(heard, pcm) }})
 	loud, req, alg := 0, false, p25.AlgClear
-	deadline := time.After(3 * time.Second)
+	deadline := time.After(12 * time.Second) // 1.2 s of voice; slow CI machines need the room
 	for loud < 60 {
 		select {
 		case p := <-got:

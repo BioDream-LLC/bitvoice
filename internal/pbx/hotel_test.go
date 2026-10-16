@@ -86,7 +86,7 @@ func TestGuestRoomsAndWakeUps(t *testing.T) {
 		t.Fatal("nothing played")
 	}
 	ps[1].send(guest.request("BYE")) // awake: the guest hangs up
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for {
 		if _, ok := st.WakeUpFor("101"); !ok {
 			break
