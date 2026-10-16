@@ -376,6 +376,10 @@ setting in the web interface.
 - **P25** checked byte for byte against a real ISSI capture (from NIST's public-domain ISSI tester), and the
   encryption against the standard's own worked examples.
 - **NG911** checked against NENA sample data and stand-ins for the ESInet, ESRP and CAD.
+- **SIP trunks** checked against a real Asterisk 23.5 playing the carrier, with another Asterisk as a desk phone:
+  registration with digest authentication; calls in to the main number and out through the trunk, with sound
+  (no loss, MOS 4.4); DTMF both ways (RFC 4733); the caller's number and name; busy and failed numbers passed
+  back as such. Real carriers are not yet tried.
 - **IAX2** checked against a real Asterisk 23: registration, calls both ways with sound, busy; **GSM** decoded
   sample for sample as ffmpeg does, and **G.726** streams exchanged with ffmpeg.
 
