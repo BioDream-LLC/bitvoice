@@ -330,6 +330,7 @@ func (s *Server) routes() {
 	s.callMediaRoutes()
 	s.i3StdRoutes()
 	s.aliRoutes()
+	s.reportLayoutRoutes()
 	s.radioLogRoutes()
 	s.mfaRoutes()
 }

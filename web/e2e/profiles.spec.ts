@@ -619,6 +619,45 @@ test('911 calls: the legacy ALI link and its layout', async ({ page }) => {
   }
 })
 
+// Report layouts: a layout as a state form asks (a row a day, a total, answered within 10 s, its own
+// headings), checked, saved, run, downloaded and opened as a page to print.
+test('911 calls: report layouts', async ({ page }) => {
+  await signIn(page)
+  await page.goto('./#/psap')
+  await page.getByRole('tab', { name: /Report layouts/ }).click()
+  const box = page.getByRole('region', { name: 'Report layouts' })
+  await box.getByRole('button', { name: 'New report layout' }).click()
+  await box.getByRole('button', { name: 'Save the layout' }).click()
+  await expect(box.getByText('name the report')).toBeVisible()
+  await box.locator('#rln').fill('State form 911-A')
+  const cols = box.getByRole('table', { name: 'Columns' })
+  await cols.getByLabel('Column 3', { exact: true }).selectOption('withinCount')
+  await cols.getByLabel('Seconds of column 3').fill('0')
+  await box.getByRole('button', { name: 'Save the layout' }).click()
+  await expect(cols.getByText('seconds, 1 to 600')).toBeVisible()
+  await cols.getByLabel('Seconds of column 3').fill('10')
+  await cols.getByLabel('Heading of column 3').fill('Ans <= 10s')
+  await box.getByRole('button', { name: 'Add a column' }).click()
+  await cols.getByLabel('Column 5', { exact: true }).selectOption('p90Answer')
+  await cols.getByRole('button', { name: 'Move column 5 up' }).click()
+  await expect(cols.getByLabel('Column 4', { exact: true })).toHaveValue('p90Answer')
+  await box.getByRole('button', { name: 'Save the layout' }).click()
+  await expect(page.getByText('Report layouts saved')).toBeVisible()
+  await box.getByRole('list', { name: 'Layouts' }).getByRole('button', { name: 'State form 911-A', exact: true }).click()
+  await box.getByRole('button', { name: 'Run' }).click()
+  const table = box.getByRole('table', { name: 'State form 911-A' })
+  await expect(table.getByRole('columnheader', { name: 'Ans <= 10s' })).toBeVisible()
+  await expect(table.getByRole('columnheader', { name: '90% answered within (s)' })).toBeVisible()
+  await expect(table.getByRole('cell', { name: 'total' })).toBeVisible()
+  const [csv] = await Promise.all([page.waitForEvent('download'), box.getByRole('link', { name: /Spreadsheet/ }).click()])
+  expect(csv.suggestedFilename()).toMatch(/^State-form-911-A-.*\.csv$/)
+  const body = (await import('node:fs')).readFileSync((await csv.path())!, 'utf8')
+  expect(body.split('\n')[0]).toBe('Date,calls,Ans <= 10s,90% answered within (s),abandoned')
+  const [print] = await Promise.all([page.context().waitForEvent('page'), box.getByRole('link', { name: /Page to print/ }).click()])
+  await expect(print.getByRole('heading', { name: 'State form 911-A' })).toBeVisible()
+  await print.close()
+})
+
 // Caller video: a 911 conversation from a TCC; the call-taker sends a video link, the caller's
 // phone (a second page, Chromium's fake camera) shares live video over WHIP and sends a photo; the
 // call-taker watches over WHEP, blurred until revealed, sees the photo's hash, time and GPS, holds it,

@@ -1,7 +1,7 @@
-import { Cable, Download, HeartPulse, Plus, ScrollText, Save, Siren, Timer, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Cable, Download, HeartPulse, Pencil, Plus, Printer, ScrollText, Save, Siren, Table2, Timer, Trash2 } from 'lucide-react'
 import { Fragment, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { errorOf, useAliParseMutation, useAliTestMutation, useExposureQuery, useCallsQuery, usePsapLogQuery, usePsapReportQuery, useSaveSettingsMutation, useSettingsQuery, type ALIField, type ALILink, type ALIRecordView, type ApiErrorBody, type MapSource, type PSAPSettings } from './api'
+import { errorOf, useAliParseMutation, useAliTestMutation, useExposureQuery, useCallsQuery, usePsapLogQuery, usePsapReportQuery, useSaveSettingsMutation, useSettingsQuery, type ALIField, type ALILink, type ALIRecordView, type ReportLayout, type ReportColumn, useLazyLaidOutQuery, type ApiErrorBody, type MapSource, type PSAPSettings } from './api'
 import { useIsAdmin } from './Editor'
 import { EmergencyCard } from './EmergencyCard'
 import { useDraft } from './useDraft'
@@ -14,7 +14,7 @@ export function PSAP() {
   const admin = useIsAdmin()
   const { data: calls } = useCallsQuery(undefined, { pollingInterval: 2000 })
   const live = (calls?.items ?? []).filter((c) => c.emergency)
-  const [tab, setTab] = useState<'report' | 'log' | 'exposure'>('report')
+  const [tab, setTab] = useState<'report' | 'log' | 'exposure' | 'layouts'>('report')
   return (
     <Page icon={Siren} title="911 calls" accent="from-rose-400 to-amber-400"
       intro="The 911 profile: calls from the emergency services network (ESInet) with the caller's location and the network's data, the answer-time report, the NENA i3 log, and what CAD is sent when a call is answered.">
@@ -27,8 +27,9 @@ export function PSAP() {
         <button role="tab" aria-selected={tab === 'report'} className={tab === 'report' ? 'btn btn-primary' : 'btn'} onClick={() => setTab('report')}><Timer size={14} aria-hidden /> Answer times</button>
         <button role="tab" aria-selected={tab === 'log'} className={tab === 'log' ? 'btn btn-primary' : 'btn'} onClick={() => setTab('log')}><ScrollText size={14} aria-hidden /> i3 log</button>
         <button role="tab" aria-selected={tab === 'exposure'} className={tab === 'exposure' ? 'btn btn-primary' : 'btn'} onClick={() => setTab('exposure')}><HeartPulse size={14} aria-hidden /> Exposure</button>
+        <button role="tab" aria-selected={tab === 'layouts'} className={tab === 'layouts' ? 'btn btn-primary' : 'btn'} onClick={() => setTab('layouts')}><Table2 size={14} aria-hidden /> Report layouts</button>
       </div>
-      {tab === 'report' ? <Report /> : tab === 'log' ? <I3Log /> : <ExposureReport />}
+      {tab === 'report' ? <Report /> : tab === 'log' ? <I3Log /> : tab === 'layouts' ? <Layouts /> : <ExposureReport />}
       {admin && <PSAPSetup />}
     </Page>
   )
@@ -250,5 +251,93 @@ function ALILinkSetup({ link, set, p }: { link: ALILink; set: (l: ALILink) => vo
         </div>
       </div>
     </div>
+  )
+}
+
+const rowKinds: [string, string][] = [['day', 'A row a day'], ['week', 'A row a week'], ['month', 'A row a month'], ['hour', 'A row an hour of the day'], ['taker', 'A row a call-taker'], ['total', 'One row in all']]
+const columnKinds: [string, string][] = [['period', 'The row (date, hour, call-taker)'], ['calls', 'Calls'], ['answered', 'Answered'], ['abandoned', 'Abandoned'], ['abandonedPct', 'Abandoned (%)'],
+  ['withinPct', 'Answered within N s (%)'], ['withinCount', 'Answered within N s'], ['overCount', 'Answered after more than N s'], ['avgAnswer', 'Average to answer (s)'], ['longestAnswer', 'Longest to answer (s)'],
+  ['p90Answer', '90% answered within (s)'], ['avgLength', 'Average call length (s)'], ['textCalls', 'Text calls (any)'], ['ttyCalls', 'TTY calls'], ['rttCalls', 'Real-time text calls'], ['msrpCalls', 'Text to 911 calls']]
+const needsSeconds = (k: string) => k === 'withinPct' || k === 'withinCount' || k === 'overCount'
+const blankLayout: ReportLayout = { id: '', name: '', rows: 'day', total: true, columns: [{ kind: 'period', seconds: 0, label: 'Date' }, { kind: 'calls', seconds: 0, label: '' }, { kind: 'withinPct', seconds: 15, label: '' }, { kind: 'abandoned', seconds: 0, label: '' }] }
+
+/** Report layouts: a PSAP lays out the rows and columns its state's form asks for, and runs them. */
+function Layouts() {
+  const admin = useIsAdmin()
+  const { data } = useSettingsQuery()
+  const [save, { isLoading }] = useSaveSettingsMutation()
+  const [run, { data: laid, isFetching }] = useLazyLaidOutQuery()
+  const [edit, setEdit] = useState<ReportLayout | null>(null)
+  const [err, setErr] = useState<ApiErrorBody | null>(null)
+  const [from, setFrom] = useState(iso(new Date(new Date().getFullYear(), new Date().getMonth(), 1)))
+  const [to, setTo] = useState(iso(new Date()))
+  const [chosen, setChosen] = useState('')
+  if (!data) return null
+  const layouts = data.system.psap?.reportLayouts ?? []
+  const p = (f: string) => problemFor(err?.problems, f)
+  const at = edit ? layouts.findIndex((l) => l.id === edit.id && edit.id !== '') : -1
+  const idx = at >= 0 ? at : layouts.length
+  const pf = (f: string) => p(`system.psap.reportLayouts[${idx}].${f}`)
+  const store = async (next: ReportLayout[]) => {
+    try { await save({ ...data, system: { ...data.system, psap: { ...data.system.psap!, reportLayouts: next } } }).unwrap(); setErr(null); setEdit(null); toast.success('Report layouts saved') }
+    catch (e) { setErr(errorOf(e)) }
+  }
+  const setCol = (i: number, v: Partial<ReportColumn>) => edit && setEdit({ ...edit, columns: edit.columns.map((c, j) => (j === i ? { ...c, ...v } : c)) })
+  const move = (i: number, d: number) => { if (!edit) return; const c = [...edit.columns]; const [x] = c.splice(i, 1); c.splice(i + d, 0, x); setEdit({ ...edit, columns: c }) }
+  const href = (fmt: string) => `./api/psap/layouts/${chosen}?from=${from}&to=${to}&format=${fmt}`
+  return (
+    <section className="card mt-4 space-y-4 p-5" aria-label="Report layouts">
+      <p className="text-sm text-slate-400">Lay out the report your state or county asks for: what each row is, which columns, their headings, and the seconds the answer-time columns count to. Then run it over any dates, to read here, download as a spreadsheet, or print.</p>
+      {!layouts.length ? <Empty icon={Table2} title="No report layouts yet">{admin ? 'Make one below, from your form.' : 'An administrator makes them.'}</Empty> : (
+        <ul className="space-y-1" aria-label="Layouts">{layouts.map((l) => (
+          <li key={l.id} className="flex flex-wrap items-center gap-2 text-sm">
+            <button className={chosen === l.id ? 'btn btn-primary py-0.5' : 'btn py-0.5'} onClick={() => setChosen(l.id)}>{l.name}</button>
+            <span className="text-slate-500">{rowKinds.find((r) => r[0] === l.rows)?.[1]}, {l.columns.length} columns</span>
+            {admin && <><button className="btn-ghost p-1" aria-label={`Edit ${l.name}`} onClick={() => setEdit(structuredClone(l))}><Pencil size={13} aria-hidden /></button>
+              <button className="btn-ghost p-1" aria-label={`Delete ${l.name}`} onClick={() => store(layouts.filter((x) => x.id !== l.id))}><Trash2 size={13} className="text-rose-300" aria-hidden /></button></>}
+          </li>))}</ul>)}
+      {chosen && <div className="space-y-2">
+        <div className="flex flex-wrap items-end gap-2">
+          <Field label="From" htmlFor="rlf"><input id="rlf" type="date" className="input" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
+          <Field label="To" htmlFor="rlt"><input id="rlt" type="date" className="input" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
+          <button className="btn btn-primary" disabled={isFetching} onClick={() => run({ id: chosen, from, to })}>Run</button>
+          <a className="btn" href={href('csv')}><Download size={14} aria-hidden /> Spreadsheet (CSV)</a>
+          <a className="btn" href={href('html')} target="_blank" rel="noreferrer"><Printer size={14} aria-hidden /> Page to print</a>
+        </div>
+        {laid && <div className="overflow-x-auto"><table className="text-sm" aria-label={laid.name}>
+          <thead><tr>{laid.header.map((h, i) => <th key={i} className="border-b border-slate-700 px-2 py-1 text-left text-slate-300">{h}</th>)}</tr></thead>
+          <tbody>{laid.rows.map((r, i) => <tr key={i} className={r[0] === 'total' ? 'font-semibold text-slate-100' : ''}>{r.map((v, j) => <td key={j} className="border-b border-slate-800 px-2 py-1 font-mono">{v}</td>)}</tr>)}</tbody>
+        </table></div>}
+      </div>}
+      {admin && !edit && <button className="btn" onClick={() => setEdit(structuredClone(blankLayout))}><Plus size={14} className="text-emerald-300" aria-hidden /> New report layout</button>}
+      {admin && edit && <div className="space-y-3 rounded-lg border border-slate-800 p-3" aria-label="Report layout">
+        <div className="grid gap-3 md:grid-cols-3">
+          <Field label="Name" htmlFor="rln" error={pf('name')}><input id="rln" className="input" value={edit.name} placeholder="State form 911-A" onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></Field>
+          <Field label="Rows" htmlFor="rlr" error={pf('rows')}><select id="rlr" className="input" value={edit.rows} onChange={(e) => setEdit({ ...edit, rows: e.target.value })}>{rowKinds.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
+          <label className="flex items-center gap-2 text-sm text-slate-300"><input type="checkbox" checked={edit.total} onChange={(e) => setEdit({ ...edit, total: e.target.checked })} /> A total row at the bottom</label>
+        </div>
+        <table className="w-full text-sm" aria-label="Columns">
+          <thead><tr className="text-left text-slate-400"><th className="py-1">Column</th><th>Seconds</th><th>Heading (blank: a plain one)</th><th></th></tr></thead>
+          <tbody>{edit.columns.map((c, i) => (
+            <tr key={i} className="border-t border-slate-800">
+              <td className="py-1"><select className="input" aria-label={`Column ${i + 1}`} value={c.kind} onChange={(e) => setCol(i, { kind: e.target.value, seconds: needsSeconds(e.target.value) ? c.seconds || 15 : 0 })}>{columnKinds.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></td>
+              <td>{needsSeconds(c.kind) && <input className="input w-20" aria-label={`Seconds of column ${i + 1}`} inputMode="numeric" value={c.seconds || ''} onChange={(e) => setCol(i, { seconds: Number(e.target.value.replace(/\D/g, '')) || 0 })} />}
+                {pf(`columns[${i}].seconds`) && <span className="block text-xs text-rose-300">{pf(`columns[${i}].seconds`)}</span>}</td>
+              <td><input className="input" aria-label={`Heading of column ${i + 1}`} value={c.label} onChange={(e) => setCol(i, { label: e.target.value })} /></td>
+              <td className="whitespace-nowrap">
+                <button className="btn-ghost p-1" aria-label={`Move column ${i + 1} up`} disabled={i === 0} onClick={() => move(i, -1)}><ArrowUp size={13} aria-hidden /></button>
+                <button className="btn-ghost p-1" aria-label={`Move column ${i + 1} down`} disabled={i === edit.columns.length - 1} onClick={() => move(i, 1)}><ArrowDown size={13} aria-hidden /></button>
+                <button className="btn-ghost p-1" aria-label={`Remove column ${i + 1}`} onClick={() => setEdit({ ...edit, columns: edit.columns.filter((_, j) => j !== i) })}><Trash2 size={13} className="text-rose-300" aria-hidden /></button>
+              </td>
+            </tr>))}</tbody>
+        </table>
+        {pf('columns') && <p className="text-sm text-rose-300" role="alert">{pf('columns')}</p>}
+        <div className="flex flex-wrap justify-between gap-2">
+          <button className="btn" onClick={() => setEdit({ ...edit, columns: [...edit.columns, { kind: 'calls', seconds: 0, label: '' }] })}><Plus size={14} className="text-emerald-300" aria-hidden /> Add a column</button>
+          <div className="flex gap-2"><button className="btn" onClick={() => { setEdit(null); setErr(null) }}>Cancel</button>
+            <button className="btn btn-primary" disabled={isLoading} onClick={() => store(at >= 0 ? layouts.map((l, j) => (j === at ? edit : l)) : [...layouts, edit])}><Save size={14} aria-hidden /> Save the layout</button></div>
+        </div>
+      </div>}
+    </section>
   )
 }

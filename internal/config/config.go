@@ -593,6 +593,9 @@ type PSAP struct {
 	// ALILink asks a legacy ALI controller (or the ALI database's data link) for the record of a 911
 	// call that brought only its callback number, when LocationServer is not set.
 	ALILink ALILink `json:"aliLink"`
+	// ReportLayouts are the PSAP's own answer-time reports: the rows and columns a state's or a
+	// county's form asks for, run over any dates as a table, a spreadsheet or a page to print.
+	ReportLayouts []ReportLayout `json:"reportLayouts"`
 	// EIDO: the incident document POSTed to CAD (https URL), with a bearer token if CAD wants one.
 	EIDOURL   string `json:"eidoUrl"`
 	EIDOToken string `json:"eidoToken"`
@@ -2263,6 +2266,34 @@ func (c *Config) Validate() error {
 				p.add("system.psap.aliAddress", "enter CAD's address and port, like 10.0.0.20:4000, or a serial port, like serial:/dev/ttyUSB0?baud=9600 (%s)", err.Error())
 			}
 		}
+		for i := range ps.ReportLayouts {
+			rl := &ps.ReportLayouts[i]
+			f := fmt.Sprintf("system.psap.reportLayouts[%d]", i)
+			checkID(f+".id", &rl.ID)
+			if rl.Name = strings.TrimSpace(rl.Name); rl.Name == "" {
+				p.add(f+".name", "name the report")
+			}
+			if !slices.Contains(ReportRowKinds, rl.Rows) {
+				p.add(f+".rows", "a row for each day, week, month, hour of the day or call-taker, or one row in all")
+			}
+			if len(rl.Columns) == 0 || len(rl.Columns) > 40 {
+				p.add(f+".columns", "1 to 40 columns")
+			}
+			for j := range rl.Columns {
+				col := &rl.Columns[j]
+				cf := fmt.Sprintf("%s.columns[%d]", f, j)
+				if !slices.Contains(ReportColumnKinds, col.Kind) {
+					p.add(cf+".kind", "choose what the column counts")
+				}
+				if (col.Kind == "withinPct" || col.Kind == "withinCount" || col.Kind == "overCount") && (col.Seconds < 1 || col.Seconds > 600) {
+					p.add(cf+".seconds", "seconds, 1 to 600")
+				}
+				col.Label = strings.TrimSpace(col.Label)
+				if len(col.Label) > 80 {
+					p.add(cf+".label", "80 characters at most")
+				}
+			}
+		}
 		if l := &ps.ALILink; l.Address != "" || len(l.Layout) > 0 {
 			l.Address = strings.TrimSpace(l.Address)
 			if err := checkLinkAddress(l.Address); err != nil {
@@ -3676,6 +3707,39 @@ func checkLinkAddress(a string) error {
 	}
 	if _, port, err := net.SplitHostPort(a); err != nil || port == "" {
 		return errors.New("host:port")
+	}
+	return nil
+}
+
+// ReportLayout is one report a PSAP lays out.
+type ReportLayout struct {
+	ID      string         `json:"id"`
+	Name    string         `json:"name"`
+	Rows    string         `json:"rows"`  // day, week, month, hour (of the day), taker, total
+	Total   bool           `json:"total"` // a total row under the others
+	Columns []ReportColumn `json:"columns"`
+}
+
+// ReportColumn is one column: what it counts, and its heading.
+type ReportColumn struct {
+	Kind    string `json:"kind"`    // one of ReportColumnKinds
+	Seconds int    `json:"seconds"` // for withinPct and withinCount
+	Label   string `json:"label"`   // the heading; a plain one when empty
+}
+
+// ReportRowKinds and ReportColumnKinds are what a layout can use.
+var (
+	ReportRowKinds    = []string{"day", "week", "month", "hour", "taker", "total"}
+	ReportColumnKinds = []string{"period", "calls", "answered", "abandoned", "abandonedPct", "withinPct", "withinCount", "overCount",
+		"avgAnswer", "longestAnswer", "p90Answer", "avgLength", "textCalls", "ttyCalls", "rttCalls", "msrpCalls"}
+)
+
+// FindReportLayout finds a layout by ID.
+func (c *Config) FindReportLayout(id string) *ReportLayout {
+	for i := range c.System.PSAP.ReportLayouts {
+		if c.System.PSAP.ReportLayouts[i].ID == id {
+			return &c.System.PSAP.ReportLayouts[i]
+		}
 	}
 	return nil
 }

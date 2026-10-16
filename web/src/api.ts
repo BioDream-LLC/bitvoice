@@ -173,7 +173,10 @@ export interface Transmission {
   id: string; channel: string; channelName: string; direction: 'rx' | 'tx'; start: string; end: string; seconds: number
   unit?: string; unitName?: string; dispatcher?: string; tone?: string; emergency?: boolean; encryption?: string; private?: boolean; recording?: string
 }
-export interface PSAPSettings { agencyId: string; elementId: string; aliAddress: string; eidoUrl: string; eidoToken: string; answerTarget: number; ttyOff: boolean; locationServer: string; videoLinkBase: string; videoFrom: string; videoStreams: number; videoKbps: number; uploadMb: number; mediaDays: number; recordVideo?: boolean; testCallsOff?: boolean; aliLink?: ALILink }
+export interface PSAPSettings { agencyId: string; elementId: string; aliAddress: string; eidoUrl: string; eidoToken: string; answerTarget: number; ttyOff: boolean; locationServer: string; videoLinkBase: string; videoFrom: string; videoStreams: number; videoKbps: number; uploadMb: number; mediaDays: number; recordVideo?: boolean; testCallsOff?: boolean; aliLink?: ALILink; reportLayouts?: ReportLayout[] }
+export interface ReportColumn { kind: string; seconds: number; label: string }
+export interface ReportLayout { id: string; name: string; rows: string; total: boolean; columns: ReportColumn[] }
+export interface LaidOut { name: string; from: string; to: string; header: string[]; rows: string[][] }
 export interface ALIField { name: string; line: number; col: number; len: number }
 export interface ALILink { address: string; request: string; layout: ALIField[]; timeoutS: number }
 export interface ALIRecordView { fields: Record<string, string>; location?: { civic?: Record<string, string>; lat?: number; lon?: number; radius?: number }; class?: string; name?: string; callback?: string; provider?: string }
@@ -487,6 +490,7 @@ export const api = createApi({
       deleteAddresses: b.mutation<void, void>({ query: () => ({ url: 'core/addresses', method: 'DELETE' }), invalidatesTags: ['Settings'] }),
       validateAddress: b.mutation<Validation, Record<string, string>>({ query: (body) => ({ url: 'core/validate', method: 'POST', body }) }),
       bcfLog: b.query<List<BCFEvent>, void>({ query: () => 'core/bcf', providesTags: ['Calls'] }),
+      laidOut: b.query<LaidOut, { id: string; from: string; to: string }>({ query: ({ id, ...params }) => ({ url: `psap/layouts/${id}`, params }), providesTags: ['Settings'] }),
       aliParse: b.mutation<{ lines: string[]; record: ALIRecordView; error?: string }, { text: string; layout: ALIField[] }>({ query: (body) => ({ url: 'psap/ali/parse', method: 'POST', body }) }),
       aliTest: b.mutation<{ text?: string; record?: ALIRecordView; error?: string }, { number: string; link: ALILink }>({ query: (body) => ({ url: 'psap/ali/test', method: 'POST', body }) }),
       corePolicies: b.query<List<StoredPolicyView>, void>({ query: () => 'core/policies', providesTags: ['Core'] }),
@@ -863,7 +867,7 @@ export const api = createApi({
 })
 
 export const {
-  useFaxBoxesQuery, useCreateFaxBoxMutation, useUpdateFaxBoxMutation, useDeleteFaxBoxMutation, useFaxesQuery, useDeleteFaxMutation, useFaxKindsQuery, useSendFaxMutation, useRetryFaxMutation, useTestFaxMailMutation, usePsapReportQuery, usePsapLogQuery, useRebidMutation, useSendCallTextMutation, useTakeTextCallMutation, useEndTextCallMutation, useVideoLinkMutation, useCallMediaQuery, useHoldMediaMutation, useRevealMutation, useExposureQuery, useBoundariesQuery, useSaveBoundaryMutation, useDeleteBoundaryMutation, useLazyFindAreaQuery, useAddressDataQuery, useLisDataQuery, useLazyLisDataQuery, useReceivedLogQuery, useDeleteLISMutation, useDeleteAddressesMutation, useValidateAddressMutation, useBcfLogQuery, useAliParseMutation, useAliTestMutation, useCorePoliciesQuery, useStorePolicyMutation, useDeletePolicyMutation, useDiscrepanciesQuery, useResolveDiscrepancyMutation, useFileDiscrepancyMutation,
+  useFaxBoxesQuery, useCreateFaxBoxMutation, useUpdateFaxBoxMutation, useDeleteFaxBoxMutation, useFaxesQuery, useDeleteFaxMutation, useFaxKindsQuery, useSendFaxMutation, useRetryFaxMutation, useTestFaxMailMutation, usePsapReportQuery, usePsapLogQuery, useRebidMutation, useSendCallTextMutation, useTakeTextCallMutation, useEndTextCallMutation, useVideoLinkMutation, useCallMediaQuery, useHoldMediaMutation, useRevealMutation, useExposureQuery, useBoundariesQuery, useSaveBoundaryMutation, useDeleteBoundaryMutation, useLazyFindAreaQuery, useAddressDataQuery, useLisDataQuery, useLazyLisDataQuery, useReceivedLogQuery, useDeleteLISMutation, useDeleteAddressesMutation, useValidateAddressMutation, useBcfLogQuery, useAliParseMutation, useAliTestMutation, useLazyLaidOutQuery, useCorePoliciesQuery, useStorePolicyMutation, useDeletePolicyMutation, useDiscrepanciesQuery, useResolveDiscrepancyMutation, useFileDiscrepancyMutation,
   useBadActorsQuery, useClearBadActorMutation, useDequeueRegsQuery, useAdrRecordsQuery, useAddADRMutation, useDeleteADRMutation, useLocatorRecordsQuery, useAddLocatorMutation, useDeleteLocatorMutation,
   useTestCallRequestsQuery, useRunTestCallMutation, useDeleteTestCallsMutation, useRadioQuery, usePttMutation, useSimulSelectMutation, useAckEmergencyMutation, useMonitorMutation, usePatchMutation, useAlertToneMutation, useUnitCallMutation, useHangUpMutation, useRadioLogQuery, useRadioLocationsQuery, useMapSourceQuery,
   useTextingKindsQuery,
