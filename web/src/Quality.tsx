@@ -40,7 +40,7 @@ function Conversations({ days }: { days: number }) {
       <h2 id="conv-h" className="font-semibold text-slate-100">Conversations, by who took them</h2>
       <p className="mb-3 text-sm text-slate-400">From transcribed calls: how much of the talking each person did, their longest stretch, how often they started over the caller, and the moments flagged. These point to calls worth listening to; they are not a score.</p>
       <table className="w-full text-sm">
-        <thead className="text-left text-xs text-slate-500"><tr><th className="font-normal">Person</th><th className="font-normal">Calls</th><th className="font-normal">Their share of talk</th><th className="font-normal">Longest stretch</th><th className="font-normal">Talked over the caller</th><th className="font-normal">Quiet</th><th className="font-normal">Ended upset</th><th className="font-normal">To look at</th><th className="font-normal">Went well</th></tr></thead>
+        <thead className="text-left text-xs text-slate-500"><tr><th className="font-normal">Person</th><th className="font-normal">Calls</th><th className="font-normal">Their share of talk</th><th className="font-normal">Longest stretch</th><th className="font-normal">Talked over the caller</th><th className="font-normal">Quiet</th><th className="font-normal">Ended upset</th><th className="font-normal">To look at</th><th className="font-normal">Went well</th><th className="font-normal">Coaching notes</th></tr></thead>
         <tbody>
           {data.agents.map((a) => (
             <tr key={a.ext || a.name} className="border-t border-slate-800">
@@ -52,6 +52,7 @@ function Conversations({ days }: { days: number }) {
               <td className={a.endedUpset ? 'text-rose-300' : 'text-slate-300'}>{a.endedUpset}</td>
               <td className={a.lookAt ? 'text-amber-300' : 'text-slate-300'}>{a.lookAt}</td>
               <td className="text-emerald-300">{a.wentWell}</td>
+              <td className={a.coaching ? 'text-violet-300' : 'text-slate-300'}>{a.coaching}</td>
             </tr>
           ))}
         </tbody>

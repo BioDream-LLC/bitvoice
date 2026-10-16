@@ -894,7 +894,7 @@ In the extension, **Calendar and do not disturb**, paste the calendar's private 
 The private address works like a password: anyone with it can read that calendar, so it is kept with the other secrets.`,
   },
   {
-    id: 'insight', title: 'Call insight for supervisors', route: '/quality', keys: 'insight coaching sentiment mood talk time talk ratio interruptions supervisor quality monitoring contact centre',
+    id: 'insight', title: 'Call insight for supervisors', route: '/quality', keys: 'insight coaching notes supervisor notes sentiment mood talk time talk ratio interruptions supervisor quality monitoring contact centre',
     body: `For contact centres: evidence about how calls went, for a supervisor to listen to, never an automatic score.
 
 ::figure insight
@@ -903,7 +903,9 @@ In a call's **Transcript**, **How it went** shows, measured from the recording's
 
 With **Note how each transcribed call went** on (Settings, AI), the AI also reads the transcript and says how the caller seemed at the start and the end, and lists up to six moments: **Went well**, **Look at** (talking over the caller, a long hold, an unclear answer), **Not answered** (a question the caller asked that got no answer) and **Promised** (something someone said they would do), each with the time and the words said, so you can go straight to it. An administrator can ask for it on any transcribed call with **Look at this call**.
 
-On [Call quality](#/quality), **Conversations, by who took them** sums the transcribed calls of the period per person: their share of the talking, their longest stretch, how often they talked over the caller, quiet time, calls that ended with the caller upset, and the moments flagged. Use it to choose calls to listen to, not to rank people.`,
+On [Call quality](#/quality), **Conversations, by who took them** sums the transcribed calls of the period per person: their share of the talking, their longest stretch, how often they talked over the caller, quiet time, calls that ended with the caller upset, and the moments flagged. Use it to choose calls to listen to, not to rank people.
+
+**Coaching notes** are your own words on a call, at the moment they are about: under **How it went**, write the **Moment** (\`1:05\`, or leave it empty for the start) and the **Coaching note**, and press **Add note**. Notes are listed in the order of the call with who wrote them and when; administrators write and remove them, viewers read them with the transcript, and adding or removing one is noted in the audit log. They go with the recording, so its retention and legal holds cover them too. **Coaching notes** on Call quality counts them per person.`,
   },
   {
     id: 'calllinks', title: 'Call links and website calling', route: '/call-links', keys: 'call link website call button qr code click to call browser web call no app',

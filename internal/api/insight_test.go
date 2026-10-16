@@ -79,4 +79,35 @@ func TestInsight(t *testing.T) {
 	if a["name"] != "Sam" || a["calls"].(float64) != 1 || a["cutIns"].(float64) != 1 || a["lookAt"].(float64) != 1 || a["talkShare"].(float64) < 65 {
 		t.Fatalf("by agent %v", a)
 	}
+
+	// Coaching notes: written at a moment of the call, kept in order, counted per person, removable.
+	coach := "/api/recordings/" + name + "/coaching"
+	for _, bad := range []map[string]any{{"second": 3, "note": "  "}, {"second": -1, "note": "x"}, {"second": 99, "note": "x"}} {
+		if code, _ := admin.do("POST", coach, bad); code != 422 {
+			t.Fatalf("note %v accepted: %d", bad, code)
+		}
+	}
+	admin.do("POST", coach, map[string]any{"second": 9.4, "note": "Good: booked the plumber and said when"})
+	code, out = admin.do("POST", coach, map[string]any{"second": 3, "note": "Let the caller finish before answering"})
+	notes := out["coaching"].([]any)
+	if code != 200 || len(notes) != 2 || notes[0].(map[string]any)["second"].(float64) != 3 || notes[1].(map[string]any)["second"].(float64) != 9 || notes[0].(map[string]any)["by"] != "owner" {
+		t.Fatalf("notes %d %v", code, notes)
+	}
+	_, agg = admin.do("GET", "/api/insight?days=7", nil)
+	if n := agg["agents"].([]any)[0].(map[string]any)["coaching"].(float64); n != 2 {
+		t.Fatalf("coaching count %v", n)
+	}
+	viewer := newClient(t, ts.URL)
+	admin.do("POST", "/api/users", map[string]any{"username": "viewer", "name": "V", "role": "viewer", "password": "viewer password"})
+	viewer.do("POST", "/api/auth/login", map[string]any{"username": "viewer", "password": "viewer password"})
+	if code, _ := viewer.do("POST", coach, map[string]any{"second": 1, "note": "x"}); code != 403 {
+		t.Fatalf("a viewer wrote a note: %d", code)
+	}
+	id := notes[0].(map[string]any)["id"].(string)
+	if code, out := admin.do("DELETE", coach+"/"+id, nil); code != 200 || len(out["coaching"].([]any)) != 1 {
+		t.Fatalf("delete %d %v", code, out)
+	}
+	if code, _ := admin.do("DELETE", coach+"/"+id, nil); code != 404 {
+		t.Fatal("deleted twice")
+	}
 }

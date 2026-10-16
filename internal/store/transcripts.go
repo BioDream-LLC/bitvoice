@@ -36,6 +36,17 @@ type CallTranscript struct {
 	Insight *ai.Insight `json:"insight,omitempty"`
 	// AnsweredExt is the extension that took the call, for insight by agent.
 	AnsweredExt string `json:"answeredExt,omitempty"`
+	// Coaching is what supervisors wrote about the call, each note at a moment in it.
+	Coaching []CoachingNote `json:"coaching,omitempty"`
+}
+
+// CoachingNote is a supervisor's note on a moment of a recorded call.
+type CoachingNote struct {
+	ID     string    `json:"id"`
+	At     time.Time `json:"at"`
+	By     string    `json:"by"`
+	Second float64   `json:"second"`
+	Note   string    `json:"note"`
 }
 
 // TimedText is the transcript with each line's second, for the insight model.

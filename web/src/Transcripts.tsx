@@ -1,6 +1,6 @@
-import { CheckSquare, FileText, Gauge, Loader2, RefreshCw, Search, Sparkles, TriangleAlert } from 'lucide-react'
+import { CheckSquare, FileText, Gauge, Loader2, MessageSquarePlus, RefreshCw, Search, Sparkles, Trash2, TriangleAlert } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { errorOf, useMakeInsightMutation, useMakeTranscriptMutation, useSearchTranscriptsQuery, useSettingsQuery, useTranscriptQuery, type CallTranscript } from './api'
+import { errorOf, useAddCoachingMutation, useDeleteCoachingMutation, useMakeInsightMutation, useMakeTranscriptMutation, useSearchTranscriptsQuery, useSettingsQuery, useTranscriptQuery, type CallTranscript } from './api'
 import { Drawer, useIsAdmin } from './Editor'
 import { formatDuration } from './ui'
 import { toast } from 'sonner'
@@ -171,6 +171,64 @@ function InsightSection({ t }: { t: CallTranscript }) {
       <p className="text-xs text-slate-500">Evidence to listen to, not a score: the measures come from the sound, the notes from the AI reading the transcript.</p>
       {admin && <button type="button" className="btn" disabled={isLoading} onClick={() => make(t.recording).unwrap().catch((e) => toast.error(errorOf(e).problems?.[0]?.message ?? errorOf(e).message))}>
         <Sparkles size={14} className="text-violet-300" aria-hidden /> {t.insight ? 'Look again' : 'Look at this call'}</button>}
+      <Coaching t={t} />
     </section>
+  )
+}
+
+/** "m:ss" or plain seconds to seconds; NaN when it is neither. */
+function parseMoment(s: string) {
+  const m = s.trim().match(/^(?:(\d+):)?(\d+)$/)
+  return m ? Number(m[1] ?? 0) * 60 + Number(m[2]) : NaN
+}
+
+/** Coaching: supervisors' own notes on moments of the call, written by administrators, read by everyone who sees the transcript. */
+function Coaching({ t }: { t: CallTranscript }) {
+  const admin = useIsAdmin()
+  const [add, { isLoading }] = useAddCoachingMutation()
+  const [del] = useDeleteCoachingMutation()
+  const [at, setAt] = useState('')
+  const [note, setNote] = useState('')
+  const [err, setErr] = useState<{ field?: string; message: string } | null>(null)
+  const notes = t.coaching ?? []
+  if (!admin && !notes.length) return null
+  const save = () => {
+    const second = at.trim() ? parseMoment(at) : 0
+    if (Number.isNaN(second)) { setErr({ field: 'second', message: 'write the moment as m:ss, such as 1:05' }); return }
+    add({ name: t.recording, second, note }).unwrap()
+      .then(() => { setAt(''); setNote(''); setErr(null); toast.success('Note added') })
+      .catch((x) => { const p = errorOf(x).problems?.[0]; setErr({ field: p?.field, message: p?.message ?? errorOf(x).message }) })
+  }
+  return (
+    <div className="space-y-2 border-t border-slate-800 pt-2" aria-labelledby="tr-coach">
+      <h4 id="tr-coach" className="flex items-center gap-1.5 text-sm font-semibold text-slate-200"><MessageSquarePlus size={14} className="text-violet-300" aria-hidden /> Coaching notes</h4>
+      {notes.length > 0 ? (
+        <ul className="space-y-1.5 text-sm">
+          {notes.map((n) => (
+            <li key={n.id} className="flex items-start gap-2">
+              <span className="w-12 shrink-0 font-mono text-xs tabular-nums text-slate-500">{formatDuration(Math.round(n.second))}</span>
+              <span className="flex-1"><span className="text-slate-200">{n.note}</span>
+                <span className="block text-xs text-slate-500">{n.by}, {new Date(n.at).toLocaleString()}</span></span>
+              {admin && <button type="button" className="btn btn-ghost p-1" aria-label={`Remove the note at ${formatDuration(Math.round(n.second))}`}
+                onClick={() => del({ name: t.recording, id: n.id }).unwrap().catch((x) => toast.error(errorOf(x).message))}><Trash2 size={14} className="text-rose-300" aria-hidden /></button>}
+            </li>
+          ))}
+        </ul>
+      ) : <p className="text-xs text-slate-500">No notes yet. Write what to keep doing or try differently, at the moment it happened.</p>}
+      {admin && (
+        // The drawer is a form already: this is a group, saved by its button or Enter in its fields.
+        <div role="group" aria-label="New coaching note" className="flex flex-wrap items-start gap-2"
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); save() } }}>
+          <label className="flex flex-col text-xs text-slate-400">Moment
+            <input className={`input w-20 font-mono ${err?.field === 'second' ? 'border-rose-400' : ''}`} placeholder="0:00" value={at} onChange={(e) => setAt(e.target.value)}
+              aria-invalid={err?.field === 'second'} aria-describedby={err ? 'coach-err' : undefined} /></label>
+          <label className="flex min-w-48 flex-1 flex-col text-xs text-slate-400">Coaching note
+            <input className={`input ${err?.field === 'note' ? 'border-rose-400' : ''}`} maxLength={1000} value={note} onChange={(e) => setNote(e.target.value)}
+              aria-invalid={err?.field === 'note'} aria-describedby={err ? 'coach-err' : undefined} /></label>
+          <button type="button" className="btn btn-primary mt-4" disabled={isLoading} onClick={save}>Add note</button>
+          {err && <p id="coach-err" role="alert" className="w-full text-xs text-rose-300">{err.message}</p>}
+        </div>
+      )}
+    </div>
   )
 }

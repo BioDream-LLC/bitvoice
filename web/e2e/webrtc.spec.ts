@@ -493,3 +493,110 @@ test('SIP.js softphones over SIP over WebSocket', async ({ page, context }) => {
   expect(result.caller).toBeGreaterThan(50)
   expect(result.callee).toBeGreaterThan(50)
 })
+
+// Coaching notes: two browser phones make a recorded call; a stand-in AI service writes it out; in Call
+// history the supervisor measures it, adds a note at a moment, sees it counted on Call quality, and
+// removes it.
+test('a supervisor writes coaching notes on a recorded call', async ({ page }) => {
+  const { createServer } = await import('node:http')
+  const ai = createServer((req, res) => {
+    let b = ''
+    req.on('data', (c) => (b += c))
+    req.on('end', () => {
+      const say = (content: string) => res.end(JSON.stringify({ choices: [{ message: { content } }] }))
+      if (b.includes('input_audio')) return say('My boiler is leaking, can someone come today?')
+      if (b.includes('supervisor')) return say('{"moodStart":"worried","moodEnd":"calm","observations":[]}')
+      say('{"summary":"A leaking boiler; a visit was booked.","actionItems":["Send a plumber"]}')
+    })
+  })
+  await new Promise<void>((r) => ai.listen(18397, '127.0.0.1', r))
+  try {
+    await signIn(page)
+    const name = await page.evaluate(async () => {
+      const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
+      const send = async (method: string, url: string, body: unknown) => {
+        const r = await fetch(url, { method, headers: H, body: JSON.stringify(body) })
+        const j = await r.json().catch(() => ({}))
+        if (!r.ok) throw new Error(url + ': ' + j.message)
+        return j
+      }
+      const st = await (await fetch('./api/settings')).json()
+      st.system.ai = { ...st.system.ai, enabled: true, baseUrl: 'http://127.0.0.1:18397', model: 'm', calls: false }
+      st.system.recording = { ...st.system.recording, mode: 'all', notice: 'off' }
+      await send('PUT', './api/settings', st)
+      const exts = (await (await fetch('./api/extensions')).json()).items as { number: string }[]
+      if (exts.length < 2) await send('POST', './api/extensions', { number: '177', name: 'Second browser', enabled: true, outbound: true, voicemail: { enabled: false }, record: false, secureMedia: false })
+      const all = (await (await fetch('./api/extensions')).json()).items as { number: string }[]
+      const [a, b] = [all[0].number, all[1].number]
+      const pa = await send('POST', './api/phone', { extension: a })
+      const pb = await send('POST', './api/phone', { extension: b })
+      let incoming: (id: string) => void = () => {}
+      const gotIncoming = new Promise<string>((ok) => { incoming = ok })
+      const esB = new EventSource(`./api/phone/${pb.id}/events`)
+      esB.addEventListener('call', (e) => { const ev = JSON.parse((e as MessageEvent).data); if (ev.type === 'incoming') incoming(ev.callId) })
+      await new Promise((ok) => setTimeout(ok, 300))
+      const mic = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const peer = async () => {
+        const pc = new RTCPeerConnection()
+        mic.getTracks().forEach((t) => pc.addTrack(t, mic))
+        await pc.setLocalDescription(await pc.createOffer())
+        return pc
+      }
+      const pcA = await peer()
+      const call = await send('POST', `./api/phone/${pa.id}/calls`, { to: b, sdp: pcA.localDescription!.sdp })
+      await pcA.setRemoteDescription({ type: 'answer', sdp: call.sdp })
+      const callId = await Promise.race([gotIncoming, new Promise<string>((_, no) => setTimeout(() => no(new Error('no incoming call')), 8000))])
+      const pcB = await peer()
+      const ans = await send('POST', `./api/phone/${pb.id}/answer`, { callId, sdp: pcB.localDescription!.sdp })
+      await pcB.setRemoteDescription({ type: 'answer', sdp: ans.sdp })
+      await new Promise((ok) => setTimeout(ok, 12000)) // insight looks at calls of 10 s or more
+      await fetch(`./api/phone/${pa.id}/calls/${call.callId}`, { method: 'DELETE', headers: H })
+      esB.close(); pcA.close(); pcB.close()
+      for (let i = 0; i < 50; i++) {
+        const recs = (await (await fetch('./api/cdr?limit=5')).json()).items as { recording?: string }[]
+        const r = recs.find((x) => x.recording)
+        if (r) return r.recording!
+        await new Promise((ok) => setTimeout(ok, 200))
+      }
+      throw new Error('the call was not recorded')
+    })
+    await page.evaluate(async (n) => {
+      await fetch(`./api/recordings/${n}/transcript`, { method: 'POST', headers: { 'X-BitVoice': '1' } })
+      for (let i = 0; i < 100; i++) {
+        const r = await fetch(`./api/recordings/${n}/transcript`)
+        if (r.ok && (await r.json()).status !== 'pending') return
+        await new Promise((ok) => setTimeout(ok, 200))
+      }
+    }, name)
+
+    await page.goto('/#/history')
+    await page.getByRole('button', { name: /^Transcript of / }).first().click()
+    const drawer = page.getByRole('dialog')
+    await expect(drawer.getByText('A leaking boiler; a visit was booked.')).toBeVisible()
+    await drawer.getByRole('button', { name: 'Look at this call' }).click()
+    await expect(drawer.getByText('worried')).toBeVisible()
+    await expect(drawer.getByText('No notes yet.')).toBeVisible()
+    // A moment that is not a time is refused in place.
+    await drawer.getByRole('textbox', { name: 'Moment' }).fill('soon')
+    await drawer.getByRole('textbox', { name: 'Coaching note' }).fill('Let the caller finish before answering')
+    await drawer.getByRole('button', { name: 'Add note' }).click()
+    await expect(drawer.getByRole('alert')).toContainText('m:ss')
+    await drawer.getByRole('textbox', { name: 'Moment' }).fill('0:04')
+    await drawer.getByRole('button', { name: 'Add note' }).click()
+    await expect(page.getByText('Note added')).toBeVisible()
+    await expect(drawer.getByText('Let the caller finish before answering')).toBeVisible()
+    await expect(drawer.getByText('0:04')).toBeVisible()
+    await page.keyboard.press('Escape')
+
+    await page.goto('/#/quality')
+    const row = page.getByRole('region', { name: 'Conversations, by who took them' }).getByRole('row').nth(1)
+    await expect(row.getByRole('cell').last()).toHaveText('1')
+
+    await page.goto('/#/history')
+    await page.getByRole('button', { name: /^Transcript of / }).first().click()
+    await drawer.getByRole('button', { name: 'Remove the note at 0:04' }).click()
+    await expect(drawer.getByText('No notes yet.')).toBeVisible()
+  } finally {
+    ai.close()
+  }
+})

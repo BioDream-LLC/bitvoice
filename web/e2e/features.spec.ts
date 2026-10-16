@@ -845,7 +845,8 @@ test('inbox: the web chat box on a website', async ({ page, context }) => {
 
   await page.getByRole('button', { name: 'Back to the inbox' }).click()
   await page.getByRole('list', { name: 'Conversations list' }).getByText('Bob').click()
-  await expect(page.getByText('Do you deliver on Saturdays?')).toBeVisible()
+  // The message in the open thread (the list beside it may show it too, as the last message).
+  await expect(page.getByRole('paragraph').filter({ hasText: 'Do you deliver on Saturdays?' })).toBeVisible()
   await page.getByLabel('Reply').fill('Yes, until noon.')
   await page.getByRole('button', { name: 'Send' }).click()
   await expect(chat.getByText('Yes, until noon.')).toBeVisible({ timeout: 10000 })
