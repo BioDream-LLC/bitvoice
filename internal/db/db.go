@@ -214,6 +214,17 @@ func (t *Tx) ForUpdate() string {
 	return ""
 }
 
+// LockName holds a lock on a name until the transaction ends, on PostgreSQL a transaction-level
+// advisory lock (BitVoice's own class of them), so servers sharing the database take turns even on
+// rows that do not exist yet. SQLite's single writer already serializes transactions.
+func (t *Tx) LockName(ctx context.Context, name string) error {
+	if !t.d.Postgres {
+		return nil
+	}
+	_, err := t.Exec(ctx, `SELECT pg_advisory_xact_lock(1651922002, hashtext(?))`, name)
+	return err
+}
+
 // pgProblem says in plain words why PostgreSQL could not be used.
 func pgProblem(u *url.URL, err error) error {
 	m := err.Error()

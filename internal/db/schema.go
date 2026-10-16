@@ -116,6 +116,11 @@ func (d *DB) DeleteDoc(ctx context.Context, name string) error {
 // document does not exist yet; returning nil from f leaves it as it was.
 func (d *DB) MutateDoc(ctx context.Context, name string, f func(old []byte) ([]byte, error)) error {
 	return d.Tx(ctx, func(tx *Tx) error {
+		// FOR UPDATE locks a row only once it exists: two changes making a new document would both
+		// read nothing and one would be lost. A lock on the name holds either way.
+		if err := tx.LockName(ctx, "doc:"+name); err != nil {
+			return err
+		}
 		var old []byte
 		err := tx.QueryRow(ctx, `SELECT body FROM docs WHERE name = ?`+tx.ForUpdate(), name).Scan(&old)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {

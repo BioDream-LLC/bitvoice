@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // Each test runs on SQLite, and on PostgreSQL too when BITVOICE_TEST_POSTGRES names one
@@ -149,4 +150,32 @@ func TestPostgresProblems(t *testing.T) {
 			t.Errorf("%s: %v", want, err)
 		}
 	}
+}
+
+// Changes to a document that does not exist yet still take turns: each one is slow, so all of them
+// start before the first commits, and none may read "nothing" after another has written.
+func TestMutateNewDocTogether(t *testing.T) {
+	each(t, func(t *testing.T, d *DB) {
+		ctx := context.Background()
+		var wg sync.WaitGroup
+		for range 8 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				err := d.MutateDoc(ctx, "slow-count", func(old []byte) ([]byte, error) {
+					var n int
+					json.Unmarshal(old, &n)
+					time.Sleep(50 * time.Millisecond)
+					return json.Marshal(n + 1)
+				})
+				if err != nil {
+					t.Error(err)
+				}
+			}()
+		}
+		wg.Wait()
+		if b, _, _ := d.GetDoc(ctx, "slow-count"); string(b) != "8" {
+			t.Fatalf("count %s: changes were lost", b)
+		}
+	})
 }
