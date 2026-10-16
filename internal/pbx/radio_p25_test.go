@@ -103,7 +103,9 @@ func radioConsoleP25(t *testing.T, encrypted bool) {
 	sub := e.Bus.Subscribe()
 	defer e.Bus.Unsubscribe(sub)
 	disp.drainRTP()
+	radioDone := make(chan struct{})
 	go func() {
+		defer close(radioDone)
 		for _, b := range captureRTP(t) {
 			sendHome(peer.Load().(netip.AddrPort), b)
 			time.Sleep(20 * time.Millisecond)
@@ -128,7 +130,19 @@ func radioConsoleP25(t *testing.T, encrypted bool) {
 			t.Fatal("no radio.unit event")
 		}
 	}
-	time.Sleep(2600 * time.Millisecond) // the rest of the radio's transmission
+	// The rest of the radio's transmission: on a slow machine its timed packets run long, and a
+	// dispatcher keying up while the radio is still on the air is (rightly) not heard.
+	select {
+	case <-radioDone:
+	case <-time.After(20 * time.Second):
+		t.Fatal("the radio's transmission never ended")
+	}
+	for until := time.Now().Add(10 * time.Second); e.Console().Channels[0].Talker != ""; {
+		if time.Now().After(until) {
+			t.Fatalf("the radio is still shown talking: %+v", e.Console().Channels[0])
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 
 	// The dispatcher talks.
 	stop := make(chan struct{})
