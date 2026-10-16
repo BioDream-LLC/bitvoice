@@ -1,5 +1,6 @@
 import AVFoundation
 import CallKit
+import os
 import Foundation
 import PushKit
 import UIKit
@@ -69,7 +70,18 @@ final class Calls: NSObject, ObservableObject {
         return u
     }
 
+    /// The iOS Simulator has no call screen: CallKit ends every incoming call there at once ("no UI to host
+    /// the call"). On the Simulator calls stay in the phone page, answered with its own buttons.
+    static let hasCallScreen: Bool = {
+        #if targetEnvironment(simulator)
+        return false
+        #else
+        return true
+        #endif
+    }()
+
     private func reportIncoming(id: String, number: String, name: String) {
+        guard Calls.hasCallScreen else { return }
         let u = uuid(for: id)
         let update = CXCallUpdate()
         update.remoteHandle = CXHandle(type: number.allSatisfy(\.isNumber) ? .phoneNumber : .generic, value: number)
@@ -78,6 +90,7 @@ final class Calls: NSObject, ObservableObject {
         update.supportsDTMF = true
         update.supportsHolding = false
         provider.reportNewIncomingCall(with: u, update: update) { error in
+            if let error { Calls.log.error("the call screen refused call \(id, privacy: .public): \(error.localizedDescription, privacy: .public)") }
             if error != nil { Task { @MainActor in self.uuids[id] = nil } }
         }
     }
@@ -104,6 +117,7 @@ final class Calls: NSObject, ObservableObject {
             }
             if let u = uuids[id], answeredEarly.remove(u) != nil { run?("window.bitvoice && window.bitvoice.answer(\(js(id)))") }
         case "calling":
+            guard Calls.hasCallScreen else { break }
             let u = uuid(for: id)
             let action = CXStartCallAction(call: u, handle: CXHandle(type: .phoneNumber, value: number))
             controller.request(CXTransaction(action: action)) { _ in }
@@ -129,6 +143,11 @@ final class Calls: NSObject, ObservableObject {
     }
 }
 
+extension Calls {
+    /// What the call screen did, for Console and for diagnosing a phone (no numbers or names logged).
+    nonisolated static let log = Logger(subsystem: "llc.biodream.bitvoice", category: "calls")
+}
+
 extension Calls: CXProviderDelegate {
     nonisolated func providerDidReset(_ provider: CXProvider) {
         Task { @MainActor in self.uuids.removeAll() }
@@ -146,6 +165,7 @@ extension Calls: CXProviderDelegate {
     }
 
     nonisolated func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
+        Calls.log.info("the call screen ended call \(action.callUUID.uuidString, privacy: .public)")
         Task { @MainActor in
             if let id = self.id(for: action.callUUID) {
                 self.run?("window.bitvoice && window.bitvoice.hangup(\(self.js(id)))")

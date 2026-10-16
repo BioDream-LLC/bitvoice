@@ -9,23 +9,44 @@
 /* Begin PBXBuildFile section */
 		1B574BFADDFCCBB88B9081B2 /* Calls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B57B849228FE71F0D1E7068 /* Calls.swift */; };
 		31A995B299638926AF2F126F /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5355BB2A29C7691E09AE661C /* App.swift */; };
+		44F10A05C95CD6513125A464 /* PairingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AA3F0F5EB3B4DD473F88065 /* PairingUITests.swift */; };
 		DADF5B22BFF73D9C009C3615 /* Scanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69DAF896D0F345A97CBE8802 /* Scanner.swift */; };
 		DE6C01AD592E321AED7D2EFD /* PhoneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBED49838802EA1F6D3D19B7 /* PhoneView.swift */; };
 		EFE8FEC462F6B9D7E34E2F8E /* Pairing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7969600AA229941187F8D9E7 /* Pairing.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		F434908131911F9C72007AEB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 673E2484A82B7C6295EC9EDF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0AC3937D96BE863B4957EF39;
+			remoteInfo = BitVoice;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		03970DCE76E50EE319D677B6 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		1B57B849228FE71F0D1E7068 /* Calls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Calls.swift; sourceTree = "<group>"; };
 		450E7BC0D609F9E995D6FF69 /* BitVoice.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BitVoice.entitlements; sourceTree = "<group>"; };
+		4AA3F0F5EB3B4DD473F88065 /* PairingUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingUITests.swift; sourceTree = "<group>"; };
 		5355BB2A29C7691E09AE661C /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
 		69DAF896D0F345A97CBE8802 /* Scanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scanner.swift; sourceTree = "<group>"; };
 		7969600AA229941187F8D9E7 /* Pairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Pairing.swift; sourceTree = "<group>"; };
 		BCEC37FB50F30A679C3C2607 /* BitVoice.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BitVoice.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BE81F14AA8A81B4466715811 /* BitVoiceUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BitVoiceUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		FBED49838802EA1F6D3D19B7 /* PhoneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
+		58E18AACF195C029591024F8 /* BitVoiceUITests */ = {
+			isa = PBXGroup;
+			children = (
+				4AA3F0F5EB3B4DD473F88065 /* PairingUITests.swift */,
+			);
+			path = BitVoiceUITests;
+			sourceTree = "<group>";
+		};
 		661EA0CBA649FEB6814AA3A2 /* BitVoice */ = {
 			isa = PBXGroup;
 			children = (
@@ -44,6 +65,7 @@
 			isa = PBXGroup;
 			children = (
 				661EA0CBA649FEB6814AA3A2 /* BitVoice */,
+				58E18AACF195C029591024F8 /* BitVoiceUITests */,
 				D88B07B0F1DBB6523AFC7124 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -52,6 +74,7 @@
 			isa = PBXGroup;
 			children = (
 				BCEC37FB50F30A679C3C2607 /* BitVoice.app */,
+				BE81F14AA8A81B4466715811 /* BitVoiceUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -59,6 +82,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		06A33F5A32A01A24EEFD7D74 /* BitVoiceUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 743DEB578156967589320DD9 /* Build configuration list for PBXNativeTarget "BitVoiceUITests" */;
+			buildPhases = (
+				23F7E211C2DA0244AECDCBF8 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				25EA9A721F759056AF240C53 /* PBXTargetDependency */,
+			);
+			name = BitVoiceUITests;
+			packageProductDependencies = (
+			);
+			productName = BitVoiceUITests;
+			productReference = BE81F14AA8A81B4466715811 /* BitVoiceUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		0AC3937D96BE863B4957EF39 /* BitVoice */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 58A10548E8C6CBEC153C3289 /* Build configuration list for PBXNativeTarget "BitVoice" */;
@@ -85,6 +126,10 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					06A33F5A32A01A24EEFD7D74 = {
+						DevelopmentTeam = "";
+						TestTargetID = 0AC3937D96BE863B4957EF39;
+					};
 					0AC3937D96BE863B4957EF39 = {
 						DevelopmentTeam = "";
 					};
@@ -105,11 +150,20 @@
 			projectRoot = "";
 			targets = (
 				0AC3937D96BE863B4957EF39 /* BitVoice */,
+				06A33F5A32A01A24EEFD7D74 /* BitVoiceUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXSourcesBuildPhase section */
+		23F7E211C2DA0244AECDCBF8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				44F10A05C95CD6513125A464 /* PairingUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		ACC3F770E889FC97DA917DA6 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -123,6 +177,14 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		25EA9A721F759056AF240C53 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0AC3937D96BE863B4957EF39 /* BitVoice */;
+			targetProxy = F434908131911F9C72007AEB /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		07366CC79DD953A0CAB8B182 /* Release */ = {
@@ -140,6 +202,23 @@
 				PRODUCT_BUNDLE_IDENTIFIER = llc.biodream.bitvoice;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		3259A3A98B9C280CC292CF43 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = llc.biodream.bitvoice.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = BitVoice;
 			};
 			name = Release;
 		};
@@ -219,6 +298,23 @@
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
+		};
+		B7CB32B1978D090816FBB796 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = llc.biodream.bitvoice.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = BitVoice;
+			};
+			name = Debug;
 		};
 		EBCBC22345ADC0645FCCA42C /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -303,6 +399,15 @@
 			buildConfigurations = (
 				982239D96712A5526C25D9BB /* Debug */,
 				07366CC79DD953A0CAB8B182 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		743DEB578156967589320DD9 /* Build configuration list for PBXNativeTarget "BitVoiceUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B7CB32B1978D090816FBB796 /* Debug */,
+				3259A3A98B9C280CC292CF43 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

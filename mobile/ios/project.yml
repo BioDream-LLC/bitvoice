@@ -21,3 +21,22 @@ targets:
         INFOPLIST_FILE: BitVoice/Info.plist
         CODE_SIGN_ENTITLEMENTS: BitVoice/BitVoice.entitlements
         TARGETED_DEVICE_FAMILY: "1"
+  BitVoiceUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [BitVoiceUITests]
+    dependencies:
+      - target: BitVoice
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: llc.biodream.bitvoice.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: BitVoice
+schemes:
+  BitVoice:
+    build:
+      targets:
+        BitVoice: all
+        BitVoiceUITests: [test]
+    test:
+      targets: [BitVoiceUITests]
