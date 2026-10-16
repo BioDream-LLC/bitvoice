@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -41,5 +43,26 @@ func TestCallMediaRetention(t *testing.T) {
 	}
 	if xs := s.exposures(now.Add(-30*24*time.Hour), now.Add(time.Hour)); len(xs) != 1 || xs[0].Who != "New" {
 		t.Fatalf("exposure log %+v", xs)
+	}
+}
+
+// Guessing tokens: an address that keeps trying is turned away; files from outside are served so
+// they cannot run in this server's pages.
+func TestCallMediaLinksGuarded(t *testing.T) {
+	s, _ := newServer(t)
+	h := s.Handler()
+	var last int
+	for i := 0; i < 30; i++ {
+		req := httptest.NewRequest("GET", "/v/notarealtokennotarealtoken", nil)
+		req.RemoteAddr = "203.0.113.9:4000"
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		last = rec.Code
+	}
+	if last != http.StatusTooManyRequests {
+		t.Fatalf("still answering guesses: %d", last)
+	}
+	if mediaTypeOK("image/svg+xml") || mediaTypeOK("text/html") || mediaTypeOK("video/mp4;x=1") || !mediaTypeOK("image/jpeg") || !mediaTypeOK("video/quicktime") {
+		t.Fatal("media types")
 	}
 }

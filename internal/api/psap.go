@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/biodream-llc/bitvoice/internal/config"
+	"github.com/biodream-llc/bitvoice/internal/events"
 	"github.com/biodream-llc/bitvoice/internal/i3"
 	"github.com/biodream-llc/bitvoice/internal/pbx"
 	"github.com/biodream-llc/bitvoice/internal/store"
@@ -79,6 +80,7 @@ func (s *Server) EmergencyAnswered(a pbx.EmergencyAnswer) {
 		}()
 	}
 	if ps.EIDOURL != "" {
+		s.withMedia(cfg, &in, a.Call)
 		go func() {
 			doc, err := i3.EIDO(in, time.Now())
 			if err == nil {
@@ -267,7 +269,9 @@ func (s *Server) psapRoutes() {
 		for _, c := range s.Engine.Calls() {
 			if c.ID == r.PathValue("id") && c.Emergency != nil {
 				cfg := s.config()
-				doc, err := i3.EIDO(incidentOf(cfg, pbx.EmergencyAnswer{Call: c}), time.Now())
+				in := incidentOf(cfg, pbx.EmergencyAnswer{Call: c, Agent: c.Emergency.TakenBy})
+				s.withMedia(cfg, &in, c)
+				doc, err := i3.EIDO(in, time.Now())
 				if err != nil {
 					writeError(w, 500, err.Error())
 					return
@@ -465,6 +469,10 @@ func (s *Server) RunPSAPLog(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case ev := <-sub.C:
+			if ev.Type == "call.media" || ev.Type == "call.video" {
+				s.eidoUpdate(ev)
+				continue
+			}
 			if r, ok := ev.Data.(pbx.Route); ok {
 				cfg := s.config()
 				le := i3.LogEvent{Type: "RouteLogEvent", Timestamp: r.At.Format(time.RFC3339Nano), ElementID: elementID(cfg), AgencyID: agencyID(cfg),
@@ -503,5 +511,69 @@ func (s *Server) RunPSAPLog(ctx context.Context) {
 			}
 			s.logI3(end)
 		}
+	}
+}
+
+// withMedia names a call's photos, clips and live video in its EIDO, by links CAD opens with the
+// call's viewing token. Without a viewing token, or an address the outside can reach, it adds none.
+func (s *Server) withMedia(cfg config.Config, in *i3.Incident, c pbx.CallInfo) {
+	if c.Emergency == nil || c.Emergency.Video == nil || c.Emergency.Video.ViewToken == "" {
+		return
+	}
+	base := strings.TrimRight(cfg.System.PSAP.VideoLinkBase, "/")
+	if base == "" {
+		base = s.WebBase()
+	}
+	if base == "" {
+		return
+	}
+	tok := c.Emergency.Video.ViewToken
+	if c.Emergency.Video.Live {
+		in.Media = append(in.Media, i3.MediaRef{ID: "live", URL: base + "/whep/" + tok, Purpose: "caller-video-live"})
+	}
+	ix, _ := s.readIndex(c.ID)
+	for _, it := range ix.Items {
+		purpose := "caller-photo"
+		if strings.HasPrefix(it.Type, "video/") {
+			purpose = "caller-video"
+		}
+		if it.Recording {
+			purpose = "caller-video-recording"
+		}
+		in.Media = append(in.Media, i3.MediaRef{ID: strconv.Itoa(it.N), URL: base + "/m/" + tok + "/" + strconv.Itoa(it.N), Purpose: purpose})
+	}
+}
+
+// eidoUpdate sends CAD the call's EIDO again when the caller's media changes (a photo arrives, live
+// video starts or stops), once the call has been answered and so already sent.
+func (s *Server) eidoUpdate(ev events.Event) {
+	cfg := s.config()
+	ps := cfg.System.PSAP
+	if ps.EIDOURL == "" {
+		return
+	}
+	var id string
+	switch d := ev.Data.(type) {
+	case map[string]any:
+		id, _ = d["call"].(string)
+	case pbx.CallInfo:
+		id = d.ID
+	}
+	for _, c := range s.Engine.Calls() {
+		if c.ID != id || c.Emergency == nil || c.Answer.IsZero() {
+			continue
+		}
+		in := incidentOf(cfg, pbx.EmergencyAnswer{Call: c, Agent: c.Emergency.TakenBy})
+		s.withMedia(cfg, &in, c)
+		go func() {
+			doc, err := i3.EIDO(in, time.Now())
+			if err == nil {
+				err = postEIDO(ps.EIDOURL, ps.EIDOToken, doc)
+			}
+			le := i3.NewEvent("EidoLogEvent", in, time.Now())
+			le.Extra = map[string]any{"direction": "outgoing", "destination": ps.EIDOURL, "ok": err == nil, "why": "media"}
+			s.logI3(le)
+			s.cadResult("EIDO", in, err)
+		}()
 	}
 }

@@ -122,7 +122,7 @@ export interface Additional {
   comments?: string[]; references?: string[]
 }
 export interface CallVideoState { token?: string; viewToken?: string; live: boolean; source?: 'link' | 'call'; codec?: string; since?: string; viewers: string[] }
-export interface MediaItem { n: number; name: string; type: string; size: number; sha256: string; received: string; kind: 'photo' | 'video' | 'file'; taken?: string; takenLocal?: string; hasGps: boolean; lat?: number; lon?: number }
+export interface MediaItem { n: number; name: string; type: string; size: number; sha256: string; received: string; kind: 'photo' | 'video' | 'file'; taken?: string; takenLocal?: string; recording?: boolean; hasGps: boolean; lat?: number; lon?: number }
 export interface ExposureRow { who: string; looks: number; calls: number; last: string }
 export type TextVia = 'tty' | 'rtt' | 'msrp' | 'sip'
 export interface TextLine { at: string; from: 'caller' | 'taker'; name?: string; via: TextVia; text: string; open?: boolean }
@@ -163,7 +163,7 @@ export interface Transmission {
   id: string; channel: string; channelName: string; direction: 'rx' | 'tx'; start: string; end: string; seconds: number
   unit?: string; unitName?: string; dispatcher?: string; tone?: string; emergency?: boolean; encryption?: string; private?: boolean; recording?: string
 }
-export interface PSAPSettings { agencyId: string; elementId: string; aliAddress: string; eidoUrl: string; eidoToken: string; answerTarget: number; ttyOff: boolean; locationServer: string; videoLinkBase: string; videoFrom: string; videoStreams: number; videoKbps: number; uploadMb: number; mediaDays: number }
+export interface PSAPSettings { agencyId: string; elementId: string; aliAddress: string; eidoUrl: string; eidoToken: string; answerTarget: number; ttyOff: boolean; locationServer: string; videoLinkBase: string; videoFrom: string; videoStreams: number; videoKbps: number; uploadMb: number; mediaDays: number; recordVideo?: boolean }
 export interface AnswerReport {
   target: number; calls: number; answered: number; abandoned: number; withinTarget: number; within20: number; average: number; longest: number
   buckets: number[]; byTaker: { ext: string; name: string; calls: number; average: number }[]; byHour: number[]

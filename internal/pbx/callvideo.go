@@ -13,6 +13,7 @@ import (
 
 	"github.com/biodream-llc/bitvoice/internal/media"
 	"github.com/biodream-llc/bitvoice/internal/sdp"
+	"github.com/biodream-llc/bitvoice/internal/vrec"
 	"github.com/biodream-llc/bitvoice/internal/webrtc"
 )
 
@@ -47,6 +48,11 @@ type videoSource struct {
 	sip      bool
 	stopTap  func()
 	resource string
+
+	recMu   sync.Mutex
+	rec     *vrec.Recorder
+	recDone func(frames int, err error)
+	recAsk  time.Time // when a key frame was last asked for the recording
 }
 
 type videoViewer struct {
@@ -115,8 +121,12 @@ func (e *Engine) videoChanged(v *callVideo) {
 	e.video.mu.Lock()
 	in := v.info()
 	e.video.mu.Unlock()
-	v.call.video.Store(in)
-	e.publish("call.updated", v.call.info())
+	old := v.call.video.Swap(in)
+	info := v.call.info()
+	e.publish("call.updated", info)
+	if (old != nil && old.Live) != in.Live {
+		e.publish("call.video", info) // live video started or stopped: CAD hears of it
+	}
 }
 
 // ErrNotVideoCall is returned for video on a call that is not a 911 call.
@@ -206,6 +216,14 @@ func (e *Engine) endCallVideo(v *callVideo, all bool) {
 func (s *videoSource) close() {
 	if s.stopTap != nil {
 		s.stopTap()
+	}
+	s.recMu.Lock()
+	r, done := s.rec, s.recDone
+	s.rec = nil
+	s.recMu.Unlock()
+	if r != nil {
+		err := r.Close()
+		done(r.Frames(), err)
 	}
 	if s.sess != nil {
 		s.sess.Close()
@@ -338,10 +356,12 @@ func (e *Engine) EndWHIP(token, resource string) bool {
 
 // tapSource sends the source's packets to every viewer.
 func (e *Engine) tapSource(v *callVideo, src *videoSource) {
+	e.startRecording(v, src)
 	src.stopTap = src.ep.Listen(func(pkt []byte) {
 		if len(pkt) < 12 {
 			return
 		}
+		src.record(e, pkt)
 		src.ssrc.Store(binary.BigEndian.Uint32(pkt[8:]))
 		if src.last.Swap(time.Now().UnixMilli()) == 0 {
 			go e.videoChanged(v) // the first picture: the call-taker's screen shows it live
@@ -568,5 +588,42 @@ func (e *Engine) watchSource(v *callVideo, src *videoSource) {
 			e.videoChanged(v)
 			return
 		}
+	}
+}
+
+// startRecording begins keeping the caller's live video, when the PSAP records it.
+func (e *Engine) startRecording(v *callVideo, src *videoSource) {
+	if !e.Config().System.PSAP.RecordVideo || e.OnVideoRecord == nil {
+		return
+	}
+	w, done := e.OnVideoRecord(v.call.ID)
+	if w == nil {
+		return
+	}
+	r, err := vrec.New(w, src.codec.Name)
+	if err != nil {
+		done(0, err)
+		return
+	}
+	src.recMu.Lock()
+	src.rec, src.recDone = r, done
+	src.recMu.Unlock()
+}
+
+// record writes one packet to the recording, and asks the phone for a full picture while the
+// recording waits for one (at the start, and after a loss).
+func (s *videoSource) record(e *Engine, pkt []byte) {
+	s.recMu.Lock()
+	r := s.rec
+	ask := false
+	if r != nil {
+		r.Write(pkt)
+		if r.NeedsKeyFrame() && time.Since(s.recAsk) > time.Second {
+			s.recAsk, ask = time.Now(), true
+		}
+	}
+	s.recMu.Unlock()
+	if ask {
+		e.keyframe(s)
 	}
 }

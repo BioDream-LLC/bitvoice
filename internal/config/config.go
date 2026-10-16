@@ -580,6 +580,9 @@ type PSAP struct {
 	VideoKbps     int    `json:"videoKbps"`
 	UploadMB      int    `json:"uploadMb"`
 	MediaDays     int    `json:"mediaDays"`
+	// RecordVideo keeps each caller's live video as it was sent (the same pictures, not converted),
+	// beside the photos and clips, hashed when it ends.
+	RecordVideo bool `json:"recordVideo,omitempty"`
 	// LocationServer is where a 911 call that came with only a callback number (CAMA, or an ESInet
 	// call with no location) is looked up: an ALI database or LIS answering HELD by telephone number
 	// (RFC 6155), https.

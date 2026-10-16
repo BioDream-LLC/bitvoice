@@ -1790,7 +1790,7 @@ These exports hold no SIP passwords, so each extension gets a new one; voicemail
 Phones and apps that share a video codec (most use H.264) get each other's video as it is. When two parties have none in common (a desk phone with only H.264 and a browser with only VP8), switch on **Convert video between H.264 and VP8** in Settings: BitVoice then offers both codecs, answers each party in its own, and converts each way with **ffmpeg**, which must be installed on the server (apt install ffmpeg, brew install ffmpeg; or give its path). Conversion costs about a processor core per call and adds a little delay, so it is off by default and used only when needed. Settings says whether ffmpeg was found.`,
   },
   {
-    id: 'psap', title: '911 calls (the 911 profile)', route: '/psap', keys: '911 psap ng911 i3 esinet location pidf-lo held rebid ali spill eido cad nena log answer time call-taker tty tdd baudot deaf text rtt real-time text msrp tcc text to 911 sms video whip whep camera photo clip evidence sha-256 exposure wellness',
+    id: 'psap', title: '911 calls (the 911 profile)', route: '/psap', keys: '911 psap ng911 i3 esinet location pidf-lo held rebid ali spill eido cad nena log answer time call-taker tty tdd baudot deaf text rtt real-time text msrp tcc text to 911 sms video whip whep camera photo clip evidence sha-256 exposure wellness recording ivf eido media',
     body: `> **Lab and design-partner track.** Not certified for live 911 or radio dispatch, and not yet tried with a live ESInet, P25 system or CAD. Use it in a lab or in shadow mode beside your current equipment. Switch on **Public-safety profiles (lab)** in [Settings](#/settings) to show it in the menu.
 
 BitVoice answers 911 calls as a PSAP's call-handling system: calls from the emergency services network (the ESInet, NENA i3) arrive with the caller's location and the network's data, the call-taker sees them at once, and CAD is told when the call is answered.
@@ -1820,7 +1820,11 @@ Location comes in the call (by value), or as a reference BitVoice fetches with H
 
 Video never takes from the calls: each live video has its own ports, this server takes at most **Live videos at once** of them (4 unless set), each asked to stay under **Video bit rate**, and video that stops for ten seconds is ended. Callers' phones must reach this server at **Link address** (https) and its media ports (UDP). Files are kept **Keep files and the exposure log** days (blank: until deleted), held calls aside.
 
-**Into CAD.** CAD learns of each photo and clip as it arrives from the event stream (\`GET /api/events\`, events \`call.media\`, with the file's name, hash, time and GPS), and can take the viewing link from the call (\`GET /api/calls\`, \`emergency.video.viewToken\`, watched at \`/whep/{viewToken}\`). The EIDO itself does not carry them yet: its media components are not settled in a form BitVoice could check against a CAD.
+**Recording the live video.** With **Record callers' live video** on, the caller's live video is kept with the photos and clips as one file per stretch of video: the same pictures the phone sent, not converted, in an IVF file (H.264 or VP8 with each picture's own time), hashed as it is written. A picture damaged by a lost packet is left out rather than kept broken, and the phone is asked for a full picture to carry on from. **Reveal** plays it (from a copy in WebM or MP4 that ffmpeg makes, the same pictures in another container; without ffmpeg only the original downloads); **Download the original** gives the file the hash is of. ffmpeg, VLC and forensic video tools open the original.
+
+**Into CAD.** The EIDO (NENA-STA-021) sent to CAD names each photo, clip and recording, and the live video while it lasts, as additional data by reference: \`urlPurpose\` is \`caller-photo\`, \`caller-video\`, \`caller-video-recording\` or \`caller-video-live\`, and \`additionalDataByReferenceUrl\` is the file at \`/m/{viewToken}/{n}\` or the live video at \`/whep/{viewToken}\`. BitVoice sends CAD the EIDO again when a file arrives or live video starts or stops. The links use **Link address** (or this server's public address); with neither, the EIDO names no media. Every fetch through them is in the exposure log. The event stream says the same (\`GET /api/events\`: \`call.media\`, \`call.video\`). BitVoice's EIDOs are checked against NENA's published EIDO schema.
+
+Links that do not exist are guessed at no faster than sign-ins: an address that keeps trying is turned away for a while. Files from callers are served in a sandbox, never as a page of this server.
 
 **Exposure.** Every reveal of a live video and every opening of a photo or clip is counted under **Exposure** on 911 calls: who, how often, over how many calls. It is for supervisors and the centre's wellness programme.
 
@@ -1842,7 +1846,7 @@ Video a phone sends in the 911 call itself (SIP video over the ESInet) can be wa
 
 The whole conversation, whichever way it came, is kept with the call in the call history and in the i3 log.
 
-What is not here yet: MSRP over TLS (TCP only for now); passing a text session on through the NG911 core (the ESRP routes voice; a text session is answered where it arrives); recording live caller video (photos and clips are kept; live video is shown, not recorded).
+What is not here yet: MSRP over TLS (TCP only for now); passing a text session on through the NG911 core (the ESRP routes voice; a text session is answered where it arrives); the EIDO conveyance standard's own subscriptions (NENA-STA-024 WebSocket): BitVoice posts EIDOs to one address.
 `,
   },
   {

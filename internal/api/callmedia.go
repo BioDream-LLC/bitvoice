@@ -8,11 +8,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/biodream-llc/bitvoice/internal/media"
 	"io"
 	"mime"
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -40,6 +42,8 @@ type MediaItem struct {
 	Size     int64     `json:"size"`
 	SHA256   string    `json:"sha256"`
 	Received time.Time `json:"received"`
+	// Recording: BitVoice recorded it from the caller's live video (not a file the caller sent).
+	Recording bool `json:"recording,omitempty"`
 	evidence.Meta
 }
 
@@ -163,7 +167,7 @@ func (s *Server) videoLinkURL(cfg config.Config, r *http.Request, token string) 
 
 func (s *Server) callMediaRoutes() {
 	// The caller's page and its script: no sign-in; the token in the link is the key.
-	s.mux.HandleFunc("GET /v/{token}", func(w http.ResponseWriter, r *http.Request) {
+	s.mux.HandleFunc("GET /v/{token}", s.tokenGuard(func(w http.ResponseWriter, r *http.Request) {
 		if _, caller, _, ok := s.Engine.VideoToken(r.PathValue("token")); !ok || !caller {
 			http.Error(w, "This link has expired. Call 911 again if you need help.", http.StatusNotFound)
 			return
@@ -173,12 +177,12 @@ func (s *Server) callMediaRoutes() {
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Permissions-Policy", "camera=(self), microphone=()")
 		io.WriteString(w, callerPage)
-	})
+	}))
 	s.mux.HandleFunc("GET /v-app.js", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 		io.WriteString(w, callerScript)
 	})
-	s.mux.HandleFunc("POST /whip/{token}", func(w http.ResponseWriter, r *http.Request) {
+	s.mux.HandleFunc("POST /whip/{token}", s.tokenGuard(func(w http.ResponseWriter, r *http.Request) {
 		offer, ok := readSDP(w, r)
 		if !ok {
 			return
@@ -192,16 +196,16 @@ func (s *Server) callMediaRoutes() {
 		w.Header().Set("Location", "/whip/"+r.PathValue("token")+"/"+res)
 		w.WriteHeader(http.StatusCreated)
 		w.Write(ans)
-	})
-	s.mux.HandleFunc("DELETE /whip/{token}/{res}", func(w http.ResponseWriter, r *http.Request) {
+	}))
+	s.mux.HandleFunc("DELETE /whip/{token}/{res}", s.tokenGuard(func(w http.ResponseWriter, r *http.Request) {
 		if !s.Engine.EndWHIP(r.PathValue("token"), r.PathValue("res")) {
 			http.NotFound(w, r)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-	})
+	}))
 	// CAD and units watch by the viewing link (no sign-in; the token is the key).
-	s.mux.HandleFunc("POST /whep/{token}", func(w http.ResponseWriter, r *http.Request) {
+	s.mux.HandleFunc("POST /whep/{token}", s.tokenGuard(func(w http.ResponseWriter, r *http.Request) {
 		offer, ok := readSDP(w, r)
 		if !ok {
 			return
@@ -222,22 +226,30 @@ func (s *Server) callMediaRoutes() {
 		w.Header().Set("Location", "/whep/"+r.PathValue("token")+"/"+id)
 		w.WriteHeader(http.StatusCreated)
 		w.Write(ans)
-	})
-	s.mux.HandleFunc("DELETE /whep/{token}/{id}", func(w http.ResponseWriter, r *http.Request) {
+	}))
+	s.mux.HandleFunc("DELETE /whep/{token}/{id}", s.tokenGuard(func(w http.ResponseWriter, r *http.Request) {
 		if _, caller, _, ok := s.Engine.VideoToken(r.PathValue("token")); !ok || caller || !s.Engine.EndWHEP(r.PathValue("id")) {
 			http.NotFound(w, r)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-	})
-	s.mux.HandleFunc("POST /v/{token}/upload", func(w http.ResponseWriter, r *http.Request) {
+	}))
+	// CAD fetches a call's photos and clips by the viewing token, as the EIDO names them.
+	s.mux.HandleFunc("GET /m/{token}/{n}", s.tokenGuard(func(w http.ResponseWriter, r *http.Request) {
+		call, caller, _, ok := s.Engine.VideoToken(r.PathValue("token"))
+		n, err := strconv.Atoi(r.PathValue("n"))
+		if !ok || caller || err != nil || !s.serveMedia(w, r, call, n, Exposure{Who: "viewing link from " + clientAddr(r), Role: "link"}) {
+			http.NotFound(w, r)
+		}
+	}))
+	s.mux.HandleFunc("POST /v/{token}/upload", s.tokenGuard(func(w http.ResponseWriter, r *http.Request) {
 		call, caller, _, ok := s.Engine.VideoToken(r.PathValue("token"))
 		if !ok || !caller {
 			http.Error(w, "This link has expired.", http.StatusNotFound)
 			return
 		}
 		s.takeUpload(w, r, call)
-	})
+	}))
 
 	// Call-takers: send the link, watch, see the files, hold them, the exposure report.
 	s.handle("POST /api/calls/{id}/video/link", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
@@ -316,18 +328,9 @@ func (s *Server) callMediaRoutes() {
 			writeError(w, 404, "no such file")
 			return
 		}
-		ix, _ := s.readIndex(id)
-		for _, it := range ix.Items {
-			if it.N == n {
-				s.logExposure(Exposure{Call: id, Item: strconv.Itoa(n), Who: firstNonEmpty(u.Name, u.Username), Role: "call-taker"})
-				w.Header().Set("Content-Type", it.Type)
-				w.Header().Set("Content-Disposition", "inline; filename=\""+strings.ReplaceAll(it.Name, "\"", "")+"\"")
-				w.Header().Set("X-Content-SHA256", it.SHA256)
-				http.ServeFile(w, r, filepath.Join(s.mediaDir(id), strconv.Itoa(n)))
-				return
-			}
+		if !s.serveMedia(w, r, id, n, Exposure{Who: firstNonEmpty(u.Name, u.Username), Role: "call-taker"}) {
+			writeError(w, 404, "no such file")
 		}
-		writeError(w, 404, "no such file")
 	})
 	s.handle("POST /api/calls/{id}/media/hold", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
 		id := r.PathValue("id")
@@ -413,7 +416,7 @@ func (s *Server) takeUpload(w http.ResponseWriter, r *http.Request, call string)
 		name = name[:120]
 	}
 	ct, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	if !strings.HasPrefix(ct, "image/") && !strings.HasPrefix(ct, "video/") {
+	if !mediaTypeOK(ct) {
 		http.Error(w, "send a photo or a video", http.StatusUnsupportedMediaType)
 		return
 	}
@@ -533,4 +536,185 @@ func clientAddr(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return h
+}
+
+// mediaTypeOK: the kinds of file a caller may send. Only pictures and video a browser shows as
+// such: no SVG or other type that carries script.
+func mediaTypeOK(ct string) bool {
+	switch ct {
+	case "video/x-ivf": // BitVoice's own recordings of live video
+		return true
+	case "image/jpeg", "image/png", "image/gif", "image/webp", "image/heic", "image/heif", "image/avif":
+		return true
+	}
+	return strings.HasPrefix(ct, "video/") && !strings.ContainsAny(ct, "+;")
+}
+
+// serveMedia sends one of a call's files and counts who saw it. The file came from outside: it is
+// served in a sandbox, never sniffed, and as a download unless it is a picture or video.
+func (s *Server) serveMedia(w http.ResponseWriter, r *http.Request, call string, n int, x Exposure) bool {
+	if !callIDRe.MatchString(call) {
+		return false
+	}
+	ix, _ := s.readIndex(call)
+	for _, it := range ix.Items {
+		if it.N != n {
+			continue
+		}
+		x.Call, x.Item = call, strconv.Itoa(n)
+		path := filepath.Join(s.mediaDir(call), strconv.Itoa(n))
+		ct, disp := it.Type, "inline"
+		if it.Recording && r.URL.Query().Get("view") == "1" {
+			// a copy a browser plays, the same pictures in another container; the original stays
+			vp, vct, err := s.viewingCopy(path)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusServiceUnavailable)
+				return true
+			}
+			path, ct = vp, vct
+		}
+		s.logExposure(x)
+		if !mediaTypeOK(ct) {
+			ct, disp = "application/octet-stream", "attachment"
+		}
+		w.Header().Set("Content-Type", ct)
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; img-src 'self'; media-src 'self'")
+		w.Header().Set("Content-Disposition", disp+"; filename=\""+strings.Map(func(r rune) rune {
+			if r == '"' || r == '\\' || r < 32 || r == 127 {
+				return -1
+			}
+			return r
+		}, it.Name)+"\"")
+		w.Header().Set("X-Content-SHA256", it.SHA256)
+		http.ServeFile(w, r, path)
+		return true
+	}
+	return false
+}
+
+// recordCallVideo keeps a caller's live video as a file of the call: written as it comes, hashed as
+// it is written, and listed with the photos and clips when it ends.
+func (s *Server) recordCallVideo(call string) (io.Writer, func(frames int, err error)) {
+	if s.DataDir == "" || !callIDRe.MatchString(call) {
+		return nil, nil
+	}
+	if err := os.MkdirAll(s.mediaDir(call), 0o700); err != nil {
+		s.Log.Error("911 caller video not recorded", "call", call, "err", err)
+		return nil, nil
+	}
+	f, err := os.CreateTemp(s.mediaDir(call), "recording-*")
+	if err != nil {
+		s.Log.Error("911 caller video not recorded", "call", call, "err", err)
+		return nil, nil
+	}
+	h := sha256.New()
+	started := time.Now().UTC()
+	return io.MultiWriter(f, h), func(frames int, werr error) {
+		size, _ := f.Seek(0, io.SeekCurrent)
+		cerr := f.Sync()
+		if err := f.Close(); cerr == nil {
+			cerr = err
+		}
+		if werr == nil {
+			werr = cerr
+		}
+		if frames == 0 || werr != nil {
+			os.Remove(f.Name())
+			if werr != nil {
+				s.Log.Error("911 caller video recording failed", "call", call, "err", werr)
+			}
+			return
+		}
+		item := MediaItem{Name: "live video " + started.Format("15-04-05") + ".ivf", Type: "video/x-ivf", Size: size,
+			SHA256: hex.EncodeToString(h.Sum(nil)), Received: time.Now().UTC(), Recording: true}
+		item.Taken = started
+		mediaMu.Lock()
+		defer mediaMu.Unlock()
+		ix, err := s.readIndex(call)
+		if err == nil {
+			item.N = len(ix.Items) + 1
+			err = os.Rename(f.Name(), filepath.Join(s.mediaDir(call), strconv.Itoa(item.N)))
+		}
+		if err == nil {
+			if ix.From == "" {
+				for _, c := range s.Engine.Calls() {
+					if c.ID == call {
+						ix.From = c.From
+					}
+				}
+			}
+			ix.Call = call
+			ix.Items = append(ix.Items, item)
+			err = s.writeIndex(ix)
+		}
+		if err != nil {
+			os.Remove(f.Name())
+			s.Log.Error("911 caller video recording not kept", "call", call, "err", err)
+			return
+		}
+		s.Log.Info("911 caller video recorded", "call", call, "frames", frames, "bytes", size, "sha256", item.SHA256)
+		s.Bus.Publish("call.media", map[string]any{"call": call, "item": item})
+	}
+}
+
+var viewMu sync.Mutex
+
+// viewingCopy makes (once) a copy of a recording a browser plays: the pictures are copied into
+// WebM (VP8) or MP4 (H.264) by ffmpeg, not converted. Without ffmpeg there is none; the original
+// still downloads.
+func (s *Server) viewingCopy(orig string) (string, string, error) {
+	viewMu.Lock()
+	defer viewMu.Unlock()
+	for _, x := range []struct{ ext, ct string }{{".webm", "video/webm"}, {".mp4", "video/mp4"}} {
+		if _, err := os.Stat(orig + ".view" + x.ext); err == nil {
+			return orig + ".view" + x.ext, x.ct, nil
+		}
+	}
+	ff := s.config().System.FFmpeg
+	if !media.FFmpegHas(ff) {
+		return "", "", errors.New("install ffmpeg to play recordings here; the original downloads as it is")
+	}
+	if ff == "" {
+		ff = "ffmpeg"
+	}
+	head := make([]byte, 12)
+	f, err := os.Open(orig)
+	if err != nil {
+		return "", "", err
+	}
+	io.ReadFull(f, head)
+	f.Close()
+	ext, ct := ".webm", "video/webm"
+	if string(head[8:12]) == "H264" {
+		ext, ct = ".mp4", "video/mp4"
+	}
+	out := orig + ".view" + ext
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	b, err := exec.CommandContext(ctx, ff, "-hide_banner", "-loglevel", "error", "-y", "-f", "ivf", "-i", orig,
+		"-c", "copy", "-movflags", "+faststart", out+".tmp"+ext).CombinedOutput()
+	if err != nil {
+		os.Remove(out + ".tmp" + ext)
+		return "", "", fmt.Errorf("the recording could not be copied for playing: %s", strings.TrimSpace(string(b)))
+	}
+	return out, ct, os.Rename(out+".tmp"+ext, out)
+}
+
+// tokenGuard keeps the token links from being guessed: an address that keeps presenting tokens that
+// do not exist is turned away for a while, as for failed sign-ins. A real token is never slowed.
+func (s *Server) tokenGuard(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ip := clientIP(r).String()
+		if _, _, _, ok := s.Engine.VideoToken(r.PathValue("token")); ok {
+			h(w, r)
+			return
+		}
+		if s.throttled(ip) {
+			http.Error(w, "too many attempts: wait a few minutes", http.StatusTooManyRequests)
+			return
+		}
+		s.loginFailed(ip)
+		h(w, r) // answers "expired" or not found as before
+	}
 }

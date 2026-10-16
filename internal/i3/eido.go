@@ -2,6 +2,7 @@ package i3
 
 import (
 	"encoding/json"
+	"html"
 	"strings"
 	"time"
 )
@@ -23,6 +24,15 @@ type Incident struct {
 	LocationRaw []byte
 	Additional  Additional
 	Comments    []string
+	Media       []MediaRef // the caller's photos, clips and live video, by reference
+}
+
+// MediaRef is one piece of caller media in an EIDO: an additional-data component by reference
+// (NENA-STA-021 AdditionalDataType: additionalDataByReferenceUrl and its urlPurpose).
+type MediaRef struct {
+	ID      string // unique within the incident (photo-3, video-live)
+	URL     string // where CAD fetches it
+	Purpose string // caller-photo, caller-video, caller-video-live (WHEP)
 }
 
 func urnID(kind, id, element string) string {
@@ -72,12 +82,12 @@ func EIDO(in Incident, now time.Time) ([]byte, error) {
 		"callbackComponent": []any{map[string]any{"$id": cbID, "lastUpdateTimeStamp": ts(now), "updatedByAgencyReference": agency,
 			"callBackInformationUri": []string{"tel:" + in.From}}},
 		"agencyComponent": []any{map[string]any{"$id": in.Agency, "lastUpdateTimeStamp": ts(now), "updatedByAgencyReference": agency,
-			"agencyRoleDescriptionRegistryText": []string{"psap"}}},
+			"agencyRoleDescriptionRegistryText": []string{"CallReceiving"}, "agencyType": []string{"psap"}}},
 		"@context": map[string]string{"@vocab": "./JSON-LD_Contexts/EmergencyIncidentDataObjectType.jsonld"},
 	}
 	if agentID != "" {
 		agent := map[string]any{"$id": agentID, "lastUpdateTimeStamp": ts(now), "updatedByAgencyReference": agency,
-			"agencyReference": agency, "agentRoleRegistryText": []string{"callTaker"}}
+			"agencyReference": agency, "agentRoleRegistryText": []string{"Call Taking"}}
 		if in.Position != "" {
 			agent["agentWorkstationPositionIdentification"] = in.Position
 		}
@@ -87,21 +97,40 @@ func EIDO(in Incident, now time.Time) ([]byte, error) {
 	if len(in.LocationRaw) > 0 {
 		call["locationReference"] = []ref{{locID}}
 		doc["locationComponent"] = []any{map[string]any{"$id": locID, "lastUpdateTimeStamp": ts(now), "updatedByAgencyReference": agency,
-			"locationTypeDescriptionRegistryText": "CallerLocation", "locationByValue": string(in.LocationRaw)}}
+			"locationTypeDescriptionRegistryText": "Caller", "locationByValue": string(in.LocationRaw)}}
 	}
-	if !in.Additional.Empty() || len(in.Comments) > 0 {
+	var adds []any
+	var addRefs []ref
+	if !in.Additional.Empty() {
 		b, _ := json.Marshal(in.Additional)
-		comp := map[string]any{"$id": adrID, "lastUpdateTimeStamp": ts(now), "updatedByAgencyReference": agency,
-			"additionalDataByValue": string(b)}
-		call["additionalDataReference"] = []ref{{adrID}}
-		doc["additionalDataComponent"] = []any{comp}
+		adds = append(adds, map[string]any{"$id": adrID, "lastUpdateTimeStamp": ts(now), "updatedByAgencyReference": agency,
+			"additionalDataByValue": string(b)})
+		addRefs = append(addRefs, ref{adrID})
+	}
+	for _, m := range in.Media {
+		id := "media-" + in.ID + "-" + m.ID
+		adds = append(adds, map[string]any{"$id": id, "lastUpdateTimeStamp": ts(now), "updatedByAgencyReference": agency,
+			"additionalDataByReferenceUrl": m.URL, "urlPurpose": m.Purpose})
+		addRefs = append(addRefs, ref{id})
+	}
+	if len(adds) > 0 {
+		call["additionalDataReference"] = addRefs
+		doc["additionalDataComponent"] = adds
 	}
 	if len(in.Comments) > 0 {
 		var notes []any
+		var refs []ref
 		for i, c := range in.Comments {
-			notes = append(notes, map[string]any{"$id": "note-" + in.ID + "-" + itoa(i+1), "lastUpdateTimeStamp": ts(now),
-				"updatedByAgencyReference": agency, "noteText": c})
+			id := "note-" + in.ID + "-" + itoa(i+1)
+			n := map[string]any{"$id": id, "lastUpdateTimeStamp": ts(now), "updatedByAgencyReference": agency,
+				"notesActionComments": html.EscapeString(c)} // the schema's field; its text is HTML
+			if agentID != "" {
+				n["agentReference"] = ref{agentID}
+			}
+			notes = append(notes, n)
+			refs = append(refs, ref{id})
 		}
+		call["notesReference"] = refs
 		doc["notesComponent"] = notes
 	}
 	return json.MarshalIndent(doc, "", "  ")

@@ -213,7 +213,7 @@ feature on this list. [Open an issue](https://github.com/BioDream-LLC/bitvoice/i
 <tr><td colspan="2">Location <b>rebids</b> and <b>transfers between PSAPs</b> with the data kept</td></tr>
 <tr><td colspan="2">The <b>NENA i3 log</b>, and <b>answer-time reports</b> by call-taker and hour against your goal, as CSV too</td></tr>
 <tr><td colspan="2"><b>TTY</b> (deaf callers' text telephones) decoded and answered on every 911 call, <b>real-time text</b> (RFC 4103) and <b>text to 911</b> from a text control centre (MSRP), in one conversation on the call</td></tr>
-<tr><td colspan="2"><b>Caller video and photos</b> by a link, no app: live camera (WHIP), photos and clips kept with their <b>SHA-256</b>, time and GPS; opened <b>blurred</b> until revealed, with an <b>exposure</b> report for the wellness programme; CAD and units watch by link (WHEP)</td></tr>
+<tr><td colspan="2"><b>Caller video and photos</b> by a link, no app: live camera (WHIP), photos, clips and <b>recordings</b> of the live video kept with their <b>SHA-256</b>, time and GPS, and named in the EIDO to CAD; opened <b>blurred</b> until revealed, with an <b>exposure</b> report for the wellness programme; CAD and units watch by link (WHEP)</td></tr>
 <tr><td colspan="2">A <b>map</b> of the caller's position and its uncertainty, from your own tiles (works offline)</td></tr>
 <tr><td colspan="2"><b>Legacy 911</b>: CAMA trunks on telephony cards, and location looked up by callback number (HELD) for calls that bring none</td></tr>
 </tbody></table>

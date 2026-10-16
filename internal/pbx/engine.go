@@ -12,6 +12,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"github.com/biodream-llc/bitvoice/internal/i3"
+	"io"
 	"log/slog"
 	"net"
 	"net/netip"
@@ -64,6 +65,9 @@ type Engine struct {
 	OnFax func(FaxIn)
 	// OnEmergencyAnswer hears each 911 call when a call-taker answers it (for CAD and the i3 log).
 	OnEmergencyAnswer func(EmergencyAnswer)
+	// OnVideoRecord keeps a 911 caller's live video when PSAP.RecordVideo is on: it gives where the
+	// recording goes, and hears when it ends (with the number of pictures kept and any error).
+	OnVideoRecord func(call string) (w io.Writer, done func(frames int, err error))
 	// FindService is the ESRP's ECRF.
 	FindService FindService
 

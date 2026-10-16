@@ -49,6 +49,7 @@ func (s *Server) WireEngine() {
 	eng.SetEmergencyMode = s.SetEmergencyMode
 	eng.OnFax = s.FaxReceived
 	eng.OnEmergencyAnswer = s.EmergencyAnswered
+	eng.OnVideoRecord = s.recordCallVideo
 	eng.FindService = s.FindService
 	cfg, _ := st.Config()
 	eng.Apply(s.Resolved(cfg))

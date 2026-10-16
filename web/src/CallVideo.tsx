@@ -122,12 +122,15 @@ function MediaList({ callId, items, held }: { callId: string; items: MediaItem[]
         {items.map((it) => (
           <li key={it.n} className="rounded-lg border border-slate-800 p-2 text-xs" aria-label={`File ${it.n}: ${it.name}`}>
             <div className="flex items-center justify-between gap-2"><span className="truncate font-semibold text-slate-200">{it.name}</span><span className="text-slate-500">{(it.size / 1024).toFixed(0)} KB</span></div>
-            <div className="text-slate-500">{it.kind}{it.takenLocal ? `, taken ${it.takenLocal} (the camera's clock)` : it.taken ? `, taken ${new Date(it.taken).toLocaleString()}` : ''} · received {new Date(it.received).toLocaleTimeString()}</div>
+            <div className="text-slate-500">{it.recording ? `live video recorded here, from ${new Date(it.taken ?? it.received).toLocaleTimeString()}` : <>{it.kind}{it.takenLocal ? `, taken ${it.takenLocal} (the camera's clock)` : it.taken ? `, taken ${new Date(it.taken).toLocaleString()}` : ''}</>} · {it.recording ? 'ended' : 'received'} {new Date(it.received).toLocaleTimeString()}</div>
             {it.hasGps && <a className="inline-flex items-center gap-1 text-sky-300 underline" href={`https://www.openstreetmap.org/?mlat=${it.lat}&mlon=${it.lon}#map=18/${it.lat}/${it.lon}`} target="_blank" rel="noreferrer"><MapPin size={11} aria-hidden /> {it.lat?.toFixed(5)}, {it.lon?.toFixed(5)}</a>}
             <div className="break-all font-mono text-[10px] text-slate-600" title="SHA-256 of the file as it arrived">SHA-256 {it.sha256}</div>
             {open[it.n]
               ? (it.type.startsWith('video/')
-                ? <video controls className="mt-1 max-h-48 w-full rounded" src={`./api/calls/${callId}/media/${it.n}`} aria-label={`Clip ${it.name}`} />
+                ? <>
+                  <video controls className="mt-1 max-h-48 w-full rounded" src={`./api/calls/${callId}/media/${it.n}${it.recording ? '?view=1' : ''}`} aria-label={`Clip ${it.name}`} />
+                  {it.recording && <a className="text-sky-300 underline" href={`./api/calls/${callId}/media/${it.n}`} download={it.name}>Download the original (IVF, the hash above)</a>}
+                </>
                 : <img className="mt-1 max-h-48 w-full rounded object-contain" src={`./api/calls/${callId}/media/${it.n}`} alt={`Photo ${it.name} from the caller`} />)
               : <button className="btn mt-1 py-0.5" onClick={() => setOpen((o) => ({ ...o, [it.n]: true }))}><Eye size={12} aria-hidden /> Reveal (may be distressing)</button>}
           </li>

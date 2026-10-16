@@ -1,7 +1,11 @@
 package i3
 
 import (
+	"bytes"
 	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -53,6 +57,36 @@ func TestALISpill(t *testing.T) {
 	for _, l := range strings.Split(b[1:len(b)-1], "\r\n") {
 		if len(l) > 32 {
 			t.Errorf("line longer than 32: %q", l)
+		}
+	}
+}
+
+// EIDOs checked against NENA's published EIDO schema (NENA911/EIDO-JSON, Schema/openapi.yaml), by a
+// validator kept outside the repo: BITVOICE_TEST_EIDO names a directory holding validate.js (ajv)
+// and the schema as nena/EIDO-JSON/Schema/openapi.yaml beside it.
+func TestEIDOAgainstNENASchema(t *testing.T) {
+	dir := os.Getenv("BITVOICE_TEST_EIDO")
+	if dir == "" {
+		t.Skip("BITVOICE_TEST_EIDO not set")
+	}
+	loc, _ := ParsePIDF([]byte(civicPIDF))
+	now := time.Date(2026, 10, 12, 13, 1, 0, 0, time.UTC)
+	full := Incident{ID: "abc123", Agency: "psap.example.gov", Element: "bitvoice.psap.example.gov", Queue: "911",
+		From: "+17175550100", Agent: "jlee", Position: "101", Start: now.Add(-40 * time.Second), Answer: now.Add(-30 * time.Second),
+		Location: &loc, LocationRaw: []byte(civicPIDF), Additional: Additional{Providers: []Provider{{Name: "Example"}}},
+		Comments: []string{"caller on 2nd floor <b>"},
+		Media: []MediaRef{{ID: "1", URL: "https://psap.example.gov/m/tok/1", Purpose: "caller-photo"},
+			{ID: "live", URL: "https://psap.example.gov/whep/tok", Purpose: "caller-video-live"}}}
+	for name, in := range map[string]Incident{"full": full, "bare": {ID: "x1", Agency: "psap.example.gov", Element: "e", From: "+1", Start: now}} {
+		b, err := EIDO(in, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command("node", filepath.Join(dir, "validate.js"), filepath.Join(dir, "..", "nena", "EIDO-JSON", "Schema", "openapi.yaml"), "EmergencyIncidentDataObjectType")
+		cmd.Stdin = bytes.NewReader(b)
+		out, err := cmd.CombinedOutput()
+		if err != nil || strings.TrimSpace(string(out)) != "ok" {
+			t.Errorf("%s: %v\n%s\n%s", name, err, out, b)
 		}
 	}
 }

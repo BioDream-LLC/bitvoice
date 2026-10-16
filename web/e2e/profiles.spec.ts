@@ -497,6 +497,13 @@ test('caller video and photos on a 911 call', async ({ page, browser }) => {
     return !!t.id
   })
   expect(ok).toBe(true)
+  // Recording on (Settings › 911 calls), with the link address CAD is given in the EIDO.
+  await page.goto('./#/psap')
+  const setup = page.locator('section[aria-labelledby="pss-h"]')
+  await setup.getByLabel('Link address').fill('https://127.0.0.1:18380')
+  await setup.getByRole('checkbox', { name: /Record callers' live video/ }).check()
+  await setup.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('911 settings saved').first()).toBeVisible()
   const tcc = await standInTCC()
   try {
     tcc.send('he is outside, I can film him')
@@ -536,9 +543,28 @@ test('caller video and photos on a 911 call', async ({ page, browser }) => {
     await card.getByRole('button', { name: 'Hold as evidence' }).click()
     await expect(card.getByRole('button', { name: 'Held as evidence' })).toBeVisible()
 
-    // The caller stops; the exposure report counts the looks.
+    // CAD's EIDO names the photo and the live video, by the viewing token.
+    const callId = await page.evaluate(async () => (await (await fetch('./api/calls')).json()).items.find((c: { emergency?: unknown }) => c.emergency).id)
+    const eido = await page.evaluate(async (id) => (await fetch(`./api/calls/${id}/eido`)).json(), callId)
+    const purposes = (eido.additionalDataComponent ?? []).map((a: { urlPurpose?: string }) => a.urlPurpose)
+    expect(purposes).toEqual(expect.arrayContaining(['caller-photo', 'caller-video-live']))
+    const photoURL = eido.additionalDataComponent.find((a: { urlPurpose?: string }) => a.urlPurpose === 'caller-photo').additionalDataByReferenceUrl
+    expect(photoURL).toMatch(/^https:\/\/127\.0\.0\.1:18380\/m\/[A-Za-z0-9_-]{24}\/1$/)
+    const fetched = await caller.request.get(photoURL)
+    expect(fetched.status()).toBe(200)
+    expect(fetched.headers()['content-security-policy']).toContain('sandbox')
+
+    // The caller stops; the recording of the live video is kept, hashed, and plays.
+    await caller.waitForTimeout(2000)
     await caller.getByRole('button', { name: 'Stop sharing' }).click()
     await expect(caller.getByText('You stopped sharing.')).toBeVisible()
+    const recItem = card.getByRole('listitem', { name: /File 2: live video .*\.ivf/ })
+    await expect(recItem.getByText(/live video recorded here/)).toBeVisible({ timeout: 10_000 })
+    await expect(recItem.getByText(/SHA-256 [0-9a-f]{64}/)).toBeVisible()
+    await recItem.getByRole('button', { name: /^Reveal/ }).click()
+    const played = recItem.getByLabel(/Clip live video/)
+    await expect.poll(() => played.evaluate((v: HTMLVideoElement) => v.videoWidth), { timeout: 15_000 }).toBeGreaterThan(0)
+    await expect(recItem.getByRole('link', { name: /Download the original/ })).toBeVisible()
     await page.getByRole('tab', { name: /Exposure/ }).click()
     await expect(page.getByRole('region', { name: 'Exposure' }).locator('td').nth(1)).toHaveText(/^[2-9]|\d\d/)
     await phone.close()

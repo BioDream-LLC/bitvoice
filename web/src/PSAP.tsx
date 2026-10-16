@@ -8,7 +8,7 @@ import { useDraft } from './useDraft'
 import { Badge, Empty, Field, Page, StaleBanner, problemFor } from './ui'
 
 const blankMap: MapSource = { file: '', url: '', attribution: '' }
-const blankPSAP: PSAPSettings = { agencyId: '', elementId: '', aliAddress: '', eidoUrl: '', eidoToken: '', answerTarget: 15, ttyOff: false, locationServer: '', videoLinkBase: '', videoFrom: '', videoStreams: 0, videoKbps: 0, uploadMb: 0, mediaDays: 0 }
+const blankPSAP: PSAPSettings = { agencyId: '', elementId: '', aliAddress: '', eidoUrl: '', eidoToken: '', answerTarget: 15, ttyOff: false, locationServer: '', videoLinkBase: '', videoFrom: '', videoStreams: 0, videoKbps: 0, uploadMb: 0, mediaDays: 0, recordVideo: false }
 
 export function PSAP() {
   const admin = useIsAdmin()
@@ -170,6 +170,10 @@ function PSAPSetup() {
         <Field label="Live videos at once" htmlFor="pvs" error={p('videoStreams')} hint="On this server (4 when blank): never at the expense of calls."><input id="pvs" className="input w-24 font-mono" inputMode="numeric" value={draft.videoStreams || ''} placeholder="4" onChange={(e) => set({ videoStreams: Number(e.target.value.replace(/\D/g, '')) || 0 })} /></Field>
         <Field label="Video bit rate (kbit/s)" htmlFor="pvk" error={p('videoKbps')} hint="Each caller's video is asked to stay under it (1500 when blank)."><input id="pvk" className="input w-28 font-mono" inputMode="numeric" value={draft.videoKbps || ''} placeholder="1500" onChange={(e) => set({ videoKbps: Number(e.target.value.replace(/\D/g, '')) || 0 })} /></Field>
         <Field label="Largest file (MB)" htmlFor="pvu" error={p('uploadMb')} hint="200 when blank."><input id="pvu" className="input w-24 font-mono" inputMode="numeric" value={draft.uploadMb || ''} placeholder="200" onChange={(e) => set({ uploadMb: Number(e.target.value.replace(/\D/g, '')) || 0 })} /></Field>
+        <label className="flex items-center gap-2 text-sm text-slate-300 md:col-span-3">
+          <input type="checkbox" checked={!!draft.recordVideo} onChange={(e) => set({ recordVideo: e.target.checked })} />
+          Record callers' live video <span className="text-xs text-slate-500">(kept with the photos and clips as it was sent, not converted, and hashed when it ends)</span>
+        </label>
         <Field label="Keep files and the exposure log (days)" htmlFor="pvd" error={p('mediaDays')} hint="Blank: until deleted. Calls held as evidence are kept."><input id="pvd" className="input w-24 font-mono" inputMode="numeric" value={draft.mediaDays || ''} placeholder="" onChange={(e) => set({ mediaDays: Number(e.target.value.replace(/\D/g, '')) || 0 })} /></Field>
       </div>
       <h3 className="text-sm font-semibold text-violet-300">Map</h3>
