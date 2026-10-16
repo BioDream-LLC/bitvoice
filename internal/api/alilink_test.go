@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"net"
+	"os"
 	"runtime"
 	"strings"
 	"testing"
@@ -104,6 +105,13 @@ func TestALILink(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer cad.Close()
+	// Hold the port's own end open as a cable would: a pseudo-terminal whose end nobody has open
+	// fails reads at once (EIO), which a real serial port never does.
+	hold, err := os.OpenFile(cdev, os.O_RDWR, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer hold.Close()
 	got := make(chan string, 1)
 	go func() { b, _ := bufio.NewReader(cad).ReadString(0x03); got <- b }()
 	lat, lon := 40.26, -76.88
