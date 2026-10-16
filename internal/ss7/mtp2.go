@@ -78,6 +78,25 @@ type mtp2 struct {
 	sending   int // the LSSU being sent while not in service; -1: FISUs
 	gotFISU   bool
 	retrans   bool // the far end asked for retransmission and we are doing it
+
+	// Link up and down reach MTP3 in the order they happened: each change is numbered, and a late
+	// one (sent from a goroutine) is dropped if a newer one has already been told.
+	upGen, upTold int
+	upMu          sync.Mutex
+}
+
+// tellUp numbers a change of the link's state; called with m.mu held. Pass the number to report.
+func (m *mtp2) tellUp() int { m.upGen++; return m.upGen }
+
+// report tells MTP3 change gen, unless a newer one was told first. Called without m.mu.
+func (m *mtp2) report(gen int, up bool) {
+	m.upMu.Lock()
+	defer m.upMu.Unlock()
+	if gen <= m.upTold {
+		return
+	}
+	m.upTold = gen
+	m.up(up)
 }
 
 func newMTP2(link Link, emergency bool, deliver func([]byte), up func(bool)) *mtp2 {
@@ -155,7 +174,8 @@ func (m *mtp2) align() {
 	m.rtb, m.queue, m.lastRxSU, m.gotFISU = nil, nil, -1, false
 	m.t2 = time.AfterFunc(T2MTP2, func() { m.mu.Lock(); m.failed(); m.mu.Unlock() })
 	if was {
-		go m.up(false)
+		g := m.tellUp()
+		go m.report(g, false)
 	}
 }
 
@@ -170,7 +190,8 @@ func (m *mtp2) failed() {
 	m.sending = sios
 	m.rtb, m.queue = nil, nil
 	if was {
-		go m.up(false)
+		g := m.tellUp()
+		go m.report(g, false)
 	}
 	time.AfterFunc(10*Fill, func() { m.mu.Lock(); m.align(); m.mu.Unlock() })
 }
@@ -191,8 +212,14 @@ func (m *mtp2) receive(f []byte) {
 	li := int(f[2] & 0x3F)
 	m.mu.Lock()
 	var out []byte
+	nowUp := 0
 	defer func() {
 		m.mu.Unlock()
+		// In order: MTP3 hears that the link is in service before the first message on it, or the
+		// link test and traffic restart that message carries would be undone by a late "link up".
+		if nowUp > 0 {
+			m.report(nowUp, true)
+		}
 		if out != nil {
 			m.deliver(out)
 		}
@@ -209,6 +236,7 @@ func (m *mtp2) receive(f []byte) {
 	switch m.state {
 	case l2AlignedReady:
 		m.inService()
+		nowUp = m.tellUp()
 	case l2InService:
 	default:
 		return
@@ -307,11 +335,11 @@ func (m *mtp2) startProving() {
 
 func (m *mtp2) lockedFailed() { m.mu.Lock(); m.failed(); m.mu.Unlock() }
 
+// inService puts the link in service; the caller tells MTP3 once m.mu is released. Called with m.mu held.
 func (m *mtp2) inService() {
 	stop(&m.t1)
 	m.state = l2InService
 	m.sending = -1
-	go m.up(true)
 }
 
 // ack takes the far end's BSN and BIB: acknowledged MSUs leave the retransmission buffer; a BIB
@@ -405,8 +433,9 @@ func (m *mtp2) close() {
 		m.fill.Stop()
 	}
 	m.state = l2OutOfService
+	g := m.tellUp()
 	m.mu.Unlock()
 	if was {
-		m.up(false)
+		m.report(g, false)
 	}
 }

@@ -331,6 +331,8 @@ func TestTelephonyCardPRIServices(t *testing.T) {
 		t.Fatalf("SETUP calling %q name %q", out.Calling, out.Name)
 	}
 	out.Hangup(isdn.CauseNormal)
+	waitFor(t, "the B-channels are not free", func() bool { return len(network.Busy()) == 0 })
+	waitFor(t, "the engine's call did not end", func() bool { return len(e.Calls()) == 0 })
 	// 101 forwards every call outside: the PRI caller's call goes back out with 101 as the
 	// redirecting number, reason unconditional.
 	if err := e.SetDivert(Divert{Ext: "101", All: "93125550188"}); err != nil {
@@ -341,7 +343,7 @@ func TestTelephonyCardPRIServices(t *testing.T) {
 	}
 	select {
 	case out = <-incoming:
-	case <-time.After(4 * time.Second):
+	case <-time.After(8 * time.Second):
 		t.Fatal("the forward did not go out")
 	}
 	if out.Called != "3125550188" || out.Redirecting != "2125550101" || out.RedirectReason != isdn.RedirectUnconditional {

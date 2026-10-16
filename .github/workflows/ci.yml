@@ -124,6 +124,8 @@ jobs:
           fi
       - name: browser tests (Chromium)
         run: |
+          # ffmpeg: recordings of callers' live video play through a copy it makes
+          sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
           make build
           cd web && pnpm exec playwright install --with-deps chromium && pnpm exec playwright test --reporter=line
       - name: keep the failure screenshots
