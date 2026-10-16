@@ -474,12 +474,96 @@ test('core services: location records answer HELD by number', async ({ page }) =
   expect(xml).toContain('<locationResponse')
   expect(xml).toContain('<ca:HNO>123</ca:HNO>')
   expect(xml).toContain('<gml:pos>40.2633 -76.8823</gml:pos>')
-  // The logging service: an unsigned event is refused; the screen lists what was taken (nothing yet).
-  const lg = await page.request.post('/i3log/LogEvents', { headers: { 'Content-Type': 'application/jose' }, data: '{"logEventType":"CallStartLogEvent"}' })
-  expect(lg.status()).toBe(400)
-  expect((await lg.json()).reason).toContain('not a compact JWS')
+  // The logging service: a body that is not a JWS is refused (460 Bad LogEvent); the screen lists
+  // what was taken (nothing yet).
+  const lg = await page.request.post('/i3log/LogEvents', { headers: { 'Content-Type': 'application/json' }, data: '{"logEventType":"CallStartLogEvent"}' })
+  expect(lg.status()).toBe(460)
+  expect((await lg.json()).reason).toContain('not a JWS')
   expect((await page.request.get('/i3log/Versions')).status()).toBe(200)
   await expect(page.locator('section[aria-labelledby="cg-h"]').getByText('No log events on this day.')).toBeVisible()
+})
+
+// The NENA i3 web services: switched on in Core services; a policy signed with this server's own
+// certificate is stored and runs; a discrepancy report filed with this server comes in, is resolved,
+// and the resolution comes back; dequeue registrations, ADR records and test call requests show.
+test('core services: the i3 web services', async ({ page }) => {
+  await signIn(page)
+  await page.goto('./#/core')
+  const setup = page.locator('section[aria-labelledby="cs-h"]')
+  for (const name of [/Policy Store/, /Discrepancy reports: take them/, /Additional Data by caller/, /Dequeue registration/, /Test call generator/, /Service\/agency locator/]) {
+    const sw = setup.getByRole('switch', { name })
+    if ((await sw.getAttribute('aria-checked')) !== 'true') await sw.click()
+  }
+  await page.locator('#csa').fill('127.0.0.1')
+  await setup.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText('who answers discrepancy reports: a name, and an email or phone')).toBeVisible()
+  await page.locator('#csdr').fill('Core services desk, core@state.example.gov')
+  await page.locator('#csq').fill('sip:esrp@127.0.0.1')
+  await setup.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText('Core services saved')).toBeVisible()
+
+  const svc = page.locator('section[aria-labelledby="ci-h"]')
+  // A policy signed by this server (its certificate names 127.0.0.1).
+  await svc.locator('#cpol').fill(JSON.stringify({ policyOwner: '127.0.0.1', policyType: 'OriginationRoutePolicy', policyQueueName: 'sip:esrp@127.0.0.1',
+    policyRules: [{ id: 'night', priority: 5, conditions: [{ conditionType: 'CallSuspicionCondition', scoreFrom: 70, scoreTo: 100 }], actions: [{ actionType: 'BusyAction' }] },
+      { id: 'default', priority: 0, actions: [{ actionType: 'RouteAction', recipientUri: 'sip:sos@psap.county.example.gov' }] }] }))
+  await svc.getByRole('button', { name: 'Store' }).click()
+  await expect(page.getByText(/Stored: 127\.0\.0\.1 OriginationRoutePolicy/)).toBeVisible()
+  const pol = svc.getByRole('table', { name: 'Stored policies' })
+  await expect(pol.getByText('not traced to the PCA')).toBeVisible()
+  await pol.getByRole('button', { name: '2 rules' }).click()
+  await expect(pol.getByText(/if CallSuspicionCondition: BusyAction/)).toBeVisible()
+  const got = await page.request.get('/i3/PolicyStore/v1/Policies?policyType=OriginationRoutePolicy')
+  expect(got.status()).toBe(200)
+  expect((await got.json()).totalCount).toBe(1)
+
+  // A discrepancy report filed with ourselves.
+  await svc.getByRole('tab', { name: 'Discrepancy reports' }).click()
+  await svc.locator('#drto').fill(new URL('/i3/DiscrepancyReports/v1', page.url()).href)
+  await svc.locator('#drkind').selectOption('LostDiscrepancyReport')
+  await svc.locator('#drsvc').fill('ecrf.state.example.gov')
+  await svc.locator('#drcom').fill('routes Oak St to the wrong county')
+  await svc.getByRole('button', { name: 'File' }).click()
+  await expect(page.getByText('Report filed')).toBeVisible()
+  const received = svc.getByRole('list', { name: 'Reports received' }).getByRole('listitem').first()
+  await expect(received.getByText('routes Oak St to the wrong county')).toBeVisible()
+  await received.getByLabel('Resolution').selectOption('DataCorrected')
+  await received.getByLabel('Comments').fill('boundary fixed')
+  await received.getByRole('button', { name: 'Send the resolution' }).click()
+  await expect(received.getByText(/Resolved: DataCorrected/)).toBeVisible()
+  await expect(svc.getByRole('list', { name: 'Reports filed' }).getByText('DataCorrected')).toBeVisible()
+
+  // A position registers to take a queue's calls.
+  const reg = await page.request.put('/i3/DequeueRegistration/v1/Registrations', { data: { queueUri: 'sip:esrp@127.0.0.1', dequeuerUri: 'sip:pos7@127.0.0.1', expirationTime: 300, dequeuePreference: 2 } })
+  expect(reg.status()).toBe(200)
+  await svc.getByRole('tab', { name: 'Dequeue' }).click()
+  await expect(svc.getByRole('table', { name: 'Dequeue registrations' }).getByText('sip:pos7@127.0.0.1')).toBeVisible()
+
+  // Additional Data kept for a caller, found by an ESInet element.
+  await svc.getByRole('tab', { name: 'Additional Data' }).click()
+  await svc.locator('#adrc').fill('tel:+17175550100')
+  await svc.locator('#adrx').fill('<sub:EmergencyCallData.SubscriberInfo xmlns:sub="urn:ietf:params:xml:ns:EmergencyCallData:SubscriberInfo"><sub:SubscriberData><fn>Pat Example</fn></sub:SubscriberData></sub:EmergencyCallData.SubscriberInfo>')
+  await svc.getByRole('button', { name: 'Keep' }).click()
+  await expect(svc.getByRole('table', { name: 'Additional Data records' }).getByText('tel:+17175550100')).toBeVisible()
+  const adr = await page.request.get('/i3/Adr/v1/AdditionalData?callerUri=' + encodeURIComponent('tel:+1 717 555 0100'))
+  expect(await adr.text()).toContain('Pat Example')
+
+  // The locator gives out other agencies added here.
+  await svc.getByRole('tab', { name: 'Locator' }).click()
+  await svc.locator('#loci').fill('police.county.example.gov')
+  await svc.locator('#locn').fill('County Police')
+  await svc.locator('#loct').fill('police')
+  await svc.locator('#locl').fill('https://log.county.example.gov/i3log')
+  await svc.getByRole('button', { name: 'Add', exact: true }).click()
+  await expect(svc.getByRole('table', { name: 'Locator records' }).getByText('County Police')).toBeVisible()
+  const loc = await page.request.get('/i3/ServiceAgencyLocator/v1/LocatorRecordUris?serviceAgencyName=County%20Police')
+  expect((await loc.json()).locatorUris[0].uriType).toBe('RecordUri')
+
+  // A test call request is refused for a PSAP this ESRP does not know.
+  const tc = await page.request.put('/i3/TestCall/v1/SendTestCalls/nobody.example.gov', { data: { location: '<presence/>', frequency: 60, discrepancyRateLimit: 1, startDate: new Date().toISOString(), endDate: new Date(Date.now() + 864e5).toISOString() } })
+  expect(tc.status()).toBe(442)
+  await svc.getByRole('tab', { name: 'Test calls' }).click()
+  await expect(svc.getByText('No PSAP has asked for test calls')).toBeVisible()
 })
 
 // Caller video: a 911 conversation from a TCC; the call-taker sends a video link, the caller's

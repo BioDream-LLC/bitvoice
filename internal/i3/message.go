@@ -269,3 +269,99 @@ func splitHeader(v string) []string {
 	}
 	return append(out, strings.TrimSpace(v[start:]))
 }
+
+// BodyParts lists a message's body part types and its Additional Data blocks by value, each
+// flattened to its elements ("EmergencyCallData.ServiceInfo" -> "ServiceType" -> "relay"), as the
+// routing rules' Additional Data condition tests them. An element that repeats keeps its first value.
+func BodyParts(contentType string, body []byte) ([]string, map[string]map[string]string) {
+	types := []string{}
+	blocks := map[string]map[string]string{}
+	add := func(ct string, b []byte) {
+		mt, _, err := mime.ParseMediaType(ct)
+		if err != nil {
+			return
+		}
+		types = append(types, mt)
+		lower := strings.ToLower(mt)
+		if !strings.HasPrefix(lower, "application/emergencycalldata.") || !strings.HasSuffix(lower, "+xml") {
+			return
+		}
+		name := ct[strings.Index(strings.ToLower(ct), "emergencycalldata."):]
+		name = name[:strings.Index(strings.ToLower(name), "+xml")]
+		root, err := parseXML(b)
+		if err != nil {
+			return
+		}
+		m := map[string]string{}
+		var walk func(n *node)
+		walk = func(n *node) {
+			for k, v := range n.attrs {
+				if _, ok := m[k]; !ok {
+					m[k] = v
+				}
+			}
+			if len(n.kids) == 0 && n.name != "" {
+				if _, ok := m[n.name]; !ok {
+					m[n.name] = strings.TrimSpace(n.text)
+				}
+			}
+			for _, k := range n.kids {
+				walk(k)
+			}
+		}
+		walk(root)
+		key := "EmergencyCallData." + name[len("EmergencyCallData."):]
+		if _, ok := blocks[key]; !ok {
+			blocks[key] = m
+		}
+	}
+	mt, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return types, blocks
+	}
+	if !strings.HasPrefix(mt, "multipart/") {
+		add(contentType, body)
+		return types, blocks
+	}
+	mr := multipart.NewReader(bytes.NewReader(body), params["boundary"])
+	for {
+		p, err := mr.NextRawPart()
+		if err != nil {
+			break
+		}
+		var buf bytes.Buffer
+		if _, err := buf.ReadFrom(p); err != nil {
+			break
+		}
+		add(p.Header.Get("Content-Type"), buf.Bytes())
+	}
+	return types, blocks
+}
+
+// TextPart is a message's first text/plain body part (or the body, when it is text/plain itself).
+func TextPart(contentType string, body []byte) string {
+	mt, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return ""
+	}
+	if mt == "text/plain" {
+		return string(body)
+	}
+	if !strings.HasPrefix(mt, "multipart/") {
+		return ""
+	}
+	mr := multipart.NewReader(bytes.NewReader(body), params["boundary"])
+	for {
+		p, err := mr.NextRawPart()
+		if err != nil {
+			return ""
+		}
+		var buf bytes.Buffer
+		if _, err := buf.ReadFrom(p); err != nil {
+			return ""
+		}
+		if ct, _, _ := mime.ParseMediaType(p.Header.Get("Content-Type")); ct == "text/plain" {
+			return buf.String()
+		}
+	}
+}

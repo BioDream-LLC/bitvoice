@@ -47,6 +47,7 @@ type Server struct {
 	core           boundaryStore
 	lis            lisStore
 	lvf            addressStore
+	i3docs         i3Docs
 	Bus            *events.Bus
 	Log            *slog.Logger
 	Version        string

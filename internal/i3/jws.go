@@ -219,3 +219,85 @@ func SignJWS(payload []byte, cert tls.Certificate) (string, error) {
 	}
 	return in + "." + base64.RawURLEncoding.EncodeToString(sig), nil
 }
+
+// FlatJWS is a JWS in the flattened JSON serialization (RFC 7515 7.2.2), the form NENA i3 web
+// services carry (NENA-STA-010.3 section 5.10, the "Jws" object of i3-common).
+type FlatJWS struct {
+	Protected string `json:"protected"`
+	Payload   string `json:"payload"`
+	Signature string `json:"signature"`
+}
+
+// Compact is the same JWS in compact form.
+func (f FlatJWS) Compact() string { return f.Protected + "." + f.Payload + "." + f.Signature }
+
+// Flat splits a compact JWS into the flattened form.
+func Flat(compact string) (FlatJWS, error) {
+	p := strings.Split(strings.TrimSpace(compact), ".")
+	if len(p) != 3 {
+		return FlatJWS{}, errors.New("not a compact JWS")
+	}
+	return FlatJWS{p[0], p[1], p[2]}, nil
+}
+
+// ReadJWS takes a request body holding a JWS: flattened JSON (the i3 form), a JSON string of a
+// compact JWS, an object {"jws": ...}, or the compact form as it is. It gives the compact form
+// (the very bytes received, so a store keeps them unaltered) and the algorithm named.
+func ReadJWS(body []byte) (compact, alg string, err error) {
+	b := strings.TrimSpace(string(body))
+	switch {
+	case strings.HasPrefix(b, "{"):
+		var f FlatJWS
+		var wrap map[string]any
+		if err := json.Unmarshal([]byte(b), &wrap); err != nil {
+			return "", "", errors.New("the body is not JSON")
+		}
+		if s, ok := wrap["jws"].(string); ok {
+			compact = s
+		} else if s, ok := wrap["logEvent"].(string); ok {
+			compact = s
+		} else {
+			_ = json.Unmarshal([]byte(b), &f)
+			if f.Protected == "" || f.Signature == "" && !strings.Contains(headerAlg(f.Protected), "none") {
+				return "", "", errors.New("the body is not a JWS (flattened JSON: protected, payload, signature)")
+			}
+			compact = f.Compact()
+		}
+	case strings.HasPrefix(b, `"`):
+		if err := json.Unmarshal([]byte(b), &compact); err != nil {
+			return "", "", errors.New("the body is not a JSON string")
+		}
+	default:
+		compact = b
+	}
+	f, err := Flat(compact)
+	if err != nil {
+		return "", "", err
+	}
+	return compact, headerAlg(f.Protected), nil
+}
+
+func headerAlg(protected string) string {
+	hb, err := base64.RawURLEncoding.DecodeString(protected)
+	if err != nil {
+		return ""
+	}
+	var h struct {
+		Alg string `json:"alg"`
+	}
+	_ = json.Unmarshal(hb, &h)
+	return h.Alg
+}
+
+// UnsignedPayload reads the payload of an unsigned JWS (alg "none"), as the logging service may
+// take them (section 5.10). Any other algorithm is refused here.
+func UnsignedPayload(compact string) ([]byte, error) {
+	f, err := Flat(compact)
+	if err != nil {
+		return nil, err
+	}
+	if headerAlg(f.Protected) != "none" {
+		return nil, errors.New("not an unsigned JWS")
+	}
+	return base64.RawURLEncoding.DecodeString(f.Payload)
+}

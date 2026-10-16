@@ -71,8 +71,14 @@ type Engine struct {
 	// FindService is the ESRP's ECRF.
 	FindService FindService
 
-	bcf   bcfState
-	video videoHub // 911 callers' video
+	bcf       bcfState
+	badActors badActorState
+	tests     testCallState
+	// Policies finds a stored i3 routing policy (the Policy Store) for the ESRP; nil: none.
+	Policies func(policyType, queue, id string) (i3.Policy, bool)
+	// Dequeuers are the registered takers of a queue (dequeue registration), most preferred first.
+	Dequeuers func(queue string) []Dequeuer
+	video     videoHub // 911 callers' video
 
 	radioOnce sync.Once
 	radio     *radio

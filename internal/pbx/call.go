@@ -63,6 +63,11 @@ type Call struct {
 	esinet             bool                      // arrived on a trunk from the ESInet
 	srcIP              string                    // the address an ESInet call came from (for the BCF)
 	suspicious         bool                      // the BCF let it through marked suspicious
+	suspicion          int                       // the call's suspicion score (Call-Info emergency-CallSuspicion, raised by the BCF)
+	sourceID           string                    // the BCF's ID for its source (Call-Info emergency-source)
+	facts              *policyFacts              // what i3 routing policies may test, read from its INVITE
+	testCall           bool                      // a test call (urn:service:test.sos)
+	testText           string                    // a test call's answer text, beside the SDP
 	inTrunkID          string                    // the trunk it came in on (for policy rules)
 	rebidAt            time.Time                 // the location was last fetched (by reference) at
 	emergencyTold      bool                      // the API was told this 911 call was answered
@@ -337,6 +342,7 @@ func (c *Call) startFork(t target, stageNo int) bool {
 	}
 	var peer sip.Peer
 	var ruri, toVal, fromVal string
+	inv0Route := "" // a Route header, when the request URI is a service URN
 	callID := sip.NewCallID()
 	tag := sip.NewTag()
 	leg := &Leg{e: e, call: c, Number: t.ext, Name: t.name, Ext: t.ext, callID: callID, localTag: tag, ep: ep,
@@ -367,6 +373,10 @@ func (c *Call) startFork(t target, stageNo int) bool {
 		ruri = "sip:" + t.number + "@" + host
 		if t.trunk.Transport == "tcp" || t.trunk.Transport == "tls" {
 			ruri += ";transport=" + t.trunk.Transport
+		}
+		if t.ruri != "" {
+			ruri = t.ruri // a service URN, the next hop in the Route header
+			inv0Route = "<sip:" + host + ";lr>"
 		}
 		toVal = "<sip:" + t.number + "@" + host + ">"
 		domain := t.trunk.FromDomain
@@ -433,6 +443,9 @@ func (c *Call) startFork(t target, stageNo int) bool {
 	leg.remoteTarget = ruri
 
 	inv := &sip.Message{IsRequest: true, Method: sip.INVITE, RequestURI: ruri}
+	if inv0Route != "" {
+		inv.Set("Route", inv0Route)
+	}
 	inv.Set("From", fromVal)
 	inv.Set("To", toVal)
 	inv.Set("Call-ID", callID)
@@ -525,6 +538,10 @@ func (c *Call) startFork(t target, stageNo int) bool {
 		if c.i3.LocationURI != "" {
 			inv.Add("Geolocation", "<"+c.i3.LocationURI+">")
 		}
+	}
+	if t.trunk != nil && c.sourceID != "" {
+		// The BCF's mark: a PSAP that finds this source attacking reports it by this ID.
+		inv.Add("Call-Info", "<sip:"+c.sourceID+">;purpose=emergency-source")
 	}
 	leg.localSDP = body
 	leg.inviteReq = inv.Clone()
@@ -993,6 +1010,8 @@ func (c *Call) answerLocal(p plan) {
 	switch p.local {
 	case "text911":
 		c.answerText()
+	case "test911":
+		c.answerTestCall()
 	case "echo":
 		if c.answerHere("Echo test") {
 			c.caller.ep.Echo()
@@ -1126,6 +1145,11 @@ func (c *Call) answerHere(name string) bool {
 	a.mu.Unlock()
 	a.sendCodec(ans)
 	ok := c.response(200, ans)
+	if c.testText != "" {
+		ct, b := testCallBody(ok.Body, c.testText)
+		ok.Set("Content-Type", ct)
+		ok.Body = b
+	}
 	c.mu.Unlock()
 	c.e.mu.Lock()
 	delete(c.e.pending, a.invite.Branch())

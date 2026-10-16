@@ -55,6 +55,13 @@ func (e *Engine) esrpPlan(cfg *config.Config, c *Call, to string) plan {
 	if uri == "" {
 		uri = core.Default
 	}
+	// Stored i3 policies (the Policy Store) decide when there are any for this call.
+	if outs, which, ok := e.policyOutcomes(cfg, c, service, loc, uri); ok {
+		if p, ok := e.policyPlan(cfg, c, service, outs, which, why); ok {
+			return p
+		}
+		why += "; " + which + " gave no route it could use, so the rules below"
+	}
 	// The policy rules: the first that matches decides where the call goes instead.
 	for _, ru := range core.Rules {
 		if !e.ruleMatches(cfg, ru, c, service, uri, loc == nil) {
@@ -91,20 +98,9 @@ func (e *Engine) esrpPlan(cfg *config.Config, c *Call, to string) plan {
 	seen := map[string]bool{}
 	for ps := first; ps != nil && !seen[ps.URI]; ps = find(ps.Overflow) {
 		seen[ps.URI] = true
-		t := cfg.FindTrunk(ps.Trunk)
-		if t == nil || !t.Enabled {
-			continue
+		if st, ok := e.psapStage(cfg, ps, to, 30*time.Second); ok {
+			p.stages = append(p.stages, st)
 		}
-		tc := *t
-		number := to
-		if u := strings.TrimPrefix(strings.TrimPrefix(ps.URI, "sips:"), "sip:"); u != ps.URI {
-			if user, _, ok := strings.Cut(u, "@"); ok && user != "" {
-				number = user // the PSAP's own name for the service (sos, 911, ...)
-			}
-		} else if strings.HasPrefix(ps.URI, "tel:") {
-			number = strings.TrimPrefix(ps.URI, "tel:")
-		}
-		p.stages = append(p.stages, stage{targets: []target{{trunk: &tc, number: number, name: ps.Name}}, timeout: 30 * time.Second, failover: true})
 	}
 	if len(p.stages) == 0 {
 		p.reject, p.reason = 503, "No PSAP Trunk"

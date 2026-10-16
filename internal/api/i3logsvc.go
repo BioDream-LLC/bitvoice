@@ -4,9 +4,12 @@ import (
 	"bufio"
 	"crypto/x509"
 	"encoding/json"
+	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -89,12 +92,13 @@ func i3logError(w http.ResponseWriter, code int, msg string) {
 }
 
 func (s *Server) i3logRoutes() {
-	s.mux.HandleFunc("GET /i3log/Versions", func(w http.ResponseWriter, r *http.Request) {
+	versions := func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := s.i3logGate(w, r); !ok {
 			return
 		}
-		writeJSON(w, 200, map[string]any{"versions": []map[string]any{{"major": 3, "minor": 0}}, "vendor": "BioDream LLC", "serviceInfo": map[string]any{"product": "BitVoice", "version": s.Version}})
-	})
+		writeJSON(w, 200, s.versions([]string{"EdDSA", "none"})) // a logging service may take unsigned events (5.10)
+	}
+	s.mux.HandleFunc("GET /i3log/Versions", versions)
 	s.mux.HandleFunc("POST /i3log/LogEvents", func(w http.ResponseWriter, r *http.Request) {
 		cfg, ok := s.i3logGate(w, r)
 		if !ok {
@@ -102,29 +106,45 @@ func (s *Server) i3logRoutes() {
 		}
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
 		if err != nil {
-			i3logError(w, 413, "the log event is larger than 1 MB")
+			i3logError(w, 461, "the log event is larger than 1 MB")
 			return
 		}
-		jws := strings.TrimSpace(string(body))
-		if strings.HasPrefix(jws, "{") { // the JWS inside a JSON body
-			var wrap map[string]string
-			if json.Unmarshal(body, &wrap) == nil {
-				jws = firstNonEmpty(wrap["jws"], wrap["logEvent"])
-			}
-		}
-		pool := s.pcaPool(cfg)
-		signed, err := i3.VerifyJWS(jws, pool, time.Now())
+		jws, alg, err := i3.ReadJWS(body)
 		if err != nil {
-			i3logError(w, 400, err.Error())
+			i3logError(w, 460, err.Error())
 			return
+		}
+		var payload []byte
+		var signer string
+		chained := false
+		switch alg {
+		case "none":
+			if payload, err = i3.UnsignedPayload(jws); err != nil {
+				i3logError(w, 460, err.Error())
+				return
+			}
+		case "":
+			i3logError(w, 438, "the log event names no algorithm")
+			return
+		default:
+			signed, err := i3.VerifyJWS(jws, s.pcaPool(cfg), time.Now())
+			if err != nil {
+				code := 434
+				if strings.Contains(err.Error(), "algorithm") {
+					code = 438
+				}
+				i3logError(w, code, err.Error())
+				return
+			}
+			payload, signer, chained = signed.Payload, signed.Subject(), signed.Chained
 		}
 		var ev map[string]any
-		if json.Unmarshal(signed.Payload, &ev) != nil {
-			i3logError(w, 400, "the log event is not JSON")
+		if json.Unmarshal(payload, &ev) != nil {
+			i3logError(w, 460, "the log event is not JSON")
 			return
 		}
 		if t, _ := ev["logEventType"].(string); t == "" {
-			i3logError(w, 400, "the log event has no logEventType")
+			i3logError(w, 460, "the log event has no logEventType")
 			return
 		}
 		host, _, err := net.SplitHostPort(r.RemoteAddr)
@@ -132,10 +152,10 @@ func (s *Server) i3logRoutes() {
 			host = r.RemoteAddr
 		}
 		rec := ReceivedLogEvent{ID: "urn:emergency:uid:logid:" + config.NewID() + ":" + elementID(cfg), Received: time.Now().UTC(), From: host,
-			Signer: signed.Subject(), Chained: signed.Chained, JWS: jws, Event: ev}
+			Signer: signer, Chained: chained, JWS: jws, Event: ev}
 		line, _ := json.Marshal(rec)
 		if s.DataDir == "" {
-			i3logError(w, 503, "this server has no data folder to keep log events in")
+			i3logError(w, 454, "this server has no data folder to keep log events in")
 			return
 		}
 		s.i3Mu.Lock()
@@ -151,26 +171,21 @@ func (s *Server) i3logRoutes() {
 		s.i3Mu.Unlock()
 		if err != nil {
 			s.Log.Error("i3 logging service: cannot keep a log event", "err", err)
-			i3logError(w, 500, "the log event could not be kept")
+			i3logError(w, 454, "the log event could not be kept")
 			return
 		}
-		writeJSON(w, 201, map[string]any{"logEventId": rec.ID})
+		writeJSON(w, 201, rec.ID) // the logEventId, as a JSON string
 	})
 	s.mux.HandleFunc("GET /i3log/LogEvents/{id}", func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := s.i3logGate(w, r); !ok {
 			return
 		}
 		id := r.PathValue("id")
-		days, _ := filepath.Glob(filepath.Join(s.i3Dir(), "received-*.jsonl"))
-		sort.Sort(sort.Reverse(sort.StringSlice(days)))
-		for _, d := range days {
-			day := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(d), "received-"), ".jsonl")
-			for _, ev := range s.receivedOn(day) {
-				if ev.ID == id {
-					w.Header().Set("Content-Type", "application/jose")
-					io.WriteString(w, ev.JWS)
-					return
-				}
+		for _, ev := range s.receivedAll(time.Time{}, time.Now().Add(time.Hour)) {
+			if ev.ID == id {
+				flat, _ := i3.Flat(ev.JWS)
+				writeJSON(w, 200, flat)
+				return
 			}
 		}
 		i3logError(w, 404, "no log event with that ID")
@@ -180,31 +195,122 @@ func (s *Server) i3logRoutes() {
 			return
 		}
 		q := r.URL.Query()
-		start, end := time.Now().UTC().Add(-24*time.Hour), time.Now().UTC()
-		if t, err := time.Parse(time.RFC3339, q.Get("start")); err == nil {
-			start = t
-		}
-		if t, err := time.Parse(time.RFC3339, q.Get("end")); err == nil {
-			end = t
-		}
-		if end.Sub(start) > 31*24*time.Hour {
-			i3logError(w, 400, "ask for 31 days at most")
+		from, to, code, msg := timeWindow(q)
+		if code != 0 {
+			i3logError(w, code, msg)
 			return
 		}
-		callID, incID := q.Get("callId"), q.Get("incidentId")
-		out := []map[string]any{}
-		for d := start.Truncate(24 * time.Hour); !d.After(end); d = d.Add(24 * time.Hour) {
-			for _, ev := range s.receivedOn(d.Format("2006-01-02")) {
-				if ev.Received.Before(start) || ev.Received.After(end) {
-					continue
-				}
-				if callID != "" && ev.Event["callId"] != callID || incID != "" && ev.Event["incidentId"] != incID {
-					continue
-				}
-				out = append(out, map[string]any{"logEventId": ev.ID, "logEvent": ev.JWS})
+		typ := q.Get("logEventType")
+		var out []map[string]any
+		for _, ev := range s.receivedAll(from, to) {
+			if typ != "" && ev.Event["logEventType"] != typ {
+				continue
 			}
+			flat, _ := i3.Flat(ev.JWS)
+			out = append(out, map[string]any{"logEventId": ev.ID, "logEvent": flat})
 		}
-		writeJSON(w, 200, map[string]any{"count": len(out), "logEventContainers": out})
+		if len(out) == 0 {
+			i3logError(w, 404, "no log events")
+			return
+		}
+		items, total := page(r, out)
+		writeJSON(w, 200, map[string]any{"count": len(items), "totalCount": total, "logEventContainers": items})
+	})
+	ids := func(path, field string, pick func(ev ReceivedLogEvent, q url.Values) []string) {
+		s.mux.HandleFunc("GET /i3log/"+path, func(w http.ResponseWriter, r *http.Request) {
+			if _, ok := s.i3logGate(w, r); !ok {
+				return
+			}
+			q := r.URL.Query()
+			from, to, code, msg := timeWindow(q)
+			if code != 0 {
+				i3logError(w, code, msg)
+				return
+			}
+			if q.Get("area") != "" {
+				i3logError(w, 467, "searching by area is not supported here")
+				return
+			}
+			seen := map[string]bool{}
+			var out []string
+			for _, ev := range s.receivedAll(from, to) {
+				for _, v := range pick(ev, q) {
+					if v != "" && !seen[v] {
+						seen[v] = true
+						out = append(out, v)
+					}
+				}
+			}
+			if len(out) == 0 {
+				i3logError(w, 404, "none found")
+				return
+			}
+			items, total := page(r, out)
+			res := map[string]any{"count": len(items), "totalCount": total, field: items}
+			if field == "incidentIds" {
+				res["logEventIds"] = items // the published YAML names the list so too
+			}
+			writeJSON(w, 200, res)
+		})
+	}
+	str := func(m map[string]any, k string) string { v, _ := m[k].(string); return v }
+	ids("LogEventIds", "logEventIds", func(ev ReceivedLogEvent, q url.Values) []string {
+		if c := q.Get("callId"); c != "" && str(ev.Event, "callId") != c {
+			return nil
+		}
+		if i := q.Get("incidentId"); i != "" && str(ev.Event, "incidentId") != i {
+			return nil
+		}
+		return []string{ev.ID}
+	})
+	ids("CallIds", "callIds", func(ev ReceivedLogEvent, q url.Values) []string {
+		if i := q.Get("incidentId"); i != "" && str(ev.Event, "incidentId") != i {
+			return nil
+		}
+		return []string{str(ev.Event, "callId")}
+	})
+	ids("IncidentIds", "incidentIds", func(ev ReceivedLogEvent, q url.Values) []string { return []string{str(ev.Event, "incidentId")} })
+	ids("AgencyIds", "agencyIds", func(ev ReceivedLogEvent, q url.Values) []string {
+		if c := q.Get("callId"); c != "" && str(ev.Event, "callId") != c {
+			return nil
+		}
+		if i := q.Get("incidentId"); i != "" && str(ev.Event, "incidentId") != i {
+			return nil
+		}
+		return []string{str(ev.Event, "agencyId")}
+	})
+	s.mux.HandleFunc("GET /i3log/Conversations", func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := s.i3logGate(w, r); !ok {
+			return
+		}
+		call := r.URL.Query().Get("callId")
+		if call == "" {
+			i3logError(w, 454, "give the callId")
+			return
+		}
+		var b strings.Builder
+		found, text := false, false
+		for _, ev := range s.receivedAll(time.Time{}, time.Now().Add(time.Hour)) {
+			if str(ev.Event, "callId") != call {
+				continue
+			}
+			found = true
+			if str(ev.Event, "logEventType") != "MessageLogEvent" {
+				continue
+			}
+			text = true
+			who := firstNonEmpty(str(ev.Event, "direction"), "")
+			body := firstNonEmpty(str(ev.Event, "text"), str(ev.Event, "message"), str(ev.Event, "body"))
+			fmt.Fprintf(&b, "<p><time>%s</time> <b>%s</b> %s</p>", html.EscapeString(str(ev.Event, "timestamp")), html.EscapeString(who), html.EscapeString(body))
+		}
+		switch {
+		case !found:
+			i3logError(w, 404, "no such call")
+		case !text:
+			i3logError(w, 464, "no text in this call")
+		default:
+			writeJSON(w, 200, "<div class=\"conversation\">"+b.String()+"</div>")
+		}
 	})
 	// The Core services page's view of what the service took.
 	s.handle("GET /api/core/i3log", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
@@ -221,4 +327,50 @@ func (s *Server) i3logRoutes() {
 		}
 		writeJSON(w, 200, map[string]any{"day": day, "items": items})
 	})
+}
+
+// receivedAll is every log event received from one time to another, oldest first.
+func (s *Server) receivedAll(from, to time.Time) []ReceivedLogEvent {
+	days, _ := filepath.Glob(filepath.Join(s.i3Dir(), "received-*.jsonl"))
+	sort.Strings(days)
+	var out []ReceivedLogEvent
+	for _, d := range days {
+		day := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(d), "received-"), ".jsonl")
+		t, err := time.Parse("2006-01-02", day)
+		if err != nil || t.Add(24*time.Hour).Before(from) || t.After(to) {
+			continue
+		}
+		for _, ev := range s.receivedOn(day) {
+			if !ev.Received.Before(from) && !ev.Received.After(to) {
+				out = append(out, ev)
+			}
+		}
+	}
+	return out
+}
+
+// timeWindow reads startTime and endTime (the last day when neither is given).
+func timeWindow(q url.Values) (time.Time, time.Time, int, string) {
+	from, to := time.Now().UTC().Add(-24*time.Hour), time.Now().UTC().Add(time.Minute)
+	if v := q.Get("startTime"); v != "" {
+		t, err := i3.ParseTimestamp(v)
+		if err != nil {
+			return from, to, 465, "startTime is not a timestamp"
+		}
+		from = t
+		if q.Get("endTime") == "" {
+			to = from.Add(31 * 24 * time.Hour)
+		}
+	}
+	if v := q.Get("endTime"); v != "" {
+		t, err := i3.ParseTimestamp(v)
+		if err != nil {
+			return from, to, 465, "endTime is not a timestamp"
+		}
+		to = t
+	}
+	if to.Before(from) {
+		return from, to, 466, "endTime is before startTime"
+	}
+	return from, to, 0, ""
 }

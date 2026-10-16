@@ -8,7 +8,7 @@ import { useDraft } from './useDraft'
 import { Badge, Empty, Field, Page, StaleBanner, problemFor } from './ui'
 
 const blankMap: MapSource = { file: '', url: '', attribution: '' }
-const blankPSAP: PSAPSettings = { agencyId: '', elementId: '', aliAddress: '', eidoUrl: '', eidoToken: '', answerTarget: 15, ttyOff: false, locationServer: '', videoLinkBase: '', videoFrom: '', videoStreams: 0, videoKbps: 0, uploadMb: 0, mediaDays: 0, recordVideo: false }
+const blankPSAP: PSAPSettings = { agencyId: '', elementId: '', aliAddress: '', eidoUrl: '', eidoToken: '', answerTarget: 15, ttyOff: false, locationServer: '', videoLinkBase: '', videoFrom: '', videoStreams: 0, videoKbps: 0, uploadMb: 0, mediaDays: 0, recordVideo: false, testCallsOff: false }
 
 export function PSAP() {
   const admin = useIsAdmin()
@@ -155,6 +155,10 @@ function PSAPSetup() {
       <label className="flex items-center gap-2 text-sm text-slate-300">
         <input type="checkbox" checked={!draft.ttyOff} onChange={(e) => set({ ttyOff: !e.target.checked })} />
         Listen for TTYs on 911 calls <span className="text-xs text-slate-500">(deaf callers' text telephones: their text shows on the call, and replies go back as TTY tones)</span>
+      </label>
+      <label className="flex items-center gap-2 text-sm text-slate-300">
+        <input type="checkbox" checked={!draft.testCallsOff} onChange={(e) => set({ testCallsOff: !e.target.checked })} />
+        Answer test calls <span className="text-xs text-slate-500">(urn:service:test.sos from the ESInet: answered with no call-taker, three packets of sound sent back, then hung up)</span>
       </label>
       <h3 className="text-sm font-semibold text-violet-300">CAD</h3>
       <div className="grid gap-3 md:grid-cols-3">

@@ -50,6 +50,8 @@ func (s *Server) WireEngine() {
 	eng.OnFax = s.FaxReceived
 	eng.OnEmergencyAnswer = s.EmergencyAnswered
 	eng.OnVideoRecord = s.recordCallVideo
+	eng.Policies = s.PolicyFor
+	eng.Dequeuers = s.DequeuersFor
 	eng.FindService = s.FindService
 	cfg, _ := st.Config()
 	eng.Apply(s.Resolved(cfg))
@@ -73,6 +75,7 @@ func (s *Server) RunBackground(ctx context.Context, main bool) {
 	go s.RunFaxMail(ctx)
 	go s.RunPSAPLog(ctx)
 	go s.RunCallMedia(ctx)
+	go s.RunTestCalls(ctx)
 	go s.RunAudit(ctx)
 	go s.RunRadioCAD(ctx)
 	go s.RunGitOps(ctx)

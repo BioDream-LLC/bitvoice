@@ -1,18 +1,21 @@
-import { ArrowDown, ArrowUp, CheckCircle2, ListOrdered, Map as MapIcon, MapPinCheck, Network, Plus, Save, Search, Shield, ShieldAlert, Trash2, Upload, XCircle } from 'lucide-react'
+import { ArrowDown, ArrowUp, CheckCircle2, FileSignature, Flag, ListOrdered, Map as MapIcon, MapPinCheck, Network, PhoneCall, Plus, Save, Search, Shield, ShieldAlert, Trash2, Upload, Waypoints, XCircle } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   api, errorOf, useBoundariesQuery, useDeleteBoundaryMutation, useLazyFindAreaQuery, useSaveBoundaryMutation, useSaveSettingsMutation, useSettingsQuery, useTrunksQuery, useSchedulesQuery,
   useAddressDataQuery, useDeleteAddressesMutation, useValidateAddressMutation, useBcfLogQuery, useLisDataQuery, useLazyLisDataQuery, useDeleteLISMutation, useReceivedLogQuery,
-  type ApiErrorBody, type Boundary, type CoreRule, type CoreSettings, type Validation,
+  useCorePoliciesQuery, useStorePolicyMutation, useDeletePolicyMutation, useDiscrepanciesQuery, useResolveDiscrepancyMutation, useFileDiscrepancyMutation, useBadActorsQuery, useClearBadActorMutation,
+  useDequeueRegsQuery, useAdrRecordsQuery, useAddADRMutation, useDeleteADRMutation, useLocatorRecordsQuery, useAddLocatorMutation, useDeleteLocatorMutation, useTestCallRequestsQuery, useRunTestCallMutation, useDeleteTestCallsMutation,
+  type ApiErrorBody, type Boundary, type CoreRule, type CoreSettings, type Validation, type DiscrepancyReport,
 } from './api'
 import { attempt, useIsAdmin } from './Editor'
 import { store } from './store'
 import { useDraft } from './useDraft'
 import { Badge, Empty, Field, Page, StaleBanner, Toggle, problemFor } from './ui'
 
-const blankBCF = { enabled: false, perMinute: 0, concurrent: 0, deny: [] as string[], mark: false, verifyIdentity: false }
-const blankCore: CoreSettings = { ecrf: false, lis: false, logging: false, pcaRoots: '', source: '', allowFrom: [], psaps: [], default: '', lostUrl: '', forestGuide: '', rules: [], bcf: blankBCF }
+const blankBCF = { enabled: false, perMinute: 0, concurrent: 0, deny: [] as string[], mark: false, verifyIdentity: false, badActors: false, badActorBlock: false, badActorScore: 0, badActorHours: 0 }
+const blankCore: CoreSettings = { ecrf: false, lis: false, logging: false, pcaRoots: '', source: '', allowFrom: [], psaps: [], default: '', lostUrl: '', forestGuide: '', rules: [], bcf: blankBCF,
+  policyStore: false, queueUri: '', discrepancy: false, drContact: '', geocode: false, msag: false, adr: false, locator: false, dequeue: false, testCalls: false, maxDequeueS: 0 }
 /** Place names may have spaces in them: split on commas only. */
 const commas = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean)
 const list = (s: string) => s.split(/[,\s]+/).map((x) => x.trim()).filter(Boolean)
@@ -29,6 +32,7 @@ export function CoreServices() {
       <LocationRecords />
       <ReceivedLog />
       <BCFLog />
+      <I3Services />
     </Page>
   )
 }
@@ -127,7 +131,35 @@ function CoreSetup() {
           <Toggle checked={draft.bcf.mark} onChange={(v) => set({ bcf: { ...draft.bcf, mark: v } })} label="Over a limit: let the call through marked suspicious (for a policy rule) instead of refusing it" />
           <Toggle checked={draft.bcf.verifyIdentity} onChange={(v) => set({ bcf: { ...draft.bcf, verifyIdentity: v } })} label="Check STIR/SHAKEN signatures: a call whose signed caller ID fails goes through marked suspicious" />
           <p className="text-xs text-slate-500">Signatures are checked against the STI roots set under Call screening in Settings. A 911 call is never refused for a bad signature.</p>
+          <Toggle checked={!!draft.bcf.badActors} onChange={(v) => set({ bcf: { ...draft.bcf, badActors: v } })} label="Mark each source and take bad actor reports (Call-Info emergency-source, /i3/BadActor/v1/BadActors)" />
+          {draft.bcf.badActors && <div className="grid gap-3 md:grid-cols-3">
+            <Toggle checked={!!draft.bcf.badActorBlock} onChange={(v) => set({ bcf: { ...draft.bcf, badActorBlock: v } })} label="Refuse a reported source's calls (else raise their suspicion)" />
+            {!draft.bcf.badActorBlock && <Field label="Raise suspicion by" htmlFor="cbbs" error={p('bcf.badActorScore')} hint="0 to 100 (50 when blank), for the policy rules' suspicion conditions."><input id="cbbs" className="input w-24" inputMode="numeric" value={draft.bcf.badActorScore || ''} placeholder="50" onChange={(e) => set({ bcf: { ...draft.bcf, badActorScore: Number(e.target.value.replace(/\D/g, '')) || 0 } })} /></Field>}
+            <Field label="A report lasts (hours)" htmlFor="cbbh" hint="24 when blank."><input id="cbbh" className="input w-24" inputMode="numeric" value={draft.bcf.badActorHours || ''} placeholder="24" onChange={(e) => set({ bcf: { ...draft.bcf, badActorHours: Number(e.target.value.replace(/\D/g, '')) || 0 } })} /></Field>
+          </div>}
         </>}
+      </div>
+      <div className="space-y-3">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-violet-300"><Waypoints size={15} className="text-sky-300" aria-hidden /> NENA i3 web services</h3>
+        <p className="text-sm text-slate-400">The other elements of the ESInet use these at <span className="font-mono text-amber-300">{origin}/i3/&lt;service&gt;/v1</span>, as NENA-STA-010.3 defines them. Only the addresses in <span className="text-slate-200">May ask</span> above get an answer.</p>
+        <div className="grid gap-2 md:grid-cols-2">
+          <Toggle checked={!!draft.policyStore} onChange={(v) => set({ policyStore: v })} label="Policy Store: keep signed routing policies, and the ESRP runs them" />
+          <Toggle checked={!!draft.discrepancy} onChange={(v) => set({ discrepancy: v })} label="Discrepancy reports: take them, and answer them" />
+          <Toggle checked={!!draft.geocode} onChange={(v) => set({ geocode: v })} label="Geocode conversion, from the address points below" />
+          <Toggle checked={!!draft.msag} onChange={(v) => set({ msag: v })} label="MSAG conversion, from the centerlines' MSAG communities" />
+          <Toggle checked={!!draft.adr} onChange={(v) => set({ adr: v })} label="Additional Data by caller (identity-searchable ADR)" />
+          <Toggle checked={!!draft.locator} onChange={(v) => set({ locator: v })} label="Service/agency locator" />
+          <Toggle checked={!!draft.dequeue} onChange={(v) => set({ dequeue: v })} label="Dequeue registration: positions sign up to take a queue's calls" />
+          <Toggle checked={!!draft.testCalls} onChange={(v) => set({ testCalls: v })} label="Test call generator: PSAPs ask for test calls" />
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          {draft.policyStore && <Field label="This ESRP's incoming queue" htmlFor="csq" error={p('queueUri')} hint="The policyQueueName of the OriginationRoutePolicy run first. Blank: sip:sos@ and the ECRF name.">
+            <input id="csq" className="input font-mono" value={draft.queueUri ?? ''} placeholder="sip:esrp@esrp.state.example.gov" onChange={(e) => set({ queueUri: e.target.value.trim() })} /></Field>}
+          {draft.discrepancy && <Field label="Who answers discrepancy reports" htmlFor="csdr" error={p('drContact')} hint="A name, and an email or phone, separated by commas: sent as a jCard.">
+            <input id="csdr" className="input" value={draft.drContact ?? ''} placeholder="Core services desk, core@state.example.gov" onChange={(e) => set({ drContact: e.target.value })} /></Field>}
+          {draft.dequeue && <Field label="Longest registration (seconds)" htmlFor="csdq" error={p('maxDequeueS')} hint="86400 (a day) when blank.">
+            <input id="csdq" className="input w-28" inputMode="numeric" value={draft.maxDequeueS || ''} placeholder="86400" onChange={(e) => set({ maxDequeueS: Number(e.target.value.replace(/\D/g, '')) || 0 })} /></Field>}
+        </div>
       </div>
       <div className="flex justify-end"><button className="btn btn-primary" disabled={isLoading} onClick={doSave}><Save size={15} aria-hidden /> Save</button></div>
     </section>
@@ -479,4 +511,226 @@ function BCFLog() {
           </tr>))}</tbody></table>
     </section>
   )
+}
+
+const tabs = ['Policies', 'Discrepancy reports', 'Bad actors', 'Dequeue', 'Additional Data', 'Locator', 'Test calls'] as const
+type Tab = (typeof tabs)[number]
+
+/** What the i3 web services hold: stored policies, reports, bad actors, registrations, records. */
+function I3Services() {
+  const [tab, setTab] = useState<Tab>('Policies')
+  return (
+    <section className="card mt-6 space-y-4 p-5" aria-labelledby="ci-h">
+      <h2 id="ci-h" className="flex items-center gap-2 font-semibold text-slate-100"><Waypoints size={17} className="text-sky-300" aria-hidden /> i3 web services</h2>
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="i3 web services">
+        {tabs.map((x) => <button key={x} role="tab" aria-selected={tab === x} className={tab === x ? 'btn btn-primary' : 'btn'} onClick={() => setTab(x)}>{x}</button>)}
+      </div>
+      {tab === 'Policies' ? <Policies /> : tab === 'Discrepancy reports' ? <Discrepancies /> : tab === 'Bad actors' ? <BadActors /> : tab === 'Dequeue' ? <Dequeue />
+        : tab === 'Additional Data' ? <ADR /> : tab === 'Locator' ? <Locator /> : <TestCalls />}
+    </section>
+  )
+}
+
+const examplePolicy = JSON.stringify({ policyOwner: 'esrp.state.example.gov', policyType: 'OriginationRoutePolicy', policyQueueName: 'sip:esrp@esrp.state.example.gov',
+  policyRules: [{ id: 'default', priority: 0, actions: [{ actionType: 'RouteAction', recipientUri: 'sip:sos@psap.county.example.gov' }] }] }, null, 2)
+
+function Policies() {
+  const admin = useIsAdmin()
+  const { data } = useCorePoliciesQuery()
+  const [store, { isLoading }] = useStorePolicyMutation()
+  const [del] = useDeletePolicyMutation()
+  const [text, setText] = useState('')
+  const [open, setOpen] = useState<string | null>(null)
+  const submit = async () => {
+    const v = text.trim()
+    let body: { jws?: string; policy?: unknown } = { jws: v }
+    if (v.startsWith('{')) {
+      try { const o = JSON.parse(v); body = o.protected && o.signature ? { jws: v } : { policy: o } } catch { toast.error('That is not JSON'); return }
+    }
+    try { const r = await store(body).unwrap(); toast.success(`Stored: ${r.owner} ${r.key}`); setText('') } catch (e) { toast.error(errorOf(e).message) }
+  }
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-slate-400">Routing policies (Policy Routing Rules), each signed by the agency that owns it. The ESRP runs the <span className="text-slate-200">OriginationRoutePolicy</span> for its incoming queue first, then the <span className="text-slate-200">NormalNextHopRoutePolicy</span> of the PSAP the ECRF chose; without one, the policy rules above decide.</p>
+      {!data?.items?.length ? <Empty icon={FileSignature} title="No policies stored">Agencies store them at /i3/PolicyStore/v1/Policies, or paste one below.</Empty> : (
+        <table className="w-full text-sm" aria-label="Stored policies">
+          <thead><tr className="text-left text-slate-400"><th className="py-1">Owner</th><th>Type</th><th>Queue or ID</th><th>Signed by</th><th>Rules</th><th></th></tr></thead>
+          <tbody>
+            {data.items.map((x) => (
+              <tr key={x.owner + x.key} className="border-t border-slate-800 align-top">
+                <td className="py-1.5">{x.owner}</td><td>{x.type}{x.expired && <Badge status="fail">expired</Badge>}</td><td className="font-mono text-xs">{x.queue || x.id}</td>
+                <td>{x.signer} {x.chained ? <Badge status="ok">PCA</Badge> : <Badge status="warn">not traced to the PCA</Badge>}</td>
+                <td>
+                  <button className="btn-ghost text-sky-300 underline" onClick={() => setOpen(open === x.key ? null : x.key)}>{x.rules?.length ?? 0} rules</button>
+                  {open === x.key && <ol className="mt-1 space-y-1 text-xs">{[...(x.rules ?? [])].sort((a, b) => b.priority - a.priority).map((r) => (
+                    <li key={r.id} className="rounded border border-slate-800 p-1.5"><span className="font-semibold text-slate-200">{r.id}</span> <span className="text-slate-500">priority {r.priority}</span>
+                      <div className="text-slate-400">if {r.conditions?.length ? r.conditions.map((c) => String(c.conditionType)).join(' and ') : 'always'}: {r.actions.map((a) => String(a.actionType) + (a.recipientUri ? ' ' + a.recipientUri : '')).join(', ')}</div></li>))}</ol>}
+                </td>
+                <td>{admin && <button className="btn-ghost p-1" aria-label={`Delete the ${x.type} of ${x.owner}`} onClick={() => del({ policyOwner: x.owner, policyType: x.type, policyQueueName: x.queue || undefined, policyId: x.id || undefined }).unwrap().then(() => toast.success('Deleted')).catch((e) => toast.error(errorOf(e).message))}><Trash2 size={14} className="text-rose-300" aria-hidden /></button>}</td>
+              </tr>))}
+          </tbody>
+        </table>)}
+      {admin && <>
+        <Field label="Store a policy" htmlFor="cpol" hint="A JWS signed by the policy's owner (flattened JSON, or compact), or a policy object to sign with this server's certificate (its owner must be this server's name).">
+          <textarea id="cpol" className="input h-40 font-mono text-xs" value={text} placeholder={examplePolicy} onChange={(e) => setText(e.target.value)} />
+        </Field>
+        <div className="flex justify-end"><button className="btn btn-primary" disabled={isLoading || !text.trim()} onClick={submit}><FileSignature size={14} aria-hidden /> Store</button></div>
+      </>}
+    </div>
+  )
+}
+
+const resolutions = ['DiscrepancyCorrected', 'NoDiscrepancy', 'DataCorrected', 'RecordsCorrected', 'PolicyCorrected', 'PolicyUpdated', 'ProblemCorrected', 'Acknowledged', 'NoError', 'OtherResponse']
+const reportTypes = ['LostDiscrepancyReport', 'GisDiscrepancyReport', 'LisDiscrepancyReport', 'PolicyDiscrepancyReport', 'EsrpDiscrepancyReport', 'BcfDiscrepancyReport', 'SipDiscrepancyReport',
+  'CallTransferDiscrepancyReport', 'AdrDiscrepancyReport', 'NetworkDiscrepancyReport', 'OriginatingServiceDiscrepancyReport', 'TestCallDiscrepancyReport', 'LoggingDiscrepancyReport']
+
+function Discrepancies() {
+  const admin = useIsAdmin()
+  const { data } = useDiscrepanciesQuery()
+  const [resolve] = useResolveDiscrepancyMutation()
+  const [file, { isLoading }] = useFileDiscrepancyMutation()
+  const [answer, setAnswer] = useState<Record<string, { resolution: string; comments: string }>>({})
+  const [to, setTo] = useState('')
+  const [kind, setKind] = useState(reportTypes[0])
+  const [severity, setSeverity] = useState('Minor')
+  const [service, setService] = useState('')
+  const [comments, setComments] = useState('')
+  const doFile = () => attempt(() => file({ to, report: { reportType: kind, problemSeverity: severity, problemService: service, problemComments: comments } }).unwrap(), 'Report filed', { problemsInToast: true }).then(() => { setComments('') })
+  const rows = (dir: DiscrepancyReport['direction']) => (data?.items ?? []).filter((d) => d.direction === dir)
+  return (
+    <div className="space-y-4">
+      <h3 className="text-sm font-semibold text-violet-300">Reports about this server's services</h3>
+      {!rows('received').length ? <p className="text-sm text-slate-500">None. Other agencies file them at /i3/DiscrepancyReports/v1/Reports.</p> : (
+        <ul className="space-y-2" aria-label="Reports received">
+          {rows('received').map((d) => (
+            <li key={d.id} className="rounded-lg border border-slate-800 p-3 text-sm" aria-label={`Report ${d.id}`}>
+              <div className="flex flex-wrap items-center gap-2"><Flag size={14} className="text-amber-300" aria-hidden /><span className="font-semibold text-slate-200">{String(d.report.reportType)}</span>
+                <span className="text-slate-400">from {String(d.report.reportingAgencyName)}, {new Date(d.at).toLocaleString()}</span>
+                <Badge status={d.status === 'resolved' ? 'ok' : 'warn'}>{d.status}</Badge> <span className="text-slate-500">{String(d.report.problemSeverity)}</span></div>
+              <p className="mt-1 text-slate-300">{String(d.report.problemComments ?? d.report.problem ?? '')}</p>
+              {d.resolution ? <p className="text-xs text-emerald-300">Resolved: {String(d.resolution.resolution)} {d.resolution.responseComments ? `— ${String(d.resolution.responseComments)}` : ''}</p>
+                : admin && <div className="mt-2 flex flex-wrap items-end gap-2">
+                  <Field label="Resolution" htmlFor={`dr-r-${d.id}`}><select id={`dr-r-${d.id}`} className="input" value={answer[d.id]?.resolution ?? ''} onChange={(e) => setAnswer((a) => ({ ...a, [d.id]: { comments: a[d.id]?.comments ?? '', resolution: e.target.value } }))}>
+                    <option value="">Choose…</option>{resolutions.map((r) => <option key={r}>{r}</option>)}</select></Field>
+                  <Field label="Comments" htmlFor={`dr-c-${d.id}`}><input id={`dr-c-${d.id}`} className="input" value={answer[d.id]?.comments ?? ''} onChange={(e) => setAnswer((a) => ({ ...a, [d.id]: { resolution: a[d.id]?.resolution ?? '', comments: e.target.value } }))} /></Field>
+                  <button className="btn" disabled={!answer[d.id]?.resolution} onClick={() => attempt(() => resolve({ id: d.id, ...answer[d.id] }).unwrap(), 'Resolution sent to the reporter', { problemsInToast: true })}>Send the resolution</button>
+                </div>}
+              {d.error && <p className="text-xs text-rose-300">{d.error}</p>}
+            </li>))}
+        </ul>)}
+      <h3 className="text-sm font-semibold text-violet-300">Reports this server filed</h3>
+      {!rows('filed').length ? <p className="text-sm text-slate-500">None yet.</p> : (
+        <ul className="space-y-1 text-sm" aria-label="Reports filed">
+          {rows('filed').map((d) => <li key={d.id}>{String(d.report.reportType)} to <span className="font-mono text-xs">{d.to}</span>, {new Date(d.at).toLocaleString()} <Badge status={d.status === 'resolved' ? 'ok' : d.error ? 'fail' : 'warn'}>{d.error ? 'not delivered' : d.status}</Badge>
+            {d.resolution && <span className="text-emerald-300"> {String(d.resolution.resolution)}</span>}{d.error && <span className="text-xs text-rose-300"> {d.error}</span>}</li>)}
+        </ul>)}
+      {admin && <div className="grid items-end gap-3 rounded-lg border border-slate-800 p-3 md:grid-cols-3">
+        <Field label="File a report with" htmlFor="drto" hint="The other agency's DR service."><input id="drto" className="input font-mono" value={to} placeholder="https://ecrf.state.example.gov/i3/DiscrepancyReports/v1" onChange={(e) => setTo(e.target.value.trim())} /></Field>
+        <Field label="About" htmlFor="drkind"><select id="drkind" className="input" value={kind} onChange={(e) => setKind(e.target.value)}>{reportTypes.map((r) => <option key={r} value={r}>{r.replace('DiscrepancyReport', '')}</option>)}</select></Field>
+        <Field label="Severity" htmlFor="drsev"><select id="drsev" className="input" value={severity} onChange={(e) => setSeverity(e.target.value)}>{['Minor', 'Major', 'Critical'].map((x) => <option key={x}>{x}</option>)}</select></Field>
+        <Field label="The service" htmlFor="drsvc" hint="Its name or address."><input id="drsvc" className="input" value={service} onChange={(e) => setService(e.target.value)} /></Field>
+        <Field label="What is wrong" htmlFor="drcom"><input id="drcom" className="input" value={comments} onChange={(e) => setComments(e.target.value)} /></Field>
+        <button className="btn btn-primary" disabled={isLoading || !to || !comments} onClick={doFile}><Flag size={14} aria-hidden /> File</button>
+      </div>}
+    </div>
+  )
+}
+
+function BadActors() {
+  const admin = useIsAdmin()
+  const { data } = useBadActorsQuery()
+  const [clear] = useClearBadActorMutation()
+  return !data?.items?.length ? <Empty icon={ShieldAlert} title="No bad actors reported">PSAPs report a source by the ID its calls carry (Call-Info, purpose emergency-source).</Empty> : (
+    <table className="w-full text-sm" aria-label="Bad actors">
+      <thead><tr className="text-left text-slate-400"><th className="py-1">Source</th><th>Source ID</th><th>Reported by</th><th>Until</th><th></th></tr></thead>
+      <tbody>{data.items.map((b) => <tr key={b.sourceId} className="border-t border-slate-800"><td className="py-1.5 font-mono">{b.source}</td><td className="font-mono text-xs">{b.sourceId}</td><td>{b.by}</td><td>{new Date(b.until).toLocaleString()}</td>
+        <td>{admin && <button className="btn py-0.5" onClick={() => attempt(() => clear(b.sourceId).unwrap(), 'Lifted', { problemsInToast: true })}>Lift</button>}</td></tr>)}</tbody>
+    </table>)
+}
+
+function Dequeue() {
+  const { data } = useDequeueRegsQuery()
+  return !data?.items?.length ? <Empty icon={PhoneCall} title="No positions registered">They register at /i3/DequeueRegistration/v1/Registrations for a PSAP's queue; the ESRP then sends that queue's calls to them, the most preferred first.</Empty> : (
+    <table className="w-full text-sm" aria-label="Dequeue registrations">
+      <thead><tr className="text-left text-slate-400"><th className="py-1">Queue</th><th>Taker</th><th>Preference</th><th>Until</th></tr></thead>
+      <tbody>{data.items.map((d) => <tr key={d.queueUri + d.dequeuerUri} className="border-t border-slate-800"><td className="py-1.5 font-mono text-xs">{d.queueUri}</td><td className="font-mono text-xs">{d.dequeuerUri}</td><td>{d.dequeuePreference}</td><td>{new Date(d.expires).toLocaleTimeString()}</td></tr>)}</tbody>
+    </table>)
+}
+
+const adrTypes = ['EmergencyCallData.SubscriberInfo', 'EmergencyCallData.ServiceInfo', 'EmergencyCallData.DeviceInfo', 'EmergencyCallData.ProviderInfo', 'EmergencyCallData.Comment']
+
+function ADR() {
+  const admin = useIsAdmin()
+  const { data } = useAdrRecordsQuery()
+  const [add, { isLoading }] = useAddADRMutation()
+  const [del] = useDeleteADRMutation()
+  const [caller, setCaller] = useState('')
+  const [type, setType] = useState(adrTypes[0])
+  const [xml, setXml] = useState('')
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-slate-400">Additional Data kept by caller, for ESInet elements that look a caller up at /i3/Adr/v1/AdditionalData?callerUri= (an identity-searchable ADR).</p>
+      {!!data?.items?.length && <table className="w-full text-sm" aria-label="Additional Data records">
+        <thead><tr className="text-left text-slate-400"><th className="py-1">Caller</th><th>Block</th><th>Added</th><th></th></tr></thead>
+        <tbody>{data.items.map((r) => <tr key={r.id} className="border-t border-slate-800"><td className="py-1.5 font-mono">{r.caller}</td><td>{r.type.replace('EmergencyCallData.', '')}</td><td>{new Date(r.added).toLocaleDateString()} by {r.addedBy}</td>
+          <td>{admin && <button className="btn-ghost p-1" aria-label={`Delete the ${r.type} of ${r.caller}`} onClick={() => attempt(() => del(r.id).unwrap(), 'Deleted', { problemsInToast: true })}><Trash2 size={14} className="text-rose-300" aria-hidden /></button>}</td></tr>)}</tbody>
+      </table>}
+      {admin && <div className="grid gap-3 md:grid-cols-2">
+        <Field label="Caller" htmlFor="adrc" hint="tel:+number or sip:user@domain"><input id="adrc" className="input font-mono" value={caller} placeholder="tel:+17175550100" onChange={(e) => setCaller(e.target.value.trim())} /></Field>
+        <Field label="Block" htmlFor="adrt"><select id="adrt" className="input" value={type} onChange={(e) => setType(e.target.value)}>{adrTypes.map((x) => <option key={x} value={x}>{x.replace('EmergencyCallData.', '')}</option>)}</select></Field>
+        <div className="md:col-span-2"><Field label="The block (XML, RFC 7852)" htmlFor="adrx"><textarea id="adrx" className="input h-28 font-mono text-xs" value={xml} onChange={(e) => setXml(e.target.value)} /></Field></div>
+        <div className="md:col-span-2 flex justify-end"><button className="btn btn-primary" disabled={isLoading || !caller || !xml} onClick={() => attempt(() => add({ caller, type, xml }).unwrap(), 'Kept', { problemsInToast: true }).then(() => setXml(''))}><Plus size={14} aria-hidden /> Keep</button></div>
+      </div>}
+    </div>
+  )
+}
+
+function Locator() {
+  const admin = useIsAdmin()
+  const { data } = useLocatorRecordsQuery()
+  const [add, { isLoading }] = useAddLocatorMutation()
+  const [del] = useDeleteLocatorMutation()
+  const [x, setX] = useState({ serviceAgencyId: '', serviceAgencyName: '', types: 'psap', loggerUri: '', dscRptUri: '', emergencySipInterfaceUri: '' })
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-slate-400">Agencies and services others find at /i3/ServiceAgencyLocator/v1: this agency (from its 911 settings) and those added here.</p>
+      {!data?.items?.length ? <p className="text-sm text-slate-500">Nothing yet: set this agency's ID on the 911 calls page, or add one below.</p> : (
+        <table className="w-full text-sm" aria-label="Locator records">
+          <thead><tr className="text-left text-slate-400"><th className="py-1">Agency</th><th>ID</th><th>Types</th><th>Logging service</th><th></th></tr></thead>
+          <tbody>{data.items.map((r) => <tr key={r.recordId} className="border-t border-slate-800"><td className="py-1.5">{r.serviceAgencyName}</td><td className="font-mono text-xs">{r.serviceAgencyId}</td><td>{r.serviceAgencyTypes.join(', ')}</td><td className="font-mono text-xs">{r.loggerUri}</td>
+            <td>{admin && r.recordId !== 'self' && <button className="btn-ghost p-1" aria-label={`Delete ${r.serviceAgencyName}`} onClick={() => attempt(() => del(r.recordId).unwrap(), 'Deleted', { problemsInToast: true })}><Trash2 size={14} className="text-rose-300" aria-hidden /></button>}</td></tr>)}</tbody>
+        </table>)}
+      {admin && <div className="grid items-end gap-3 md:grid-cols-3">
+        <Field label="Agency ID" htmlFor="loci"><input id="loci" className="input font-mono" value={x.serviceAgencyId} placeholder="police.county.example.gov" onChange={(e) => setX({ ...x, serviceAgencyId: e.target.value.trim() })} /></Field>
+        <Field label="Name" htmlFor="locn"><input id="locn" className="input" value={x.serviceAgencyName} onChange={(e) => setX({ ...x, serviceAgencyName: e.target.value })} /></Field>
+        <Field label="Types" htmlFor="loct" hint="psap, police, fire, ems ..., by commas."><input id="loct" className="input" value={x.types} onChange={(e) => setX({ ...x, types: e.target.value })} /></Field>
+        <Field label="Logging service" htmlFor="locl"><input id="locl" className="input font-mono" value={x.loggerUri} placeholder="https://log.county.example.gov/i3log" onChange={(e) => setX({ ...x, loggerUri: e.target.value.trim() })} /></Field>
+        <Field label="Discrepancy reports" htmlFor="locd"><input id="locd" className="input font-mono" value={x.dscRptUri} onChange={(e) => setX({ ...x, dscRptUri: e.target.value.trim() })} /></Field>
+        <Field label="Emergency calls to" htmlFor="locs"><input id="locs" className="input font-mono" value={x.emergencySipInterfaceUri} placeholder="sip:sos@police.county.example.gov" onChange={(e) => setX({ ...x, emergencySipInterfaceUri: e.target.value.trim() })} /></Field>
+        <div className="md:col-span-3 flex justify-end"><button className="btn btn-primary" disabled={isLoading || !x.serviceAgencyId || !x.serviceAgencyName} onClick={() => attempt(() => add({ serviceAgencyId: x.serviceAgencyId, serviceAgencyName: x.serviceAgencyName, serviceAgencyTypes: commas(x.types), loggerUri: x.loggerUri, dscRptUri: x.dscRptUri || undefined, emergencySipInterfaceUri: x.emergencySipInterfaceUri || undefined }).unwrap(), 'Added', { problemsInToast: true })}><Plus size={14} aria-hidden /> Add</button></div>
+      </div>}
+    </div>
+  )
+}
+
+function TestCalls() {
+  const admin = useIsAdmin()
+  const { data } = useTestCallRequestsQuery()
+  const [run, { isLoading }] = useRunTestCallMutation()
+  const [del] = useDeleteTestCallsMutation()
+  return !data?.items?.length ? <Empty icon={PhoneCall} title="No PSAP has asked for test calls">A PSAP asks at /i3/TestCall/v1/SendTestCalls/&lt;its agency ID&gt;: a call to urn:service:test.sos every so many minutes, with the location it gives.</Empty> : (
+    <ul className="space-y-3" aria-label="Test call requests">
+      {data.items.map((r) => (
+        <li key={r.psapId} className="rounded-lg border border-slate-800 p-3 text-sm" aria-label={`Test calls to ${r.psapId}`}>
+          <div className="flex flex-wrap items-center gap-2"><PhoneCall size={14} className="text-emerald-300" aria-hidden /><span className="font-semibold text-slate-200">{r.psapId}</span>
+            <span className="text-slate-400">every {r.frequency} minutes, {new Date(r.startDate).toLocaleDateString()} to {new Date(r.endDate).toLocaleDateString()}</span>
+            {admin && <><button className="btn py-0.5" disabled={isLoading} onClick={() => run(r.psapId).unwrap().then((x) => (x.ok ? toast.success('Test call answered: ' + x.echoed + ' packets back') : toast.error(x.problem ?? 'The test call failed'))).catch((e) => toast.error(errorOf(e).message))}>Place one now</button>
+              <button className="btn py-0.5" onClick={() => attempt(() => del(r.psapId).unwrap(), 'Stopped', { problemsInToast: true })}>Stop</button></>}</div>
+          {!!r.results?.length && <table className="mt-2 w-full text-xs" aria-label={`Results for ${r.psapId}`}>
+            <thead><tr className="text-left text-slate-500"><th>When</th><th>Answer</th><th>Packets back</th><th>Result</th></tr></thead>
+            <tbody>{r.results.map((x) => <tr key={x.at} className="border-t border-slate-800 align-top"><td className="py-1">{new Date(x.at).toLocaleString()}</td><td className="whitespace-pre-line">{x.status ? `${x.status} ${x.reason ?? ''}\n` : ''}{x.answer}</td><td>{x.echoed} of {x.sent}</td>
+              <td>{x.ok ? <span className="inline-flex items-center gap-1 text-emerald-300"><CheckCircle2 size={12} aria-hidden /> passed</span> : <span className="inline-flex items-center gap-1 text-rose-300"><XCircle size={12} aria-hidden /> {x.problem}</span>}</td></tr>)}</tbody>
+          </table>}
+        </li>))}
+    </ul>)
 }

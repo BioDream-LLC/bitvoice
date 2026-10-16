@@ -500,6 +500,25 @@ type Core struct {
 	Rules []CoreRule `json:"rules"`
 	// BCF is the border control function at the ESInet edge.
 	BCF BCF `json:"bcf"`
+	// The NENA i3 web services (NENA-STA-010.3), each under /i3/<service>/v1 for the addresses in
+	// AllowFrom. Each is off until switched on.
+	//
+	// PolicyStore keeps agencies' signed routing policies (JWS); the ESRP runs them: the
+	// OriginationRoutePolicy for QueueURI first, then the NormalNextHopRoutePolicy of the PSAP the
+	// ECRF chose. Without a stored policy, Rules decide.
+	PolicyStore bool   `json:"policyStore"`
+	QueueURI    string `json:"queueUri"` // this ESRP's incoming queue; sip:sos@ and the server's name when empty
+	// Discrepancy takes discrepancy reports (DRs) about this server's services, and resolutions of
+	// those it filed; DRContact is who answers them (name, email or phone), sent as a jCard.
+	Discrepancy bool   `json:"discrepancy"`
+	DRContact   string `json:"drContact"`
+	Geocode     bool   `json:"geocode"`     // converts civic addresses to positions and back, from the LVF's address points
+	MSAG        bool   `json:"msag"`        // converts civic addresses to MSAG addresses and back, from the LVF's centerlines
+	ADR         bool   `json:"adr"`         // serves Additional Data by caller (identity-searchable ADR), from uploaded records
+	Locator     bool   `json:"locator"`     // the service/agency locator: this agency's record and those added here
+	Dequeue     bool   `json:"dequeue"`     // positions and PSAPs register to take calls from a queue
+	TestCalls   bool   `json:"testCalls"`   // the test call generator: PSAPs ask for test calls to be sent to them
+	MaxDequeueS int    `json:"maxDequeueS"` // longest dequeue registration, seconds (86400 when 0)
 }
 
 // CoreRule is one policy routing rule. Empty conditions match everything.
@@ -535,6 +554,14 @@ type BCF struct {
 	// carry one, against the STI roots set under Call screening: a call whose signature fails is let
 	// through marked suspicious, for the policy rules. A 911 call is never refused for it.
 	VerifyIdentity bool `json:"verifyIdentity"`
+	// BadActors marks each call passed on with a source ID (Call-Info purpose=emergency-source) and
+	// takes reports that a source is a bad actor (/i3/BadActor/v1/BadActors, from AllowFrom):
+	// its later calls are refused when BadActorBlock is on, else their suspicion score is raised by
+	// BadActorScore (50 when 0), for the policy rules. A report lasts BadActorHours (24 when 0).
+	BadActors     bool `json:"badActors"`
+	BadActorBlock bool `json:"badActorBlock"`
+	BadActorScore int  `json:"badActorScore"`
+	BadActorHours int  `json:"badActorHours"`
 }
 
 // CorePSAP is a PSAP the ESRP can send calls to: the URI the ECRF answers with, the trunk that
@@ -568,6 +595,9 @@ type PSAP struct {
 	AnswerTarget int `json:"answerTarget"`
 	// TTYOff stops listening for TTYs (deaf callers' text telephones) on 911 calls' voice.
 	TTYOff bool `json:"ttyOff"`
+	// TestCallsOff refuses test calls (urn:service:test.sos, NENA i3 section 9); otherwise they are
+	// answered at once with no call-taker, three packets looped back, then hung up.
+	TestCallsOff bool `json:"testCallsOff,omitempty"`
 	// Caller video (911 calls): the link callers open is VideoLinkBase plus /v/ and a token (the
 	// address callers' phones reach this server at, https); VideoFrom is the texting number that
 	// sends it (empty: the call-taker reads the link out). VideoStreams is the most live caller
@@ -2178,6 +2208,25 @@ func (c *Config) Validate() error {
 			ru.To = ""
 		default:
 			p.add(f+".action", "route or reject")
+		}
+	}
+	{
+		co := &c.System.Core
+		co.QueueURI = strings.TrimSpace(co.QueueURI)
+		if co.QueueURI != "" && !strings.HasPrefix(co.QueueURI, "sip:") && !strings.HasPrefix(co.QueueURI, "sips:") {
+			p.add("system.core.queueUri", "a sip: URI, like sip:esrp@esrp.example.gov")
+		}
+		if (co.PolicyStore || co.Discrepancy || co.Geocode || co.MSAG || co.ADR || co.Locator || co.Dequeue || co.TestCalls || co.BCF.BadActors) && len(co.AllowFrom) == 0 {
+			p.add("system.core.allowFrom", "say which addresses may use the i3 services (your ESInet)")
+		}
+		if co.Discrepancy && strings.TrimSpace(co.DRContact) == "" {
+			p.add("system.core.drContact", "who answers discrepancy reports: a name, and an email or phone")
+		}
+		if co.MaxDequeueS < 0 || co.MaxDequeueS > 7*86400 {
+			p.add("system.core.maxDequeueS", "0 (a day) to 604800 (a week)")
+		}
+		if b := co.BCF; b.BadActorScore < 0 || b.BadActorScore > 100 || b.BadActorHours < 0 || b.BadActorHours > 24*30 {
+			p.add("system.core.bcf.badActorScore", "a score of 0 to 100, for 0 to 720 hours")
 		}
 	}
 	{

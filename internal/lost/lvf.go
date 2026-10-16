@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -34,6 +35,8 @@ type Side struct {
 	County   string `json:",omitempty"`
 	State    string `json:",omitempty"`
 	Postal   string `json:",omitempty"`
+	MSAG     string `json:",omitempty"` // the MSAG community name (MSAGComm_L/R), for legacy E9-1-1
+	ESN      string `json:",omitempty"` // the emergency service number (ESN_L/R)
 }
 
 // Point is a site/structure address point.
@@ -90,9 +93,11 @@ func ParseAddressGeoJSON(data []byte) (Addresses, error) {
 			out.Streets = append(out.Streets, Street{ID: id,
 				PreDir: p.s("St_PreDir"), Name: p.s("St_Name"), Type: p.s("St_PosTyp"), PostDir: p.s("St_PosDir"),
 				Left: Side{From: p.n("FromAddr_L"), To: p.n("ToAddr_L"), Parity: p.s("Parity_L"),
-					City: p.s("IncMuni_L", "Inc_Muni_L"), County: p.s("County_L"), State: p.s("State_L"), Postal: p.s("PostCode_L")},
+					City: p.s("IncMuni_L", "Inc_Muni_L"), County: p.s("County_L"), State: p.s("State_L"), Postal: p.s("PostCode_L"),
+					MSAG: p.s("MSAGComm_L"), ESN: p.s("ESN_L")},
 				Right: Side{From: p.n("FromAddr_R"), To: p.n("ToAddr_R"), Parity: p.s("Parity_R"),
-					City: p.s("IncMuni_R", "Inc_Muni_R"), County: p.s("County_R"), State: p.s("State_R"), Postal: p.s("PostCode_R")}})
+					City: p.s("IncMuni_R", "Inc_Muni_R"), County: p.s("County_R"), State: p.s("State_R"), Postal: p.s("PostCode_R"),
+					MSAG: p.s("MSAGComm_R"), ESN: p.s("ESN_R")}})
 		case p.has("Add_Number"):
 			pt := Point{ID: id, Number: p.n("Add_Number"), NumberSuf: p.s("AddNum_Suf"),
 				PreDir: p.s("St_PreDir"), Name: p.s("St_Name"), Type: p.s("St_PosTyp"), PostDir: p.s("St_PosDir"),
@@ -309,4 +314,121 @@ func civicOf(ca *el) Civic {
 		}
 	}
 	return c
+}
+
+// Geocode finds the address point a civic address names (the number on its street, in its area).
+func (a *Addresses) Geocode(c Civic) (Point, bool) {
+	num, err := strconv.Atoi(strings.TrimSpace(c["HNO"]))
+	if err != nil {
+		return Point{}, false
+	}
+	for _, p := range a.Points {
+		if p.Number != num || !streetMatches(c, p.PreDir, p.Name, p.Type, p.PostDir) || p.Lat == 0 && p.Lon == 0 {
+			continue
+		}
+		if c["A3"] != "" && p.City != "" && !same(c["A3"], p.City) || c["A1"] != "" && p.State != "" && !same(c["A1"], p.State) {
+			continue
+		}
+		if c["HNS"] != "" && !same(c["HNS"], p.NumberSuf) {
+			continue
+		}
+		return p, true
+	}
+	return Point{}, false
+}
+
+// Reverse finds the address point nearest a position, within maxM metres.
+func (a *Addresses) Reverse(lat, lon, maxM float64) (Point, bool) {
+	best, bestD := Point{}, maxM
+	found := false
+	for _, p := range a.Points {
+		if p.Lat == 0 && p.Lon == 0 {
+			continue
+		}
+		if d := metres(lat, lon, p.Lat, p.Lon); d <= bestD {
+			best, bestD, found = p, d, true
+		}
+	}
+	return best, found
+}
+
+func metres(lat1, lon1, lat2, lon2 float64) float64 {
+	const r = 6371008.8
+	p1, p2 := lat1*math.Pi/180, lat2*math.Pi/180
+	dp, dl := (lat2-lat1)*math.Pi/180, (lon2-lon1)*math.Pi/180
+	h := math.Sin(dp/2)*math.Sin(dp/2) + math.Cos(p1)*math.Cos(p2)*math.Sin(dl/2)*math.Sin(dl/2)
+	return 2 * r * math.Asin(math.Min(1, math.Sqrt(h)))
+}
+
+// ToMSAG writes a civic address as an MSAG address: "HNO PRD RD STS POD, COMMUNITY, STATE", upper
+// case, the community from the centerline side whose range holds the number (NENA-STA-010.3
+// Appendix A maps the two). False when no side holds it, or that side has no MSAG community.
+func (a *Addresses) ToMSAG(c Civic) (string, bool) {
+	num, err := strconv.Atoi(strings.TrimSpace(c["HNO"]))
+	if err != nil {
+		return "", false
+	}
+	for _, s := range a.Streets {
+		if !streetMatches(c, s.PreDir, s.Name, s.Type, s.PostDir) {
+			continue
+		}
+		for _, side := range []Side{s.Left, s.Right} {
+			if side.MSAG == "" || !inRange(num, side) || c["A1"] != "" && side.State != "" && !same(c["A1"], side.State) {
+				continue
+			}
+			if c["A3"] != "" && side.City != "" && !same(c["A3"], side.City) && !same(c["A3"], side.MSAG) {
+				continue
+			}
+			street := strings.Join(strings.Fields(strings.Join([]string{strconv.Itoa(num) + c["HNS"], s.PreDir, s.Name, s.Type, s.PostDir}, " ")), " ")
+			return strings.ToUpper(street + ", " + side.MSAG + ", " + side.State), true
+		}
+	}
+	return "", false
+}
+
+// FromMSAG reads an MSAG address written as ToMSAG writes it back into a civic address.
+func (a *Addresses) FromMSAG(m string) (Civic, bool) {
+	parts := strings.Split(m, ",")
+	if len(parts) < 2 {
+		return nil, false
+	}
+	words := strings.Fields(parts[0])
+	if len(words) < 2 {
+		return nil, false
+	}
+	numText := words[0]
+	digits := strings.TrimRightFunc(numText, func(r rune) bool { return r < '0' || r > '9' })
+	num, err := strconv.Atoi(digits)
+	if err != nil {
+		return nil, false
+	}
+	community := strings.TrimSpace(parts[1])
+	state := ""
+	if len(parts) > 2 {
+		state = strings.TrimSpace(parts[2])
+	}
+	rest := strings.Join(words[1:], " ")
+	for _, s := range a.Streets {
+		line := strings.Join(strings.Fields(strings.Join([]string{s.PreDir, s.Name, s.Type, s.PostDir}, " ")), " ")
+		if !same(line, rest) {
+			continue
+		}
+		for _, side := range []Side{s.Left, s.Right} {
+			if !same(side.MSAG, community) || !inRange(num, side) || state != "" && side.State != "" && !same(side.State, state) {
+				continue
+			}
+			c := Civic{"HNO": digits, "PRD": s.PreDir, "RD": s.Name, "STS": s.Type, "POD": s.PostDir, "A3": side.City, "A2": side.County,
+				"A1": side.State, "PC": side.Postal, "country": "US"}
+			if suf := strings.TrimPrefix(numText, digits); suf != "" {
+				c["HNS"] = suf
+			}
+			for k, v := range c {
+				if v == "" {
+					delete(c, k)
+				}
+			}
+			return c, true
+		}
+	}
+	return nil, false
 }

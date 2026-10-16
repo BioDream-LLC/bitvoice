@@ -162,8 +162,11 @@ func BuildPIDF(entity string, rec LISRecord, now time.Time) []byte {
 	if method == "" {
 		method = "Manual"
 	}
-	fmt.Fprintf(&b, `</gp:location-info><gp:usage-rules/><gp:method>%s</gp:method></gp:geopriv><dm:deviceID>tel:%s</dm:deviceID><dm:timestamp>%s</dm:timestamp></dm:device></presence>`,
-		esc(method), esc(rec.Number), now.UTC().Format(time.RFC3339))
+	fmt.Fprintf(&b, `</gp:location-info><gp:usage-rules/><gp:method>%s</gp:method></gp:geopriv>`, esc(method))
+	if rec.Number != "" {
+		fmt.Fprintf(&b, `<dm:deviceID>tel:%s</dm:deviceID>`, esc(rec.Number))
+	}
+	fmt.Fprintf(&b, `<dm:timestamp>%s</dm:timestamp></dm:device></presence>`, now.UTC().Format(time.RFC3339))
 	return b.Bytes()
 }
 
@@ -207,4 +210,14 @@ func HELDErrorResponse(code HELDError, message string) []byte {
 	var x bytes.Buffer
 	_ = xml.EscapeText(&x, []byte(message))
 	return []byte(`<?xml version="1.0" encoding="UTF-8"?>` + "\n" + `<error xmlns="urn:ietf:params:xml:ns:geopriv:held" code="` + string(code) + `"><message xml:lang="en">` + x.String() + `</message></error>`)
+}
+
+// PointPIDF is a PIDF-LO holding a position only (a geocoder's answer).
+func PointPIDF(entity string, lat, lon float64, now time.Time) string {
+	return string(BuildPIDF(entity, LISRecord{Lat: lat, Lon: lon, Method: "Derived"}, now))
+}
+
+// CivicPIDF is a PIDF-LO holding a civic address only.
+func CivicPIDF(entity string, c Civic, now time.Time) string {
+	return string(BuildPIDF(entity, LISRecord{Civic: c, Method: "Derived"}, now))
 }

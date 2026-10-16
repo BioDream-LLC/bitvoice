@@ -49,6 +49,7 @@ type target struct {
 	binding  *Binding
 	trunk    *config.Trunk
 	number   string // what to send to a trunk
+	ruri     string // instead of number@trunk: a service URN as the request URI (an ESRP passing a test call on)
 	confirm  bool   // follow-me to an outside number: whoever answers presses 1 to take the call
 	// divertFrom and divertReason: a call forwarded out from an extension, sent as Diversion (RFC 5806)
 	// so the carrier, or a PRI as its redirecting number, knows whose call it is.
@@ -608,6 +609,14 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 			if e.bcfIdentity(cfg, c, m.Get("Identity"), did, in.From.Addr.Addr()) {
 				c.suspicious = true
 			}
+			c.suspicion = callSuspicion(m)
+			if e.badActorCheck(cfg, c, c.srcIP) {
+				r := sip.NewResponse(m, 503, "Service Unavailable")
+				r.Set("Retry-After", "300")
+				tx.Respond(r)
+				return
+			}
+			c.facts = readPolicyFacts(m, offer)
 		}
 		if refuse := e.screenCall(cfg, c, m, trunk, did); refuse != "" {
 			tx.Respond(sip.NewResponse(m, 603, refuse))
@@ -630,8 +639,19 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 		}
 		c.to = did
 		p = e.resolveFor(cfg, route.Destination, 0, scriptCall{from: c.from, fromName: c.fromName, to: did, direction: "inbound", trunk: trunk.Name})
+		c.testCall = trunk.ESInet && IsTestCall(m.RequestURI)
 		if p.local == "esrp" {
 			p = e.esrpPlan(cfg, c, did)
+			if c.testCall {
+				// routed like a real call, and still a test call when it reaches the PSAP
+				for i := range p.stages {
+					for j := range p.stages[i].targets {
+						p.stages[i].targets[j].ruri = m.RequestURI
+					}
+				}
+			}
+		} else if c.testCall {
+			p = e.testCallPlan(cfg, c, c.srcIP+" "+m.Get("Contact"))
 		}
 		p.direction = "inbound"
 		p.trunk = trunk.Name

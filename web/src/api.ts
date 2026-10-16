@@ -132,9 +132,19 @@ export interface CoreRule {
   id: string; name: string; services: string[]; psaps: string[]; schedule: string; whenOpen: boolean
   noLocation: boolean; suspicious: boolean; trunks: string[]; action: 'route' | 'reject'; to: string
 }
-export interface BCFSettings { enabled: boolean; perMinute: number; concurrent: number; deny: string[]; mark: boolean; verifyIdentity: boolean }
+export interface BCFSettings { enabled: boolean; perMinute: number; concurrent: number; deny: string[]; mark: boolean; verifyIdentity: boolean; badActors?: boolean; badActorBlock?: boolean; badActorScore?: number; badActorHours?: number }
 export interface LISRecordView { number: string; civic: Civic; lat?: number; lon?: number; radius?: number }
-export interface CoreSettings { ecrf: boolean; lis: boolean; logging: boolean; pcaRoots: string; source: string; allowFrom: string[]; psaps: CorePSAP[]; default: string; lostUrl: string; forestGuide: string; rules: CoreRule[]; bcf: BCFSettings }
+export interface CoreSettings { ecrf: boolean; lis: boolean; logging: boolean; pcaRoots: string; source: string; allowFrom: string[]; psaps: CorePSAP[]; default: string; lostUrl: string; forestGuide: string; rules: CoreRule[]; bcf: BCFSettings
+  policyStore?: boolean; queueUri?: string; discrepancy?: boolean; drContact?: string; geocode?: boolean; msag?: boolean; adr?: boolean; locator?: boolean; dequeue?: boolean; testCalls?: boolean; maxDequeueS?: number }
+export interface StoredPolicyView { owner: string; type: string; queue?: string; id?: string; expires?: string; signer: string; chained: boolean; modified: string; from: string; key: string; expired?: boolean
+  rules?: { id: string; priority: number; description?: string; conditions?: Record<string, unknown>[]; actions: Record<string, unknown>[] }[] }
+export interface DiscrepancyReport { id: string; direction: 'received' | 'filed'; report: Record<string, unknown>; at: string; from?: string; to?: string; status: 'open' | 'resolved'; resolution?: Record<string, unknown>; error?: string }
+export interface BadActorView { sourceId: string; source: string; at: string; until: string; by: string }
+export interface DequeueRegView { queueUri: string; dequeuerUri: string; dequeuePreference: number; expires: string; from: string }
+export interface ADRRecordView { id: string; caller: string; type: string; xml: string; added: string; addedBy: string }
+export interface LocatorRecordView { recordId: string; serviceAgencyId: string; serviceAgencyName: string; serviceAgencyTypes: string[]; loggerUri: string; dscRptUri?: string; emergencySipInterfaceUri?: string; eidoInterfaceUri?: string }
+export interface TestCallResultView { at: string; psap: string; status: number; reason?: string; answer?: string; sent: number; echoed: number; ok: boolean; problem?: string; seconds: number }
+export interface TestCallRequestView { psapId: string; psapUri: string; frequency: number; startDate: string; endDate: string; last?: string; results?: TestCallResultView[]; from: string }
 export interface Validation { valid: string[]; invalid: string[]; unchecked: string[]; matched?: string; found?: Record<string, string> }
 export interface BCFEvent { at: string; source: string; from: string; action: 'refused' | 'marked'; why: string }
 export interface Boundary { id: string; service: string; name: string; uri: string; number: string; cities?: string[] | null; counties?: string[] | null; states?: string[] | null; corners: number }
@@ -163,7 +173,7 @@ export interface Transmission {
   id: string; channel: string; channelName: string; direction: 'rx' | 'tx'; start: string; end: string; seconds: number
   unit?: string; unitName?: string; dispatcher?: string; tone?: string; emergency?: boolean; encryption?: string; private?: boolean; recording?: string
 }
-export interface PSAPSettings { agencyId: string; elementId: string; aliAddress: string; eidoUrl: string; eidoToken: string; answerTarget: number; ttyOff: boolean; locationServer: string; videoLinkBase: string; videoFrom: string; videoStreams: number; videoKbps: number; uploadMb: number; mediaDays: number; recordVideo?: boolean }
+export interface PSAPSettings { agencyId: string; elementId: string; aliAddress: string; eidoUrl: string; eidoToken: string; answerTarget: number; ttyOff: boolean; locationServer: string; videoLinkBase: string; videoFrom: string; videoStreams: number; videoKbps: number; uploadMb: number; mediaDays: number; recordVideo?: boolean; testCallsOff?: boolean }
 export interface AnswerReport {
   target: number; calls: number; answered: number; abandoned: number; withinTarget: number; within20: number; average: number; longest: number
   buckets: number[]; byTaker: { ext: string; name: string; calls: number; average: number }[]; byHour: number[]
@@ -402,7 +412,7 @@ const baseQuery = fetchBaseQuery({
 })
 
 const tags = ['Me', 'Extensions', 'RingGroups', 'Trunks', 'Inbound', 'Outbound', 'Settings', 'Users', 'Calls',
-  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail', 'Tenants', 'System', 'Prompts', 'Music', 'Directories', 'DialIns', 'Inbox', 'AudioStreams', 'Campaigns', 'Dialer', 'DNC', 'Toggles', 'ToggleState', 'PINSets', 'Lookups', 'Hotel', 'WakeUps', 'Chat'] as const
+  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail', 'Tenants', 'System', 'Prompts', 'Music', 'Directories', 'DialIns', 'Inbox', 'AudioStreams', 'Campaigns', 'Dialer', 'DNC', 'Toggles', 'ToggleState', 'PINSets', 'Lookups', 'Hotel', 'WakeUps', 'Chat', 'Core'] as const
 
 export const api = createApi({
   reducerPath: 'api',
@@ -474,6 +484,24 @@ export const api = createApi({
       deleteAddresses: b.mutation<void, void>({ query: () => ({ url: 'core/addresses', method: 'DELETE' }), invalidatesTags: ['Settings'] }),
       validateAddress: b.mutation<Validation, Record<string, string>>({ query: (body) => ({ url: 'core/validate', method: 'POST', body }) }),
       bcfLog: b.query<List<BCFEvent>, void>({ query: () => 'core/bcf', providesTags: ['Calls'] }),
+      corePolicies: b.query<List<StoredPolicyView>, void>({ query: () => 'core/policies', providesTags: ['Core'] }),
+      storePolicy: b.mutation<{ key: string; owner: string }, { jws?: string; policy?: unknown }>({ query: (body) => ({ url: 'core/policies', method: 'POST', body }), invalidatesTags: ['Core'] }),
+      deletePolicy: b.mutation<void, { policyOwner: string; policyType: string; policyQueueName?: string; policyId?: string }>({ query: (params) => ({ url: 'core/policies', method: 'DELETE', params }), invalidatesTags: ['Core'] }),
+      discrepancies: b.query<List<DiscrepancyReport>, void>({ query: () => 'core/discrepancies', providesTags: ['Core'] }),
+      resolveDiscrepancy: b.mutation<DiscrepancyReport, { id: string; resolution: string; comments: string }>({ query: ({ id, ...body }) => ({ url: `core/discrepancies/${id}/resolve`, method: 'POST', body }), invalidatesTags: ['Core'] }),
+      fileDiscrepancy: b.mutation<DiscrepancyReport, { to: string; report: Record<string, unknown> }>({ query: (body) => ({ url: 'core/discrepancies', method: 'POST', body }), invalidatesTags: ['Core'] }),
+      badActors: b.query<List<BadActorView>, void>({ query: () => 'core/badactors', providesTags: ['Core'] }),
+      clearBadActor: b.mutation<void, string>({ query: (id) => ({ url: `core/badactors/${encodeURIComponent(id)}`, method: 'DELETE' }), invalidatesTags: ['Core'] }),
+      dequeueRegs: b.query<List<DequeueRegView>, void>({ query: () => 'core/dequeue', providesTags: ['Core'] }),
+      adrRecords: b.query<List<ADRRecordView>, void>({ query: () => 'core/adr', providesTags: ['Core'] }),
+      addADR: b.mutation<ADRRecordView, { caller: string; type: string; xml: string }>({ query: (body) => ({ url: 'core/adr', method: 'POST', body }), invalidatesTags: ['Core'] }),
+      deleteADR: b.mutation<void, string>({ query: (id) => ({ url: `core/adr/${id}`, method: 'DELETE' }), invalidatesTags: ['Core'] }),
+      locatorRecords: b.query<List<LocatorRecordView>, void>({ query: () => 'core/locator', providesTags: ['Core'] }),
+      addLocator: b.mutation<LocatorRecordView, Partial<LocatorRecordView>>({ query: (body) => ({ url: 'core/locator', method: 'POST', body }), invalidatesTags: ['Core'] }),
+      deleteLocator: b.mutation<void, string>({ query: (id) => ({ url: `core/locator/${id}`, method: 'DELETE' }), invalidatesTags: ['Core'] }),
+      testCallRequests: b.query<List<TestCallRequestView>, void>({ query: () => 'core/testcalls', providesTags: ['Core'] }),
+      runTestCall: b.mutation<TestCallResultView, string>({ query: (psap) => ({ url: `core/testcalls/${encodeURIComponent(psap)}/run`, method: 'POST' }), invalidatesTags: ['Core'] }),
+      deleteTestCalls: b.mutation<void, string>({ query: (psap) => ({ url: `core/testcalls/${encodeURIComponent(psap)}`, method: 'DELETE' }), invalidatesTags: ['Core'] }),
       findArea: b.query<{ found: boolean; why?: string; area?: Boundary }, Record<string, string>>({ query: (q) => `core/find?${new URLSearchParams(q)}` }),
       radio: b.query<ConsoleState, void>({ query: () => 'radio', providesTags: ['Calls'] }),
       ptt: b.mutation<void, { call: string; channel: string; on: boolean }>({ query: (body) => ({ url: 'radio/ptt', method: 'POST', body }) }),
@@ -830,7 +858,9 @@ export const api = createApi({
 })
 
 export const {
-  useFaxBoxesQuery, useCreateFaxBoxMutation, useUpdateFaxBoxMutation, useDeleteFaxBoxMutation, useFaxesQuery, useDeleteFaxMutation, useFaxKindsQuery, useSendFaxMutation, useRetryFaxMutation, useTestFaxMailMutation, usePsapReportQuery, usePsapLogQuery, useRebidMutation, useSendCallTextMutation, useTakeTextCallMutation, useEndTextCallMutation, useVideoLinkMutation, useCallMediaQuery, useHoldMediaMutation, useRevealMutation, useExposureQuery, useBoundariesQuery, useSaveBoundaryMutation, useDeleteBoundaryMutation, useLazyFindAreaQuery, useAddressDataQuery, useLisDataQuery, useLazyLisDataQuery, useReceivedLogQuery, useDeleteLISMutation, useDeleteAddressesMutation, useValidateAddressMutation, useBcfLogQuery, useRadioQuery, usePttMutation, useSimulSelectMutation, useAckEmergencyMutation, useMonitorMutation, usePatchMutation, useAlertToneMutation, useUnitCallMutation, useHangUpMutation, useRadioLogQuery, useRadioLocationsQuery, useMapSourceQuery,
+  useFaxBoxesQuery, useCreateFaxBoxMutation, useUpdateFaxBoxMutation, useDeleteFaxBoxMutation, useFaxesQuery, useDeleteFaxMutation, useFaxKindsQuery, useSendFaxMutation, useRetryFaxMutation, useTestFaxMailMutation, usePsapReportQuery, usePsapLogQuery, useRebidMutation, useSendCallTextMutation, useTakeTextCallMutation, useEndTextCallMutation, useVideoLinkMutation, useCallMediaQuery, useHoldMediaMutation, useRevealMutation, useExposureQuery, useBoundariesQuery, useSaveBoundaryMutation, useDeleteBoundaryMutation, useLazyFindAreaQuery, useAddressDataQuery, useLisDataQuery, useLazyLisDataQuery, useReceivedLogQuery, useDeleteLISMutation, useDeleteAddressesMutation, useValidateAddressMutation, useBcfLogQuery, useCorePoliciesQuery, useStorePolicyMutation, useDeletePolicyMutation, useDiscrepanciesQuery, useResolveDiscrepancyMutation, useFileDiscrepancyMutation,
+  useBadActorsQuery, useClearBadActorMutation, useDequeueRegsQuery, useAdrRecordsQuery, useAddADRMutation, useDeleteADRMutation, useLocatorRecordsQuery, useAddLocatorMutation, useDeleteLocatorMutation,
+  useTestCallRequestsQuery, useRunTestCallMutation, useDeleteTestCallsMutation, useRadioQuery, usePttMutation, useSimulSelectMutation, useAckEmergencyMutation, useMonitorMutation, usePatchMutation, useAlertToneMutation, useUnitCallMutation, useHangUpMutation, useRadioLogQuery, useRadioLocationsQuery, useMapSourceQuery,
   useTextingKindsQuery,
   useMeQuery, useAuthOptionsQuery, useLoginMutation, useLogoutMutation, useSetupStatusQuery, useCompleteSetupMutation,
   useExtensionsQuery, useCreateExtensionMutation, useUpdateExtensionMutation, useDeleteExtensionMutation, useLazyNextExtensionQuery,

@@ -1,12 +1,14 @@
 package api
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"io"
@@ -49,46 +51,83 @@ func TestI3LoggingService(t *testing.T) {
 		t.Fatalf("save %d %v", code, out)
 	}
 	ev, _ := json.Marshal(map[string]any{"logEventType": "RouteLogEvent", "timestamp": time.Now().UTC().Format(time.RFC3339), "elementId": "esrp1", "agencyId": "state.example.gov", "callId": "urn:emergency:uid:callid:abc:esrp1"})
-	post := func(cert tls.Certificate) (int, map[string]any) {
+	post := func(cert tls.Certificate) (int, []byte) {
 		jws, err := i3.SignJWS(ev, cert)
 		if err != nil {
 			t.Fatal(err)
 		}
-		r, err := http.Post(ts.URL+"/i3log/LogEvents", "application/jose", strings.NewReader(jws))
+		flat, _ := i3.Flat(jws) // the i3 form: flattened JSON
+		b, _ := json.Marshal(flat)
+		nenaCheck(t, "Logging-Service/loggingservice.yaml", "/LogEvents", "POST", "request", b)
+		r, err := http.Post(ts.URL+"/i3log/LogEvents", "application/json", bytes.NewReader(b))
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer r.Body.Close()
-		var out map[string]any
-		json.NewDecoder(r.Body).Decode(&out)
+		out, _ := io.ReadAll(r.Body)
 		return r.StatusCode, out
 	}
-	if code, out := post(impostor); code != 400 || !strings.Contains(out["reason"].(string), "not from the PCA") {
-		t.Fatalf("an impostor's event: %d %v", code, out)
+	if code, out := post(impostor); code != 434 || !strings.Contains(string(out), "not from the PCA") {
+		t.Fatalf("an impostor's event: %d %s", code, out)
 	}
 	code, out := post(signer)
 	if code != 201 {
-		t.Fatalf("%d %v", code, out)
+		t.Fatalf("%d %s", code, out)
 	}
-	id := out["logEventId"].(string)
-	r, _ := http.Get(ts.URL + "/i3log/LogEvents/" + url.PathEscape(id))
-	b, _ := io.ReadAll(r.Body)
-	if s, err := i3.VerifyJWS(string(b), nil, time.Now()); r.StatusCode != 200 || err != nil || !strings.Contains(string(s.Payload), "RouteLogEvent") {
-		t.Fatalf("by ID: %d %v %s", r.StatusCode, err, b)
+	nenaCheck(t, "Logging-Service/loggingservice.yaml", "/LogEvents", "POST", "201", out)
+	var id string
+	json.Unmarshal(out, &id)
+	get := func(path string) (int, []byte) {
+		r, err := http.Get(ts.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer r.Body.Close()
+		b, _ := io.ReadAll(r.Body)
+		return r.StatusCode, b
 	}
-	r, _ = http.Get(ts.URL + "/i3log/LogEvents?callId=" + url.QueryEscape("urn:emergency:uid:callid:abc:esrp1"))
+	code, b := get("/i3log/LogEvents/" + url.PathEscape(id))
+	var flat i3.FlatJWS
+	json.Unmarshal(b, &flat)
+	if s, err := i3.VerifyJWS(flat.Compact(), nil, time.Now()); code != 200 || err != nil || !strings.Contains(string(s.Payload), "RouteLogEvent") {
+		t.Fatalf("by ID: %d %v %s", code, err, b)
+	}
+	nenaCheck(t, "Logging-Service/loggingservice.yaml", "/LogEvents/{logEventId}", "GET", "200", b)
+	code, b = get("/i3log/LogEvents?logEventType=RouteLogEvent&limit=5&start=1")
 	var list map[string]any
-	json.NewDecoder(r.Body).Decode(&list)
-	if list["count"] != float64(1) {
-		t.Fatalf("by call %v", list)
+	json.Unmarshal(b, &list)
+	if code != 200 || list["count"] != float64(1) || list["totalCount"] != float64(1) {
+		t.Fatalf("list %d %s", code, b)
+	}
+	nenaCheck(t, "Logging-Service/loggingservice.yaml", "/LogEvents", "GET", "200", b)
+	for _, q := range []struct{ path, op string }{
+		{"/i3log/LogEventIds?callId=" + url.QueryEscape("urn:emergency:uid:callid:abc:esrp1"), "/LogEventIds"},
+		{"/i3log/CallIds", "/CallIds"},
+		{"/i3log/AgencyIds?callId=" + url.QueryEscape("urn:emergency:uid:callid:abc:esrp1"), "/AgencyIds"},
+		{"/i3log/Versions", "/Versions"},
+	} {
+		code, b := get(q.path)
+		if code != 200 {
+			t.Fatalf("%s: %d %s", q.path, code, b)
+		}
+		nenaCheck(t, "Logging-Service/loggingservice.yaml", q.op, "GET", "200", b)
+	}
+	if code, _ := get("/i3log/Conversations?callId=" + url.QueryEscape("urn:emergency:uid:callid:abc:esrp1")); code != 464 {
+		t.Fatalf("a call with no text: %d", code)
+	}
+	if code, _ := get("/i3log/CallIds?startTime=2026-01-02T00:00:00Z&endTime=2026-01-01T00:00:00Z"); code != 466 {
+		t.Fatalf("end before start: %d", code)
 	}
 	if _, view := c.do("GET", "/api/core/i3log", nil); len(view["items"].([]any)) != 1 || view["items"].([]any)[0].(map[string]any)["chained"] != true {
 		t.Fatalf("screen view %v", view)
 	}
-	if r, _ := http.Post(ts.URL+"/i3log/LogEvents", "application/jose", strings.NewReader(`{"logEventType":"x"}`)); r.StatusCode != 400 {
+	// Unsigned events are taken (alg none), marked as not traced to the PCA.
+	unsigned := i3.FlatJWS{Protected: base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none"}`)), Payload: base64.RawURLEncoding.EncodeToString(ev)}
+	ub, _ := json.Marshal(unsigned)
+	if r, _ := http.Post(ts.URL+"/i3log/LogEvents", "application/json", bytes.NewReader(ub)); r.StatusCode != 201 {
 		t.Fatalf("an unsigned event: %d", r.StatusCode)
 	}
-	if r, _ := http.Get(ts.URL + "/i3log/Versions"); r.StatusCode != 200 {
-		t.Fatalf("versions %d", r.StatusCode)
+	if r, _ := http.Post(ts.URL+"/i3log/LogEvents", "application/json", strings.NewReader(`{"logEventType":"x"}`)); r.StatusCode != 460 {
+		t.Fatalf("not a JWS: %d", r.StatusCode)
 	}
 }
