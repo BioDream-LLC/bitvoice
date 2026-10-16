@@ -297,7 +297,7 @@ func waitReset(t *testing.T, s *SS7) {
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		s.mu.Lock()
-		ok := s.resetOK
+		ok := s.isUp
 		s.mu.Unlock()
 		if ok {
 			return

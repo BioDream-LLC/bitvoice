@@ -123,8 +123,9 @@ type SS7 struct {
 	mu      sync.Mutex
 	calls   map[int]*Call
 	blocked map[int]bool // circuits the far end blocked
-	isUp    bool
-	resetOK bool
+	isUp    bool         // MTP is up and the circuit reset was acknowledged: calls may go
+	mtpOK   bool         // MTP is up
+	waitGRA int          // circuit groups whose reset (GRS) is not acknowledged yet
 	grs     *time.Timer
 }
 
@@ -167,7 +168,11 @@ func (s *SS7) Busy() []int {
 func (s *SS7) mtpUp(up bool) {
 	if !up {
 		s.mu.Lock()
-		s.isUp = false
+		s.isUp, s.mtpOK, s.waitGRA = false, false, 0
+		if s.grs != nil {
+			s.grs.Stop()
+			s.grs = nil
+		}
 		var gone []*Call
 		for _, c := range s.calls {
 			gone = append(gone, c)
@@ -181,14 +186,49 @@ func (s *SS7) mtpUp(up bool) {
 		}
 		return
 	}
-	// MTP up: reset every circuit (GRS in groups of up to 32), then calls may go.
+	// MTP up: reset every circuit (GRS in groups of up to 32); calls may go once the far end has
+	// acknowledged them all (GRA), so a call is never cleared by a reset still on its way.
 	s.mu.Lock()
-	s.isUp = true
+	s.mtpOK = true
 	s.mu.Unlock()
-	for _, g := range groups(s.cfg.CICs) {
+	s.resetCircuits()
+}
+
+// resetCircuits sends a GRS for every group of circuits and, until each is acknowledged, again every
+// T22 (Q.764 2.10.3.1).
+func (s *SS7) resetCircuits() {
+	gs := groups(s.cfg.CICs)
+	s.mu.Lock()
+	if !s.mtpOK {
+		s.mu.Unlock()
+		return
+	}
+	s.waitGRA = len(gs)
+	if s.grs != nil {
+		s.grs.Stop()
+	}
+	s.grs = time.AfterFunc(T22ISUP, s.resetCircuits)
+	s.mu.Unlock()
+	if len(gs) == 0 {
+		s.circuitsReset()
+	}
+	for _, g := range gs {
 		_ = s.sendISUP(g[0], msgGRS, nil, [][]byte{{byte(g[1] - g[0])}}, nil)
 	}
-	if s.Up != nil {
+}
+
+// circuitsReset: every group acknowledged, calls may go.
+func (s *SS7) circuitsReset() {
+	s.mu.Lock()
+	was := s.isUp
+	s.isUp = s.mtpOK
+	if s.grs != nil {
+		s.grs.Stop()
+		s.grs = nil
+	}
+	now := s.isUp && !was
+	s.mu.Unlock()
+	if now && s.Up != nil {
 		s.Up(true)
 	}
 }
@@ -704,8 +744,15 @@ func (s *SS7) receive(si int, l Label, data []byte) {
 		_ = s.sendISUP(m.cic, msgGRA, nil, [][]byte{append([]byte{byte(rng)}, status...)}, nil)
 	case msgGRA:
 		s.mu.Lock()
-		s.resetOK = true
+		done := false
+		if s.waitGRA > 0 {
+			s.waitGRA--
+			done = s.waitGRA == 0
+		}
 		s.mu.Unlock()
+		if done {
+			s.circuitsReset()
+		}
 	case msgBLO:
 		s.mu.Lock()
 		s.blocked[m.cic] = true

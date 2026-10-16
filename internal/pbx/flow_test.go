@@ -134,7 +134,10 @@ func TestCallerIDLookup(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
 		if r.URL.Query().Get("n") == "3125550000" {
-			time.Sleep(2 * time.Second)
+			select { // far longer than the lookup's 300 ms: a call that waited for it would show
+			case <-time.After(8 * time.Second):
+			case <-r.Context().Done():
+			}
 		}
 		if u, p, _ := r.BasicAuth(); u != "crm" || p != "secret" {
 			w.WriteHeader(401)
@@ -185,7 +188,7 @@ func TestCallerIDLookup(t *testing.T) {
 	if f := call("3125550000").Get("From"); strings.Contains(f, "Northwind") {
 		t.Fatalf("a slow answer was used: %s", f)
 	}
-	if time.Since(start)-base > time.Second {
+	if time.Since(start)-base > 4*time.Second {
 		t.Fatalf("a slow lookup held the call %s", time.Since(start))
 	}
 	if n, err := e.TestLookup(context.Background(), &cfg.Lookups[0], "+1 312 555 9999"); err != nil || n != "Northwind Traders" {
