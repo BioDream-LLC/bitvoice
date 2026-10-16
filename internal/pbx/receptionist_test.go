@@ -122,9 +122,8 @@ func TestReceptionistBooksCallback(t *testing.T) {
 	cfg.System.AI = config.AI{Enabled: true, BaseURL: ai.URL, Model: "m", SpeechModel: "tts-1"}
 	cfg.Receptionists = []config.Receptionist{{ID: "r1", Name: "Front", Person: config.Destination{Type: "extension", Target: "102"}}}
 	cfg.FindExtension("101").NoAnswer = &config.Destination{Type: "receptionist", Target: "r1"}
-	e, _ := startEngine(t, cfg)
 	got := make(chan store.Callback, 1)
-	e.Callback = func(c store.Callback) error { got <- c; return nil }
+	e, _ := startEngine(t, cfg, func(e *Engine) { e.Callback = func(c store.Callback) error { got <- c; return nil } })
 	ps := registered(t, e, "100", "102")
 	caller := ps[0]
 	d, code := caller.dial("101")
@@ -133,7 +132,11 @@ func TestReceptionistBooksCallback(t *testing.T) {
 	}
 	var seq uint16
 	for turn := 0; turn < 2; turn++ { // asks for a callback, then says yes to the read-back
-		time.Sleep(900 * time.Millisecond)
+		// Speak once the receptionist has said its piece: on a slow machine the AI's turn takes longer
+		// than any fixed pause, and a caller talking over it is not taken as an answer.
+		if !waitPrompt(caller, 10*time.Second) {
+			t.Fatalf("turn %d: the receptionist said nothing", turn)
+		}
 		speakFor(caller, d, 600*time.Millisecond)
 		quiet := time.Now().Add(1200 * time.Millisecond)
 		for time.Now().Before(quiet) {
@@ -179,4 +182,22 @@ func TestWantsPerson(t *testing.T) {
 	if !sayYes.MatchString("Yes, that's right") || sayYes.MatchString("Tuesday") || !sayNo.MatchString("no, the number is wrong") {
 		t.Error("yes/no")
 	}
+}
+
+// waitPrompt waits until BitVoice has spoken to the phone and then gone quiet for 400 ms.
+func waitPrompt(p *phone, d time.Duration) bool {
+	if !receivedLoud(p.rtp, d) {
+		return false
+	}
+	buf := make([]byte, 2048)
+	until := time.Now().Add(d)
+	last := time.Now()
+	for time.Since(last) < 400*time.Millisecond && time.Now().Before(until) {
+		_ = p.rtp.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+		n, _, err := p.rtp.ReadFromUDP(buf)
+		if err == nil && loud(buf[:n]) {
+			last = time.Now()
+		}
+	}
+	return time.Since(last) >= 400*time.Millisecond
 }

@@ -18,10 +18,11 @@ func TestHotDesk(t *testing.T) {
 	if err := cfg.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	e, rec := startEngine(t, cfg)
 	var mu sync.Mutex
 	var saved []HotDesk
-	e.SaveHotDesks = func(h []HotDesk) error { mu.Lock(); saved = h; mu.Unlock(); return nil }
+	e, rec := startEngine(t, cfg, func(e *Engine) {
+		e.SaveHotDesks = func(h []HotDesk) error { mu.Lock(); saved = h; mu.Unlock(); return nil }
+	})
 	savedN := func() int { mu.Lock(); defer mu.Unlock(); return len(saved) }
 	ps := registered(t, e, "900", "101")
 	desk, other := ps[0], ps[1]

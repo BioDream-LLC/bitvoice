@@ -149,13 +149,14 @@ func TestTrunkRegistersAndCallsOut(t *testing.T) {
 
 func TestTrunkCallsIn(t *testing.T) {
 	c := newCarrier(t)
-	e, _ := startEngine(t, trunkConfig(c.stack.Port()))
-	e.NameFor = func(n string) string {
-		if n == "3125559999" {
-			return "Acme Plumbing"
+	e, _ := startEngine(t, trunkConfig(c.stack.Port()), func(e *Engine) {
+		e.NameFor = func(n string) string {
+			if n == "3125559999" {
+				return "Acme Plumbing"
+			}
+			return ""
 		}
-		return ""
-	}
+	})
 	waitTrunk(t, e, "registered")
 	b := registered(t, e, "101")[0]
 

@@ -80,11 +80,12 @@ func TestDNDCodes(t *testing.T) {
 	if err := cfg.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	e, _ := startEngine(t, cfg)
-	ps := registered(t, e, "100", "101", "102")
 	var mu sync.Mutex
 	var saved DivertState
-	e.SaveDiverts = func(s DivertState) error { mu.Lock(); saved = s; mu.Unlock(); return nil }
+	e, _ := startEngine(t, cfg, func(e *Engine) {
+		e.SaveDiverts = func(s DivertState) error { mu.Lock(); saved = s; mu.Unlock(); return nil }
+	})
+	ps := registered(t, e, "100", "101", "102")
 	if _, code := ps[1].dial("*76"); code != 200 {
 		t.Fatalf("*76 answered %d", code)
 	}
@@ -419,9 +420,8 @@ func TestConferenceWaitsForLeader(t *testing.T) {
 }
 
 func TestDivertsSurviveRestart(t *testing.T) {
-	e, _ := startEngine(t, testConfig())
 	var saved DivertState
-	e.SaveDiverts = func(s DivertState) error { saved = s; return nil }
+	e, _ := startEngine(t, testConfig(), func(e *Engine) { e.SaveDiverts = func(s DivertState) error { saved = s; return nil } })
 	if err := e.SetDivert(Divert{Ext: "100", All: "101"}); err != nil {
 		t.Fatal(err)
 	}
