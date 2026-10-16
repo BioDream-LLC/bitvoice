@@ -212,10 +212,12 @@ feature on this list. [Open an issue](https://github.com/BioDream-LLC/bitvoice/i
 <tr><td colspan="2"><b>ALI spill</b> over TCP and <b>EIDO</b> over HTTPS to any CAD when a call is answered</td></tr>
 <tr><td colspan="2">Location <b>rebids</b> and <b>transfers between PSAPs</b> with the data kept</td></tr>
 <tr><td colspan="2">The <b>NENA i3 log</b>, and <b>answer-time reports</b> by call-taker and hour against your goal, as CSV too</td></tr>
-<tr><td colspan="2"><b>TTY</b> (deaf callers' text telephones) decoded and answered on every 911 call, <b>real-time text</b> (RFC 4103) and <b>text to 911</b> from a text control centre (MSRP), in one conversation on the call</td></tr>
+<tr><td colspan="2"><b>TTY</b> (deaf callers' text telephones) decoded and answered on every 911 call, <b>real-time text</b> (RFC 4103) and <b>text to 911</b> from a text control centre (MSRP, over TLS too), in one conversation on the call</td></tr>
 <tr><td colspan="2"><b>Caller video and photos</b> by a link, no app: live camera (WHIP), photos, clips and <b>recordings</b> of the live video kept with their <b>SHA-256</b>, time and GPS, and named in the EIDO to CAD; opened <b>blurred</b> until revealed, with an <b>exposure</b> report for the wellness programme; CAD and units watch by link (WHEP)</td></tr>
 <tr><td colspan="2">A <b>map</b> of the caller's position and its uncertainty, from your own tiles (works offline)</td></tr>
-<tr><td colspan="2"><b>Legacy 911</b>: CAMA trunks on telephony cards, and location looked up by callback number (HELD) for calls that bring none</td></tr>
+<tr><td colspan="2"><b>Legacy 911</b>: CAMA trunks on telephony cards, and location looked up by callback number for calls that bring none, by HELD or the old <b>ALI link</b> (network or serial port, read by your provider's layout); ALI spill to CAD over the network or a serial port</td></tr>
+<tr><td colspan="2"><b>Report layouts</b>: lay out your state's form (rows by day, week, month, hour or call-taker; your columns and headings) and run it as a table, a spreadsheet or a page to print</td></tr>
+<tr><td colspan="2"><b>Test calls</b> (urn:service:test.sos) answered by themselves, as NENA i3 section 9 asks</td></tr>
 </tbody></table>
 
 <table width="100%">
@@ -239,6 +241,7 @@ feature on this list. [Open an issue](https://github.com/BioDream-LLC/bitvoice/i
 <tr><td colspan="2">An <b>LVF</b> validating civic addresses against NENA address points and road centrelines</td></tr>
 <tr><td colspan="2">A <b>BCF</b> at the ESInet edge: calls per minute and at once per source, deny lists, <b>STIR/SHAKEN</b> checks, suspicious calls marked for the policy rules</td></tr>
 <tr><td colspan="2">A <b>LIS</b> answering HELD by telephone number, a <b>forest guide</b> for places outside your areas, and an <b>i3 logging service</b> that takes signed log events, checked against the <b>PSAP Credentialing Agency</b></td></tr>
+<tr><td colspan="2">The <b>NENA i3 web services</b>: a <b>Policy Store</b> whose signed routing policies the ESRP runs, <b>discrepancy reports</b>, <b>bad actors</b>, <b>geocode</b> and <b>MSAG</b> conversion, an <b>ADR</b>, the <b>service/agency locator</b>, <b>dequeue registration</b> and a <b>test call generator</b>, each checked against NENA's published definitions</td></tr>
 </tbody></table>
 
 **Radio console**: radio channels and P25 talkgroups beside the phones, with the radio log.
