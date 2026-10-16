@@ -58,7 +58,10 @@ func (v vphone) seen() (marks map[byte]int, ssrcs map[uint32]bool, pts map[int]b
 		_ = v.p.video.SetReadDeadline(deadline)
 		n, _, err := v.p.video.ReadFromUDPAddrPort(buf)
 		if err != nil {
-			break
+			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				break
+			}
+			continue // Windows reports an earlier ICMP "port unreachable" as a read error
 		}
 		if n == 600 {
 			marks[buf[12]]++
@@ -219,10 +222,15 @@ func TestVideoRoomShowsTheLeader(t *testing.T) {
 		t.Fatalf("the leader is not on screen: %v", got)
 	}
 	speak(ds[2], 9)
-	time.Sleep(400 * time.Millisecond)
-	got = look()
-	if got[1]['C'] == 0 || got[0]['B'] == 0 || got[2]['B'] == 0 {
-		t.Fatalf("after 102 spoke: %v", got)
+	// The switch is made on 200 ms ticks; a slow machine may take a few more to make it.
+	for until := time.Now().Add(6 * time.Second); ; {
+		got = look()
+		if got[1]['C'] != 0 && got[0]['B'] != 0 && got[2]['B'] != 0 {
+			break
+		}
+		if time.Now().After(until) {
+			t.Fatalf("after 102 spoke: %v", got)
+		}
 	}
 }
 

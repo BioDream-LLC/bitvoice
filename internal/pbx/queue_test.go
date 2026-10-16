@@ -163,13 +163,15 @@ func TestQueueVIPAndSticky(t *testing.T) {
 	// Sticky: 102 rings first for the caller it answered last time, though 101 has been idle longer.
 	cfg2 := queueConfig("longest-idle")
 	cfg2.Queues[0].Sticky = true
-	e2, _ := startEngine(t, cfg2)
-	e2.LastAgent = func(number string, since time.Time) string {
-		if number == "100" && since.Before(time.Now().AddDate(0, 0, -29)) {
-			return "102"
+	// Set before the engine starts: a call reads it on another goroutine.
+	e2, _ := startEngine(t, cfg2, func(e *Engine) {
+		e.LastAgent = func(number string, since time.Time) string {
+			if number == "100" && since.Before(time.Now().AddDate(0, 0, -29)) {
+				return "102"
+			}
+			return ""
 		}
-		return ""
-	}
+	})
 	qs := registered(t, e2, "100", "101", "102")
 	qs[0].dial("700")
 	if qs[2].waitRing(3*time.Second) == nil {

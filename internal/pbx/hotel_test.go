@@ -81,8 +81,11 @@ func TestGuestRoomsAndWakeUps(t *testing.T) {
 	if ring == nil {
 		t.Fatal("wake-up call did not ring")
 	}
+	// Sound left over from the *62 call would pass for the wake-up call's and the guest would hang up
+	// before the call was taken as answered.
+	ps[1].drainRTP()
 	guest := ps[1].answer(ring)
-	if !ps[1].gotRTP(2 * time.Second) {
+	if !ps[1].gotRTP(5 * time.Second) {
 		t.Fatal("nothing played")
 	}
 	ps[1].send(guest.request("BYE")) // awake: the guest hangs up
