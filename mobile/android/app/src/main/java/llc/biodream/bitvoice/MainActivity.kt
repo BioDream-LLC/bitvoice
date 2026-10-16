@@ -38,7 +38,9 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(state)
         val perms = mutableListOf(Manifest.permission.RECORD_AUDIO)
         if (Build.VERSION.SDK_INT >= 33) perms += Manifest.permission.POST_NOTIFICATIONS
-        requestPermissions(perms.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }.toTypedArray(), 1)
+        // Ask only for what is missing: Android refuses an empty request (every start once all are granted).
+        val missing = perms.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+        if (missing.isNotEmpty()) requestPermissions(missing.toTypedArray(), 1)
         show()
         intent?.data?.toString()?.let { if (Vault.load(this) == null) pair(it) }
     }

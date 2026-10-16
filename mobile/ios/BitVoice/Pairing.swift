@@ -67,7 +67,7 @@ enum BitVoiceAPI {
               c.host == "pair",
               let s = c.queryItems?.first(where: { $0.name == "server" })?.value, let server = URL(string: s),
               let code = c.queryItems?.first(where: { $0.name == "code" })?.value, !code.isEmpty,
-              server.scheme == "https" || server.scheme == "http" else { return nil }
+              server.scheme == "https" else { return nil } // the device secret never travels unencrypted
         return (server, code)
     }
 

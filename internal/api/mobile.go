@@ -149,11 +149,9 @@ func (s *Server) mobileRoutes() {
 		}
 		server := cfg.System.Mobile.ServerURL
 		if server == "" {
-			scheme := "http"
-			if r.TLS != nil {
-				scheme = "https"
-			}
-			server = scheme + "://" + r.Host
+			// HTTPS only: BitVoice serves nothing else, and behind a proxy that ends TLS the apps still
+			// reach it over https.
+			server = "https://" + r.Host
 		}
 		code := token(16)
 		st := &s.mobile

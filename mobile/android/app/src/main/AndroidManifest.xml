@@ -15,7 +15,8 @@
         android:label="BitVoice"
         android:icon="@drawable/ic_phone"
         android:theme="@style/Theme.BitVoice"
-        android:usesCleartextTraffic="true">
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:usesCleartextTraffic="false">
         <activity
             android:name=".MainActivity"
             android:exported="true"

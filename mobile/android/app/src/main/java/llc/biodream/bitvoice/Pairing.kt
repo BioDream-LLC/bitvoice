@@ -91,7 +91,7 @@ object BitVoiceApi {
         if (u.scheme != "bitvoice" || u.host != "pair") return null
         val server = u.getQueryParameter("server") ?: return null
         val code = u.getQueryParameter("code") ?: return null
-        if (!server.startsWith("https://") && !server.startsWith("http://")) return null
+        if (!server.startsWith("https://")) return null // the device secret never travels unencrypted
         return server.trimEnd('/') to code
     }
 

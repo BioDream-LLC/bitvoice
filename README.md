@@ -401,7 +401,9 @@ recording and the network: run the generator on your own server before you go li
 
 The **iPhone app** is tested in the iOS Simulator against a real BitVoice: paired by link, rung by a call,
 answered and hung up (`mobile/ios/BitVoiceUITests`). The phone's own call screen and push wake-up need a
-real phone and are not yet tried on one; the Android app is built but not yet run.
+real phone and are not yet tried on one. The **Android app** is tried on the Android 15 emulator the same
+way (paired, rung, answered with Opus and no loss); its first run there found and fixed a crash on every
+start after the first.
 
 **Status, plainly.** The phone system is working. The 911, radio console and NG911 Core Services profiles
 are built and tested against stand-ins and real captures, **not yet against a live ESInet, P25 system or
