@@ -566,6 +566,59 @@ test('core services: the i3 web services', async ({ page }) => {
   await expect(svc.getByText('No PSAP has asked for test calls')).toBeVisible()
 })
 
+// The legacy ALI link: the 911 settings place each field of the ALI provider's layout, read a sample
+// by it, and ask a stand-in ALI controller (this test, over TCP) for a number's record.
+test('911 calls: the legacy ALI link and its layout', async ({ page }) => {
+  const asked: string[] = []
+  const ali = net.createServer((sock) => {
+    let buf = ''
+    sock.on('data', (d) => {
+      buf += d.toString('latin1')
+      const end = buf.indexOf('\x03')
+      if (end < 0) return
+      asked.push(buf.slice(0, end + 1))
+      buf = buf.slice(end + 1)
+      sock.write('\x02001 (717) 555-0100\r\nRESD\r\nJOHNSON PAT\r\n123 N MARKET ST\r\nHARRISBURG          PA\r\n\x03')
+    })
+  })
+  await new Promise<void>((ok) => ali.listen(18402, '127.0.0.1', ok))
+  try {
+    await signIn(page)
+    await page.goto('./#/psap')
+    const setup = page.locator('section[aria-labelledby="pss-h"]')
+    await setup.locator('#pal').fill('serial:dev/ttyUSB0')
+    await setup.getByRole('button', { name: 'Place a field' }).click()
+    await setup.getByRole('button', { name: 'Save' }).click()
+    await expect(setup.getByText(/the ALI controller's address and port, or its serial port/)).toBeVisible()
+    await setup.locator('#pal').fill('127.0.0.1:18402')
+    const layout = setup.getByRole('table', { name: 'ALI layout' })
+    await layout.getByLabel('Field 1', { exact: true }).selectOption('callback')
+    await layout.getByLabel('Line of field 1').fill('1')
+    await layout.getByLabel('Column of field 1').fill('5')
+    for (const [i, name, line, col, len] of [[2, 'class', '2', '1', '4'], [3, 'name', '3', '1', ''], [4, 'street', '4', '1', ''], [5, 'city', '5', '1', '20'], [6, 'state', '5', '21', '2']] as const) {
+      await setup.getByRole('button', { name: 'Place a field' }).click()
+      await layout.getByLabel(`Field ${i}`, { exact: true }).selectOption(name)
+      await layout.getByLabel(`Line of field ${i}`).fill(line)
+      await layout.getByLabel(`Column of field ${i}`).fill(col)
+      if (len) await layout.getByLabel(`Length of field ${i}`).fill(len)
+    }
+    await setup.locator('#pals').fill('001 (717) 555-0100\nRESD\nJOHNSON PAT\n123 N MARKET ST\nHARRISBURG          PA')
+    await setup.getByRole('button', { name: 'Read the sample' }).click()
+    const fields = setup.getByLabel('ALI fields read')
+    await expect(fields.getByText('JOHNSON PAT')).toBeVisible()
+    await expect(fields.getByText('HARRISBURG')).toBeVisible()
+    await setup.getByRole('button', { name: 'Save' }).click()
+    await expect(page.getByText('911 settings saved').first()).toBeVisible()
+    await setup.locator('#paln').fill('(717) 555-0100')
+    await setup.getByRole('button', { name: 'Ask', exact: true }).click()
+    await expect(setup.getByLabel('ALI lines')).toContainText('123 N MARKET ST')
+    await expect(fields.getByText('RESD')).toBeVisible()
+    expect(asked[0]).toBe('\x027175550100\x03')
+  } finally {
+    ali.close()
+  }
+})
+
 // Caller video: a 911 conversation from a TCC; the call-taker sends a video link, the caller's
 // phone (a second page, Chromium's fake camera) shares live video over WHIP and sends a photo; the
 // call-taker watches over WHEP, blurred until revealed, sees the photo's hash, time and GPS, holds it,

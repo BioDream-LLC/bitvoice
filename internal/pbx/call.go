@@ -68,6 +68,7 @@ type Call struct {
 	facts              *policyFacts              // what i3 routing policies may test, read from its INVITE
 	testCall           bool                      // a test call (urn:service:test.sos)
 	testText           string                    // a test call's answer text, beside the SDP
+	aliClass           string                    // the class of service the ALI link gave
 	inTrunkID          string                    // the trunk it came in on (for policy rules)
 	rebidAt            time.Time                 // the location was last fetched (by reference) at
 	emergencyTold      bool                      // the API was told this 911 call was answered
@@ -137,7 +138,7 @@ func (c *Call) info() CallInfo {
 			em.TextVia = append(em.TextVia, "msrp")
 		}
 		em.TextOnly = c.textOnly
-		em.CAMA, em.ALILookup = c.cama, c.aliLookup
+		em.CAMA, em.ALILookup, em.ALIClass = c.cama, c.aliLookup, c.aliClass
 		em.Video = c.video.Load()
 		if c.cama != "" {
 			em.ESInet = false // the legacy 911 network

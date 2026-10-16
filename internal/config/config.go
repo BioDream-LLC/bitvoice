@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/mail"
@@ -586,8 +587,12 @@ type MapSource struct {
 type PSAP struct {
 	AgencyID  string `json:"agencyId"`  // a domain naming the agency, like psap.county.example.gov
 	ElementID string `json:"elementId"` // this system's own name in i3 logs; the host name when empty
-	// ALI spill: the text block sent to CAD over TCP for each answered call (host:port of CAD's listener).
+	// ALI spill: the text block sent to CAD for each answered call: over TCP (host:port of CAD's
+	// listener), or out of a serial port (serial:/dev/ttyUSB0?baud=9600&parity=none).
 	ALIAddress string `json:"aliAddress"`
+	// ALILink asks a legacy ALI controller (or the ALI database's data link) for the record of a 911
+	// call that brought only its callback number, when LocationServer is not set.
+	ALILink ALILink `json:"aliLink"`
 	// EIDO: the incident document POSTed to CAD (https URL), with a bearer token if CAD wants one.
 	EIDOURL   string `json:"eidoUrl"`
 	EIDOToken string `json:"eidoToken"`
@@ -2254,8 +2259,20 @@ func (c *Config) Validate() error {
 			p.add("system.psap.agencyId", "an agency ID is a domain, like psap.county.example.gov")
 		}
 		if ps.ALIAddress != "" {
-			if _, port, err := net.SplitHostPort(ps.ALIAddress); err != nil || port == "" {
-				p.add("system.psap.aliAddress", "enter CAD's address and port, like 10.0.0.20:4000")
+			if err := checkLinkAddress(ps.ALIAddress); err != nil {
+				p.add("system.psap.aliAddress", "enter CAD's address and port, like 10.0.0.20:4000, or a serial port, like serial:/dev/ttyUSB0?baud=9600 (%s)", err.Error())
+			}
+		}
+		if l := &ps.ALILink; l.Address != "" || len(l.Layout) > 0 {
+			l.Address = strings.TrimSpace(l.Address)
+			if err := checkLinkAddress(l.Address); err != nil {
+				p.add("system.psap.aliLink.address", "the ALI controller's address and port, or its serial port (%s)", err.Error())
+			}
+			if err := checkALILayout(l.Layout); err != nil {
+				p.add("system.psap.aliLink.layout", "%s", err.Error())
+			}
+			if l.TimeoutS < 0 || l.TimeoutS > 30 {
+				p.add("system.psap.aliLink.timeoutS", "1 to 30 seconds (4 when 0)")
 			}
 		}
 		if ps.EIDOURL != "" && !strings.HasPrefix(ps.EIDOURL, "https://") && !strings.HasPrefix(ps.EIDOURL, "http://") {
@@ -3594,4 +3611,71 @@ func (c *Config) validateHotDesk(p *Problems) {
 			p.add(fmt.Sprintf("extensions[%d].hotDesk", i), "a door phone, speaker or analog line cannot be a hot desk")
 		}
 	}
+}
+
+// ALILink is a legacy ALI data link (see PSAP.ALILink).
+type ALILink struct {
+	Address  string     `json:"address"`  // host:port, or serial:/dev/ttyUSB0?baud=9600&parity=none
+	Request  string     `json:"request"`  // the request template: {ani10}, {ani7}, {pos2}, \x02 ... (STX, ten digits, ETX when empty)
+	Layout   []ALIField `json:"layout"`   // where each field sits in the answer
+	TimeoutS int        `json:"timeoutS"` // how long to wait for the answer (4 seconds when 0)
+}
+
+// ALIField places one field of an ALI record: line and column from 1, length (0: to the line's end).
+type ALIField struct {
+	Name string `json:"name"`
+	Line int    `json:"line"`
+	Col  int    `json:"col"`
+	Len  int    `json:"len"`
+}
+
+// aliFieldNames are the fields an ALI layout can place (i3.ALIFieldNames).
+var aliFieldNames = []string{"callback", "class", "name", "hno", "hns", "prd", "rd", "sts", "pod", "loc", "unit", "floor", "building",
+	"city", "county", "state", "zip", "lat", "lon", "unc", "company", "esn", "pilot", "street"}
+
+func checkALILayout(fields []ALIField) error {
+	seen := map[string]bool{}
+	for i, f := range fields {
+		if !slices.Contains(aliFieldNames, f.Name) {
+			return fmt.Errorf("field %d: choose what it is", i+1)
+		}
+		if seen[f.Name] {
+			return fmt.Errorf("%s is placed twice", f.Name)
+		}
+		seen[f.Name] = true
+		if f.Line < 1 || f.Line > 40 || f.Col < 1 || f.Col > 200 || f.Len < 0 || f.Len > 200 {
+			return fmt.Errorf("%s: line 1 to 40, column 1 to 200, length 0 to 200", f.Name)
+		}
+	}
+	if len(fields) == 0 {
+		return errors.New("place at least the street (or its parts) in the layout")
+	}
+	return nil
+}
+
+// checkLinkAddress takes host:port or a serial port.
+func checkLinkAddress(a string) error {
+	if rest, ok := strings.CutPrefix(a, "serial:"); ok {
+		dev, q, _ := strings.Cut(rest, "?")
+		if !strings.HasPrefix(dev, "/dev/") {
+			return errors.New("a serial device under /dev")
+		}
+		for _, kv := range strings.Split(q, "&") {
+			k, v, _ := strings.Cut(kv, "=")
+			switch k {
+			case "", "parity", "bits", "stop":
+			case "baud":
+				if !slices.Contains([]string{"1200", "2400", "4800", "9600", "19200", "38400", "57600", "115200"}, v) {
+					return errors.New("baud 1200 to 115200")
+				}
+			default:
+				return fmt.Errorf("serial settings are baud, bits, parity and stop, not %s", k)
+			}
+		}
+		return nil
+	}
+	if _, port, err := net.SplitHostPort(a); err != nil || port == "" {
+		return errors.New("host:port")
+	}
+	return nil
 }

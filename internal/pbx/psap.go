@@ -69,21 +69,35 @@ func (e *Engine) Rebid(ctx context.Context, id string) (*i3.Location, error) {
 // and a location server is set (the ALI query of a legacy call). It never holds up the call: what it
 // finds is added when it comes.
 func (c *Call) locateByNumber() {
-	server := c.e.Config().System.PSAP.LocationServer
+	ps := c.e.Config().System.PSAP
+	server := ps.LocationServer
+	link := server == "" && ps.ALILink.Address != "" && c.e.ALIQuery != nil
 	c.mu.Lock()
 	emergency := c.i3 != nil || c.esinet
 	has := c.i3 != nil && (c.i3.Location != nil || c.i3.LocationURI != "")
 	number := c.from
-	if emergency && !has && server != "" {
+	if emergency && !has && (server != "" || link) {
 		c.aliLookup = "looking"
 	}
 	c.mu.Unlock()
-	if !emergency || has || server == "" {
+	if !emergency || has || server == "" && !link {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	loc, raw, err := i3.LocateNumber(ctx, &http.Client{Timeout: 5 * time.Second}, server, number)
+	var loc i3.Location
+	var raw []byte
+	var err error
+	var rec i3.ALIRecord
+	if link {
+		// The legacy ALI link: the record, read by the PSAP's layout.
+		if rec, err = c.e.ALIQuery(ctx, number, ""); err == nil {
+			loc = *rec.Location
+			raw = i3.BuildPIDF("tel:"+number, i3.LISRecord{Number: number, Civic: civicOr(loc.Civic), Lat: deref(loc.Lat), Lon: deref(loc.Lon), Radius: loc.Radius, Method: "ALI"}, time.Now())
+		}
+	} else {
+		loc, raw, err = i3.LocateNumber(ctx, &http.Client{Timeout: 5 * time.Second}, server, number)
+	}
 	c.mu.Lock()
 	if err != nil {
 		c.aliLookup = err.Error()
@@ -93,10 +107,30 @@ func (c *Call) locateByNumber() {
 			c.i3 = &i3.Call{}
 		}
 		c.i3.Location, c.i3.LocationRaw = &loc, raw
+		if link && rec.Name != "" && (c.fromName == "" || cleanNumber(c.fromName) == c.from) {
+			c.fromName = rec.Name
+		}
+		if link && rec.Class != "" {
+			c.aliClass = rec.Class
+		}
 	}
 	c.mu.Unlock()
 	if err != nil {
 		c.e.Log.Warn("911 location lookup failed", "call", c.ID, "number", number, "err", err)
 	}
 	c.e.publish("call.updated", c.info())
+}
+
+func civicOr(c *i3.Civic) i3.Civic {
+	if c == nil {
+		return i3.Civic{}
+	}
+	return *c
+}
+
+func deref(f *float64) float64 {
+	if f == nil {
+		return 0
+	}
+	return *f
 }

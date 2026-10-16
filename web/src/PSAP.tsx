@@ -1,14 +1,14 @@
-import { Download, HeartPulse, ScrollText, Save, Siren, Timer } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { Cable, Download, HeartPulse, Plus, ScrollText, Save, Siren, Timer, Trash2 } from 'lucide-react'
+import { Fragment, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { errorOf, useExposureQuery, useCallsQuery, usePsapLogQuery, usePsapReportQuery, useSaveSettingsMutation, useSettingsQuery, type ApiErrorBody, type MapSource, type PSAPSettings } from './api'
+import { errorOf, useAliParseMutation, useAliTestMutation, useExposureQuery, useCallsQuery, usePsapLogQuery, usePsapReportQuery, useSaveSettingsMutation, useSettingsQuery, type ALIField, type ALILink, type ALIRecordView, type ApiErrorBody, type MapSource, type PSAPSettings } from './api'
 import { useIsAdmin } from './Editor'
 import { EmergencyCard } from './EmergencyCard'
 import { useDraft } from './useDraft'
 import { Badge, Empty, Field, Page, StaleBanner, problemFor } from './ui'
 
 const blankMap: MapSource = { file: '', url: '', attribution: '' }
-const blankPSAP: PSAPSettings = { agencyId: '', elementId: '', aliAddress: '', eidoUrl: '', eidoToken: '', answerTarget: 15, ttyOff: false, locationServer: '', videoLinkBase: '', videoFrom: '', videoStreams: 0, videoKbps: 0, uploadMb: 0, mediaDays: 0, recordVideo: false, testCallsOff: false }
+const blankPSAP: PSAPSettings = { agencyId: '', elementId: '', aliAddress: '', eidoUrl: '', eidoToken: '', answerTarget: 15, ttyOff: false, locationServer: '', videoLinkBase: '', videoFrom: '', videoStreams: 0, videoKbps: 0, uploadMb: 0, mediaDays: 0, recordVideo: false, testCallsOff: false, aliLink: { address: '', request: '', layout: [], timeoutS: 0 } }
 
 export function PSAP() {
   const admin = useIsAdmin()
@@ -125,7 +125,7 @@ function I3Log() {
 
 function PSAPSetup() {
   const { data } = useSettingsQuery()
-  const server = useMemo(() => (data ? { ...blankPSAP, ...(data.system.psap ?? {}), map: { ...blankMap, ...(data.system.map ?? {}) } } : undefined), [data])
+  const server = useMemo(() => (data ? { ...blankPSAP, ...(data.system.psap ?? {}), aliLink: { ...blankPSAP.aliLink!, ...(data.system.psap?.aliLink ?? {}), layout: data.system.psap?.aliLink?.layout ?? [] }, map: { ...blankMap, ...(data.system.map ?? {}) } } : undefined), [data])
   const { draft, setDraft, reset, stale } = useDraft<PSAPSettings & { map: MapSource }>(server)
   const [err, setErr] = useState<ApiErrorBody | null>(null)
   const [save, { isLoading }] = useSaveSettingsMutation()
@@ -152,6 +152,7 @@ function PSAPSetup() {
       <Field label="Location lookup (ALI)" htmlFor="psls" error={p('locationServer')} hint="For 911 calls that bring only a callback number (CAMA trunks, or ESInet calls with no location): an ALI database or location server that answers HELD by telephone number (RFC 6155).">
         <input id="psls" className="input font-mono" value={draft.locationServer} placeholder="https://ali.example.gov/held" onChange={(e) => set({ locationServer: e.target.value.trim() })} />
       </Field>
+      <ALILinkSetup link={draft.aliLink!} set={(l) => set({ aliLink: l })} p={p} />
       <label className="flex items-center gap-2 text-sm text-slate-300">
         <input type="checkbox" checked={!draft.ttyOff} onChange={(e) => set({ ttyOff: !e.target.checked })} />
         Listen for TTYs on 911 calls <span className="text-xs text-slate-500">(deaf callers' text telephones: their text shows on the call, and replies go back as TTY tones)</span>
@@ -162,7 +163,7 @@ function PSAPSetup() {
       </label>
       <h3 className="text-sm font-semibold text-violet-300">CAD</h3>
       <div className="grid gap-3 md:grid-cols-3">
-        <Field label="ALI spill to" htmlFor="psl" error={p('aliAddress')} hint="CAD's address and port: the ALI text goes there over TCP when a call is answered."><input id="psl" className="input font-mono" value={draft.aliAddress} placeholder="10.0.0.20:4000" onChange={(e) => set({ aliAddress: e.target.value.trim() })} /></Field>
+        <Field label="ALI spill to" htmlFor="psl" error={p('aliAddress')} hint="CAD's address and port (the ALI text goes there over TCP when a call is answered), or a serial port: serial:/dev/ttyS0?baud=9600."><input id="psl" className="input font-mono" value={draft.aliAddress} placeholder="10.0.0.20:4000" onChange={(e) => set({ aliAddress: e.target.value.trim() })} /></Field>
         <Field label="EIDO to" htmlFor="psu" error={p('eidoUrl')} hint="CAD's address for EIDOs (NENA-STA-024), sent by HTTPS POST."><input id="psu" className="input font-mono" value={draft.eidoUrl} placeholder="https://cad.example.gov/eido" onChange={(e) => set({ eidoUrl: e.target.value.trim() })} /></Field>
         <Field label="EIDO token" htmlFor="pst2" hint="Sent as a bearer token, if CAD asks for one. Blank keeps the saved one."><input id="pst2" type="password" autoComplete="off" className="input font-mono" value={draft.eidoToken} onChange={(e) => set({ eidoToken: e.target.value })} /></Field>
       </div>
@@ -189,5 +190,65 @@ function PSAPSetup() {
       </div>
       <div className="flex justify-end"><button className="btn btn-primary" disabled={isLoading} onClick={doSave}><Save size={15} aria-hidden /> Save</button></div>
     </section>
+  )
+}
+
+const aliFields = ['callback', 'class', 'name', 'street', 'hno', 'hns', 'prd', 'rd', 'sts', 'pod', 'loc', 'unit', 'floor', 'building', 'city', 'county', 'state', 'zip', 'lat', 'lon', 'unc', 'company', 'esn', 'pilot']
+const aliFieldLabel: Record<string, string> = { callback: 'Callback number', class: 'Class of service', name: 'Name', street: 'Street (whole line)', hno: 'House number', hns: 'Number suffix', prd: 'Direction before', rd: 'Street name',
+  sts: 'Street type', pod: 'Direction after', loc: 'More (apartment, suite)', unit: 'Unit', floor: 'Floor', building: 'Building', city: 'City', county: 'County', state: 'State', zip: 'ZIP', lat: 'Latitude', lon: 'Longitude',
+  unc: 'Uncertainty (m)', company: 'Phone company', esn: 'ESN', pilot: 'Pilot number' }
+const sampleALI = '001 (717) 555-0100   10/15 14:05\nRESD VERIZON\nJOHNSON PAT\n123 N MARKET ST\nAPT 4B\nHARRISBURG          PA 17101'
+const numInput = (v: string) => Number(v.replace(/\D/g, '')) || 0
+
+/** The legacy ALI link: where to ask, what to send, and where each field sits in the answer. */
+function ALILinkSetup({ link, set, p }: { link: ALILink; set: (l: ALILink) => void; p: (f: string) => string | undefined }) {
+  const [sample, setSample] = useState(sampleALI)
+  const [number, setNumber] = useState('')
+  const [read, setRead] = useState<{ lines?: string[]; record?: ALIRecordView; error?: string; text?: string } | null>(null)
+  const [parse] = useAliParseMutation()
+  const [test, { isLoading }] = useAliTestMutation()
+  const setField = (i: number, v: Partial<ALIField>) => set({ ...link, layout: link.layout.map((f, j) => (j === i ? { ...f, ...v } : f)) })
+  const lines = (read?.lines ?? (read?.text ?? '').split('\n')).filter((l) => l !== undefined)
+  return (
+    <div className="space-y-3 rounded-lg border border-slate-800 p-3">
+      <h3 className="flex items-center gap-2 text-sm font-semibold text-violet-300"><Cable size={15} className="text-amber-300" aria-hidden /> Legacy ALI link</h3>
+      <p className="text-sm text-slate-400">Where there is no location server above: BitVoice asks your ALI controller (or the ALI database's data link) for a callback number's record, over the network or a serial port, and reads the answer by the layout below. ALI layouts differ between providers: copy yours from a printout of an ALI screen.</p>
+      <div className="grid gap-3 md:grid-cols-3">
+        <Field label="ALI link address" htmlFor="pal" error={p('aliLink.address')} hint="host:port, or a serial port: serial:/dev/ttyUSB0?baud=9600&parity=none (Linux and macOS).">
+          <input id="pal" className="input font-mono" value={link.address} placeholder="serial:/dev/ttyUSB0?baud=9600" onChange={(e) => set({ ...link, address: e.target.value.trim() })} /></Field>
+        <Field label="Request" htmlFor="palr" hint="{ani10} the ten digits, {ani7} the last seven, {pos2} the position, \x02 STX, \x03 ETX. Blank: \x02{ani10}\x03.">
+          <input id="palr" className="input font-mono" value={link.request} placeholder="\x02{ani10}\x03" onChange={(e) => set({ ...link, request: e.target.value })} /></Field>
+        <Field label="Wait for the answer (seconds)" htmlFor="palt" error={p('aliLink.timeoutS')} hint="4 when blank."><input id="palt" className="input w-24" inputMode="numeric" value={link.timeoutS || ''} placeholder="4" onChange={(e) => set({ ...link, timeoutS: numInput(e.target.value) })} /></Field>
+      </div>
+      <table className="w-full text-sm" aria-label="ALI layout">
+        <thead><tr className="text-left text-slate-400"><th className="py-1">Field</th><th>Line</th><th>Column</th><th>Length (0: to the end)</th><th></th></tr></thead>
+        <tbody>{link.layout.map((f, i) => (
+          <tr key={i} className="border-t border-slate-800">
+            <td className="py-1"><select className="input" aria-label={`Field ${i + 1}`} value={f.name} onChange={(e) => setField(i, { name: e.target.value })}>{aliFields.map((n) => <option key={n} value={n}>{aliFieldLabel[n]}</option>)}</select></td>
+            <td><input className="input w-16" aria-label={`Line of field ${i + 1}`} inputMode="numeric" value={f.line || ''} onChange={(e) => setField(i, { line: numInput(e.target.value) })} /></td>
+            <td><input className="input w-16" aria-label={`Column of field ${i + 1}`} inputMode="numeric" value={f.col || ''} onChange={(e) => setField(i, { col: numInput(e.target.value) })} /></td>
+            <td><input className="input w-16" aria-label={`Length of field ${i + 1}`} inputMode="numeric" value={f.len || ''} placeholder="0" onChange={(e) => setField(i, { len: numInput(e.target.value) })} /></td>
+            <td><button className="btn-ghost p-1" aria-label={`Remove field ${i + 1}`} onClick={() => set({ ...link, layout: link.layout.filter((_, j) => j !== i) })}><Trash2 size={14} className="text-rose-300" aria-hidden /></button></td>
+          </tr>))}</tbody>
+      </table>
+      {p('aliLink.layout') && <p className="text-sm text-rose-300" role="alert">{p('aliLink.layout')}</p>}
+      <button className="btn" onClick={() => set({ ...link, layout: [...link.layout, { name: aliFields.find((n) => !link.layout.some((f) => f.name === n)) ?? 'street', line: link.layout.length + 1, col: 1, len: 0 }] })}><Plus size={14} className="text-emerald-300" aria-hidden /> Place a field</button>
+      <div className="grid gap-3 md:grid-cols-2">
+        <Field label="A sample of your ALI text" htmlFor="pals" hint="Paste an ALI record as your provider sends it, to check the layout.">
+          <textarea id="pals" className="input h-36 font-mono text-xs" value={sample} onChange={(e) => setSample(e.target.value)} /></Field>
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-end gap-2">
+            <button className="btn" onClick={() => parse({ text: sample, layout: link.layout }).unwrap().then(setRead).catch((e) => toast.error(errorOf(e).message))}>Read the sample</button>
+            <Field label="Or ask the link for" htmlFor="paln"><input id="paln" className="input w-40 font-mono" value={number} placeholder="7175550100" onChange={(e) => setNumber(e.target.value)} /></Field>
+            <button className="btn" disabled={isLoading || !link.address || !number} onClick={() => test({ number, link }).unwrap().then(setRead).catch((e) => toast.error(errorOf(e).message))}>Ask</button>
+          </div>
+          {read && <div className="space-y-2" aria-label="What the layout reads">
+            {!!lines.length && <pre className="overflow-x-auto rounded bg-slate-950 p-2 text-xs text-slate-300" aria-label="ALI lines">{'     ' + '1234567890'.repeat(4) + '\n' + lines.map((l, i) => String(i + 1).padStart(3) + '  ' + l).join('\n')}</pre>}
+            {read.error && <p className="text-sm text-amber-300" role="status">{read.error}</p>}
+            {read.record && <dl className="grid grid-cols-[auto_1fr] gap-x-3 text-xs" aria-label="ALI fields read">{Object.entries(read.record.fields ?? {}).map(([k, v]) => <Fragment key={k}><dt className="text-slate-500">{aliFieldLabel[k] ?? k}</dt><dd className="font-mono text-slate-200">{v}</dd></Fragment>)}</dl>}
+          </div>}
+        </div>
+      </div>
+    </div>
   )
 }

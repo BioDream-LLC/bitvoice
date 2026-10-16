@@ -96,7 +96,7 @@ export function EmergencyCard({ call }: { call: Call }) {
         {em.textOnly && <TextControls id={call.id} taken={answered} />}
         {em.locationUri && <button className="btn" disabled={isLoading} onClick={doRebid}><RefreshCw size={14} className="text-sky-300" aria-hidden /> {isLoading ? 'Fetching…' : 'Rebid location'}</button>}
         {em.rebid && <span className="text-xs text-slate-500">fetched again {relTime(em.rebid)}</span>}
-        {em.aliLookup === 'found' && <span className="text-xs text-slate-500">location from the lookup by number (ALI)</span>}
+        {em.aliLookup === 'found' && <span className="text-xs text-slate-500">location from the lookup by number (ALI){em.aliClass ? ` · class of service ${em.aliClass}` : ''}</span>}
         <a className="btn" href={`/api/calls/${call.id}/eido`} target="_blank" rel="noreferrer"><FileJson size={14} className="text-violet-300" aria-hidden /> EIDO</a>
       </footer>
     </article>

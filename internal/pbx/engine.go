@@ -78,7 +78,9 @@ type Engine struct {
 	Policies func(policyType, queue, id string) (i3.Policy, bool)
 	// Dequeuers are the registered takers of a queue (dequeue registration), most preferred first.
 	Dequeuers func(queue string) []Dequeuer
-	video     videoHub // 911 callers' video
+	// ALIQuery asks the legacy ALI link (PSAP.ALILink) for a callback number's record.
+	ALIQuery func(ctx context.Context, number, position string) (i3.ALIRecord, error)
+	video    videoHub // 911 callers' video
 
 	radioOnce sync.Once
 	radio     *radio
@@ -704,6 +706,7 @@ type Emergency struct {
 	// none). ALILookup says how looking up its location went (looking, found, or the problem).
 	CAMA      string `json:"cama,omitempty"`
 	ALILookup string `json:"aliLookup,omitempty"`
+	ALIClass  string `json:"aliClass,omitempty"` // the class of service the ALI link gave (RESD, WPH2, ...)
 	// Video is the caller's video: the link sent, live video, its viewers.
 	Video *CallVideo `json:"video,omitempty"`
 }

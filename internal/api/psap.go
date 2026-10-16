@@ -7,7 +7,6 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -124,16 +123,6 @@ func (s *Server) cadResult(what string, in i3.Incident, err error) {
 }
 
 // sendALI writes the spill to CAD's listener.
-func sendALI(addr string, a i3.ALI) error {
-	c, err := net.DialTimeout("tcp", addr, 3*time.Second)
-	if err != nil {
-		return err
-	}
-	defer c.Close()
-	_ = c.SetDeadline(time.Now().Add(3 * time.Second))
-	_, err = c.Write(a.Spill())
-	return err
-}
 
 func postEIDO(url, token string, doc []byte) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

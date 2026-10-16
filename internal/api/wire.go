@@ -52,6 +52,7 @@ func (s *Server) WireEngine() {
 	eng.OnVideoRecord = s.recordCallVideo
 	eng.Policies = s.PolicyFor
 	eng.Dequeuers = s.DequeuersFor
+	eng.ALIQuery = s.QueryALI
 	eng.FindService = s.FindService
 	cfg, _ := st.Config()
 	eng.Apply(s.Resolved(cfg))
