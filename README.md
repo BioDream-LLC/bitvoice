@@ -58,10 +58,17 @@ It runs as:
 has a time limit and a fixed outcome when it fails. Emergency calls from every extension always go out,
 with the caller's building, floor and room.
 
-**Public safety is a separate lab track.** The same engine also carries a 911 answering-point profile, a P25
-radio dispatch console and NG911 Core Services. They are built and tested against recorded captures, sample
-data and stand-ins, **not certified and not yet tried with a live ESInet, P25 system or CAD**. They are off the
-menu until switched on in Settings; see [Public safety: lab and design-partner track](#public-safety-lab-and-design-partner-track).
+**Two missions.** BitVoice is built for two jobs, and neither is a side project:
+
+1. **A standalone phone system that beats FreePBX, Asterisk and their rivals.** Everything above, with no
+   911 parts needed or shown: a business that only wants a phone system never sees them.
+2. **The call-handling side of BioDream's open-source CAD, bitdispatcher.** The same engine carries a 911
+   answering-point profile, a P25 radio dispatch console and NG911 Core Services, and hands the CAD what it
+   needs through the standards: EIDO incidents with links to the caller's photos and video, ALI spill,
+   PIDF-LO location, live video by WHEP, radio emergencies and unit positions, the i3 log. They are built and
+   tested against recorded captures, NENA's published schemas, sample data and stand-ins, **not certified and
+   not yet tried with a live ESInet or P25 system**. They stay off the menu until switched on in Settings; see
+   [Public safety: lab and design-partner track](#public-safety-lab-and-design-partner-track).
 
 <img src="docs/assets/architecture.svg" alt="BitVoice sits between phone carriers, the ESInet, radio systems and phones on one side, and the people answering, CAD, records and Teams or CRMs on the other. In the middle it routes, queues, records, logs and converts codecs." width="100%">
 
