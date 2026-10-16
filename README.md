@@ -379,6 +379,26 @@ setting in the web interface.
 - **IAX2** checked against a real Asterisk 23: registration, calls both ways with sound, busy; **GSM** decoded
   sample for sample as ffmpeg does, and **G.726** streams exchanged with ffmpeg.
 
+### Capacity
+
+Measured with BitVoice's own call generator (Health, **Call generator**) on an Apple M4 Mac mini (10 cores,
+16 GB), v0.1.5: one extension calls another, which the generator answers and sends the audio back, G.711
+with media relayed through BitVoice, 45 seconds a call. The generator runs inside the same process, so each
+call is carried three times over (caller, PBX, answerer): the PBX alone needs less.
+
+| Calls at once | Answered | Set-up time (p95) | Audio loss | MOS | CPU (peak, of one core) | Memory |
+|---|---|---|---|---|---|---|
+| 50 | 50 of 50 | 3.9 ms | 0% | 4.41 | 81% | 61 MB |
+| 100 | 100 of 100 | 3.4 ms | 0% | 4.41 | 137% | 76 MB |
+| 200 | 200 of 200 | 4.8 ms | 0% | 4.41 | 240% | 111 MB |
+
+200 is the generator's own ceiling, not BitVoice's. Your numbers depend on the codec, conversion,
+recording and the network: run the generator on your own server before you go live.
+
+The **iPhone app** is tested in the iOS Simulator against a real BitVoice: paired by link, rung by a call,
+answered and hung up (`mobile/ios/BitVoiceUITests`). The phone's own call screen and push wake-up need a
+real phone and are not yet tried on one; the Android app is built but not yet run.
+
 **Status, plainly.** The phone system is working. The 911, radio console and NG911 Core Services profiles
 are built and tested against stand-ins and real captures, **not yet against a live ESInet, P25 system or
 PSAP CAD, and not certified for live 911 or public-safety use.** P25 Phase 2 half-rate voice (AMBE+2) is
