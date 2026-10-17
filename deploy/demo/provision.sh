@@ -2,7 +2,7 @@
 # provision.sh - makes (or updates) the public BitVoice demo from this machine. DO NOT run it without the
 # owner's go-ahead: it creates a paid cloud server.
 #
-#   DOMAIN=demo.bitvoice.org EMAIL=you@example.com VERSION=v0.1.6 sh deploy/demo/provision.sh
+#   DOMAIN=demo.bitvoice.org VERSION=v0.1.6 [EMAIL=you@example.com] sh deploy/demo/provision.sh
 #
 # It creates an Amazon Lightsail instance of its own (Ubuntu, the smallest plan; BitVoice needs about
 # 100 MB at 200 calls), a static IP, and opens only what a visitor's browser needs: 443 (the web
@@ -15,7 +15,8 @@
 # this prints, then run it again so Let's Encrypt can check the name.
 # Needs the AWS CLI signed in, Go, and the SSH key in KEYS (default ~/keys), mode 600, never printed.
 set -eu
-: "${DOMAIN:?set DOMAIN, like demo.bitvoice.org}" "${EMAIL:?set EMAIL, where the certificate authority writes}" "${VERSION:?set VERSION, a released version like v0.1.6}"
+: "${DOMAIN:?set DOMAIN, like demo.bitvoice.org}" "${VERSION:?set VERSION, a released version like v0.1.6}"
+EMAIL=${EMAIL:-} # optional: where the certificate authority writes about the certificate
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 export AWS_PAGER=""
@@ -26,12 +27,16 @@ key="$keys/lightsail-$region.pem"
 [ -f "$key" ] || { echo "no SSH key at $key (Lightsail's default key for $region)" >&2; exit 1; }
 
 if ! aws lightsail get-instance --region "$region" --instance-name $name >/dev/null 2>&1; then
-  q='bundles[?isActive && supportedPlatforms[0]==`LINUX_UNIX`] | sort_by(@, &price)[0].bundleId'
+  q='bundles[?isActive && supportedPlatforms[0]==`LINUX_UNIX` && publicIpv4AddressCount > `0`] | sort_by(@, &price)[0].bundleId'
   bundle=$(aws lightsail get-bundles --region "$region" --query "$q" --output text)
   aws lightsail create-instances --region "$region" --instance-names $name --availability-zone "${region}a" \
     --blueprint-id ubuntu_24_04 --bundle-id "$bundle" >/dev/null
+fi
+# The static IP: made once, and attached once the server runs (each step skipped when done).
+aws lightsail get-static-ip --region "$region" --static-ip-name $name-ip >/dev/null 2>&1 ||
   aws lightsail allocate-static-ip --region "$region" --static-ip-name $name-ip >/dev/null
-  until [ "$(aws lightsail get-instance --region "$region" --instance-name $name --query instance.state.name --output text)" = running ]; do sleep 5; done
+until [ "$(aws lightsail get-instance --region "$region" --instance-name $name --query instance.state.name --output text)" = running ]; do sleep 5; done
+if [ "$(aws lightsail get-static-ip --region "$region" --static-ip-name $name-ip --query staticIp.isAttached --output text)" != True ]; then
   aws lightsail attach-static-ip --region "$region" --static-ip-name $name-ip --instance-name $name >/dev/null
 fi
 aws lightsail put-instance-public-ports --region "$region" --instance-name $name --port-infos \

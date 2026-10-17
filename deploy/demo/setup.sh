@@ -23,9 +23,9 @@ set -eu
 systemctl stop bitvoice
 # The certificate is kept (Let's Encrypt limits how often one is issued); everything else goes.
 keep=$(mktemp -d)
-[ -d /var/lib/bitvoice/acme ] && cp -a /var/lib/bitvoice/acme "$keep/"
+[ -d /var/lib/bitvoice/tls ] && cp -a /var/lib/bitvoice/tls "$keep/"
 rm -rf /var/lib/bitvoice/*
-[ -d "$keep/acme" ] && cp -a "$keep/acme" /var/lib/bitvoice/
+[ -d "$keep/tls" ] && cp -a "$keep/tls" /var/lib/bitvoice/
 rm -rf "$keep"
 chown -R bitvoice:bitvoice /var/lib/bitvoice
 systemctl start bitvoice
