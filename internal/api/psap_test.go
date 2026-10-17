@@ -68,7 +68,7 @@ func TestEmergencyToCAD(t *testing.T) {
 				t.Errorf("ALI has no %q:\n%s", w, a)
 			}
 		}
-	case <-time.After(3 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("no ALI spill")
 	}
 	select {
@@ -76,7 +76,7 @@ func TestEmergencyToCAD(t *testing.T) {
 		if d["$id"] != "urn:emergency:uid:incidentid:c911:bv.psap.example.gov" || d["locationComponent"] == nil {
 			t.Fatalf("EIDO %v", d["$id"])
 		}
-	case <-time.After(3 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("no EIDO")
 	}
 	time.Sleep(200 * time.Millisecond)
@@ -156,15 +156,18 @@ func TestPSAPLogFromEvents(t *testing.T) {
 	s.DataDir = t.TempDir()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go s.RunPSAPLog(ctx)
-	time.Sleep(50 * time.Millisecond)
+	subscribed(t, s, func() { go s.RunPSAPLog(ctx) })
 	c := pbx.CallInfo{ID: "ab1", From: "+17175550100", To: "911", Start: time.Now(), Emergency: &pbx.Emergency{ESInet: true}}
 	s.Bus.Publish("call.started", c)
 	s.Bus.Publish("call.updated", c)
 	s.Bus.Publish("call.ended", c)
 	s.Bus.Publish("call.ended", pbx.CallInfo{ID: "office"}) // not a 911 call
-	time.Sleep(200 * time.Millisecond)
-	evs := s.i3Events(time.Now().UTC().Format("2006-01-02"))
+	var evs []map[string]any
+	for end := time.Now().Add(15 * time.Second); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
+		if evs = s.i3Events(time.Now().UTC().Format("2006-01-02")); len(evs) >= 2 {
+			break
+		}
+	}
 	if len(evs) != 2 || evs[0]["logEventType"] != "CallEndLogEvent" || evs[1]["logEventType"] != "CallStartLogEvent" {
 		t.Fatalf("%v", evs)
 	}

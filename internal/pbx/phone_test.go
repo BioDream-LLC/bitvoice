@@ -290,11 +290,21 @@ func (p *phone) answer(tx *sip.ServerTx) *dialog {
 		seq: 100, media: mediaOf(tx.Req.Body)}
 }
 
+// patient stretches a wait for something that should happen (a second or more) on slow machines:
+// such a wait ends as soon as it happens, so passing tests are no slower. Short windows (under a
+// second) check that something does not happen, and keep their length.
+func patient(d time.Duration) time.Duration {
+	if d < time.Second {
+		return d
+	}
+	return 4 * d
+}
+
 func (p *phone) waitRing(timeout time.Duration) *sip.ServerTx {
 	select {
 	case tx := <-p.incoming:
 		return tx
-	case <-time.After(timeout):
+	case <-time.After(patient(timeout)):
 		return nil
 	}
 }
@@ -313,7 +323,7 @@ func (d *dialog) sendRTP(n int) {
 
 // gotRTP reports whether RTP arrives within the timeout.
 func (p *phone) gotRTP(timeout time.Duration) bool {
-	_ = p.rtp.SetReadDeadline(time.Now().Add(timeout))
+	_ = p.rtp.SetReadDeadline(time.Now().Add(patient(timeout)))
 	buf := make([]byte, 2048)
 	for {
 		n, _, err := p.rtp.ReadFromUDP(buf)

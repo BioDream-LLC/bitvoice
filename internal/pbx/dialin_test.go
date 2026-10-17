@@ -72,10 +72,11 @@ func TestDialInPINAndCallOut(t *testing.T) {
 
 	// The right PIN, then a number: it is called as extension 100.
 	d, _ = ps[0].dial("450")
-	ps[0].gotRTP(time.Second)
+	prompted(t, ps[0])
 	seq = 1
 	d.press(&seq, "4321#")
-	time.Sleep(800 * time.Millisecond)
+	ps[0].drainRTP()
+	prompted(t, ps[0]) // the PIN is right: the dial tone
 	d.press(&seq, "101#")
 	if ps[1].waitRing(5*time.Second) == nil {
 		t.Fatal("dial-in did not call 101")

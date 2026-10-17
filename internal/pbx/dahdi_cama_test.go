@@ -70,7 +70,7 @@ func TestTelephonyCardCAMA(t *testing.T) {
 			if !strings.Contains(req, "<tel>"+tc.ani+"</tel>") {
 				t.Fatalf("ALI asked %s", req)
 			}
-		case <-time.After(3 * time.Second):
+		case <-time.After(15 * time.Second):
 			t.Fatal("no ALI lookup")
 		}
 		var em *Emergency

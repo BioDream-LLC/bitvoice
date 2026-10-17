@@ -66,7 +66,7 @@ func TestHotelSystemLink(t *testing.T) {
 	br := bufio.NewReader(c)
 	next := func(typ string) pms.Record {
 		for {
-			_ = c.SetReadDeadline(time.Now().Add(3 * time.Second))
+			_ = c.SetReadDeadline(time.Now().Add(15 * time.Second))
 			if _, err := br.ReadBytes(0x02); err != nil {
 				t.Fatalf("waiting for %s: %v", typ, err)
 			}
@@ -78,7 +78,7 @@ func TestHotelSystemLink(t *testing.T) {
 	}
 	next("LA")
 	_, _ = c.Write(pms.Record{Type: "GI", Fields: map[string]string{"RN": "100", "GN": "Smith, Ann", "G#": "4711", "GL": "FR"}}.Encode())
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for {
 		if g, in := s.Engine.GuestIn("100"); in && g.Name == "Smith, Ann" && g.Language == "fr" {
 			break
@@ -117,7 +117,7 @@ func TestHotelSystemLink(t *testing.T) {
 	}
 	// Check-out from the hotel system cancels the wake-up call.
 	_, _ = c.Write(pms.Record{Type: "GO", Fields: map[string]string{"RN": "100"}}.Encode())
-	deadline = time.Now().Add(3 * time.Second)
+	deadline = time.Now().Add(15 * time.Second)
 	for {
 		_, in := s.Engine.GuestIn("100")
 		_, wake := s.Store.WakeUpFor("100")

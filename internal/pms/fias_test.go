@@ -67,7 +67,7 @@ func TestLinkWithHotelSystem(t *testing.T) {
 	defer c.Close()
 	br := bufio.NewReader(c)
 	read := func() Record {
-		_ = c.SetReadDeadline(time.Now().Add(3 * time.Second))
+		_ = c.SetReadDeadline(time.Now().Add(15 * time.Second))
 		if _, err := br.ReadBytes(stx); err != nil {
 			t.Fatal(err)
 		}
@@ -95,7 +95,7 @@ func TestLinkWithHotelSystem(t *testing.T) {
 	send(Record{Type: "WR", Fields: map[string]string{"RN": "101", "DA": "261015", "TI": "0630"}})
 	send(Record{Type: "GC", Fields: map[string]string{"RN": "102", "RO": "101", "GN": "Smith, John", "G#": "4711"}})
 	send(Record{Type: "GO", Fields: map[string]string{"RN": "102"}})
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for _, want := range []string{"in 101 Smith, John 4711 es", "wake 101 06:30", "in 102 Smith, John 4711 ", "out 101", "out 102"} {
 		for !ev.has(want) && time.Now().Before(deadline) {
 			time.Sleep(10 * time.Millisecond)

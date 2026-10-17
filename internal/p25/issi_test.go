@@ -135,7 +135,7 @@ func TestGroupCall(t *testing.T) {
 		if !ok {
 			t.Fatal("not granted")
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("no answer to the push-to-talk request")
 	}
 	for i := 0; i < 40; i++ {
@@ -202,7 +202,7 @@ collect:
 		if tk == nil || tk.Unit.String() != "bee07.ad5.0000c5" {
 			t.Fatalf("talker %+v", tk)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("the talker was not reported")
 	}
 	select {
@@ -210,7 +210,7 @@ collect:
 		if tk != nil {
 			t.Fatalf("want the end of the transmission, got %+v", tk)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("the end of the transmission was not reported")
 	}
 	if n := len(voice); n < 100 {
@@ -279,7 +279,7 @@ func TestGroupCallEncrypted(t *testing.T) {
 		select {
 		case p := <-h.got:
 			sent = append(sent, p)
-		case <-time.After(2 * time.Second):
+		case <-time.After(15 * time.Second):
 			t.Fatal("transmission did not end")
 		}
 	}

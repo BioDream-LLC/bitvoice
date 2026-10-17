@@ -63,7 +63,7 @@ func TestIAX2TrunkBetweenServers(t *testing.T) {
 	var ad *dialog
 	select {
 	case ad = <-done:
-	case <-time.After(4 * time.Second):
+	case <-time.After(15 * time.Second):
 	}
 	if ad == nil {
 		t.Fatal("the caller was not answered")

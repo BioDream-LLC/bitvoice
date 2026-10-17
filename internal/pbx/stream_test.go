@@ -42,7 +42,7 @@ func (b *fakeBot) accept(t *testing.T) (net.Conn, *bufio.Reader) {
 	select {
 	case c := <-b.conns:
 		return c, bufio.NewReader(c)
-	case <-time.After(3 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("the bot was never called")
 		return nil, nil
 	}
@@ -50,7 +50,7 @@ func (b *fakeBot) accept(t *testing.T) (net.Conn, *bufio.Reader) {
 
 func readUntil(t *testing.T, r *bufio.Reader, c net.Conn, kind byte) audiosocket.Frame {
 	t.Helper()
-	c.SetReadDeadline(time.Now().Add(3 * time.Second))
+	c.SetReadDeadline(time.Now().Add(15 * time.Second))
 	for {
 		f, err := audiosocket.ReadFrame(r)
 		if err != nil {

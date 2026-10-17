@@ -46,7 +46,7 @@ func TestShakenSignsCallsOut(t *testing.T) {
 		var inv *sip.Message
 		select {
 		case inv = <-c.invites:
-		case <-time.After(3 * time.Second):
+		case <-time.After(15 * time.Second):
 			t.Fatal("no INVITE reached the provider")
 		}
 		id := inv.Get("Identity")

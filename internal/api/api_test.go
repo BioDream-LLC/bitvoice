@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/biodream-llc/bitvoice/internal/config"
 	"github.com/biodream-llc/bitvoice/internal/events"
@@ -320,5 +321,18 @@ func TestCallGeneratorChecks(t *testing.T) {
 	}
 	if code, _ := c.do("POST", "/api/loadtest", ok); code != 200 {
 		t.Fatalf("a good plan was refused: %d", code)
+	}
+}
+
+// subscribed starts a listener (start) and waits until it has subscribed to the event bus, so events
+// published next are not missed on a slow machine.
+func subscribed(t *testing.T, s *Server, start func()) {
+	t.Helper()
+	before := s.Bus.Subscribers()
+	start()
+	for end := time.Now().Add(15 * time.Second); s.Bus.Subscribers() <= before; time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(end) {
+			t.Fatal("the listener never subscribed")
+		}
 	}
 }

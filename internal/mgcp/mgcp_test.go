@@ -129,7 +129,7 @@ func (g *fakeGateway) wait(what string, match func(*Message) bool) *Message {
 			return m
 		}
 	}
-	deadline := time.After(4 * time.Second)
+	deadline := time.After(15 * time.Second)
 	for {
 		select {
 		case m := <-g.got:

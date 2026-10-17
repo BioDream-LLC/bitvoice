@@ -51,6 +51,13 @@ func (b *Bus) Subscribe() *Sub {
 	return s
 }
 
+// Subscribers is how many subscriptions are open (health checks, and tests waiting for a listener).
+func (b *Bus) Subscribers() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return len(b.subs)
+}
+
 // Unsubscribe ends a subscription.
 func (b *Bus) Unsubscribe(s *Sub) {
 	b.mu.Lock()

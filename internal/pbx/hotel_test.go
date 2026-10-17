@@ -64,9 +64,8 @@ func TestGuestRoomsAndWakeUps(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("*62 answered %d", code)
 	}
-	ps[1].gotRTP(time.Second)
+	prompted(t, ps[1])
 	var seq uint16 = 1
-	time.Sleep(1200 * time.Millisecond)
 	d.press(&seq, "0630")
 	ps[1].waitBye(t, 8*time.Second)
 	w, ok := st.WakeUpFor("101")

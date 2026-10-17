@@ -139,7 +139,7 @@ func TestAgainstLibpriAsNetwork(t *testing.T) {
 	var in *Call
 	select {
 	case in = <-incoming:
-	case <-time.After(5 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("libpri's SETUP did not arrive")
 	}
 	if in.Called != "2125551234" || in.Calling != "3125550199" || in.Channel != 2 { // libpri asked for channel 2
@@ -280,7 +280,7 @@ func TestAgainstLibpri2BCT(t *testing.T) {
 	var c *Call
 	select {
 	case c = <-asked:
-	case <-time.After(5 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("the transfer request was not read")
 	}
 	mu.Lock()

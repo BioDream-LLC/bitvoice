@@ -208,7 +208,7 @@ func TestAgainstOpenR2Forward(t *testing.T) {
 				return Events{Accepted: func(bool) { got <- "accepted" }, Answered: func() { got <- "answered" },
 					Disconnected: func(cs Cause) { got <- "disconnected " + cs.String(); (*c).Hangup() }, Ended: func() { got <- "ended" }}
 			})
-			time.Sleep(300 * time.Millisecond)
+			o.expect("IDLE") // OpenR2 has seen the line idle: it is ready for the call
 			k.setForward(true)
 			if err := ch.Dial("3125550199", "5550100", CategoryNational, false); err != nil {
 				t.Fatal(err)
@@ -263,7 +263,7 @@ func TestAgainstOpenR2Busy(t *testing.T) {
 	ch, k, o := startOpenR2(t, "itu", []string{"busy"}, func(c **Chan) Events {
 		return Events{Disconnected: func(cs Cause) { got <- "disconnected " + cs.String(); (*c).Hangup() }, Ended: func() { got <- "ended" }}
 	})
-	time.Sleep(300 * time.Millisecond)
+	o.expect("IDLE") // OpenR2 has seen the line idle: it is ready for the call
 	k.setForward(true)
 	if err := ch.Dial("", "5550100", CategoryNational, true); err != nil {
 		t.Fatal(err)

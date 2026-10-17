@@ -37,10 +37,10 @@ func TestCallLink(t *testing.T) {
 		t.Fatalf("a second call: %d, want 486", code)
 	}
 	b.answer(ring)
-	time.Sleep(100 * time.Millisecond)
-	if cs := e.Calls(); len(cs) != 1 || cs[0].Direction != "inbound" || cs[0].Trunk != "Call link: Support" {
-		t.Fatalf("calls %+v", cs)
-	}
+	waitFor(t, "the call link's call is not shown as answered", func() bool {
+		cs := e.Calls()
+		return len(cs) == 1 && cs[0].Direction == "inbound" && cs[0].Trunk == "Call link: Support"
+	})
 	_ = rec
 	for _, h := range []string{"wrong;L1", "pass;L2", "pass"} {
 		p := newPhone(t, e.SIPPort(), "web", "x")

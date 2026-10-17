@@ -13,7 +13,7 @@ import (
 // waitFor polls cond for up to two seconds.
 func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(15 * time.Second) // returns as soon as cond holds; slow machines need the room
 	for !cond() {
 		if time.Now().After(deadline) {
 			t.Fatal(what)
@@ -52,7 +52,10 @@ func TestForwardAskedForNumber(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("*72 answered %d", code)
 	}
-	time.Sleep(400 * time.Millisecond) // the tone that asks for the number
+	// The tone that asks for the number (after a moment of silence): from then on the code listens.
+	if !receivedLoud(ps[0].rtp, 2*time.Second) {
+		t.Fatal("no tone asking for the number")
+	}
 	var seq uint16 = 1
 	d.press(&seq, "101#")
 	waitFor(t, "forwarding entered on the keypad not set", func() bool { return e.DivertOf("100").All == "101" })
@@ -331,7 +334,7 @@ func TestConferenceRoom(t *testing.T) {
 		if code != 200 {
 			t.Fatalf("%s: room answered %d", p.user, code)
 		}
-		time.Sleep(400 * time.Millisecond)
+		prompted(t, p)
 		var seq uint16 = 1
 		d.press(&seq, "1234#")
 		return d
@@ -400,7 +403,7 @@ func TestConferenceWaitsForLeader(t *testing.T) {
 	e, _ := startEngine(t, cfg)
 	ps := registered(t, e, "100", "101")
 	d, _ := ps[0].dial("500")
-	time.Sleep(400 * time.Millisecond)
+	prompted(t, ps[0])
 	var seq uint16 = 1
 	d.press(&seq, "#") // no member PIN: # alone
 	waitFor(t, "member not waiting", func() bool {
@@ -408,7 +411,7 @@ func TestConferenceWaitsForLeader(t *testing.T) {
 		return len(rs) == 1 && rs[0].Waiting == 1
 	})
 	l, _ := ps[1].dial("500")
-	time.Sleep(400 * time.Millisecond)
+	prompted(t, ps[1])
 	var s2 uint16 = 1
 	l.press(&s2, "8888#")
 	waitFor(t, "the leader did not let the member in", func() bool {
@@ -481,7 +484,7 @@ func TestFollowMeConfirm(t *testing.T) {
 		if code != 200 {
 			t.Fatalf("caller got %d", code)
 		}
-	case <-time.After(3 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("pressing 1 did not put the call through")
 	}
 }

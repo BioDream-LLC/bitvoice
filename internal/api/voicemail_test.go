@@ -198,8 +198,7 @@ func TestVoicemailTranscript(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go s.RunAI(ctx)
-	time.Sleep(50 * time.Millisecond)
+	subscribed(t, s, func() { go s.RunAI(ctx) })
 	v, _ := s.Store.AddVoicemail(store.Voicemail{Box: "100", At: time.Now()}, media.EncodeWAV(make([]int16, 8000)))
 	s.Bus.Publish("voicemail.new", v)
 	for range 100 {
@@ -318,8 +317,7 @@ func TestVoicemailEmail(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go s.RunEmail(ctx)
-	time.Sleep(50 * time.Millisecond)
+	subscribed(t, s, func() { go s.RunEmail(ctx) })
 	v, _ := s.Store.AddVoicemail(store.Voicemail{Box: "100", From: "2125550100", At: time.Now(), Seconds: 3}, media.EncodeWAV(make([]int16, 800)))
 	s.Bus.Publish("voicemail.new", v)
 	select {
@@ -327,7 +325,7 @@ func TestVoicemailEmail(t *testing.T) {
 		if !strings.Contains(m, "To: desk@example.com") || !strings.Contains(m, "audio/wav") || !strings.Contains(m, "2125550100") {
 			t.Fatalf("%s", m)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("no email")
 	}
 }

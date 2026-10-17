@@ -69,7 +69,7 @@ func TestWidebandBridge(t *testing.T) {
 		dec := NewG722Decoder()
 		var out []int16
 		buf := make([]byte, 2048)
-		_ = ph.SetReadDeadline(time.Now().Add(2 * time.Second))
+		_ = ph.SetReadDeadline(time.Now().Add(15 * time.Second))
 		for len(out) < 16000/2 {
 			n, _, err := ph.ReadFromUDP(buf)
 			if err != nil {

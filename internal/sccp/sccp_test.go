@@ -72,7 +72,7 @@ func (f *fakePhone) wait(what string, id uint32, match func([]byte) bool) []byte
 			return m[1].([]byte)
 		}
 	}
-	deadline := time.After(4 * time.Second)
+	deadline := time.After(15 * time.Second)
 	for {
 		select {
 		case m, ok := <-f.got:

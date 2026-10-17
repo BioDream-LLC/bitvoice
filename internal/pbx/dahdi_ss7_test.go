@@ -96,7 +96,7 @@ func TestTelephonyCardSS7(t *testing.T) {
 	var out *ss7.Call
 	select {
 	case out = <-incoming:
-	case <-time.After(4 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatalf("no IAM (%v)", b.Status())
 	}
 	if out.Called != "3125550199" || out.Calling != "2125550101" {
@@ -115,7 +115,7 @@ func TestTelephonyCardSS7(t *testing.T) {
 
 func waitSS7(t *testing.T, c *ss7.Call, kind string) {
 	t.Helper()
-	timeout := time.After(5 * time.Second)
+	timeout := time.After(15 * time.Second)
 	for {
 		select {
 		case e := <-c.Events:

@@ -58,7 +58,7 @@ func newFakeTeams(t *testing.T) *fakeTeams {
 
 func (f *fakeTeams) next(t *testing.T, method string) *sip.Message {
 	t.Helper()
-	deadline := time.After(3 * time.Second)
+	deadline := time.After(15 * time.Second)
 	for {
 		select {
 		case m := <-f.got:

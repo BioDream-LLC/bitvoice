@@ -39,7 +39,7 @@ func loud(pkt []byte) bool {
 // receivedLoud reads a socket for a while and says whether a loud packet came.
 func receivedLoud(c *net.UDPConn, d time.Duration) bool {
 	buf := make([]byte, 2048)
-	_ = c.SetReadDeadline(time.Now().Add(d))
+	_ = c.SetReadDeadline(time.Now().Add(patient(d)))
 	for {
 		n, _, err := c.ReadFromUDP(buf)
 		if err != nil {

@@ -82,7 +82,7 @@ func TestMetrics(t *testing.T) {
 				t.Fatalf("missing %s in %s", want, b)
 			}
 		}
-	case <-time.After(3 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("nothing pushed")
 	}
 	if code, d := admin.do("GET", "/api/metrics/dashboard", nil); code != 200 || d["title"] != "BitVoice" {

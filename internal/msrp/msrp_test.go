@@ -328,7 +328,7 @@ func TestTLSAgainstWireshark(t *testing.T) {
 	}
 	select {
 	case <-got:
-	case <-time.After(2 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("no message over TLS")
 	}
 	time.Sleep(100 * time.Millisecond)

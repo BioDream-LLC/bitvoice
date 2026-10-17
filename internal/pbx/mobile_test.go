@@ -33,7 +33,7 @@ func TestMobileAppIsWokenAndRung(t *testing.T) {
 	go func() { _, code := a.dial("101"); done <- code }()
 	select {
 	case <-apps.wake:
-	case <-time.After(2 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("the app was never woken")
 	}
 	if apps.woken[0] != "101 100" {

@@ -201,12 +201,13 @@ func (s *Server) phoneEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-store")
+	// Subscribe before saying hello: a page that has heard hello misses nothing after it.
+	sub := s.Bus.Subscribe()
+	defer s.Bus.Unsubscribe(sub)
 	fmt.Fprint(w, "event: hello\ndata: {}\n\n")
 	fl.Flush()
 	tick := time.NewTicker(15 * time.Second)
 	defer tick.Stop()
-	sub := s.Bus.Subscribe()
-	defer s.Bus.Unsubscribe(sub)
 	for {
 		select {
 		case <-r.Context().Done():

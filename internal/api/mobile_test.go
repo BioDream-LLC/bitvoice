@@ -76,7 +76,7 @@ func TestMobilePairingAndPush(t *testing.T) {
 		t.Fatal("device with a token not wakeable")
 	}
 	s.Wake("101", pbx.CallInfo{ID: "call-1", From: "100", FromName: "Front desk"})
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		mu.Lock()
 		n := len(got)

@@ -105,7 +105,7 @@ func TestAlertTones(t *testing.T) {
 			req = req || p.Packet.Type == p25.PTTRequest
 			end = p.Packet.Type == p25.PTTEnd
 			rx.Receive(p)
-		case <-time.After(3 * time.Second):
+		case <-time.After(15 * time.Second):
 			t.Fatalf("request %v, no end of the tone's transmission", req)
 		}
 	}

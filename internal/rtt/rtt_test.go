@@ -20,6 +20,7 @@ func collect(t *testing.T, red int, drop func(i int) bool, typed ...string) stri
 	var mu sync.Mutex
 	var got strings.Builder
 	i := 0
+	last := time.Now()
 	done := make(chan struct{}, 64)
 	s := &Sender{T140: 98, Red: red, SSRC: 7, Write: func(pkt []byte) {
 		mu.Lock()
@@ -28,6 +29,7 @@ func collect(t *testing.T, red int, drop func(i int) bool, typed ...string) stri
 			got.WriteString(r.Packet(pkt))
 		}
 		i++
+		last = time.Now()
 		done <- struct{}{}
 	}}
 	defer s.Close()
@@ -35,7 +37,17 @@ func collect(t *testing.T, red int, drop func(i int) bool, typed ...string) stri
 		s.Send(w)
 		time.Sleep(Interval + 50*time.Millisecond)
 	}
+	// The redundant copies follow on the sender's timer, which runs late on a slow machine: wait until
+	// it has been quiet for a while (it stops once everything was sent Level+1 times).
 	time.Sleep(time.Duration(Level+1) * (Interval + 50*time.Millisecond))
+	for end := time.Now().Add(15 * time.Second); time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
+		mu.Lock()
+		quiet := time.Since(last) > 3*Interval
+		mu.Unlock()
+		if quiet {
+			break
+		}
+	}
 	mu.Lock()
 	defer mu.Unlock()
 	return got.String()

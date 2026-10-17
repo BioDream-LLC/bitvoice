@@ -92,7 +92,7 @@ func TestTextTo911OverTLS(t *testing.T) {
 				if !tc.ok {
 					if err == nil {
 						// TLS 1.3: the client learns of a refused certificate on its first read
-						cc.SetReadDeadline(time.Now().Add(2 * time.Second))
+						cc.SetReadDeadline(time.Now().Add(15 * time.Second))
 						_, err = cc.Read(make([]byte, 1))
 					}
 					if err == nil {

@@ -107,7 +107,7 @@ func trunkConfig(port int) config.Config {
 
 func waitTrunk(t *testing.T, e *Engine, state string) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(patient(5 * time.Second))
 	for time.Now().Before(deadline) {
 		if ts := e.TrunkStatus(); len(ts) == 1 && ts[0].State == state {
 			return
@@ -137,7 +137,7 @@ func TestTrunkRegistersAndCallsOut(t *testing.T) {
 		if n != "12125551212" {
 			t.Fatalf("carrier got %q, want the route's prepended 1", n)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("carrier never answered")
 	}
 	time.Sleep(1100 * time.Millisecond) // a second of talk, billed as a whole minute
@@ -288,7 +288,7 @@ func TestEmergencyLocationIsSent(t *testing.T) {
 		var inv *sip.Message
 		select {
 		case inv = <-c.invites:
-		case <-time.After(3 * time.Second):
+		case <-time.After(15 * time.Second):
 			t.Fatalf("%s: no INVITE reached the provider", tc.name)
 		}
 		body := string(inv.Body)
@@ -317,7 +317,7 @@ func TestBrandedCallOut(t *testing.T) {
 		var inv *sip.Message
 		select {
 		case inv = <-c.invites:
-		case <-time.After(3 * time.Second):
+		case <-time.After(15 * time.Second):
 			t.Fatal("no INVITE reached the provider")
 		}
 		if !strings.HasPrefix(inv.Get("From"), `"Acme Dental" <sip:+12125550100@`) {

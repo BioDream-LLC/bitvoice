@@ -48,7 +48,7 @@ func TestRadioConsolePrivateCalls(t *testing.T) {
 		if inv.RequestURI != "sip:bee07ad50000c5@p25dr;user=TIA-P25-SU" {
 			t.Fatalf("INVITE to %s", inv.RequestURI)
 		}
-	case <-time.After(3 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("no INVITE for the private call")
 	}
 	tile := func() *ChannelState {
@@ -72,7 +72,7 @@ func TestRadioConsolePrivateCalls(t *testing.T) {
 		select {
 		case p := <-h.got:
 			granted = p.Packet.Type == p25.PTTRequest
-		case <-time.After(2 * time.Second):
+		case <-time.After(15 * time.Second):
 			t.Fatal("no push-to-talk request on the private call")
 		}
 	}
@@ -82,7 +82,7 @@ func TestRadioConsolePrivateCalls(t *testing.T) {
 	}
 	select {
 	case <-h.byes:
-	case <-time.After(2 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("hanging up sent no BYE")
 	}
 	if tile() != nil {

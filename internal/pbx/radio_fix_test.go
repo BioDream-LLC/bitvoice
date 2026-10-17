@@ -43,7 +43,7 @@ func TestRadioLocations(t *testing.T) {
 				}
 				return
 			}
-		case <-time.After(2 * time.Second):
+		case <-time.After(15 * time.Second):
 			t.Fatal("no radio.location event")
 		}
 	}

@@ -72,7 +72,7 @@ func TestH323TrunkBetweenServers(t *testing.T) {
 	var ad *dialog
 	select {
 	case ad = <-done:
-	case <-time.After(4 * time.Second):
+	case <-time.After(15 * time.Second):
 	}
 	if ad == nil {
 		t.Fatal("the caller was not answered")
@@ -130,7 +130,7 @@ func TestH323SetupFromAnotherEncoder(t *testing.T) {
 	}
 	defer conn.Close()
 	_, _ = conn.Write(h323.RawSetup(0x55, uu))
-	_ = conn.SetReadDeadline(time.Now().Add(4 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(15 * time.Second))
 	if typ, _, err := h323.ReadMessage(conn); err != nil || typ != h323.MsgCallProceeding {
 		t.Fatalf("first answer %x %v", typ, err)
 	}

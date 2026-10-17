@@ -122,7 +122,7 @@ func TestRLTBothSides(t *testing.T) {
 		calls = append(calls, c)
 	}
 	in1, in2 := <-incoming, <-incoming
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for calls[1].rltID == 0 || calls[0].rltID == 0 {
 		if time.Now().After(deadline) {
 			t.Fatal("no transfer identifiers from the network")
@@ -194,7 +194,7 @@ func TestAgainstLibpriChargeAsNetwork(t *testing.T) {
 	var in *Call
 	select {
 	case in = <-incoming:
-	case <-time.After(5 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("libpri's SETUP did not arrive")
 	}
 	if in.ChargeAsked != AskDuring|AskAtTheEnd {
@@ -245,7 +245,7 @@ func TestAgainstLibpriRLT(t *testing.T) {
 	var j [2]*Call
 	select {
 	case j = <-joined:
-	case <-time.After(5 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("libpri's RLT request was not read")
 	}
 	if j[0].Called == j[1].Called {

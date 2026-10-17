@@ -27,7 +27,7 @@ func TestRingGroupFirstAnswerWins(t *testing.T) {
 		t.Fatalf("caller got %d", code)
 	}
 	// 101 is cancelled: its INVITE ends with 487 (sent by the phone in reply to CANCEL).
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for len(e.Calls()) != 1 || len(e.Calls()[0].Legs) != 2 {
 		if time.Now().After(deadline) {
 			t.Fatalf("losing fork not dropped: %+v", e.Calls())
@@ -138,13 +138,13 @@ func TestBlindTransfer(t *testing.T) {
 		if br.Target != "102" || br.From != "100" || len(br.Caller) == 0 || len(br.Callee) == 0 {
 			t.Fatalf("briefing request %+v (caller %d, callee %d samples)", br.Target, len(br.Caller), len(br.Callee))
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("no briefing asked for")
 	}
 	cd := c.answer(ring)
 	// The transferor is told it worked and is released.
 	gotOK := false
-	deadline := time.After(3 * time.Second)
+	deadline := time.After(15 * time.Second)
 	for !gotOK {
 		select {
 		case n := <-b.notifies:
@@ -155,7 +155,7 @@ func TestBlindTransfer(t *testing.T) {
 	}
 	select {
 	case <-b.byes:
-	case <-time.After(2 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("transferor not released")
 	}
 	// 102 and 100 now talk.
@@ -184,7 +184,7 @@ func TestEmergencyNotifies(t *testing.T) {
 		if !strings.Contains(m, "EMERGENCY") || !strings.Contains(m, "100") {
 			t.Fatalf("message %q", m)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("notification phone got no message")
 	}
 	found := false
@@ -192,7 +192,7 @@ func TestEmergencyNotifies(t *testing.T) {
 		select {
 		case ev := <-sub.C:
 			found = ev.Type == "emergency.call"
-		case <-time.After(time.Second):
+		case <-time.After(15 * time.Second):
 			t.Fatal("no emergency event")
 		}
 	}

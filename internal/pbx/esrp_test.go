@@ -66,7 +66,7 @@ func TestESRPRoutesByLocation(t *testing.T) {
 		if userOf(m.RequestURI) != "sos" {
 			t.Fatalf("sent to %s", m.RequestURI)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("no PSAP got the call")
 	}
 	if r := finalOf(tx); r == nil || r.StatusCode != 200 {
@@ -75,7 +75,7 @@ func TestESRPRoutesByLocation(t *testing.T) {
 	if got := <-asked; got != "urn:service:sos.fire" {
 		t.Fatalf("asked the ECRF for %q", got)
 	}
-	deadline := time.After(2 * time.Second)
+	deadline := time.After(15 * time.Second)
 	for {
 		select {
 		case ev := <-routes.C:

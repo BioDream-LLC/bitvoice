@@ -68,7 +68,7 @@ func TestEmergencyCallFromESInet(t *testing.T) {
 		if a.Agent != "101" || len(a.PIDF) == 0 || a.Call.Emergency.Location.Radius != 25 {
 			t.Fatalf("answer %+v", a)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("the answer was not reported")
 	}
 	select {

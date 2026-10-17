@@ -76,7 +76,9 @@ func TestAIReceptionist(t *testing.T) {
 	// Two turns: speak (a loud tone), then go quiet so the receptionist knows we finished.
 	var seq uint16
 	for turn := 0; turn < 2; turn++ {
-		time.Sleep(900 * time.Millisecond) // the receptionist speaks
+		if !waitPrompt(caller, 10*time.Second) { // the receptionist speaks, then listens
+			t.Fatalf("turn %d: the receptionist said nothing", turn)
+		}
 		speakFor(caller, d, 600*time.Millisecond)
 		quiet := time.Now().Add(1200 * time.Millisecond)
 		for time.Now().Before(quiet) {
@@ -156,7 +158,7 @@ func TestReceptionistBooksCallback(t *testing.T) {
 		if c.Name != "Ana Diaz" || c.Number != "+12125550123" || c.When != "tomorrow morning" || c.Reason != "a quote" || c.Receptionist != "Front" {
 			t.Fatalf("callback %+v", c)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("no callback was booked")
 	}
 	caller.waitBye(t, 5*time.Second)
@@ -200,4 +202,13 @@ func waitPrompt(p *phone, d time.Duration) bool {
 		}
 	}
 	return time.Since(last) >= 400*time.Millisecond
+}
+
+// prompted waits for the next sound BitVoice plays the phone (a prompt or tone, not silence): a code
+// that asks for keys starts listening before it asks, so keys pressed from then on are heard.
+func prompted(t *testing.T, p *phone) {
+	t.Helper()
+	if !receivedLoud(p.rtp, 3*time.Second) {
+		t.Fatal("BitVoice played no prompt")
+	}
 }

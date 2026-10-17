@@ -77,7 +77,7 @@ func radioConsoleP25(t *testing.T, encrypted bool) {
 	e, _ := startEngine(t, cfg)
 	select {
 	case <-invited:
-	case <-time.After(3 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("the console never set up the group call")
 	}
 	disp := registered(t, e, "100")[0]
@@ -126,7 +126,7 @@ func radioConsoleP25(t *testing.T, encrypted bool) {
 				}
 				found = true
 			}
-		case <-time.After(time.Second):
+		case <-time.After(15 * time.Second):
 			t.Fatal("no radio.unit event")
 		}
 	}
@@ -203,7 +203,7 @@ func radioConsoleP25(t *testing.T, encrypted bool) {
 		select {
 		case p := <-got:
 			end = p.Packet.Type == p25.PTTEnd
-		case <-time.After(2 * time.Second):
+		case <-time.After(15 * time.Second):
 			t.Fatal("no end of transmission")
 		}
 	}

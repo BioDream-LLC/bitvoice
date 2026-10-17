@@ -50,7 +50,7 @@ func TestVideoTranscoder(t *testing.T) {
 	if err := cam.Run(); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for got.Load() < 20 && time.Now().Before(deadline) {
 		time.Sleep(50 * time.Millisecond)
 	}

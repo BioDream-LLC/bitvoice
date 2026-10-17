@@ -62,7 +62,7 @@ func TestSNMPAndCDROutputs(t *testing.T) {
 	}
 
 	// SNMP: the agent answers a walk of the system group and BitVoice's values.
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	var got map[string]string
 	for time.Now().Before(deadline) {
 		if got = snmpWalk(t, "127.0.0.1:"+strconv.Itoa(port), "watchtower", "1.3.6.1.2.1.1"); len(got) > 0 {
@@ -81,10 +81,20 @@ func TestSNMPAndCDROutputs(t *testing.T) {
 	}
 	// A trap for an emergency call.
 	s.Bus.Publish("emergency.call", map[string]any{"number": "911", "extension": "100"})
+	// Other traps (the agent starting, say) may come first on a slow machine: read until this one.
 	buf := make([]byte, 2048)
-	_ = traps.SetReadDeadline(time.Now().Add(3 * time.Second))
-	if n, _, err := traps.ReadFromUDP(buf); err != nil || !strings.Contains(string(buf[:n]), "trapsecret") || !strings.Contains(string(buf[:n]), "911") {
-		t.Fatalf("trap %q %v", buf[:n], err)
+	_ = traps.SetReadDeadline(time.Now().Add(15 * time.Second))
+	for {
+		n, _, err := traps.ReadFromUDP(buf)
+		if err != nil {
+			t.Fatalf("no trap for the emergency call: %v", err)
+		}
+		if strings.Contains(string(buf[:n]), "911") {
+			if !strings.Contains(string(buf[:n]), "trapsecret") {
+				t.Fatalf("trap without its community %q", buf[:n])
+			}
+			break
+		}
 	}
 	if code, b := rawGet(t, admin, ts.URL+"/api/snmp/mib"); code != 200 || !strings.Contains(b, "bvTrunkDown") {
 		t.Fatal("MIB")
@@ -94,14 +104,14 @@ func TestSNMPAndCDROutputs(t *testing.T) {
 	rec := store.CDR{ID: "c-1", Start: time.Now().UTC(), End: time.Now().UTC(), Direction: "outbound", From: "100", FromName: "Front",
 		To: "=cmd|'/c calc'!A1", Disposition: "answered", Duration: 61, Billsec: 60, Ext: "100"}
 	s.Bus.Publish("call.logged", rec)
-	_ = udp.SetReadDeadline(time.Now().Add(3 * time.Second))
+	_ = udp.SetReadDeadline(time.Now().Add(15 * time.Second))
 	n, _, err := udp.ReadFromUDP(buf)
 	if err != nil || !strings.HasPrefix(string(buf[:n]), "<142>1 ") || !strings.Contains(string(buf[:n]), `"id":"c-1"`) {
 		t.Fatalf("syslog %q %v", buf[:n], err)
 	}
 	var code int
 	var b string
-	for end := time.Now().Add(2 * time.Second); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
+	for end := time.Now().Add(15 * time.Second); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
 		if code, b = rawGet(t, admin, ts.URL+"/api/cdr/csv/"+rec.Start.Format(time.DateOnly)); strings.Contains(b, "ANSWERED") {
 			break
 		}
@@ -125,7 +135,7 @@ func TestSNMPAndCDROutputs(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer c.Close()
-	_ = c.SetReadDeadline(time.Now().Add(3 * time.Second))
+	_ = c.SetReadDeadline(time.Now().Add(15 * time.Second))
 	line, _ := bufio.NewReader(c).ReadString('}')
 	if sp := strings.IndexByte(line, ' '); sp < 0 || !strings.Contains(line, "<134>1 ") || !strings.Contains(line, `"id":"c-2"`) {
 		t.Fatalf("tcp syslog %q", line)

@@ -32,8 +32,7 @@ func TestCallGenerator(t *testing.T) {
 		t.Fatalf("result %+v", r)
 	}
 	// Each call's record keeps how the caller's side sounded, for quality by site.
-	time.Sleep(200 * time.Millisecond)
-	q := rec.last(t).Quality
+	q := rec.nth(t, 10).Quality
 	if len(q) != 1 || q[0].Ext != "100" || q[0].Packets == 0 || q[0].MOS == 0 || q[0].Codec == "" {
 		t.Fatalf("quality %+v", q)
 	}
@@ -76,11 +75,8 @@ func TestCallGeneratorStop(t *testing.T) {
 	run.Stop()
 	select {
 	case <-run.Done():
-	case <-time.After(5 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatalf("still running: %+v", run.Snapshot())
 	}
-	time.Sleep(200 * time.Millisecond)
-	if n := len(e.Calls()); n != 0 {
-		t.Fatalf("%d calls left in BitVoice", n)
-	}
+	waitFor(t, "calls left in BitVoice", func() bool { return len(e.Calls()) == 0 })
 }

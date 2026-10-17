@@ -48,7 +48,7 @@ func TestDoorStation(t *testing.T) {
 	// The person answering presses * then 1 (each end packet three times, as phones send them). Under
 	// load the first presses can arrive before the call's media is joined up: press again, as a person
 	// would, until the door opens.
-	deadline := time.Now().Add(4 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for try := 0; opened.Load() == 0 && time.Now().Before(deadline); try++ {
 		for i, ev := range []byte{10, 1} {
 			for j := 0; j < 3; j++ {
@@ -84,7 +84,7 @@ func TestDoorStationOpensItself(t *testing.T) {
 	if err := e.OpenDoor(e.Calls()[0].ID, "admin"); err != nil {
 		t.Fatal(err)
 	}
-	_ = door.rtp.SetReadDeadline(time.Now().Add(time.Second))
+	_ = door.rtp.SetReadDeadline(time.Now().Add(15 * time.Second))
 	buf := make([]byte, 64)
 	n, _, err := door.rtp.ReadFromUDP(buf)
 	if err != nil || n != 16 || buf[1]&0x7f != 101 || buf[12] != 11 {

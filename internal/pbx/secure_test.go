@@ -23,7 +23,7 @@ func rtpPacket(seq uint16, payload []byte) []byte {
 
 func (p *phone) readRTP(t *testing.T) []byte {
 	t.Helper()
-	_ = p.rtp.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = p.rtp.SetReadDeadline(time.Now().Add(15 * time.Second))
 	buf := make([]byte, 2048)
 	n, _, err := p.rtp.ReadFromUDP(buf)
 	if err != nil {

@@ -47,9 +47,6 @@ func TestFaxBetweenServers(t *testing.T) {
 		t.Fatal("nothing received")
 	}
 	if n := len(tx.Calls()) + len(rx.Calls()); n != 0 {
-		time.Sleep(2 * time.Second)
-		if n = len(tx.Calls()) + len(rx.Calls()); n != 0 {
-			t.Fatalf("%d calls left up", n)
-		}
+		waitFor(t, "calls left up", func() bool { return len(tx.Calls())+len(rx.Calls()) == 0 })
 	}
 }

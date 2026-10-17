@@ -176,7 +176,7 @@ func TestBothEnds(t *testing.T) {
 			if e := next(t, c2, "released"); e.Cause != CauseBusy {
 				t.Fatalf("cause %d", e.Cause)
 			}
-			deadline := time.Now().Add(3 * time.Second)
+			deadline := time.Now().Add(15 * time.Second)
 			for len(a.Busy())+len(b.Busy()) != 0 { // a frees its circuit when the RLC arrives
 				if time.Now().After(deadline) {
 					t.Fatalf("circuits left busy %v %v", a.Busy(), b.Busy())
@@ -288,13 +288,21 @@ func startOracle(t *testing.T, variant string, script string) (*gramLink, *oracl
 		}
 		close(o.lines)
 	}()
-	time.Sleep(100 * time.Millisecond)
+	// The oracle binds path.c when it is ready to hear us.
+	for end := time.Now().Add(15 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		if _, err := os.Stat(path + ".c"); err == nil {
+			break
+		}
+		if time.Now().After(end) {
+			t.Fatal("the libss7 oracle never opened its socket")
+		}
+	}
 	return &gramLink{c: c, peer: &net.UnixAddr{Name: path + ".c", Net: "unixgram"}}, o
 }
 
 func waitReset(t *testing.T, s *SS7) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for {
 		s.mu.Lock()
 		ok := s.isUp

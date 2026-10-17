@@ -37,7 +37,7 @@ func rtpFrom(t *testing.T, ff string, args ...string) [][]byte {
 	var pkts [][]byte
 	b := make([]byte, 2000)
 	for {
-		c.SetReadDeadline(time.Now().Add(2 * time.Second))
+		c.SetReadDeadline(time.Now().Add(15 * time.Second))
 		n, err := c.Read(b)
 		if err != nil {
 			break

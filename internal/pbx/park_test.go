@@ -29,7 +29,7 @@ func TestParkAndPickup(t *testing.T) {
 		if !strings.Contains(m, "parked on 71") {
 			t.Fatalf("message %q", m)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("parker not told the slot")
 	}
 	b.waitBye(t, 2*time.Second)

@@ -104,7 +104,7 @@ func (c *amiClient) do(kv ...string) amiMsg {
 
 // next returns the next message that is not an unrelated event.
 func (c *amiClient) next() amiMsg {
-	_ = c.c.SetReadDeadline(time.Now().Add(3 * time.Second))
+	_ = c.c.SetReadDeadline(time.Now().Add(15 * time.Second))
 	for {
 		m, err := readMsg(c.r)
 		if err != nil {
@@ -292,6 +292,7 @@ func TestARI(t *testing.T) {
 	}
 
 	// The event WebSocket.
+	listeners := bus.Subscribers()
 	conn, err := net.Dial("tcp", strings.TrimPrefix(srv.URL, "http://"))
 	if err != nil {
 		t.Fatal(err)
@@ -301,13 +302,18 @@ func TestARI(t *testing.T) {
 	_, _ = conn.Write([]byte("GET /ari/events?app=wallboard&api_key=board:a%20long%20board%20secret HTTP/1.1\r\nHost: x\r\n" +
 		"Upgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: " + key + "\r\n\r\n"))
 	r := bufio.NewReader(conn)
-	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(15 * time.Second))
 	resp, err := http.ReadResponse(r, nil)
 	sum := sha1.Sum([]byte(key + wsGUID))
 	if err != nil || resp.StatusCode != 101 || resp.Header.Get("Sec-WebSocket-Accept") != base64.StdEncoding.EncodeToString(sum[:]) {
 		t.Fatalf("upgrade %v %v", resp, err)
 	}
-	time.Sleep(50 * time.Millisecond)
+	// The events socket subscribes to the bus once upgraded; publish only after it has.
+	for end := time.Now().Add(15 * time.Second); bus.Subscribers() <= listeners; time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(end) {
+			t.Fatal("the events socket never subscribed")
+		}
+	}
 	bus.Publish("call.started", pbx.CallInfo{ID: "newcall00001", State: "ringing", From: "100", To: "101", Start: time.Now()})
 	var hdr [2]byte
 	if _, err := io.ReadFull(r, hdr[:]); err != nil || hdr[0] != 0x81 {

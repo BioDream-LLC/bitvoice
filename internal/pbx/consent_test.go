@@ -39,10 +39,7 @@ func TestRecordingNotice(t *testing.T) {
 	if c := e.Calls(); len(c) != 1 || c[0].Recording != "" {
 		t.Fatalf("recording before the notice ended: %+v", c)
 	}
-	time.Sleep(1200 * time.Millisecond)
-	if c := e.Calls(); len(c) != 1 || c[0].Recording != "recording" {
-		t.Fatal("not recording after the notice")
-	}
+	waitFor(t, "not recording after the notice", func() bool { c := e.Calls(); return len(c) == 1 && c[0].Recording == "recording" })
 	var sa, sb uint16 = 1, 1
 	a.speak(10, &sa, 0)
 	b.speak(10, &sb, 0)

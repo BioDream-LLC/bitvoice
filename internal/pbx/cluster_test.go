@@ -199,7 +199,8 @@ func TestCallBetweenServers(t *testing.T) {
 	for i := 0; i < 40 && recA.count() == 0; i++ {
 		time.Sleep(100 * time.Millisecond)
 	}
-	time.Sleep(300 * time.Millisecond)
+	waitFor(t, "server a wrote no record", func() bool { return recA.count() >= 1 })
+	time.Sleep(300 * time.Millisecond) // and no second one
 	if n := recA.count(); n != 1 {
 		t.Fatalf("server a wrote %d records", n)
 	}
@@ -296,7 +297,7 @@ func TestFeaturesAcrossServers(t *testing.T) {
 		if !strings.Contains(m, "Your visitor is here") {
 			t.Fatalf("message %q", m)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("text did not reach the phone on the other server")
 	}
 
@@ -352,7 +353,7 @@ func TestTrunkHeldByOneServer(t *testing.T) {
 	var inv *sip.Message
 	select {
 	case inv = <-carrier.invites:
-	case <-time.After(3 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("the call out did not reach the provider")
 	}
 	if <-done != 200 {
@@ -399,7 +400,7 @@ func (d *dialog) follow(t *testing.T, server *Engine) {
 			d.target = ct.URI.String()
 		}
 		d.p.pbx.Addr = netip.MustParseAddrPort("127.0.0.1:" + strconv.Itoa(server.SIPPort()))
-	case <-time.After(3 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("no re-INVITE from the server taking over")
 	}
 }
@@ -431,7 +432,7 @@ func TestCallSurvivesServer(t *testing.T) {
 	f.set("b", b)
 	ps := registered(t, a, "100", "101")
 	d100, d101 := answeredCall(t, ps[0], ps[1], "101")
-	time.Sleep(100 * time.Millisecond)
+	waitFor(t, "the call is not shown", func() bool { return len(a.Calls()) == 1 })
 	start := a.Calls()[0].Start
 	var snaps [][]byte
 	for _, s := range a.CallSnapshots() {

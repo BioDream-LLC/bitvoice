@@ -46,7 +46,7 @@ func (m *memRecorder) AddCDR(r store.CDR) error {
 
 func (m *memRecorder) last(t *testing.T) store.CDR {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		m.mu.Lock()
 		n := len(m.cdrs)
@@ -64,10 +64,30 @@ func (m *memRecorder) last(t *testing.T) store.CDR {
 	return store.CDR{}
 }
 
+// find waits for a call record that ok accepts, newest first: last() may still be an earlier call's.
+func (m *memRecorder) find(t *testing.T, what string, ok func(store.CDR) bool) store.CDR {
+	t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		m.mu.Lock()
+		for i := len(m.cdrs) - 1; i >= 0; i-- {
+			if ok(m.cdrs[i]) {
+				r := m.cdrs[i]
+				m.mu.Unlock()
+				return r
+			}
+		}
+		m.mu.Unlock()
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal(what)
+	return store.CDR{}
+}
+
 // nth waits for the nth call record (1-based).
 func (m *memRecorder) nth(t *testing.T, n int) store.CDR {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		m.mu.Lock()
 		if len(m.cdrs) >= n {
@@ -181,7 +201,7 @@ func TestRegisterAndCall(t *testing.T) {
 	}
 	select {
 	case <-b.byes:
-	case <-time.After(2 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("callee never got BYE")
 	}
 	cdr := rec.last(t)

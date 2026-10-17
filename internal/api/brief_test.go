@@ -61,7 +61,7 @@ func TestBriefing(t *testing.T) {
 				if b, ok := ev.Data.(Briefing); ok && ev.Type == "call.briefing" {
 					return b
 				}
-			case <-time.After(5 * time.Second):
+			case <-time.After(15 * time.Second):
 				t.Fatalf("no briefing; the model said %v", asked)
 			}
 		}

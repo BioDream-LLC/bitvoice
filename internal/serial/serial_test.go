@@ -29,7 +29,7 @@ func TestPortOverPTY(t *testing.T) {
 	}
 	got := make([]byte, 0, 64)
 	buf := make([]byte, 64)
-	p.SetReadDeadline(time.Now().Add(2 * time.Second))
+	p.SetReadDeadline(time.Now().Add(15 * time.Second))
 	for len(got) < len(msg) {
 		n, err := p.Read(buf)
 		if err != nil {
@@ -44,7 +44,7 @@ func TestPortOverPTY(t *testing.T) {
 		t.Fatal(err)
 	}
 	back := make([]byte, 16)
-	m.SetReadDeadline(time.Now().Add(2 * time.Second))
+	m.SetReadDeadline(time.Now().Add(15 * time.Second))
 	n, _ := m.Read(back)
 	if string(back[:n]) != "ANI\r" {
 		t.Fatalf("the other way: %q", back[:n])

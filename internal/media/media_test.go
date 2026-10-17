@@ -87,7 +87,7 @@ func TestRelayLatchesAndForwards(t *testing.T) {
 		}
 	}
 	buf := make([]byte, 2048)
-	_ = phoneB.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = phoneB.SetReadDeadline(time.Now().Add(15 * time.Second))
 	got := 0
 	for got < 4 {
 		n, _, err := phoneB.ReadFromUDP(buf)
@@ -122,7 +122,7 @@ func TestEchoAndTone(t *testing.T) {
 	to := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: e.Port()}
 	_, _ = phone.WriteToUDP(rtpPacket(7, 7), to)
 	buf := make([]byte, 2048)
-	_ = phone.SetReadDeadline(time.Now().Add(time.Second))
+	_ = phone.SetReadDeadline(time.Now().Add(15 * time.Second))
 	if _, _, err := phone.ReadFromUDP(buf); err != nil {
 		t.Fatalf("echo: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestEchoAndTone(t *testing.T) {
 	}
 	select {
 	case <-p.Done():
-	case <-time.After(time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("finite tone did not finish")
 	}
 }

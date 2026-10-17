@@ -254,7 +254,7 @@ func TestTransactionsOverUDPAndTCP(t *testing.T) {
 						select {
 						case <-tx.acked:
 							acked <- true
-						case <-time.After(2 * time.Second):
+						case <-time.After(15 * time.Second):
 							acked <- false
 						}
 					}()

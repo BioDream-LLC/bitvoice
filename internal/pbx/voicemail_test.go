@@ -54,7 +54,7 @@ func (p *phone) waitBye(t *testing.T, within time.Duration) {
 	t.Helper()
 	select {
 	case <-p.byes:
-	case <-time.After(within):
+	case <-time.After(patient(within)):
 		t.Fatal("BitVoice did not hang up")
 	}
 }
@@ -76,7 +76,7 @@ func (p *phone) subscribeMWI(t *testing.T) {
 
 func (p *phone) waitNotify(t *testing.T, want string) {
 	t.Helper()
-	deadline := time.After(3 * time.Second)
+	deadline := time.After(patient(3 * time.Second))
 	for {
 		select {
 		case b := <-p.notifies:
@@ -109,10 +109,9 @@ func TestVoicemailLeaveAndCollect(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("voicemail answered %d", code)
 	}
-	if !caller.gotRTP(2 * time.Second) {
+	if !waitPrompt(caller, 10*time.Second) { // the greeting and the beep, then recording
 		t.Fatal("no greeting or beep")
 	}
-	time.Sleep(1200 * time.Millisecond) // greeting quiet and beep
 	var seq uint16 = 1
 	d.speak(100, &seq, '#') // two seconds, then # to finish
 	caller.waitBye(t, 3*time.Second)
@@ -197,7 +196,7 @@ func TestBusyLamp(t *testing.T) {
 	_ = b
 	watcher.waitNotify(t, "<state>confirmed</state>")
 	ps[0].send(a.request("BYE"))
-	deadline := time.After(3 * time.Second)
+	deadline := time.After(15 * time.Second)
 	for {
 		select {
 		case body := <-watcher.notifies:

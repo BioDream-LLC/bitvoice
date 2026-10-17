@@ -107,8 +107,7 @@ func TestCRM(t *testing.T) {
 	// Calls are logged, signed; the first attempt fails and is tried again.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go s.RunCRM(ctx)
-	time.Sleep(50 * time.Millisecond)
+	subscribed(t, s, func() { go s.RunCRM(ctx) })
 	cdr := store.CDR{ID: "c2", Start: time.Now(), From: "+12125550123", To: "100", Disposition: "answered"}
 	s.Bus.Publish("call.logged", cdr)
 	deadline := time.Now().Add(6 * time.Second)

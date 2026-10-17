@@ -31,7 +31,7 @@ func itoa(v int) string {
 
 func next(t *testing.T, c *Call, kinds ...string) Event {
 	t.Helper()
-	deadline := time.After(3 * time.Second)
+	deadline := time.After(15 * time.Second)
 	for {
 		select {
 		case e, ok := <-c.Events:

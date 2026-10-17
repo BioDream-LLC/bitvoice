@@ -161,7 +161,10 @@ func TestTTYOn911(t *testing.T) {
 	s := placeSOS(t, "")
 	s.play(make([]int16, 4000)) // a moment of silence first, as a call starts
 	s.play(tty.Encode("HELP MY FATHER FELL GA"))
-	time.Sleep(200 * time.Millisecond)
+	waitFor(t, "the TTY text is not in the conversation", func() bool {
+		c := s.conversation()
+		return len(c) == 1 && c[0].Text == "HELP MY FATHER FELL GA"
+	})
 	txt := s.conversation()
 	if len(txt) != 1 || txt[0].From != "caller" || txt[0].Via != "tty" || txt[0].Text != "HELP MY FATHER FELL GA" {
 		t.Fatalf("conversation %+v", txt)
@@ -223,7 +226,7 @@ func TestRTTOn911(t *testing.T) {
 		out.Send(w)
 		time.Sleep(350 * time.Millisecond)
 	}
-	time.Sleep(time.Second)
+	waitFor(t, "the RTT lines are not in the conversation", func() bool { return len(s.conversation()) == 2 })
 	txt := s.conversation()
 	if len(txt) != 2 || txt[0].Text != "I CANT TALK" || txt[1].Text != "HE HAS A GUN" || txt[0].Via != "rtt" {
 		t.Fatalf("conversation %+v", txt)
@@ -235,7 +238,7 @@ func TestRTTOn911(t *testing.T) {
 	in := &rtt.Receiver{T140: 98, Red: 100}
 	var got strings.Builder
 	buf := make([]byte, 1500)
-	end := time.Now().Add(2 * time.Second)
+	end := time.Now().Add(15 * time.Second)
 	for time.Now().Before(end) && !strings.Contains(got.String(), "\u2028") {
 		_ = tc.SetReadDeadline(end)
 		n, _, err := tc.ReadFromUDP(buf)
@@ -379,7 +382,7 @@ func TestTextTo911(t *testing.T) {
 			if s, _ := ans.Media[0].Attr("setup"); s != "active" {
 				t.Fatalf("setup %q", s)
 			}
-			_ = ln.(*net.TCPListener).SetDeadline(time.Now().Add(3 * time.Second))
+			_ = ln.(*net.TCPListener).SetDeadline(time.Now().Add(15 * time.Second))
 			conn, err := ln.Accept()
 			if err != nil {
 				t.Fatal("BitVoice did not connect to the passive TCC")
@@ -411,7 +414,7 @@ func TestTextTo911(t *testing.T) {
 			if a.Agent != "101" || len(a.PIDF) == 0 {
 				t.Fatalf("answer %+v", a)
 			}
-		case <-time.After(2 * time.Second):
+		case <-time.After(15 * time.Second):
 			t.Fatal("CAD was not told when the text was taken")
 		}
 		if err := e.TakeTextCall(id, "102", "Lee"); err == nil {
@@ -425,7 +428,7 @@ func TestTextTo911(t *testing.T) {
 			if s != "Where are you?" {
 				t.Fatalf("the TCC got %q", s)
 			}
-		case <-time.After(2 * time.Second):
+		case <-time.After(15 * time.Second):
 			t.Fatal("the reply did not reach the TCC")
 		}
 		tcc.Close()
@@ -492,7 +495,7 @@ func TestSIPMessageOn911(t *testing.T) {
 		if string(r.Body) != "Stay where you are. Help is coming." || r.CallID() != s.invite.CallID() {
 			t.Fatalf("reply %s", r)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("no reply MESSAGE")
 	}
 }

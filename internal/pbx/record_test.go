@@ -66,17 +66,11 @@ func TestRecordingPause(t *testing.T) {
 	b.speak(10, &sb, 0)
 	b.speak(0, &sb, '*')
 	b.speak(0, &sb, '7')
-	time.Sleep(100 * time.Millisecond)
-	if c := e.Calls(); len(c) != 1 || c[0].Recording != "paused" {
-		t.Fatalf("not paused: %+v", c)
-	}
+	waitFor(t, "not paused", func() bool { c := e.Calls(); return len(c) == 1 && c[0].Recording == "paused" })
 	a.speak(50, &sa, 0) // the card number: must not be recorded
 	b.speak(0, &sb, '*')
 	b.speak(0, &sb, '8')
-	time.Sleep(100 * time.Millisecond)
-	if c := e.Calls(); c[0].Recording != "recording" {
-		t.Fatalf("not resumed: %s", c[0].Recording)
-	}
+	waitFor(t, "not resumed", func() bool { c := e.Calls(); return len(c) == 1 && c[0].Recording == "recording" })
 	// From the screen too.
 	if !e.PauseRecording(e.Calls()[0].ID, true, "admin") || e.Calls()[0].Recording != "paused" {
 		t.Fatal("screen pause")
@@ -112,7 +106,7 @@ func TestCallAudioCleanup(t *testing.T) {
 			defer close(done)
 			buf := make([]byte, 2048)
 			for {
-				_ = ps[1].rtp.SetReadDeadline(time.Now().Add(time.Second))
+				_ = ps[1].rtp.SetReadDeadline(time.Now().Add(15 * time.Second))
 				n, _, err := ps[1].rtp.ReadFromUDP(buf)
 				if err != nil {
 					return

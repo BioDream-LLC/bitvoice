@@ -84,7 +84,7 @@ func TestHoldMusicStream(t *testing.T) {
 	srv.CloseClientConnections()
 	next3, leave3 := e.listen("radio", cfg.System.Music[0].Stream, fallback)
 	defer leave3()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for {
 		if b := next3(); len(b) > 0 && b[0] == 7 {
 			break

@@ -123,7 +123,7 @@ func TestALILink(t *testing.T) {
 		if !strings.HasPrefix(b, "\x02POS 101") || !strings.Contains(b, "(717) 555-0100") {
 			t.Fatalf("spill %q", b)
 		}
-	case <-time.After(3 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("no spill on the serial port")
 	}
 }

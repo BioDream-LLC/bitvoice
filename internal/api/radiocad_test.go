@@ -39,8 +39,7 @@ func TestRadioDataToCAD(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go s.RunRadioCAD(ctx)
-	time.Sleep(50 * time.Millisecond) // subscribed
+	subscribed(t, s, func() { go s.RunRadioCAD(ctx) })
 	s.Bus.Publish("radio.emergency", pbx.RadioUnitEvent{Channel: "tg", ChannelName: "County fire", Unit: "bee07.ad5.0000c5", UnitID: 197, Emergency: true})
 	select {
 	case m := <-got:
@@ -51,7 +50,7 @@ func TestRadioDataToCAD(t *testing.T) {
 		if a := <-auth; a != "Bearer cad-shared-secret" {
 			t.Fatalf("authorization %q", a)
 		}
-	case <-time.After(3 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("CAD got nothing")
 	}
 

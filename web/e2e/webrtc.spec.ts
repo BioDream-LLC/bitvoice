@@ -71,7 +71,8 @@ test('browser phone to browser phone through the engine', async ({ page }) => {
       events.b.push(ev.type)
       if (ev.type === 'incoming') incoming(ev.callId)
     })
-    await new Promise((ok) => setTimeout(ok, 300))
+    // hello comes once the stream is listening
+    await Promise.all([esA, esB].map((es) => new Promise((ok) => es.addEventListener('hello', ok, { once: true }))))
     const mic = await navigator.mediaDevices.getUserMedia({ audio: true })
     const peer = async () => {
       const pc = new RTCPeerConnection()
@@ -132,7 +133,7 @@ test('Opus converted both ways against the browser', async ({ page }) => {
     const gotIncoming = new Promise<string>((ok) => { incoming = ok })
     const esB = new EventSource(`./api/phone/${pb.id}/events`)
     esB.addEventListener('call', (e) => { const ev = JSON.parse((e as MessageEvent).data); if (ev.type === 'incoming') incoming(ev.callId) })
-    await new Promise((ok) => setTimeout(ok, 300))
+    await new Promise((ok) => esB.addEventListener('hello', ok, { once: true })) // the stream is listening
     const mic = await navigator.mediaDevices.getUserMedia({ audio: true })
     const ulaw = (u: number) => { u = ~u & 0xff; const t = (((u & 0x0f) << 3) + 0x84) << ((u & 0x70) >> 4); return (u & 0x80 ? 0x84 - t : t - 0x84) / 32768 }
     type Heard = { frames: number; peak: number; errors: number; loud: number; crossings: number; hz: number }
@@ -534,7 +535,7 @@ test('a supervisor writes coaching notes on a recorded call', async ({ page }) =
       const gotIncoming = new Promise<string>((ok) => { incoming = ok })
       const esB = new EventSource(`./api/phone/${pb.id}/events`)
       esB.addEventListener('call', (e) => { const ev = JSON.parse((e as MessageEvent).data); if (ev.type === 'incoming') incoming(ev.callId) })
-      await new Promise((ok) => setTimeout(ok, 300))
+      await new Promise((ok) => esB.addEventListener('hello', ok, { once: true })) // the stream is listening
       const mic = await navigator.mediaDevices.getUserMedia({ audio: true })
       const peer = async () => {
         const pc = new RTCPeerConnection()

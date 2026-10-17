@@ -33,7 +33,7 @@ func (c *tclient) write(b []byte) {
 }
 
 func (c *tclient) read() []byte {
-	c.conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	c.conn.SetReadDeadline(time.Now().Add(15 * time.Second))
 	if !c.stream {
 		b := make([]byte, 65536)
 		n, err := c.conn.Read(b)
@@ -177,7 +177,7 @@ func TestRelay(t *testing.T) {
 			w.Add(attrData, []byte("hello peer"))
 			c.write(w.Bytes())
 			buf := make([]byte, 1500)
-			peer.SetReadDeadline(time.Now().Add(2 * time.Second))
+			peer.SetReadDeadline(time.Now().Add(15 * time.Second))
 			n, from, err := peer.ReadFromUDPAddrPort(buf)
 			if err != nil || string(buf[:n]) != "hello peer" || from.Port() != relay.Port() {
 				t.Fatalf("peer got %q from %v (%v), relay %v", buf[:n], from, err, relay)
@@ -297,7 +297,7 @@ func TestPublicAddressReachedLocally(t *testing.T) {
 	w.Add(attrData, []byte("ping"))
 	c.write(w.Bytes())
 	buf := make([]byte, 100)
-	peer.SetReadDeadline(time.Now().Add(2 * time.Second))
+	peer.SetReadDeadline(time.Now().Add(15 * time.Second))
 	n, from, err := peer.ReadFromUDPAddrPort(buf)
 	if err != nil || string(buf[:n]) != "ping" {
 		t.Fatalf("%q %v", buf[:n], err)

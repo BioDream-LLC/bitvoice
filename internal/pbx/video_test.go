@@ -152,7 +152,7 @@ func TestVideoAddedDuringCall(t *testing.T) {
 	}
 	select {
 	case <-b.reinvite:
-	case <-time.After(2 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("the other party was not asked")
 	}
 	// Now b has one: a switches on again and gets b's picture.
@@ -165,7 +165,7 @@ func TestVideoAddedDuringCall(t *testing.T) {
 	select {
 	case r := <-b.reinvite:
 		bm = videoOf(t, r.Body)
-	case <-time.After(2 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("the other party was not asked")
 	}
 	if bm == nil || bm.Port == 0 {

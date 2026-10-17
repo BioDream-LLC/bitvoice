@@ -73,7 +73,7 @@ func gotAt(t *testing.T, psaps *carrier) *sip.Message {
 	select {
 	case m := <-psaps.invites:
 		return m
-	case <-time.After(5 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("no PSAP got the call")
 	}
 	return nil
@@ -113,7 +113,7 @@ func TestESRPRunsStoredPolicies(t *testing.T) {
 					t.Fatalf("relay call: %+v", r)
 				}
 			}
-		case <-time.After(2 * time.Second):
+		case <-time.After(15 * time.Second):
 			t.Fatal("no route event")
 		}
 	}

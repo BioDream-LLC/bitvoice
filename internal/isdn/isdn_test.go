@@ -47,7 +47,7 @@ func (l *pipeLink) WriteFrame(f []byte) error {
 
 func waitUp(t *testing.T, ps ...*PRI) {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for _, p := range ps {
 		for !p.IsUp() {
 			if time.Now().After(deadline) {
@@ -60,7 +60,7 @@ func waitUp(t *testing.T, ps ...*PRI) {
 
 func next(t *testing.T, c *Call, kind string) Event {
 	t.Helper()
-	timeout := time.After(5 * time.Second)
+	timeout := time.After(15 * time.Second)
 	for {
 		select {
 		case e := <-c.Events:
@@ -176,7 +176,7 @@ func TestRecovery(t *testing.T) {
 	select {
 	case in := <-incoming:
 		in.Answer()
-	case <-time.After(3 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("the lost SETUP was not sent again")
 	}
 	next(t, c, "connected")

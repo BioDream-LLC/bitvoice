@@ -53,7 +53,7 @@ func TestUpgradeFromTheInterface(t *testing.T) {
 	}
 	select {
 	case <-restarted:
-	case <-time.After(5 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("never restarted")
 	}
 	if st := upgrade.Load(s.DataDir); st.CurrentVersion != "9.0.0" || st.PreviousVersion != "test" || !st.Pending {

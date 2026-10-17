@@ -64,10 +64,7 @@ func TestSupervisorListenWhisperBarge(t *testing.T) {
 		t.Fatal("supervisor not rung")
 	}
 	sd := sup.answer(ring)
-	time.Sleep(300 * time.Millisecond)
-	if c := e.Calls(); len(c) != 2 {
-		t.Fatalf("calls %d", len(c))
-	}
+	waitFor(t, "the supervisor's call is not shown", func() bool { return len(e.Calls()) == 2 })
 	// Listen: the supervisor hears the caller; the agent does not hear the supervisor.
 	go speakFor(caller, cd, 600*time.Millisecond)
 	if l := loudness(sup, 600*time.Millisecond); l < 1000 {
@@ -95,10 +92,7 @@ func TestSupervisorListenWhisperBarge(t *testing.T) {
 	}
 	// The supervisor leaves: caller and agent are joined directly again.
 	sup.send(sd.request("BYE"))
-	time.Sleep(300 * time.Millisecond)
-	if c := e.Calls(); len(c) != 1 || c[0].Supervision != "" {
-		t.Fatalf("after leaving %+v", c)
-	}
+	waitFor(t, "caller and agent not joined again", func() bool { c := e.Calls(); return len(c) == 1 && c[0].Supervision == "" })
 	agent.drainRTP()
 	cd.sendRTP(5)
 	if !agent.gotRTP(time.Second) {

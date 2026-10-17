@@ -7,6 +7,7 @@ import (
 
 	"github.com/biodream-llc/bitvoice/internal/config"
 	"github.com/biodream-llc/bitvoice/internal/sip"
+	"github.com/biodream-llc/bitvoice/internal/store"
 )
 
 // A desk phone signs in by dialling *33, the extension and its voicemail PIN; then calls to that
@@ -34,7 +35,7 @@ func TestHotDesk(t *testing.T) {
 			t.Fatalf("*33 answered %d", code)
 		}
 		var seq uint16 = 1
-		time.Sleep(700 * time.Millisecond)
+		prompted(t, desk)
 		d.press(&seq, keys)
 		desk.waitBye(t, 12*time.Second)
 	}
@@ -58,8 +59,7 @@ func TestHotDesk(t *testing.T) {
 		t.Fatalf("echo from the desk: %d", code)
 	}
 	desk.send(d.request(sip.BYE))
-	time.Sleep(200 * time.Millisecond)
-	if r := rec.last(t); r.From != "100" || r.Ext != "100" {
+	if r := rec.find(t, "no record of the desk's echo call", func(r store.CDR) bool { return r.To == cfg.System.EchoNumber }); r.From != "100" || r.Ext != "100" {
 		t.Fatalf("the desk's call was not 100's: %+v", r)
 	}
 	// Signing out by code.

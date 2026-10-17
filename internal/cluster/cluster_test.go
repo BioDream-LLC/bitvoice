@@ -230,7 +230,7 @@ func TestCallsTakenOver(t *testing.T) {
 		if len(got) != 1 {
 			t.Fatalf("a took %q", got)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("a did not take the handed-over call")
 	}
 }

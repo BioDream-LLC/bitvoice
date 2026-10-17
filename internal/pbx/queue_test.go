@@ -60,10 +60,10 @@ func TestQueueConnectsAgent(t *testing.T) {
 	}
 	// The caller gives up while the agent rings: the ringing stops and the call counts as abandoned.
 	ps[0].send(d2.request("BYE"))
-	time.Sleep(300 * time.Millisecond)
-	if qs := e.Queues(); qs[0].Totals.Abandoned != 1 || len(qs[0].Waiting) != 0 {
-		t.Fatalf("after abandon %+v", qs[0])
-	}
+	waitFor(t, "the call is not counted as abandoned", func() bool {
+		qs := e.Queues()
+		return qs[0].Totals.Abandoned == 1 && len(qs[0].Waiting) == 0
+	})
 }
 
 func TestQueueRingAllAndTimeout(t *testing.T) {
@@ -154,7 +154,7 @@ func TestQueueVIPAndSticky(t *testing.T) {
 	ps[1].dial("700")
 	time.Sleep(300 * time.Millisecond)
 	ps[2].dial("700") // the VIP, last in
-	time.Sleep(300 * time.Millisecond)
+	waitFor(t, "three callers are not waiting", func() bool { return len(e.Queues()[0].Waiting) == 3 })
 	w := e.Queues()[0].Waiting
 	if len(w) != 3 || w[0].From != "102" || !w[0].VIP || w[1].From != "100" || w[2].From != "101" {
 		t.Fatalf("waiting %+v", w)

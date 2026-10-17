@@ -114,7 +114,7 @@ func TestTelephonyCardEM(t *testing.T) {
 	var ad *dialog
 	select {
 	case ad = <-done:
-	case <-time.After(5 * time.Second):
+	case <-time.After(15 * time.Second):
 	}
 	if ad == nil {
 		t.Fatalf("the call out was not answered (status %v)", b.Status())

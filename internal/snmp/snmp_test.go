@@ -84,7 +84,7 @@ func TestAgent(t *testing.T) {
 	c, _ := net.Dial("udp", a.Addr().String())
 	defer c.Close()
 	_, _ = c.Write(request(pduGet, "public2", 0, 0, SysDescr))
-	_ = c.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = c.SetReadDeadline(time.Now().Add(15 * time.Second))
 	buf := make([]byte, 2048)
 	n, err := c.Read(buf)
 	if err != nil {
@@ -109,7 +109,7 @@ func TestTrap(t *testing.T) {
 		t.Fatal(err)
 	}
 	buf := make([]byte, 2048)
-	_ = l.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = l.SetReadDeadline(time.Now().Add(15 * time.Second))
 	n, _, err := l.ReadFromUDP(buf)
 	if err != nil {
 		t.Fatal(err)

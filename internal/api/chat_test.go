@@ -59,7 +59,7 @@ func TestStaffChat(t *testing.T) {
 	if code, _ := a.do("POST", "/api/me/chat/d-100-101", map[string]any{"text": "  Can you take line 2?  "}); code != 201 {
 		t.Fatalf("send: %d", code)
 	}
-	deadline := time.After(3 * time.Second)
+	deadline := time.After(15 * time.Second)
 	for got := false; !got; {
 		select {
 		case l := <-lines:

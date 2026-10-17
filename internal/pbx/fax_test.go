@@ -73,7 +73,7 @@ func TestT38Fax(t *testing.T) {
 	select {
 	case m := <-b.reinvite:
 		bi = imageOf(t, m.Body)
-	case <-time.After(2 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("b was not switched")
 	}
 	if ai == nil || bi == nil || ai.Port == bi.Port {
@@ -104,7 +104,7 @@ func TestT38Fax(t *testing.T) {
 		if s, _ := sdp.Parse(m.Body); s == nil || s.Audio() == nil || s.Audio().Port == 0 || imageMedia(s) != nil {
 			t.Fatalf("b not switched back to sound: %s", m.Body)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("b was not switched back")
 	}
 	d.media = mediaOf(r.Body)

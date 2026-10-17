@@ -58,7 +58,7 @@ func TestOriginate(t *testing.T) {
 	for _, p := range []*phone{a, b} {
 		select {
 		case <-p.byes:
-		case <-time.After(2 * time.Second):
+		case <-time.After(15 * time.Second):
 			t.Fatalf("%s got no BYE", p.user)
 		}
 	}
@@ -104,7 +104,7 @@ func TestRedirect(t *testing.T) {
 	c.answer(ringC)
 	select {
 	case <-b.byes:
-	case <-time.After(2 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("101 was not released")
 	}
 	select {

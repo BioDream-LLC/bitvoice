@@ -100,9 +100,8 @@ func TestPINSetOnOutboundRoute(t *testing.T) {
 	default:
 	}
 	d, _ = a.dial("2125551212")
-	a.gotRTP(time.Second)
+	prompted(t, a)
 	seq = 1
-	time.Sleep(300 * time.Millisecond)
 	d.press(&seq, "7002#")
 	select {
 	case n := <-c.answered:
@@ -114,7 +113,7 @@ func TestPINSetOnOutboundRoute(t *testing.T) {
 	}
 	time.Sleep(200 * time.Millisecond)
 	a.send(d.request(sip.BYE))
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for rec.last(t).Account != "7002" {
 		if time.Now().After(deadline) {
 			t.Fatalf("account code not recorded: %+v", rec.last(t))
