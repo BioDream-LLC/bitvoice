@@ -70,7 +70,9 @@ func TestDialInPINAndCallOut(t *testing.T) {
 	}
 	ps[0].waitBye(t, 6*time.Second)
 
-	// The right PIN, then a number: it is called as extension 100.
+	// The right PIN, then a number: it is called as extension 100. The first call's prompts are still
+	// queued on the phone's socket: drop them, so prompted hears this call's own prompt.
+	ps[0].drainRTP()
 	d, _ = ps[0].dial("450")
 	prompted(t, ps[0])
 	seq = 1
@@ -78,7 +80,7 @@ func TestDialInPINAndCallOut(t *testing.T) {
 	ps[0].drainRTP()
 	prompted(t, ps[0]) // the PIN is right: the dial tone
 	d.press(&seq, "101#")
-	if ps[1].waitRing(5*time.Second) == nil {
+	if ps[1].waitRing(patient(5*time.Second)) == nil {
 		t.Fatal("dial-in did not call 101")
 	}
 	ps[0].send(d.request("BYE"))

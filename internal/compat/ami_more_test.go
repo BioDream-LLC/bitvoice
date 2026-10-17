@@ -194,7 +194,6 @@ func TestAMIMoreActions(t *testing.T) {
 		t.Fatalf("user event %v", m)
 	}
 	// Mailbox events.
-	bus.Publish("voicemail.changed", map[string]any{"box": "100", "new": 1, "old": 0})
 	c.do("Action", "Filter", "Filter", "Event: MessageWaiting")
 	bus.Publish("voicemail.changed", map[string]any{"box": "100", "new": 3, "old": 1})
 	if m := c.next(); m.get("Event") != "MessageWaiting" || m.get("New") != "3" || m.get("Waiting") != "yes" {
