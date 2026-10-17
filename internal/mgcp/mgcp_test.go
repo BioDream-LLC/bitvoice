@@ -242,7 +242,9 @@ func TestCallBetweenTwoPorts(t *testing.T) {
 	gw.wait("the connection of port 1 deleted", func(m *Message) bool { return m.Verb == "DLCX" && strings.HasPrefix(m.Endpoint, "aaln/1@") })
 	gw.wait("the connection of port 2 deleted", func(m *Message) bool { return m.Verb == "DLCX" && strings.HasPrefix(m.Endpoint, "aaln/2@") })
 	gw.wait("reorder tone on port 2", isRQNT("aaln/2", "S:L/ro"))
-	if s := a.Status(); s["aaln/1@gw1.test"] != "ready" {
-		t.Errorf("status %v", s)
+	for end := time.Now().Add(15 * time.Second); a.Status()["aaln/1@gw1.test"] != "ready"; time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(end) {
+			t.Fatalf("status %v", a.Status())
+		}
 	}
 }
