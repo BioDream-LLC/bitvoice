@@ -3,6 +3,7 @@ import { Phone, PhoneIncoming, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { useExtensionsQuery } from './api'
+import { useIsAdmin } from './Editor'
 import { Softphone } from './Softphone'
 import { usePhone } from './usePhone'
 
@@ -10,6 +11,8 @@ import { usePhone } from './usePhone'
 export function PhoneDock() {
   const api = usePhone()
   const { data } = useExtensionsQuery()
+  // Administrators pick any extension; everyone else signs the phone in with the extension's password.
+  const admin = useIsAdmin()
   const [open, setOpen] = useState(false)
   const ringing = api.calls.some((c) => c.state === 'incoming')
   const live = api.calls.some((c) => c.state === 'connected')
@@ -32,7 +35,7 @@ export function PhoneDock() {
             <h2 className="flex items-center gap-2 font-semibold text-slate-100"><Phone size={16} className="text-emerald-300" aria-hidden /> Browser phone</h2>
             <button className="btn ml-auto px-2 py-1" aria-label="Close the phone panel" onClick={() => setOpen(false)}><X size={13} aria-hidden /></button>
           </div>
-          <Softphone phoneApi={api} extensions={data?.items.map((x) => ({ number: x.number, name: x.name }))} />
+          <Softphone phoneApi={api} extensions={admin ? data?.items.map((x) => ({ number: x.number, name: x.name })) : undefined} />
         </section>
       )}
       <button onClick={() => setOpen(!open)} aria-label={ringing ? 'Incoming call' : 'Browser phone'}

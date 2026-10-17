@@ -692,3 +692,33 @@ test('an ARI application runs a call from the browser phone', async ({ page }) =
   await expect.poll(() => page.evaluate(() => (window as unknown as { ari: string[] }).ari.join(' ')))
     .toBe('StasisStart PlaybackStarted PlaybackFinished StasisEnd')
 })
+
+// Someone who is not an administrator signs the browser phone in with the extension's own password.
+test('a viewer uses the browser phone with the extension password', async ({ page, browser }) => {
+  await signIn(page)
+  const secret = await page.evaluate(async () => {
+    const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
+    await fetch('./api/users', { method: 'POST', headers: H, body: JSON.stringify({ username: 'phoneviewer', name: 'Phone viewer', role: 'viewer', password: 'a viewer password here' }) })
+    const exts = await (await fetch('./api/extensions')).json()
+    return { number: exts.items[0].number as string, secret: exts.items[0].secret as string }
+  })
+  const ctx = await browser.newContext({ ignoreHTTPSErrors: true, permissions: ['microphone'] })
+  const v = await ctx.newPage()
+  await v.goto(page.url().split('#')[0])
+  await v.getByLabel('Username').fill('phoneviewer')
+  await v.getByLabel('Password').fill('a viewer password here')
+  await v.getByRole('button', { name: 'Sign in' }).click()
+  await expect(v.getByRole('navigation', { name: 'Main' })).toBeVisible({ timeout: 15000 })
+  await v.getByRole('button', { name: 'Browser phone' }).click()
+  await v.getByRole('textbox', { name: 'Extension', exact: true }).fill(secret.number)
+  await v.getByLabel('SIP password').fill('wrong password')
+  await v.getByRole('button', { name: /^Sign in as/ }).click()
+  await expect(v.getByText('that extension and password do not match')).toBeVisible()
+  await v.getByLabel('SIP password').fill(secret.secret)
+  await v.getByRole('button', { name: /^Sign in as/ }).click()
+  for (const k of ['*', '4', '3']) await v.getByRole('group', { name: 'Keypad' }).getByRole('button', { name: k, exact: true }).click()
+  await v.getByRole('button', { name: 'Call', exact: true }).click()
+  await expect(v.getByRole('region', { name: 'Browser phone' }).getByText(/^0:0[1-9]$/)).toBeVisible({ timeout: 10000 })
+  await v.getByRole('button', { name: 'Hang up' }).click()
+  await ctx.close()
+})
