@@ -1037,6 +1037,10 @@ func (c *Call) answerLocal(p plan) {
 		if c.answerHere(p.toName) {
 			go c.runMenu(p.box)
 		}
+	case "callscript":
+		if c.answerHere(p.toName) {
+			go c.runCallScript(p.box)
+		}
 	case "receptionist":
 		if c.answerHere(p.toName) {
 			go c.runReceptionist(p.box)

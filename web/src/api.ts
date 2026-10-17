@@ -92,9 +92,9 @@ export interface QueueStatus {
   agents: { extension: string; name: string; state: AgentState; reason?: string; lastCall?: string }[]
   totals: { answered: number; abandoned: number; timedOut: number; longestWait: number }
 }
-export interface Script { id: string; name: string; language: 'js' | 'lua'; source: string; fallback: Destination }
+export interface Script { id: string; name: string; language: 'js' | 'lua'; source: string; fallback: Destination; mode?: '' | 'route' | 'call'; maxMinutes?: number; number?: string }
 export interface ScriptCall { from: string; fromName: string; to: string; direction: string; trunk: string; weekday: number; hour: number; minute: number; date: string }
-export interface ScriptTest { type: string; target: string; log?: string[]; error?: string; millis: number }
+export interface ScriptTest { type?: string; target?: string; log?: string[]; error?: string; millis: number; steps?: string[]; ended?: boolean }
 export interface Menu {
   id: string; number: string; name: string; dialExtensions: boolean; timeoutSeconds: number; repeats: number
   options: { key: string; label: string; destination: Destination }[]; timeout?: Destination | null
@@ -645,7 +645,7 @@ export const api = createApi({
         query: (body) => ({ url: `scripts/${body.id}`, method: 'PUT', body }), invalidatesTags: ['Scripts', 'History', 'Health'] }),
       deleteScript: b.mutation<void, string>({
         query: (id) => ({ url: `scripts/${id}`, method: 'DELETE' }), invalidatesTags: ['Scripts', 'History', 'Health'] }),
-      testScript: b.mutation<ScriptTest, { language: string; source: string; call: ScriptCall }>({
+      testScript: b.mutation<ScriptTest, { language: string; source: string; call: ScriptCall; mode?: string; keys?: string[]; answer?: boolean }>({
         query: (body) => ({ url: 'scripts/test', method: 'POST', body }) }),
       menus: b.query<List<Menu>, void>({ query: () => 'menus', providesTags: ['Menus'] }),
       createMenu: b.mutation<Item<Menu>, Partial<Menu>>({

@@ -120,6 +120,8 @@ func (s *sim) fromExtension(x *config.Extension, to string, res *SimResult) *Sim
 		d = &config.Destination{Type: "extension", Target: to}
 	case cfg.FindMenuNumber(to) != nil:
 		d = &config.Destination{Type: "menu", Target: cfg.FindMenuNumber(to).ID}
+	case cfg.FindScriptNumber(to) != nil:
+		d = &config.Destination{Type: "script", Target: cfg.FindScriptNumber(to).ID}
 	case cfg.FindQueue(to) != nil:
 		d = &config.Destination{Type: "queue", Target: to}
 	case cfg.FindRingGroup(to) != nil:
@@ -398,6 +400,52 @@ func (s *sim) walk(d config.Destination, depth int, path []string, direction, fr
 			return missing("script")
 		}
 		in := script.Call{From: from, To: to, Direction: direction, Weekday: int(s.at.Weekday()), Hour: s.at.Hour(), Minute: s.at.Minute(), Date: s.at.Format("2006-01-02")}
+		if sc.Mode == "call" {
+			// A call script runs the call: what it does depends on the keys the caller presses, so the
+			// simulator runs it pressing nothing, with nobody answering, and says what it did.
+			sim := &script.Simulator{Exists: func(d script.Destination) bool {
+				if d.Type == "number" {
+					if cfg.FindExtension(d.Target) != nil || cfg.FindRingGroup(d.Target) != nil || cfg.FindQueue(d.Target) != nil {
+						return true
+					}
+					for _, r := range cfg.OutboundRoutes { // an outside number: some route must take it
+						for _, pat := range r.Patterns {
+							if config.MatchPattern(pat, d.Target) {
+								return true
+							}
+						}
+					}
+					return false
+				}
+				return s.exists(config.Destination{Type: d.Type, Target: d.Target})
+			}}
+			out, err := script.RunCall(sc.Language, sc.Source, in, sim, 5*time.Second)
+			st := &SimStep{Kind: "script", Target: sc.ID, Name: sc.Name, Status: "ok",
+				Says: "A call script answers and runs the call. Pressing nothing, with nobody answering, it does: " + strings.Join(out.Steps, ", ") + "."}
+			if len(out.Steps) == 0 {
+				st.Says = "A call script answers and runs the call; pressing nothing, it takes no step."
+			}
+			fallback := err != nil || (!out.Ended && out.Next == nil)
+			switch {
+			case err != nil:
+				st.Status, st.Says = "warn", st.Says+" Then it fails ("+err.Error()+"), so its fallback is used."
+			case out.Next != nil:
+				d := config.Destination{Type: out.Next.Type, Target: out.Next.Target}
+				if d.Type == "number" {
+					d.Type = "extension"
+					if cfg.FindRingGroup(d.Target) != nil {
+						d.Type = "ringgroup"
+					} else if cfg.FindQueue(d.Target) != nil {
+						d.Type = "queue"
+					}
+				}
+				st.Branches = append(st.Branches, SimBranch{When: "Its choice", Taken: true, Step: next(d)})
+			case !out.Ended:
+				st.Says += " Then it ends without hanging up or handing the call on, so its fallback is used."
+			}
+			st.Branches = append(st.Branches, SimBranch{When: "Fallback", Taken: fallback, Step: next(sc.Fallback)})
+			return st
+		}
 		out, err := script.Route(sc.Language, sc.Source, in)
 		st := &SimStep{Kind: "script", Target: sc.ID, Name: sc.Name, Status: "ok"}
 		chosen := config.Destination{Type: out.Type, Target: out.Target}
@@ -497,36 +545,7 @@ func noAnswerWhen(ringing bool) string {
 }
 
 // exists says whether a destination a script chose is there.
-func (s *sim) exists(d config.Destination) bool {
-	c := s.cfg
-	switch d.Type {
-	case "extension", "voicemail":
-		return c.FindExtension(d.Target) != nil
-	case "ringgroup":
-		return c.FindRingGroup(d.Target) != nil
-	case "queue":
-		return c.FindQueue(d.Target) != nil
-	case "menu":
-		return c.FindMenu(d.Target) != nil
-	case "schedule":
-		return c.FindSchedule(d.Target) != nil
-	case "toggle":
-		return c.FindToggle(d.Target) != nil
-	case "audiosocket":
-		return c.FindAudioStream(d.Target) != nil
-	case "receptionist":
-		return c.FindReceptionist(d.Target) != nil
-	case "conference":
-		return c.FindConference(d.Target) != nil
-	case "directory":
-		return c.FindDirectory(d.Target) != nil
-	case "dialin":
-		return c.FindDialIn(d.Target) != nil
-	case "echo", "hangup":
-		return true
-	}
-	return false
-}
+func (s *sim) exists(d config.Destination) bool { return s.cfg.DestinationExists(d) }
 
 // nameOf names a destination in words.
 func (s *sim) nameOf(d config.Destination) string {

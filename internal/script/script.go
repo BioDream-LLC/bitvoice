@@ -78,7 +78,7 @@ func wrapJS(source string) string {
 
 var (
 	jsLineRe  = regexp.MustCompile(`Line (\d+):(\d+)`)
-	jsFrameRe = regexp.MustCompile(`route\.js:(\d+):(\d+)`)
+	jsFrameRe = regexp.MustCompile(`(?:route|call)\.js:(\d+):(\d+)`)
 )
 
 // cleanJS turns a goja error into one sentence with line numbers counted in the person's own script

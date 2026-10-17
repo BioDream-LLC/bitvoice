@@ -601,3 +601,39 @@ test('a supervisor writes coaching notes on a recorded call', async ({ page }) =
     ai.close()
   }
 })
+
+// A script that runs the whole call: made on Scripts, tried with keys the caller would press, then
+// dialled from the browser phone, which hears it and is hung up on by it.
+test('a call script runs a call from the browser phone', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/#/scripts')
+  await page.getByRole('button', { name: 'Add script' }).click()
+  await page.getByLabel('Name', { exact: true }).fill('Front door app')
+  await page.getByRole('radio', { name: 'Runs the whole call' }).click()
+  await expect(page.getByLabel('Number to dial it (optional)')).toBeVisible()
+  // The call example is in the editor: try it with 1 pressed.
+  await page.getByLabel('Keys the caller presses').fill('1')
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
+  await expect(page.getByRole('list', { name: 'Steps' }).getByText('collect up to 1 keys')).toBeVisible()
+  await expect(page.getByText('ringgroup 600')).toBeVisible()
+  // A script of its own, for the real call: a beep, two seconds, then goodbye.
+  await page.getByRole('textbox', { name: 'Script' }).fill('play("beep")\nwait(2)\nlog("done")\nhangup()')
+  await page.getByLabel('Keys the caller presses').fill('')
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
+  await expect(page.getByRole('list', { name: 'Steps' }).getByText('hang up')).toBeVisible()
+  await expect(page.getByText('the script hung up or handed the call on')).toBeVisible()
+  await page.getByLabel('Number to dial it (optional)').fill('851')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('runs the call · dial 851')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Browser phone' }).click()
+  await page.getByRole('button', { name: /^Sign in as/ }).click()
+  await expect(page.getByText(/^Extension/).first()).toBeVisible()
+  for (const k of ['8', '5', '1']) await page.getByRole('group', { name: 'Keypad' }).getByRole('button', { name: k, exact: true }).click()
+  await page.getByRole('button', { name: 'Call', exact: true }).click()
+  await expect(page.getByRole('region', { name: 'Browser phone' }).getByText(/^0:0[1-9]$/)).toBeVisible({ timeout: 10000 })
+  await expect(page.getByText('the other party hung up')).toBeVisible({ timeout: 15000 })
+  // The run list says how it went.
+  await expect(page.getByText('ended: the script hung up')).toBeVisible()
+  await expect(page.getByText('play beep → wait 2 s → hang up')).toBeVisible()
+})

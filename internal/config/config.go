@@ -1255,14 +1255,66 @@ type VIP struct {
 	Name   string `json:"name"`
 }
 
-// Script decides a call's destination in JavaScript or Lua. When it fails, runs too long or has no
-// opinion, the call goes to Fallback: a script can never lose a call.
+// Script decides a call's destination in JavaScript or Lua, or (Mode "call") runs the whole call:
+// prompts, speech, keys, recordings, ringing people. When it fails, runs too long, has no opinion or
+// ends without hanging up or handing the call on, the call goes to Fallback: a script can never lose a call.
 type Script struct {
 	ID       string      `json:"id"`
 	Name     string      `json:"name"`
 	Language string      `json:"language"` // js or lua
 	Source   string      `json:"source"`
 	Fallback Destination `json:"fallback"`
+	// Mode: "route" (the default) chooses where the call goes; "call" answers it and runs it.
+	Mode string `json:"mode,omitempty"`
+	// MaxMinutes is how long a call script may run (1 to 60; 0 is 10).
+	MaxMinutes int `json:"maxMinutes,omitempty"`
+	// Number lets extensions dial a call script (optional).
+	Number string `json:"number,omitempty"`
+}
+
+// DestinationExists says whether a destination names something in this configuration.
+func (c *Config) DestinationExists(d Destination) bool {
+	switch d.Type {
+	case "extension", "voicemail":
+		return c.FindExtension(d.Target) != nil
+	case "ringgroup":
+		return c.FindRingGroup(d.Target) != nil
+	case "queue":
+		return c.FindQueue(d.Target) != nil
+	case "menu":
+		return c.FindMenu(d.Target) != nil
+	case "schedule":
+		return c.FindSchedule(d.Target) != nil
+	case "toggle":
+		return c.FindToggle(d.Target) != nil
+	case "audiosocket":
+		return c.FindAudioStream(d.Target) != nil
+	case "receptionist":
+		return c.FindReceptionist(d.Target) != nil
+	case "conference":
+		return c.FindConference(d.Target) != nil
+	case "directory":
+		return c.FindDirectory(d.Target) != nil
+	case "dialin":
+		return c.FindDialIn(d.Target) != nil
+	case "script":
+		return c.FindScript(d.Target) != nil
+	case "fax":
+		return c.FindFax(d.Target) != nil
+	case "echo", "hangup":
+		return true
+	}
+	return false
+}
+
+// FindScriptNumber returns the call script with a dialable number, or nil.
+func (c *Config) FindScriptNumber(number string) *Script {
+	for i := range c.Scripts {
+		if c.Scripts[i].Number != "" && c.Scripts[i].Number == number && c.Scripts[i].Mode == "call" {
+			return &c.Scripts[i]
+		}
+	}
+	return nil
 }
 
 // FindScript returns the script with an ID, or nil.
@@ -2877,6 +2929,25 @@ func (c *Config) Validate() error {
 		}
 		if len(s.Source) > 64<<10 {
 			p.add(f+".source", "scripts can be up to 64 KB")
+		}
+		switch s.Mode {
+		case "", "route":
+			s.Mode = ""
+			s.MaxMinutes = 0
+			s.Number = ""
+		case "call":
+			if s.MaxMinutes < 0 || s.MaxMinutes > 60 {
+				p.add(f+".maxMinutes", "a call script may run 1 to 60 minutes")
+			}
+			if s.Number = strings.TrimSpace(s.Number); s.Number != "" {
+				if !numberRe.MatchString(s.Number) {
+					p.add(f+".number", "numbers are 2 to 8 digits, or empty")
+				} else {
+					claim(f+".number", s.Number, "script "+s.Name)
+				}
+			}
+		default:
+			p.add(f+".mode", "choose routing or call control")
 		}
 		if s.Fallback.Type == "script" {
 			p.add(f+".fallback", "the fallback cannot be another script")

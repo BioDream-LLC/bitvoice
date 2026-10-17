@@ -231,12 +231,51 @@ func (s *Server) routes() {
 			Language string      `json:"language"`
 			Source   string      `json:"source"`
 			Call     script.Call `json:"call"`
+			// A call script: the keys the caller presses (one entry for each collect), and whether
+			// someone answers when it dials.
+			Mode   string   `json:"mode"`
+			Keys   []string `json:"keys"`
+			Answer bool     `json:"answer"`
 		}
 		if err := readJSON(r, &in); err != nil {
 			writeErr(w, err)
 			return
 		}
 		start := time.Now()
+		if in.Mode == "call" {
+			cfg, _ := s.Store.Config()
+			sim := &script.Simulator{Keys: in.Keys, Answer: in.Answer, Exists: func(d script.Destination) bool {
+				switch d.Type {
+				case "number":
+					if cfg.FindExtension(d.Target) != nil || cfg.FindRingGroup(d.Target) != nil || cfg.FindQueue(d.Target) != nil {
+						return true
+					}
+					for _, r := range cfg.OutboundRoutes {
+						for _, p := range r.Patterns {
+							if config.MatchPattern(p, d.Target) {
+								return true
+							}
+						}
+					}
+					return false
+				case "voicemail":
+					x := cfg.FindExtension(d.Target)
+					return x != nil && x.Voicemail.Enabled
+				}
+				return cfg.DestinationExists(config.Destination{Type: d.Type, Target: d.Target})
+			}}
+			o, err := script.RunCall(in.Language, in.Source, in.Call, sim, 10*time.Second)
+			out := map[string]any{"steps": nonNilStrings(o.Steps), "log": nonNilStrings(o.Log), "ended": o.Ended,
+				"millis": float64(time.Since(start).Microseconds()) / 1000}
+			if o.Next != nil {
+				out["type"], out["target"] = o.Next.Type, o.Next.Target
+			}
+			if err != nil {
+				out["error"] = err.Error()
+			}
+			writeJSON(w, 200, out)
+			return
+		}
 		d, err := script.Route(in.Language, in.Source, in.Call)
 		out := map[string]any{"type": d.Type, "target": d.Target, "log": d.Log, "millis": float64(time.Since(start).Microseconds()) / 1000}
 		if err != nil {
@@ -696,4 +735,11 @@ func ownerName(cfg *config.Config, field string) string {
 		return "Settings"
 	}
 	return field
+}
+
+func nonNilStrings(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }

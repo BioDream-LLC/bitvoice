@@ -107,6 +107,9 @@ func (e *Engine) resolveFor(cfg *config.Config, d config.Destination, depth int,
 		if s == nil {
 			return plan{reject: 404}
 		}
+		if s.Mode == "call" {
+			return plan{local: "callscript", box: s.ID, toName: s.Name}
+		}
 		return e.runScript(cfg, s, depth, sc)
 	case "menu":
 		m := cfg.FindMenu(d.Target)
@@ -346,6 +349,9 @@ func (e *Engine) route(cfg *config.Config, caller *config.Extension, dialled str
 		p := e.resolve(cfg, config.Destination{Type: "menu", Target: m.ID}, 0)
 		p.direction = "internal"
 		return p
+	}
+	if s := cfg.FindScriptNumber(dialled); s != nil {
+		return plan{local: "callscript", box: s.ID, toName: s.Name, direction: "internal"}
 	}
 	if cfg.FindQueue(dialled) != nil {
 		p := e.resolve(cfg, config.Destination{Type: "queue", Target: dialled}, 0)

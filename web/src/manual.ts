@@ -665,14 +665,14 @@ The time zone is the one in Settings. When the clocks change, schedules follow t
 > Try a call on [Call flow](#flow) with a time and date (a holiday, a Saturday night) to see which side of the schedule it takes, before it matters.`,
   },
   {
-    id: 'scripts', title: 'Scripts (JavaScript and Lua)', route: '/scripts', keys: 'code javascript lua route logic api program',
-    body: `A script decides where a call goes when menus, schedules and groups are not enough: callers from one area to one office, VIP numbers straight to a person, a decision from your own data. Scripts are written in JavaScript or Lua on [Scripts](#/scripts).
+    id: 'scripts', title: 'Scripts (JavaScript and Lua)', route: '/scripts', keys: 'code javascript lua route logic api program call control ivr agi dialplan play say collect read record dial transfer hangup',
+    body: `A script decides where a call goes when menus, schedules and groups are not enough: callers from one area to one office, VIP numbers straight to a person, a decision from your own data. Or, set to **Runs the whole call**, it answers the call and runs it, as an Asterisk dialplan or AGI script would: prompts and speech, keys, recordings, ringing people, handing on (below). Scripts are written in JavaScript or Lua on [Scripts](#/scripts).
 
 ::figure scripts
 
 ## Safe by design
-- A script runs for at most 200 ms. If it fails or takes too long, the call goes to the script's **fallback**, so a mistake never loses a call.
-- It runs in a sandbox: it cannot place calls, reach the network or the disk. It only chooses.
+- A routing script runs for at most 200 ms. If it fails or takes too long, the call goes to the script's **fallback**, so a mistake never loses a call. (Call scripts have their own limits, below.)
+- It runs in a sandbox: it cannot reach the network or the disk. A routing script only chooses; a call script can do only the steps listed below, to its own call.
 - Emergency calls never run scripts.
 
 ## What a script sees
@@ -710,7 +710,39 @@ end
 \`\`\`
 
 ## Using a script
-Point an incoming route, a menu key or a schedule at the script, as at any destination. **Test** runs it with a call you describe, without placing one; the run list shows each real run with its decision, time taken and any error. The [call flow](#flow) runs scripts too when you try a call.`,
+Point an incoming route, a menu key or a schedule at the script, as at any destination. **Test** runs it with a call you describe, without placing one; the run list shows each real run with its decision, time taken and any error. The [call flow](#flow) runs scripts too when you try a call.
+
+## Scripts that run the whole call
+Choose **Runs the whole call**. The script then answers the call and goes from top to bottom, each step waiting until it is done:
+
+| Step | What it does |
+|---|---|
+| \`play(name)\` | plays a prompt from [Sounds](#/sounds) in the caller's language (\`goodbye\`, \`digit-5\`...), \`digits:1234\`, or a tone: \`beep\`, \`confirm\`, \`error\`, \`off\`, \`hold\`. A prompt not recorded yet is a beep. |
+| \`say(text)\` | speaks the words with the speech service in Settings, AI (a beep without one) |
+| \`collect({max, timeout, interDigit, end, say, prompt})\` | gathers keys: at most \`max\` (32), waiting \`timeout\` seconds for the first (5) and \`interDigit\` for each next (3), until \`end\` (\`#\`). \`say\` or \`prompt\` asks first. Returns the keys, \`""\` when none. |
+| \`record({box, seconds, beep})\` | records a message into an extension's mailbox, until # or the time; returns its seconds |
+| \`wait(seconds)\` | waits, returning a key pressed |
+| \`dial(destination, ringSeconds)\` | rings it with the caller hearing ringback. Answered: they talk and the script is done (\`true\`). Not answered: \`false\`, and the script carries on. |
+| \`transfer(destination)\` | hands the call on; the script is done |
+| \`hangup()\` | ends the call |
+| \`log(text)\` | writes to the run list |
+
+A destination is a number (an extension, ring group or queue here, else an outside number through the outbound routes; never an emergency number) or \`{type, target}\` as above. A key pressed during a sound stops it; \`play\` and \`say\` return it and the next \`collect\` starts with it. Returning a destination sends the call there.
+
+\`\`\`
+const k = collect({ max: 1, timeout: 5, say: "Press 1 for sales, 2 for support." })
+if (k === "1") return { type: "ringgroup", target: "600" }
+if (k === "2") {
+  if (dial("101", 20)) return
+  say("Nobody is free. Leave a message after the tone.")
+  record({ box: "101" })
+  hangup()
+}
+\`\`\`
+
+Lua has the same steps (\`collect{max = 1}\`). Give the script a **Number to dial it** to call it from an extension.
+
+Its limits keep the call safe: the script's own code may run at most a quarter of a second between two steps; a call takes at most 1,000 steps; and the whole script stops after its **Longest run** (10 minutes unless you say, 60 at most). When it fails, is stopped, or ends without hanging up or handing the call on, the call goes to its **fallback**; a caller who hangs up stops it at once. **Try it** runs the script with the keys you say the caller presses and lists each step, with no call placed.`,
   },
   {
     id: 'voicemail', title: 'Voicemail', route: '/voicemail', keys: 'messages mailbox greeting pin email transcript',
