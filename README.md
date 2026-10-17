@@ -13,11 +13,11 @@ paid modules. No licence meter.
 **One 37 MB file. 47 MB of memory carrying four live calls and eight phones.** Double-click it and a
 browser opens on a setup wizard; a few minutes later a phone rings.
 
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go](https://img.shields.io/badge/Go-1.26%2B-00ADD8.svg?logo=go&logoColor=white)](https://go.dev) [![Release](https://img.shields.io/badge/release-v0.1.5-success.svg)](#download) [![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)](#download) [![CI](https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml/badge.svg)](https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go](https://img.shields.io/badge/Go-1.26%2B-00ADD8.svg?logo=go&logoColor=white)](https://go.dev) [![Release](https://img.shields.io/badge/release-v0.1.6-success.svg)](#download) [![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)](#download) [![CI](https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml/badge.svg)](https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml)
 
-### Download v0.1.5
+### Download v0.1.6
 
-<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.5/bitvoice-v0.1.5-linux-amd64.tar.gz"><img src="docs/assets/buttons/download-linux.svg" alt="Download BitVoice for Linux, x86-64" width="240"></a>&nbsp;<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.5/bitvoice-v0.1.5-darwin-arm64.tar.gz"><img src="docs/assets/buttons/download-macos.svg" alt="Download BitVoice for macOS, Apple Silicon" width="240"></a>&nbsp;<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.5/bitvoice-v0.1.5-windows-amd64.zip"><img src="docs/assets/buttons/download-windows.svg" alt="Download BitVoice for Windows, x64" width="240"></a>
+<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.6/bitvoice-v0.1.6-linux-amd64.tar.gz"><img src="docs/assets/buttons/download-linux.svg" alt="Download BitVoice for Linux, x86-64" width="240"></a>&nbsp;<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.6/bitvoice-v0.1.6-darwin-arm64.tar.gz"><img src="docs/assets/buttons/download-macos.svg" alt="Download BitVoice for macOS, Apple Silicon" width="240"></a>&nbsp;<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.6/bitvoice-v0.1.6-windows-amd64.zip"><img src="docs/assets/buttons/download-windows.svg" alt="Download BitVoice for Windows, x64" width="240"></a>
 
 <a href="https://biodream-llc.github.io/bitvoice/manual/"><img src="docs/assets/buttons/manual.svg" alt="Read the BitVoice manual" width="240"></a>
 
@@ -306,17 +306,17 @@ irm https://raw.githubusercontent.com/BioDream-LLC/bitvoice/main/deploy/install.
 Run it again to upgrade; `--uninstall` removes it. The manual's Getting started chapter says what each puts
 where. CI runs both installers on Linux, macOS and Windows on every change.
 
-**Or download it: version 0.1.5**, one binary, nothing to install. Each archive holds the program, the licence, the notice
+**Or download it: version 0.1.6**, one binary, nothing to install. Each archive holds the program, the licence, the notice
 and the manual as a PDF.
 
 | Platform | Architecture | Download |
 |---|---|---|
-| **Windows** | x64 (Intel/AMD) | [`bitvoice-v0.1.5-windows-amd64.zip`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.5/bitvoice-v0.1.5-windows-amd64.zip) |
-| **Windows** | ARM64 | [`bitvoice-v0.1.5-windows-arm64.zip`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.5/bitvoice-v0.1.5-windows-arm64.zip) |
-| **macOS** | Apple Silicon | [`bitvoice-v0.1.5-darwin-arm64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.5/bitvoice-v0.1.5-darwin-arm64.tar.gz) |
-| **macOS** | Intel | [`bitvoice-v0.1.5-darwin-amd64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.5/bitvoice-v0.1.5-darwin-amd64.tar.gz) |
-| **Linux** | x86-64 | [`bitvoice-v0.1.5-linux-amd64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.5/bitvoice-v0.1.5-linux-amd64.tar.gz) |
-| **Linux** | ARM64 / aarch64 | [`bitvoice-v0.1.5-linux-arm64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.5/bitvoice-v0.1.5-linux-arm64.tar.gz) |
+| **Windows** | x64 (Intel/AMD) | [`bitvoice-v0.1.6-windows-amd64.zip`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.6/bitvoice-v0.1.6-windows-amd64.zip) |
+| **Windows** | ARM64 | [`bitvoice-v0.1.6-windows-arm64.zip`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.6/bitvoice-v0.1.6-windows-arm64.zip) |
+| **macOS** | Apple Silicon | [`bitvoice-v0.1.6-darwin-arm64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.6/bitvoice-v0.1.6-darwin-arm64.tar.gz) |
+| **macOS** | Intel | [`bitvoice-v0.1.6-darwin-amd64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.6/bitvoice-v0.1.6-darwin-amd64.tar.gz) |
+| **Linux** | x86-64 | [`bitvoice-v0.1.6-linux-amd64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.6/bitvoice-v0.1.6-linux-amd64.tar.gz) |
+| **Linux** | ARM64 / aarch64 | [`bitvoice-v0.1.6-linux-arm64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.6/bitvoice-v0.1.6-linux-arm64.tar.gz) |
 
 **On Windows, unzip and double-click `bitvoice.exe`.** A window opens and your browser opens on the setup
 wizard. Keep the window open while you use BitVoice: closing it stops it. Windows asks once whether BitVoice
@@ -326,7 +326,7 @@ the same way but has not been run on an ARM Windows machine. BitVoice does not i
 service yet.
 
 **Verify what you downloaded** against
-[`SHA256SUMS`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.5/SHA256SUMS):
+[`SHA256SUMS`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.6/SHA256SUMS):
 
 ```sh
 shasum -a 256 -c SHA256SUMS --ignore-missing
