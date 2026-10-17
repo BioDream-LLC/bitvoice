@@ -54,6 +54,8 @@ manual:
 #   make release VERSION=v0.1.3 SIGNING_KEY=path/to/release.key
 # DIST is where they go (dist by default); PLATFORMS may be narrowed, as the installer tests do.
 DIST ?= dist
+# Archive entries owned by root, in GNU tar's words or BSD tar's (macOS).
+TAR_ROOT := $(shell tar --version 2>/dev/null | grep -q GNU && echo '--owner=root:0 --group=root:0' || echo '--uid 0 --gid 0 --uname root --gname root')
 PLATFORMS ?= linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
 release:
 	@case "$(VERSION)" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "set VERSION, like VERSION=v0.1.3"; exit 1;; esac
@@ -68,7 +70,7 @@ release:
 			$(DIST)/.bvsign -key "$(SIGNING_KEY)" $(DIST)/$$name/bitvoice-dahdi > /dev/null; fi; \
 		cp LICENSE NOTICE docs/manual/bitvoice-manual.pdf $(DIST)/$$name/; \
 		if [ $$os = windows ]; then (cd $(DIST) && TZ=UTC zip -qrX $$name.zip $$name); \
-		else COPYFILE_DISABLE=1 tar -C $(DIST) --uid 0 --gid 0 --uname root --gname root -czf $(DIST)/$$name.tar.gz $$name; fi; \
+		else COPYFILE_DISABLE=1 tar -C $(DIST) $(TAR_ROOT) -czf $(DIST)/$$name.tar.gz $$name; fi; \
 		echo "built $$name"; done
 	rm $(DIST)/.bvsign
 	cd $(DIST) && shasum -a 256 $$(ls *.tar.gz *.zip 2>/dev/null) > SHA256SUMS
