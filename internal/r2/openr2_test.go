@@ -60,6 +60,11 @@ func (k *circuit) tick() {
 	next := time.Now()
 	for {
 		next = next.Add(20 * time.Millisecond)
+		if behind := time.Since(next); behind > 100*time.Millisecond {
+			// The machine stalled us: slip, as an E1 does, rather than send the missed frames in one burst
+			// (a burst is no line at all, and the far end's line clock would leap ahead).
+			next = time.Now()
+		}
 		for time.Now().Before(next) {
 			select {
 			case <-k.stopTick:
