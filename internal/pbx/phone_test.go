@@ -347,4 +347,15 @@ func (p *phone) drainRTP() {
 	}
 }
 
+// drainVideo discards queued video packets, as drainRTP does sound.
+func (p *phone) drainVideo() {
+	_ = p.video.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+	buf := make([]byte, 2048)
+	for {
+		if _, _, err := p.video.ReadFromUDP(buf); err != nil {
+			return
+		}
+	}
+}
+
 var _ = sync.Mutex{}

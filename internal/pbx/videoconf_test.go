@@ -305,7 +305,7 @@ func TestVideoRoomGrid(t *testing.T) {
 			if err != nil {
 				break
 			}
-			if k > 12 {
+			if k > 12 && (buf[1] < 200 || buf[1] > 207) { // RTP, not RTCP reports
 				n++
 				ssrcs[binary.BigEndian.Uint32(buf[8:])] = true
 				got[int(buf[1]&0x7f)] = true
@@ -340,6 +340,10 @@ func TestVideoRoomGrid(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	t.Logf("the grid's first picture after %v", time.Since(started))
+	// Until the grid is up the room relays each camera as it is; drop what came before it.
+	for _, p := range ps {
+		p.drainVideo()
+	}
 	for i, p := range ps {
 		n, ssrcs, got := recv(p, 6*time.Second)
 		if n < 30 || len(ssrcs) != 1 || len(got) != 1 || !got[pts[i]] {
