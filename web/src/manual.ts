@@ -1479,7 +1479,7 @@ In [Settings](#/settings), **Single sign-on**:
 > Two-step sign-in is then the provider's job: switch it on there.`,
   },
   {
-    id: 'compat', title: 'Asterisk compatibility (AMI and ARI)', keys: 'ami ari asterisk manager rest crm wallboard click to dial originate',
+    id: 'compat', title: 'Asterisk compatibility (AMI and ARI)', keys: 'ami ari asterisk manager rest crm wallboard click to dial originate stasis application playback record bridge confbridge queuepause parkedcalls mailboxcount filter userevent',
     body: `Tools written for Asterisk can control BitVoice: CRMs, wallboards, click-to-dial buttons, call recorders' controllers. Switch it on in [Settings](#/settings), **Asterisk compatibility**. Tools see calls as channels named like \`PJSIP/100-...\`, as on Asterisk.
 
 ::figure compat
@@ -1488,8 +1488,12 @@ In [Settings](#/settings), **Single sign-on**:
 The manager interface on TCP port 5038 (**AMI listens on**: this computer only by default). Supported:
 | Kind | Names |
 |---|---|
-| Actions | Login (plain or MD5 challenge), Ping, Events, CoreShowChannels, Status, PJSIPShowEndpoints, ExtensionState, QueueStatus, Originate, Redirect, Hangup, Logoff |
-| Events | Newchannel, Newstate, Hangup |
+| Actions | Login (plain or MD5 challenge), Ping, Events, Filter, ListCommands, CoreShowChannels, Status, CoreStatus, CoreSettings, PJSIPShowEndpoints, ExtensionState, ExtensionStateList, DeviceStateList, Getvar, Originate, Redirect, BlindTransfer, Hangup, Logoff |
+| Queues | QueueStatus, QueueSummary, QueuePause, QueueAdd and QueueRemove (they sign an agent in to, or out of, all of their queues), Agents |
+| Other | ParkedCalls; ConfbridgeListRooms, ConfbridgeList, ConfbridgeKick, ConfbridgeMute, ConfbridgeUnmute, ConfbridgeLock, ConfbridgeUnlock; MailboxCount, MailboxStatus; PauseMonitor, UnpauseMonitor; UserEvent; Reload (nothing to reload: changes apply at once) |
+| Events | Newchannel, Newstate, Hangup, DialBegin, DialEnd, Hold, Unhold, PeerStatus, ContactStatus, MessageWaiting, ConfbridgeJoin, ConfbridgeLeave, ConfbridgeEnd, UserEvent |
+
+**Filter** keeps only the events a regular expression matches (\`Event: Newchannel\`), or drops them with \`!\` first, as on Asterisk. There is no Asterisk command line: **Command** answers with an error.
 
 ## ARI
 At \`/ari/\`, with basic authentication or \`?api_key=user:secret\`:
@@ -1506,7 +1510,26 @@ At \`/ari/\`, with basic authentication or \`?api_key=user:secret\`:
 | \`POST /ari/bridges/{call}/addChannel?channel={id}\` | the external media channel joins a call: it hears both parties and both hear it; with \`role=listener\` nobody hears it (for live transcription) |
 | \`POST /ari/bridges/{call}/removeChannel?channel={id}\` | it leaves the call; the two parties talk directly again |
 
-An external media channel not added to a call within a minute is closed. Stasis dialplan applications are not offered: use [Scripts](#scripts) for call logic, and [Voice bots](#voicebots) to hand a whole call to a program.
+An external media channel not added to a call within a minute is closed.
+
+## ARI applications
+An ARI application (Asterisk's \`Stasis()\`) runs calls from your own program. Add it under **ARI applications** in Settings, Asterisk compatibility: a **name**, an optional **number** extensions dial, and a **fallback**. Then send calls to it like any destination: an incoming route, a menu key, a schedule.
+
+Your program connects to \`/ari/events?app=NAME\` (a WebSocket, with the login in \`?api_key=user:secret\`). Each call reaching the application is answered and arrives as **StasisStart**, with the channel; the program then runs it:
+| Request | What it does |
+|---|---|
+| \`POST /ari/channels/{id}/play?media=sound:goodbye,digits:42\` | plays prompts from Sounds (\`sound:\`), \`digits:\`, \`number:\`, \`tone:beep\` or a stored recording (\`recording:\`); **PlaybackStarted** and **PlaybackFinished** follow. \`DELETE /ari/playbacks/{id}\` stops it. |
+| \`POST /ari/channels/{id}/record?name=msg1&maxDurationSeconds=60&maxSilenceSeconds=5&beep=true&terminateOn=%23\` | records (wav) into the stored recordings; **RecordingStarted** and **RecordingFinished**. \`POST /ari/recordings/live/{name}/stop\` ends it, \`DELETE\` discards it. |
+| \`GET /ari/recordings/stored\`, \`.../{name}\`, \`.../{name}/file\`, \`DELETE .../{name}\` | the stored recordings |
+| \`POST /ari/channels/{id}/dtmf?dtmf=123\` | sends keys to the caller |
+| \`GET\`/\`POST /ari/channels/{id}/variable?variable=X&value=Y\` | the channel's variables |
+| \`POST /ari/bridges?bridgeId=room1\`, \`.../addChannel?channel=a,b\`, \`.../removeChannel\`, \`.../play\`, \`DELETE\` | mixing bridges: everyone in one hears everyone else |
+| \`POST /ari/channels/{id}/continue?extension=101\` | lets go of the call: to that extension, ring group or queue, else the fallback |
+| \`DELETE /ari/channels/{id}\` | hangs up |
+| \`POST /ari/channels?endpoint=PJSIP/101&app=NAME\` | rings 101; answered, it enters the application |
+| \`GET /ari/applications\` | the applications, whether a program is connected, and their channels |
+
+Keys pressed arrive as **ChannelDtmfReceived**; a caller hanging up as **StasisEnd**. When no program is connected the call goes to the fallback; when the program's last connection closes, its calls go there too after five seconds (time to reconnect). For call logic without a program of your own, use [Scripts](#scripts) that run the whole call; to hand the audio to a program, [Voice bots](#voicebots).
 
 ## Logins
 Each login has a **Username** and **Secret**. Logins are **read only** unless marked **Can change calls**. Keep AMI on this computer unless the tool runs elsewhere: AMI is plain, unencrypted TCP.`,

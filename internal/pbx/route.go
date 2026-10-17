@@ -117,6 +117,12 @@ func (e *Engine) resolveFor(cfg *config.Config, d config.Destination, depth int,
 			return plan{reject: 404}
 		}
 		return plan{local: "menu", box: m.ID, toName: m.Name}
+	case "ariapp":
+		a := cfg.FindARIApp(d.Target)
+		if a == nil {
+			return plan{reject: 404}
+		}
+		return plan{local: "ariapp", box: a.Name, toName: "ARI " + a.Name}
 	case "schedule":
 		s := cfg.FindSchedule(d.Target)
 		if s == nil {
@@ -352,6 +358,9 @@ func (e *Engine) route(cfg *config.Config, caller *config.Extension, dialled str
 	}
 	if s := cfg.FindScriptNumber(dialled); s != nil {
 		return plan{local: "callscript", box: s.ID, toName: s.Name, direction: "internal"}
+	}
+	if a := cfg.FindARIAppNumber(dialled); a != nil {
+		return plan{local: "ariapp", box: a.Name, toName: "ARI " + a.Name, direction: "internal"}
 	}
 	if cfg.FindQueue(dialled) != nil {
 		p := e.resolve(cfg, config.Destination{Type: "queue", Target: dialled}, 0)

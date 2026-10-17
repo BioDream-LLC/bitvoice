@@ -221,12 +221,14 @@ func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 			}
 		}}
 	// Asterisk compatibility: AMI on its own port, ARI under /ari.
-	ami := &compat.AMI{PBX: eng, Bus: bus, Log: log, Audit: srv.AuditSystem}
+	ami := &compat.AMI{PBX: eng, Bus: bus, Log: log, Audit: srv.AuditSystem, Started: time.Now()}
 	ami.Apply(cfg.System.Compat)
 	st.OnChange(func(c config.Config) { ami.Apply(c.System.Compat) })
 	defer ami.Close()
 	srv.AMIAddr = ami.Addr
-	srv.ARI = &compat.ARI{PBX: eng, Bus: bus, Audit: srv.AuditSystem, Started: time.Now()}
+	ari := &compat.ARI{PBX: eng, Bus: bus, Audit: srv.AuditSystem, Started: time.Now(), Recordings: filepath.Join(o.data, "ari-recordings")}
+	srv.ARI = ari
+	eng.Stasis = ari // calls sent to ARI applications
 	// The engine runs on the configuration with vault references resolved.
 	srv.WireEngine()
 	eng.HoldsAddress = srv.HoldsSharedAddress

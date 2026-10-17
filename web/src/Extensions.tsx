@@ -229,6 +229,8 @@ export function DestinationPicker({ label, value, onChange, exclude, required, n
   const { data: dialIns } = useDialInsQuery()
   const { data: toggles } = useTogglesQuery()
   const { data: streams } = useAudioStreamsQuery()
+  const { data: settings } = useSettingsQuery()
+  const apps = settings?.system.compat.apps ?? []
   const key = value ? `${value.type}:${value.target}` : ''
   return (
     <Field label={label} htmlFor={id} error={error}>
@@ -270,6 +272,11 @@ export function DestinationPicker({ label, value, onChange, exclude, required, n
         {!noSchedules && (
           <optgroup label="Scripts">
             {scripts?.items.map((s) => <option key={s.id} value={`script:${s.id}`}>{s.name} (script)</option>)}
+          </optgroup>
+        )}
+        {apps.length > 0 && !noSchedules && (
+          <optgroup label="ARI applications">
+            {apps.map((a) => <option key={a.name} value={`ariapp:${a.name}`}>{a.name} (ARI application{a.number ? `, ${a.number}` : ''})</option>)}
           </optgroup>
         )}
         {(receptionists?.items.length ?? 0) > 0 && !noSchedules && (
@@ -386,6 +393,7 @@ export function useDescribe() {
       case 'conference': return `Conference room ${t}`
       case 'directory': return 'Dial-by-name directory'
       case 'dialin': return 'Dial-in'
+      case 'ariapp': return `ARI application ${t}`
       case 'echo': return 'Echo test'
     }
     return 'Hang up'

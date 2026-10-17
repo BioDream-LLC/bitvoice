@@ -86,6 +86,8 @@ type Engine struct {
 	radio     *radio
 	// Mail stores voicemail; nil switches voicemail off.
 	Mail Mailbox
+	// Stasis is where calls sent to ARI applications go (set by the web server's ARI).
+	Stasis StasisHub
 	// Dialer keeps the outbound dialer's contacts; nil switches the dialer off.
 	Dialer DialerStore
 	// Music stores hold music tracks; nil plays the hold tone everywhere.

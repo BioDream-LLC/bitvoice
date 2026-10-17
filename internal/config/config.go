@@ -1301,11 +1301,15 @@ func (c *Config) DestinationExists(d Destination) bool {
 		return c.FindScript(d.Target) != nil
 	case "fax":
 		return c.FindFax(d.Target) != nil
+	case "ariapp":
+		return c.FindARIApp(d.Target) != nil
 	case "echo", "hangup":
 		return true
 	}
 	return false
 }
+
+var ariAppRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,40}$`)
 
 // FindScriptNumber returns the call script with a dialable number, or nil.
 func (c *Config) FindScriptNumber(number string) *Script {
@@ -2779,9 +2783,38 @@ func (c *Config) Validate() error {
 			if len(c.System.Core.PSAPs) == 0 {
 				p.add(field, "list the PSAPs on Core services before routing to the ESRP")
 			}
+		case "ariapp":
+			if c.FindARIApp(d.Target) == nil {
+				p.add(field, "no ARI application %s", d.Target)
+			}
 		case "echo", "hangup":
 		default:
 			p.add(field, "choose where calls go")
+		}
+	}
+	appNames := map[string]bool{}
+	for i := range c.System.Compat.Apps {
+		a := &c.System.Compat.Apps[i]
+		f := fmt.Sprintf("system.compat.apps[%d]", i)
+		a.Name = strings.TrimSpace(a.Name)
+		switch {
+		case !ariAppRe.MatchString(a.Name):
+			p.add(f+".name", "a name of letters, digits, - and _ (up to 40)")
+		case appNames[a.Name]:
+			p.add(f+".name", "another application has this name")
+		}
+		appNames[a.Name] = true
+		if a.Number = strings.TrimSpace(a.Number); a.Number != "" {
+			if !numberRe.MatchString(a.Number) {
+				p.add(f+".number", "numbers are 2 to 8 digits, or empty")
+			} else {
+				claim(f+".number", a.Number, "ARI application "+a.Name)
+			}
+		}
+		if a.Fallback.Type == "ariapp" {
+			p.add(f+".fallback", "the fallback must not be an ARI application: it is where calls go when one is not there")
+		} else {
+			checkDest(f+".fallback", &a.Fallback)
 		}
 	}
 	for i := range c.Extensions {
@@ -3304,6 +3337,38 @@ type Compat struct {
 	// ARI is served under /ari on the web interface's ports.
 	ARI   bool         `json:"ari"`
 	Users []CompatUser `json:"users"`
+	// Apps are ARI applications (Asterisk's Stasis apps): a call sent to one is handed to the program
+	// connected to /ari/events?app=NAME, which runs it over ARI.
+	Apps []ARIApp `json:"apps,omitempty"`
+}
+
+// ARIApp is an ARI application calls can be sent to. When no program is connected for it, or the
+// program lets go of a call without hanging up or sending it on, the call goes to Fallback.
+type ARIApp struct {
+	Name     string      `json:"name"`
+	Fallback Destination `json:"fallback"`
+	// Number lets extensions dial the application (optional), as Stasis() in a dialplan would.
+	Number string `json:"number,omitempty"`
+}
+
+// FindARIAppNumber returns the ARI application with a dialable number, or nil.
+func (c *Config) FindARIAppNumber(number string) *ARIApp {
+	for i := range c.System.Compat.Apps {
+		if a := &c.System.Compat.Apps[i]; a.Number != "" && a.Number == number {
+			return a
+		}
+	}
+	return nil
+}
+
+// FindARIApp returns the ARI application of a name, or nil.
+func (c *Config) FindARIApp(name string) *ARIApp {
+	for i := range c.System.Compat.Apps {
+		if c.System.Compat.Apps[i].Name == name {
+			return &c.System.Compat.Apps[i]
+		}
+	}
+	return nil
 }
 
 // CompatUser is an AMI or ARI login, as in manager.conf and ari.conf.

@@ -1,5 +1,6 @@
-import { Cable, KeyRound, Plus, Trash2 } from 'lucide-react'
+import { AppWindow, Cable, KeyRound, Plus, Trash2 } from 'lucide-react'
 import { useSystemQuery, type Settings } from './api'
+import { DestinationPicker } from './Extensions'
 import { Field, Toggle } from './ui'
 
 type Compat = Settings['system']['compat']
@@ -19,6 +20,8 @@ export function CompatSettings({ value, onChange, error, admin }: {
   const users = value.users ?? []
   const setUser = (i: number, v: Partial<Compat['users'][number]>) => onChange({ users: users.map((u, j) => (j === i ? { ...u, ...v } : u)) })
   const port = (value.amiListen || '127.0.0.1:5038').split(':').pop()
+  const apps = value.apps ?? []
+  const setApp = (i: number, v: Partial<NonNullable<Compat['apps']>[number]>) => onChange({ apps: apps.map((a, j) => (j === i ? { ...a, ...v } : a)) })
   return (
     <section className="card space-y-4 p-5 lg:col-span-2" aria-labelledby="compat-h">
       <h2 id="compat-h" className="flex items-center gap-2 font-semibold text-slate-100"><Cable size={17} className="text-orange-300" aria-hidden /> Asterisk compatibility</h2>
@@ -43,6 +46,34 @@ export function CompatSettings({ value, onChange, error, admin }: {
           )}
         </div>
       </div>
+      {(value.ari || apps.length > 0) && (
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="flex items-center gap-2 text-sm font-medium text-slate-200"><AppWindow size={15} className="text-sky-300" aria-hidden /> ARI applications</h3>
+            {admin && <button type="button" className="btn" onClick={() => onChange({ apps: [...apps, { name: '', number: '', fallback: { type: 'hangup', target: '' } }] })}><Plus size={14} aria-hidden /> Add application</button>}
+          </div>
+          <p className="mb-2 text-xs text-slate-500">
+            A call sent to an application (as Asterisk's <span className="font-mono">Stasis()</span>) is answered and handed to the program connected to
+            <span className="font-mono text-sky-300"> /ari/events?app=NAME</span>, which runs it: play, record, keys, bridges, hang up or continue. With no program connected, or once the program lets go, the call goes to the fallback.
+          </p>
+          {apps.length === 0 ? <p className="text-sm text-slate-500">No applications yet.</p> : (
+            <ul className="space-y-2">
+              {apps.map((a, i) => (
+                <li key={i} className="grid items-start gap-3 rounded-lg border border-slate-800 p-3 md:grid-cols-[1fr_0.6fr_1.4fr_auto]">
+                  <Field label="Application name" htmlFor={`an${i}`} error={error(`system.compat.apps[${i}].name`)}>
+                    <input id={`an${i}`} className="input font-mono" value={a.name} autoComplete="off" onChange={(e) => setApp(i, { name: e.target.value.trim() })} />
+                  </Field>
+                  <Field label="Number to dial it" htmlFor={`anum${i}`} error={error(`system.compat.apps[${i}].number`)} hint="Optional.">
+                    <input id={`anum${i}`} className="input font-mono" inputMode="numeric" value={a.number ?? ''} onChange={(e) => setApp(i, { number: e.target.value.trim() })} />
+                  </Field>
+                  <DestinationPicker label="Fallback" required value={a.fallback} onChange={(d) => d && setApp(i, { fallback: d })} error={error(`system.compat.apps[${i}].fallback`)} />
+                  {admin && <button type="button" className="btn mt-6 text-rose-300" aria-label={`Remove application ${a.name || i + 1}`} onClick={() => onChange({ apps: apps.filter((_, j) => j !== i) })}><Trash2 size={14} aria-hidden /></button>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       {(value.ami || value.ari || users.length > 0) && (
         <div>
           <div className="mb-2 flex items-center justify-between">

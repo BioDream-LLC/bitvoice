@@ -120,8 +120,13 @@ var scriptTones = map[string]media.Tone{"beep": media.ToneBeep, "confirm": media
 	"off": media.ToneOff, "hold": media.ToneHold}
 
 // sound finds what a name plays: a prompt (in the caller's language), "digits:123", or a tone.
-func (h *callHost) sound(name string) ([]int16, error) {
-	lang := promptLang(h.cfg, "")
+func (h *callHost) sound(name string) ([]int16, error) { return h.c.e.soundFor(h.cfg, name) }
+
+// soundFor finds what a sound name plays, for call scripts and ARI: a prompt from Sounds in the system's
+// language ("goodbye"), "digits:123" said digit by digit, or a tone (beep, confirm, error, off, hold).
+// A prompt not recorded yet is a beep.
+func (e *Engine) soundFor(cfg *config.Config, name string) ([]int16, error) {
+	lang := promptLang(cfg, "")
 	if t, ok := scriptTones[name]; ok {
 		return media.ToneSamples(t), nil
 	}
@@ -132,7 +137,7 @@ func (h *callHost) sound(name string) ([]int16, error) {
 				keys = append(keys, "digit-"+string(d))
 			}
 		}
-		if pcm, ok := h.c.e.promptSamples(h.cfg, lang, keys...); ok {
+		if pcm, ok := e.promptSamples(cfg, lang, keys...); ok {
 			return pcm, nil
 		}
 		return media.ToneSamples(media.ToneBeep), nil
@@ -140,7 +145,7 @@ func (h *callHost) sound(name string) ([]int16, error) {
 	if !slices.ContainsFunc(prompts.All, func(p prompts.Prompt) bool { return p.Key == name }) {
 		return nil, fmt.Errorf("there is no prompt or tone named %q (see Sounds)", name)
 	}
-	if pcm, ok := h.c.e.promptSamples(h.cfg, lang, name); ok {
+	if pcm, ok := e.promptSamples(cfg, lang, name); ok {
 		return pcm, nil
 	}
 	return media.ToneSamples(media.ToneBeep), nil // not recorded yet: a beep, as everywhere else

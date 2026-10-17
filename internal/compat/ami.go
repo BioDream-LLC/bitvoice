@@ -28,6 +28,8 @@ type AMI struct {
 	Log *slog.Logger
 	// Audit records each action that changes a call.
 	Audit func(user, action, detail string)
+	// Started is when BitVoice started (CoreStatus).
+	Started time.Time
 
 	mu    sync.Mutex
 	ln    net.Listener
@@ -148,6 +150,10 @@ type session struct {
 	challenge string
 	events    bool
 	fails     int
+
+	fmu     sync.Mutex
+	filters []amiFilter
+	rooms   map[string]map[string]pbx.ConferenceMember // for ConfbridgeJoin and Leave
 }
 
 // clean keeps a value on one line: AMI has no escaping, so a line break would start a new header.
@@ -335,7 +341,7 @@ func (s *session) handle(ctx context.Context, m amiMsg) bool {
 		}
 		reply("Message", "Extension Status", "Exten", ext, "Context", m.get("Context"), "Hint", "PJSIP/"+ext,
 			"Status", strconv.Itoa(st), "StatusText", txt)
-	case "queuestatus", "queuesummary":
+	case "queuestatus":
 		reply("EventList", "start", "Message", "Queue status will follow")
 		n := 0
 		for _, q := range p.Queues() {
@@ -421,12 +427,22 @@ func (s *session) handle(ctx context.Context, m amiMsg) bool {
 		}
 		reply("Message", "Originate successfully queued")
 	case "listcommands":
-		reply("Ping", "Check the server is alive", "Events", "Turn events on or off",
+		reply("Ping", "Check the server is alive", "Events", "Turn events on or off", "Filter", "Keep or drop events",
 			"CoreShowChannels", "List channels", "Status", "List channels", "PJSIPShowEndpoints", "List endpoints",
-			"ExtensionState", "Check an extension's state", "QueueStatus", "Show queues", "Hangup", "Hang up a channel",
-			"Redirect", "Transfer a channel", "Originate", "Place a call", "Logoff", "Log off")
+			"ExtensionState", "Check an extension's state", "ExtensionStateList", "List extension states", "DeviceStateList", "List device states",
+			"QueueStatus", "Show queues", "QueueSummary", "Summarize queues", "QueuePause", "Pause or unpause an agent",
+			"QueueAdd", "Sign an agent in", "QueueRemove", "Sign an agent out", "Agents", "List agents", "ParkedCalls", "List parked calls",
+			"ConfbridgeListRooms", "List conference rooms", "ConfbridgeList", "List a room's members", "ConfbridgeKick", "Remove a member",
+			"ConfbridgeMute", "Mute a member", "ConfbridgeUnmute", "Unmute a member", "ConfbridgeLock", "Lock a room", "ConfbridgeUnlock", "Unlock a room",
+			"MailboxCount", "Count a mailbox's messages", "MailboxStatus", "Say whether messages wait", "PauseMonitor", "Pause a call's recording",
+			"UnpauseMonitor", "Resume a call's recording", "Getvar", "Read a channel variable", "CoreStatus", "Show core status", "CoreSettings", "Show core settings",
+			"UserEvent", "Send an event to every client", "Reload", "Reload (nothing to do)",
+			"Hangup", "Hang up a channel", "Redirect", "Transfer a channel", "Originate", "Place a call", "Logoff", "Log off")
 	default:
-		fail("Invalid/unknown command: " + m.get("Action") + ". BitVoice supports Ping, Events, CoreShowChannels, Status, PJSIPShowEndpoints, ExtensionState, QueueStatus, Hangup, Redirect and Originate")
+		if s.more(action, m, id, reply, fail, write) {
+			return true
+		}
+		fail("Invalid/unknown command: " + m.get("Action") + ". ListCommands lists what BitVoice supports")
 	}
 	return true
 }
@@ -470,6 +486,15 @@ func queueParams(q pbx.QueueStatus, id string) []string {
 		"Completed", strconv.Itoa(q.Totals.Answered), "Abandoned", strconv.Itoa(q.Totals.Abandoned)}
 }
 
+// prefixed names another channel's fields as Asterisk does for the far side (DestChannel, DestUniqueid).
+func prefixed(p string, kv []string) []string {
+	out := make([]string, len(kv))
+	for i := 0; i < len(kv); i += 2 {
+		out[i], out[i+1] = p+kv[i], kv[i+1]
+	}
+	return out
+}
+
 func channelFields(ch Channel, c pbx.CallInfo) []string {
 	dur := int(time.Since(c.Start).Seconds())
 	return []string{"Channel", ch.Name, "ChannelState", strconv.Itoa(ch.State), "ChannelStateDesc", StateName(ch.State),
@@ -485,25 +510,55 @@ func (s *session) stream(ctx context.Context) {
 	sub := s.a.Bus.Subscribe()
 	defer s.a.Bus.Unsubscribe(sub)
 	tr := NewTracker(s.a.PBX.Calls())
+	peers := map[string]string{}
+	for _, e := range Endpoints(s.a.PBX) {
+		peers[e.Resource] = map[bool]string{true: "Reachable", false: "Unreachable"}[e.State == "online"]
+	}
+	held := map[string]bool{}
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case ev := <-sub.C:
+			if !s.events {
+				continue
+			}
 			c, ok := ev.Data.(pbx.CallInfo)
-			if !ok || !s.events {
+			if !ok {
+				s.moreEvents(ev.Data, ev.Type, peers)
 				continue
 			}
 			for _, ch := range tr.Update(c, ev.Type == "call.ended") {
 				f := channelFields(ch.Ch, c)
+				caller := channelFields(Channels(c)[0], c)
 				switch ch.Kind {
 				case "new":
-					s.send(append([]string{"Event", "Newchannel", "Privilege", "call,all"}, f...)...)
+					s.event(append([]string{"Event", "Newchannel", "Privilege", "call,all"}, f...)...)
+					if ch.Ch.Side == "callee" { // the caller's side starts dialling this one
+						s.event(append(append([]string{"Event", "DialBegin", "Privilege", "call,all"}, caller...), prefixed("Dest", f)...)...)
+						if ch.Ch.State == 6 { // seen first already answered
+							s.event(append(append(append([]string{"Event", "DialEnd", "Privilege", "call,all"}, caller...), prefixed("Dest", f)...), "DialStatus", "ANSWER")...)
+						}
+					}
 				case "state":
-					s.send(append([]string{"Event", "Newstate", "Privilege", "call,all"}, f...)...)
+					s.event(append([]string{"Event", "Newstate", "Privilege", "call,all"}, f...)...)
+					if ch.Ch.Side == "callee" && ch.Ch.State == 6 {
+						s.event(append(append(append([]string{"Event", "DialEnd", "Privilege", "call,all"}, caller...), prefixed("Dest", f)...), "DialStatus", "ANSWER")...)
+					}
 				case "gone":
-					s.send(append([]string{"Event", "Hangup", "Privilege", "call,all"}, append(f, "Cause", "16", "Cause-txt", "Normal Clearing")...)...)
+					if ch.Ch.Side == "callee" && ch.Ch.State != 6 {
+						s.event(append(append(append([]string{"Event", "DialEnd", "Privilege", "call,all"}, caller...), prefixed("Dest", f)...), "DialStatus", "NOANSWER")...)
+					}
+					s.event(append([]string{"Event", "Hangup", "Privilege", "call,all"}, append(f, "Cause", "16", "Cause-txt", "Normal Clearing")...)...)
 				}
+			}
+			// Hold and unhold, from the call's state.
+			if was, now := held[c.ID], c.State == "held"; was != now && ev.Type != "call.ended" {
+				held[c.ID] = now
+				s.event(append([]string{"Event", map[bool]string{true: "Hold", false: "Unhold"}[now], "Privilege", "call,all"}, channelFields(Channels(c)[0], c)...)...)
+			}
+			if ev.Type == "call.ended" {
+				delete(held, c.ID)
 			}
 		}
 	}

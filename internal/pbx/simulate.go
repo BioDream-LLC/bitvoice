@@ -122,6 +122,8 @@ func (s *sim) fromExtension(x *config.Extension, to string, res *SimResult) *Sim
 		d = &config.Destination{Type: "menu", Target: cfg.FindMenuNumber(to).ID}
 	case cfg.FindScriptNumber(to) != nil:
 		d = &config.Destination{Type: "script", Target: cfg.FindScriptNumber(to).ID}
+	case cfg.FindARIAppNumber(to) != nil:
+		d = &config.Destination{Type: "ariapp", Target: cfg.FindARIAppNumber(to).Name}
 	case cfg.FindQueue(to) != nil:
 		d = &config.Destination{Type: "queue", Target: to}
 	case cfg.FindRingGroup(to) != nil:
@@ -468,6 +470,15 @@ func (s *sim) walk(d config.Destination, depth int, path []string, direction, fr
 		}
 		st.Branches = append(st.Branches, SimBranch{When: "Fallback", Taken: !ok, Step: next(sc.Fallback)})
 		return st
+	case "ariapp":
+		app := cfg.FindARIApp(d.Target)
+		if app == nil {
+			return missing("ARI application")
+		}
+		st := &SimStep{Kind: "ariapp", Target: app.Name, Name: "ARI application " + app.Name, Status: "ok",
+			Says: "BitVoice answers and hands the call to the program connected for ARI application " + app.Name + ", which runs it. When no program is connected, or it lets go of the call, the call goes to the fallback."}
+		st.Branches = append(st.Branches, SimBranch{When: "Fallback", Taken: false, Step: next(app.Fallback)})
+		return st
 	case "voicemail":
 		x := cfg.FindExtension(d.Target)
 		if x == nil || !x.Voicemail.Enabled {
@@ -593,6 +604,8 @@ func (s *sim) nameOf(d config.Destination) string {
 		if r := c.FindReceptionist(d.Target); r != nil {
 			return "receptionist " + r.Name
 		}
+	case "ariapp":
+		return "ARI application " + d.Target
 	case "conference":
 		if r := c.FindConference(d.Target); r != nil {
 			return "conference room " + r.Name

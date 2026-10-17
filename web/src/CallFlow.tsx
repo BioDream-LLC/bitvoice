@@ -6,7 +6,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   useExtensionsQuery, useInboundRoutesQuery, useMenusQuery, useQueuesQuery, useRingGroupsQuery, useSchedulesQuery, useTogglesQuery, useAudioStreamsQuery,
-  useScriptsQuery, useTrunksQuery, useReceptionistsQuery, type Destination,
+  useScriptsQuery, useTrunksQuery, useReceptionistsQuery, useSettingsQuery, type Destination,
 } from './api'
 import { Empty, Page } from './ui'
 import { useIsAdmin } from './Editor'
@@ -15,7 +15,7 @@ import { FlowEdit, NewRoute, type FlowBox } from './FlowEdit'
 // Colours match the rest of the interface: each kind of thing has one colour.
 const colours: Record<string, [string, string]> = {
   route: ['#fbbf24', 'Incoming'], extension: ['#7dd3fc', 'Extension'], ringgroup: ['#c4b5fd', 'Ring group'],
-  queue: ['#fdba74', 'Queue'], menu: ['#7dd3fc', 'Menu'], schedule: ['#fcd34d', 'Schedule'], toggle: ['#a5b4fc', 'Day/night toggle'], audiosocket: ['#f0abfc', 'Voice bot'], script: ['#f0abfc', 'Script'], receptionist: ['#c4b5fd', 'AI receptionist'],
+  queue: ['#fdba74', 'Queue'], menu: ['#7dd3fc', 'Menu'], schedule: ['#fcd34d', 'Schedule'], toggle: ['#a5b4fc', 'Day/night toggle'], audiosocket: ['#f0abfc', 'Voice bot'], script: ['#f0abfc', 'Script'], ariapp: ['#7dd3fc', 'ARI application'], receptionist: ['#c4b5fd', 'AI receptionist'],
   voicemail: ['#c4b5fd', 'Voicemail'], fax: ['#a78bfa', 'Fax'], esrp: ['#fb7185', 'ESRP'], echo: ['#94a3b8', 'Echo test'], hangup: ['#fda4af', 'Hang up'],
 }
 const pages: Record<string, string> = {
@@ -36,6 +36,7 @@ export function CallFlow() {
   const { data: scripts } = useScriptsQuery()
   const { data: trunks } = useTrunksQuery()
   const { data: receptionists } = useReceptionistsQuery()
+  const { data: settings } = useSettingsQuery()
   const navigate = useNavigate()
   // A box opens its own editor: /extensions?open=101.
   const go = (data: unknown) => {
@@ -139,6 +140,12 @@ export function CallFlow() {
           if (r?.messageBox) next.push([{ type: 'voicemail', target: r.messageBox }, 'message'])
           break
         }
+        case 'ariapp': {
+          const a = settings?.system.compat.apps?.find((x) => x.name === d.target)
+          name = d.target
+          next.push([a?.fallback, 'no program / let go'])
+          break
+        }
         case 'voicemail': name = `of ${d.target}`; break
         case 'fax': name = `${d.target} (to PDF)`; break
         case 'esrp': name = 'PSAP by location'; break
@@ -157,7 +164,7 @@ export function CallFlow() {
       visit(r.destination, id, 1)
     })
     return { nodes, edges }
-  }, [routes, exts, groups, queues, menus, schedules, scripts, trunks, receptionists])
+  }, [routes, exts, groups, queues, menus, schedules, scripts, trunks, receptionists, settings])
 
   return (
     <Page icon={Workflow} title="Call flow" accent="from-amber-400 to-sky-400"

@@ -187,11 +187,12 @@ func TestAMI(t *testing.T) {
 	call.State, call.Legs = "answered", make([]pbx.LegInfo, 2)
 	bus.Publish("call.updated", call)
 	got := map[string]bool{}
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 4; i++ {
 		m := c.next()
-		got[m.get("Event")+" "+m.get("Channel")] = true
+		got[m.get("Event")+" "+m.get("Channel")+" "+m.get("DestChannel")+m.get("DialStatus")] = true
 	}
-	if !got["Newstate PJSIP/101-zzzz99991"] || !got["Newchannel PJSIP/100-zzzz99992"] {
+	if !got["Newstate PJSIP/101-zzzz99991 "] || !got["Newchannel PJSIP/100-zzzz99992 "] ||
+		!got["DialBegin PJSIP/101-zzzz99991 PJSIP/100-zzzz99992"] || !got["DialEnd PJSIP/101-zzzz99991 PJSIP/100-zzzz99992ANSWER"] {
 		t.Fatalf("answer events %v", got)
 	}
 	bus.Publish("call.ended", call)

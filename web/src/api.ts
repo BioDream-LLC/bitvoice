@@ -5,7 +5,7 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 export type Role = 'admin' | 'viewer' | 'extension'
 export interface Me { username: string; name: string; role: Role; setupComplete: boolean; mfa?: boolean }
 
-export interface Destination { type: 'extension' | 'ringgroup' | 'queue' | 'menu' | 'schedule' | 'toggle' | 'audiosocket' | 'script' | 'receptionist' | 'voicemail' | 'fax' | 'esrp' | 'conference' | 'directory' | 'dialin' | 'echo' | 'hangup'; target: string }
+export interface Destination { type: 'extension' | 'ringgroup' | 'queue' | 'menu' | 'schedule' | 'toggle' | 'audiosocket' | 'script' | 'receptionist' | 'voicemail' | 'fax' | 'esrp' | 'conference' | 'directory' | 'dialin' | 'ariapp' | 'echo' | 'hangup'; target: string }
 export interface Receptionist { id: string; name: string; greeting: string; knowledge: string; person: Destination; messageBox: string }
 
 export interface Extension {
@@ -268,7 +268,7 @@ export interface SystemSettings {
   metrics: Metrics
   costs: Costs
   sso: { enabled: boolean; label: string; issuer: string; clientId: string; clientSecret: string; redirectUrl: string; groupsClaim: string; adminGroups: string[]; viewerGroups: string[]; passwordSignIn: boolean }
-  compat: { ami: boolean; amiListen: string; ari: boolean; users: { username: string; secret: string; write: boolean }[] }
+  compat: { ami: boolean; amiListen: string; ari: boolean; users: { username: string; secret: string; write: boolean }[]; apps?: { name: string; number?: string; fallback: Destination }[] }
   archive: {
     target: '' | 's3' | 'azure'; recordings: boolean; voicemail: boolean
     s3: { region: string; bucket: string; prefix: string; accessKey: string; secretKey: string; endpoint: string }

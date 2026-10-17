@@ -1041,6 +1041,10 @@ func (c *Call) answerLocal(p plan) {
 		if c.answerHere(p.toName) {
 			go c.runCallScript(p.box)
 		}
+	case "ariapp":
+		if c.answerHere(p.toName) {
+			go c.runStasis(p.box, nil)
+		}
 	case "receptionist":
 		if c.answerHere(p.toName) {
 			go c.runReceptionist(p.box)

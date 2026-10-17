@@ -217,6 +217,17 @@ func (c *Call) collectMessages(box string) {
 }
 
 // MailboxChanged tells the mailbox's phones (message-waiting light) and screens that its messages changed.
+// MailboxCounts is a mailbox's new and old messages (AMI's MailboxCount); ok is false when there is
+// no such mailbox.
+func (e *Engine) MailboxCounts(box string) (fresh, old int, ok bool) {
+	x := e.Config().FindExtension(box)
+	if x == nil || !x.Voicemail.Enabled || e.Mail == nil {
+		return 0, 0, false
+	}
+	fresh, old = e.Mail.VoicemailCounts(box)
+	return fresh, old, true
+}
+
 func (e *Engine) MailboxChanged(box string) {
 	if e.Mail == nil {
 		return

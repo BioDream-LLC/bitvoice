@@ -637,3 +637,58 @@ test('a call script runs a call from the browser phone', async ({ page }) => {
   await expect(page.getByText('ended: the script hung up')).toBeVisible()
   await expect(page.getByText('play beep → wait 2 s → hang up')).toBeVisible()
 })
+
+// An ARI application (Asterisk's Stasis): a program in the page connects to /ari/events, the browser
+// phone dials the application's number, and the program answers it, plays to it and hangs it up.
+test('an ARI application runs a call from the browser phone', async ({ page }) => {
+  await signIn(page)
+  // ARI on, with a login that may change calls.
+  await page.evaluate(async () => {
+    const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
+    const s = await (await fetch('./api/settings')).json()
+    s.system.compat.ari = true
+    s.system.compat.users = [...(s.system.compat.users ?? []).filter((u: { username: string }) => u.username !== 'ivrapp'),
+      { username: 'ivrapp', secret: 'a long ivr app secret', write: true }]
+    await fetch('./api/settings', { method: 'PUT', headers: H, body: JSON.stringify(s) })
+  })
+  // The application, added on Settings.
+  await page.goto('/#/settings')
+  await page.getByRole('button', { name: 'Add application' }).click()
+  const row = page.getByRole('listitem').filter({ has: page.getByLabel('Application name') }).last()
+  await row.getByLabel('Application name').fill('e2eivr')
+  await row.getByLabel('Number to dial it').fill('852')
+  await row.getByLabel('Fallback').selectOption({ label: 'Echo test' })
+  await page.getByRole('button', { name: 'Save' }).first().click()
+  await expect(page.getByText('Settings saved')).toBeVisible()
+
+  // The program: on StasisStart it plays a beep; when that finishes it hangs up.
+  await page.evaluate(() => {
+    const w = window as unknown as { ari: string[] }
+    w.ari = []
+    const key = 'api_key=ivrapp:' + encodeURIComponent('a long ivr app secret')
+    const ws = new WebSocket(location.origin.replace('https', 'wss') + '/ari/events?app=e2eivr&' + key)
+    ws.onmessage = async (m) => {
+      const ev = JSON.parse(m.data)
+      if (!['StasisStart', 'PlaybackStarted', 'PlaybackFinished', 'StasisEnd'].includes(ev.type)) return
+      w.ari.push(ev.type)
+      const ch = ev.channel?.id ?? ev.playback?.target_uri?.replace('channel:', '')
+      if (ev.type === 'StasisStart') {
+        await fetch(`./ari/channels/${ch}/answer?${key}`, { method: 'POST' })
+        await fetch(`./ari/channels/${ch}/play?media=tone:beep,digits:42&${key}`, { method: 'POST' })
+      }
+      if (ev.type === 'PlaybackFinished') await fetch(`./ari/channels/${ch}?${key}`, { method: 'DELETE' })
+    }
+    return new Promise((ok) => { ws.onopen = ok })
+  })
+  await expect.poll(async () => page.evaluate(async () =>
+    (await (await fetch('./ari/applications/e2eivr?api_key=ivrapp:' + encodeURIComponent('a long ivr app secret'))).json()).connected)).toBe(true)
+
+  await page.getByRole('button', { name: 'Browser phone' }).click()
+  await page.getByRole('button', { name: /^Sign in as/ }).click()
+  await expect(page.getByText(/^Extension/).first()).toBeVisible()
+  for (const k of ['8', '5', '2']) await page.getByRole('group', { name: 'Keypad' }).getByRole('button', { name: k, exact: true }).click()
+  await page.getByRole('button', { name: 'Call', exact: true }).click()
+  await expect(page.getByText('the other party hung up')).toBeVisible({ timeout: 15000 })
+  await expect.poll(() => page.evaluate(() => (window as unknown as { ari: string[] }).ari.join(' ')))
+    .toBe('StasisStart PlaybackStarted PlaybackFinished StasisEnd')
+})

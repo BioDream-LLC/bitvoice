@@ -25,6 +25,13 @@ type ARI struct {
 
 	extOnce sync.Once
 	exts    *externals
+
+	// Recordings is where ARI recordings are kept (data/ari-recordings).
+	Recordings string
+	// Grace is how long an application's calls wait for its program to reconnect (5 s when zero).
+	Grace  time.Duration
+	stOnce sync.Once
+	stasis *stasis
 }
 
 type ariChannel struct {
@@ -125,6 +132,37 @@ func (a *ARI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		ariJSON(w, out)
+	case path == "channels" && r.Method == http.MethodPost && q.Get("app") != "":
+		// Originate into an application: ring the endpoint; answered, it enters the application.
+		ap, ok := p.(AppPBX)
+		ext := Extension(q.Get("endpoint"))
+		switch {
+		case !ok:
+			ariError(w, http.StatusNotImplemented, "applications are not available here")
+			return
+		case ext == "":
+			ariError(w, http.StatusBadRequest, "endpoint (PJSIP/100) is required")
+			return
+		case p.Config().FindARIApp(q.Get("app")) == nil:
+			ariError(w, http.StatusBadRequest, "no ARI application "+q.Get("app")+" (add it in Settings, Asterisk compatibility)")
+			return
+		}
+		ring := 30 * time.Second
+		if s, err := strconv.Atoi(q.Get("timeout")); err == nil && s > 0 {
+			ring = min(time.Duration(s)*time.Second, 5*time.Minute)
+		}
+		var args []string
+		if v := q.Get("appArgs"); v != "" {
+			args = strings.Split(v, ",")
+		}
+		id, err := ap.CallIntoApp(ext, q.Get("app"), args, q.Get("callerId"), ring)
+		if err != nil {
+			ariError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		a.audit(u, "ari.originate", ext+" into "+q.Get("app"))
+		ariJSON(w, ariChannel{ID: id, Name: "PJSIP/" + ext, State: "Down", Dialplan: ariDialplan{Context: "default", Exten: "s", Priority: 1, AppName: "Stasis", AppData: q.Get("app")},
+			CreationTime: time.Now().Format("2006-01-02T15:04:05.000-0700"), Language: "en"})
 	case path == "channels" && r.Method == http.MethodPost:
 		// Originate: endpoint is the extension to ring first, extension the number it then calls.
 		ext, num := Extension(q.Get("endpoint")), q.Get("extension")
@@ -161,6 +199,10 @@ func (a *ARI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 			ariError(w, http.StatusNotImplemented, "an external media channel takes GET and DELETE")
 		}
+	case len(parts) >= 2 && parts[0] == "channels" && a.appChannelRoute(w, r, u, parts):
+	case parts[0] == "bridges" && path != "bridges" && a.bridgeRoute(w, r, u, parts):
+	case path == "bridges" && r.Method == http.MethodPost && a.bridgeRoute(w, r, u, parts):
+	case (parts[0] == "playbacks" || parts[0] == "recordings" || parts[0] == "applications") && a.otherRoutes(w, r, u, parts):
 	case len(parts) == 3 && parts[0] == "bridges" && parts[2] == "addChannel" && r.Method == http.MethodPost:
 		a.addChannel(w, r, u, parts[1])
 	case len(parts) == 3 && parts[0] == "bridges" && parts[2] == "removeChannel" && r.Method == http.MethodPost:
@@ -219,7 +261,7 @@ func (a *ARI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					"bridge_class": "basic", "channels": []string{c.ID + "-1", c.ID + "-2"}})
 			}
 		}
-		ariJSON(w, out)
+		ariJSON(w, append(out, a.ariBridges()...))
 	case path == "events":
 		a.events(w, r)
 	default:
@@ -250,6 +292,17 @@ func (a *ARI) events(w http.ResponseWriter, r *http.Request) {
 	defer ws.Close()
 	sub := a.Bus.Subscribe()
 	defer a.Bus.Unsubscribe(sub)
+	// The applications named are this program's: calls sent to them come here.
+	conn := &appConn{out: make(chan []byte, 256)}
+	var apps []string
+	for _, x := range strings.Split(app, ",") {
+		if x = strings.TrimSpace(x); x != "" {
+			apps = append(apps, x)
+		}
+	}
+	if len(apps) > 0 {
+		defer a.connect(apps, conn)()
+	}
 	tr := NewTracker(a.PBX.Calls())
 	gone := make(chan struct{})
 	go func() { _ = ws.readLoop(); close(gone) }()
@@ -261,6 +314,10 @@ func (a *ARI) events(w http.ResponseWriter, r *http.Request) {
 			return
 		case <-ping.C:
 			if ws.writeFrame(9, nil) != nil {
+				return
+			}
+		case b := <-conn.out:
+			if ws.WriteText(b) != nil {
 				return
 			}
 		case ev := <-sub.C:
