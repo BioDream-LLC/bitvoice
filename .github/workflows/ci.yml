@@ -89,6 +89,81 @@ jobs:
       - name: go test
         run: go test -count=1 -timeout 25m ./...
 
+  install:
+    # The one-command installers, on each system, from a release built and signed here with a
+    # throwaway key: installed, running as a service, refusing a tampered program, then removed.
+    name: Installers (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: install.sh
+        if: runner.os != 'Windows'
+        run: |
+          set -eu
+          go run ./cmd/bvsign -new "$RUNNER_TEMP/k" > "$RUNNER_TEMP/k.pub"
+          case "$RUNNER_OS" in Linux) plat=linux/amd64 ;; macOS) plat=darwin/arm64 ;; esac
+          make release VERSION=v9.9.9 SIGNING_KEY="$RUNNER_TEMP/k" PLATFORMS=$plat DIST="$RUNNER_TEMP/rel"
+          export BITVOICE_FROM="$RUNNER_TEMP/rel" BITVOICE_RELEASE_KEY="$(cat "$RUNNER_TEMP/k.pub")" BITVOICE_REQUIRE_SIGNATURE=1
+          if [ "$RUNNER_OS" = Linux ]; then
+            sh deploy/install.sh
+            systemctl is-active bitvoice
+            curl -fsk https://127.0.0.1/api/health/live
+            journalctl -u bitvoice --no-pager | grep -q 'Setup code'
+            sh deploy/install.sh   # again: an upgrade in place
+            curl -fsk https://127.0.0.1/api/health/live
+            url=https://127.0.0.1
+          else
+            export BITVOICE_DATA="$RUNNER_TEMP/bvdata"
+            sh deploy/install.sh
+            curl -fsk https://127.0.0.1:8443/api/health/live
+          fi
+          # A program changed after signing is refused, even with a matching SHA256SUMS.
+          name=$(cd "$BITVOICE_FROM" && ls *.tar.gz | sed 's/\.tar\.gz$//')
+          mkdir "$RUNNER_TEMP/bad" && tar -xzf "$BITVOICE_FROM/$name.tar.gz" -C "$RUNNER_TEMP/bad"
+          printf x >> "$RUNNER_TEMP/bad/$name/bitvoice"
+          (cd "$RUNNER_TEMP/bad" && tar -czf "$name.tar.gz" "$name" && shasum -a 256 "$name.tar.gz" > SHA256SUMS)
+          if BITVOICE_FROM="$RUNNER_TEMP/bad" sh deploy/install.sh 2> err.txt; then echo "a tampered program was installed"; exit 1; fi
+          grep -q 'does not match' err.txt
+          sh deploy/install.sh --purge
+          if [ "$RUNNER_OS" = Linux ]; then
+            ! systemctl is-active bitvoice
+            [ ! -e /usr/local/bin/bitvoice ] && [ ! -e /var/lib/bitvoice ]
+          else
+            ! curl -fsk -m 3 https://127.0.0.1:8443/api/health/live
+          fi
+      - name: install.ps1
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $t = $env:RUNNER_TEMP
+          go run ./cmd/bvsign -new "$t\k" > "$t\k.pub"
+          $name = 'bitvoice-v9.9.9-windows-amd64'
+          New-Item -ItemType Directory "$t\rel\$name" | Out-Null
+          go build -trimpath -o "$t\rel\$name\bitvoice.exe" ./cmd/bitvoice
+          go run ./cmd/bvsign -key "$t\k" "$t\rel\$name\bitvoice.exe"
+          Copy-Item LICENSE, NOTICE "$t\rel\$name"
+          Compress-Archive "$t\rel\$name" "$t\rel\$name.zip"
+          "$((Get-FileHash "$t\rel\$name.zip").Hash.ToLower())  $name.zip" | Set-Content "$t\rel\SHA256SUMS"
+          $env:BITVOICE_FROM = "$t\rel"; $env:BITVOICE_RELEASE_KEY = (Get-Content "$t\k.pub").Trim(); $env:BITVOICE_REQUIRE_SIGNATURE = '1'
+          # As "irm ... | iex" runs it.
+          Get-Content deploy\install.ps1 -Raw | Invoke-Expression
+          if ((Invoke-RestMethod -SkipCertificateCheck https://127.0.0.1:8443/api/health/live).status -ne 'ok') { throw 'not running' }
+          if (-not (Get-ScheduledTask -TaskName BitVoice)) { throw 'no task' }
+          # Again: an upgrade in place.
+          & .\deploy\install.ps1
+          if ((Invoke-RestMethod -SkipCertificateCheck https://127.0.0.1:8443/api/health/live).status -ne 'ok') { throw 'not running after the upgrade' }
+          & .\deploy\install.ps1 -Purge
+          if (Test-Path "$env:ProgramFiles\BitVoice") { throw 'not removed' }
+          try { Invoke-RestMethod -SkipCertificateCheck -TimeoutSec 3 https://127.0.0.1:8443/api/health/live; throw 'still running' } catch { if ($_.Exception.Message -eq 'still running') { throw } }
+
   web:
     name: Web interface and browser tests
     runs-on: ubuntu-latest

@@ -290,7 +290,23 @@ calls in progress.
 
 ## Download
 
-**Version 0.1.4**: one binary, nothing to install. Each archive holds the program, the licence, the notice
+**Install in one command**, as a service that starts by itself (the download is checked against the
+release's SHA-256 sums and BioDream's release signature):
+
+```sh
+# Linux (systemd) and macOS
+curl -fsSL https://raw.githubusercontent.com/BioDream-LLC/bitvoice/main/deploy/install.sh | sh
+```
+
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/BioDream-LLC/bitvoice/main/deploy/install.ps1 | iex
+```
+
+Run it again to upgrade; `--uninstall` removes it. The manual's Getting started chapter says what each puts
+where. CI runs both installers on Linux, macOS and Windows on every change.
+
+**Or download it: version 0.1.5**, one binary, nothing to install. Each archive holds the program, the licence, the notice
 and the manual as a PDF.
 
 | Platform | Architecture | Download |

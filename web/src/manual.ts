@@ -48,6 +48,26 @@ Start BitVoice and open the address it prints (on a desktop it opens the browser
 
 Then make a test call: from any phone dial \`*43\`, the echo test. You hear yourself back, which proves sound works both ways.
 
+## Installing it in one command
+On a Linux server (Ubuntu, Debian, RHEL, Fedora, Alpine with systemd) or a Mac:
+
+\`\`\`
+curl -fsSL https://raw.githubusercontent.com/BioDream-LLC/bitvoice/main/deploy/install.sh | sh
+\`\`\`
+
+On Windows, in PowerShell:
+
+\`\`\`
+irm https://raw.githubusercontent.com/BioDream-LLC/bitvoice/main/deploy/install.ps1 | iex
+\`\`\`
+
+It downloads the latest release for the computer, checks it against the release's SHA-256 sums and BioDream's release signature (with OpenSSL 3, which current Linux, macOS and Git for Windows have), and installs it as a service that starts by itself:
+- **Linux:** \`/usr/local/bin/bitvoice\`, a \`bitvoice\` system user, data in \`/var/lib/bitvoice\`, the systemd service \`bitvoice\` with the web interface on port 443. When ufw or firewalld is on, it opens 443, SIP (5060, 5061) and the calls' audio ports (10000 to 20000 UDP). It prints the address to open and the setup code the wizard asks for from another computer.
+- **macOS:** \`~/Applications/BitVoice\`, started when you sign in, the web interface on port 8443.
+- **Windows:** as administrator, \`C:\\Program Files\\BitVoice\`, started with Windows, data in \`C:\\ProgramData\\BitVoice\`, and a firewall rule for private and domain networks; otherwise for you alone, started when you sign in.
+
+Run the same command again to upgrade (or use [Updates](#/updates)). \`sh -s -- --version v0.1.5\` (after the pipe) picks a release; \`--uninstall\` removes the program and service and keeps the data, \`--purge\` removes the data too. On Windows, save the script and run \`.\\install.ps1 -Version v0.1.5\`, \`-Uninstall\` or \`-Purge\`. For a server kept off the internet, copy the release's archive and \`SHA256SUMS\` into a folder and set \`BITVOICE_FROM\` to it.
+
 ## Where it runs
 BitVoice runs on Linux, macOS and Windows.
 

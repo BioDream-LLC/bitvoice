@@ -52,24 +52,26 @@ manual:
 # archives also carry bitvoice-dahdi, for telephony cards), with
 # SHA256SUMS. Archives name no person: files are owned by root, and zips keep no owner at all.
 #   make release VERSION=v0.1.3 SIGNING_KEY=path/to/release.key
-PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
+# DIST is where they go (dist by default); PLATFORMS may be narrowed, as the installer tests do.
+DIST ?= dist
+PLATFORMS ?= linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
 release:
 	@case "$(VERSION)" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "set VERSION, like VERSION=v0.1.3"; exit 1;; esac
 	@test -n "$(SIGNING_KEY)" || { echo "set SIGNING_KEY to the release private key"; exit 1; }
-	rm -rf dist && mkdir -p dist
-	$(GO) build -o dist/.bvsign ./cmd/bvsign
+	rm -rf $(DIST) && mkdir -p $(DIST)
+	$(GO) build -o $(DIST)/.bvsign ./cmd/bvsign
 	@set -e; for p in $(PLATFORMS); do os=$${p%/*}; arch=$${p#*/}; name=bitvoice-$(VERSION)-$$os-$$arch; \
-		exe=bitvoice; [ $$os = windows ] && exe=bitvoice.exe; mkdir -p dist/$$name; \
-		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch $(GO) build -trimpath -ldflags "-s -w -X main.version=$(VERSION) -X main.releaseKey=$(BIODREAM_KEY)" -o dist/$$name/$$exe $(PKG); \
-		dist/.bvsign -key "$(SIGNING_KEY)" dist/$$name/$$exe > /dev/null; \
-		if [ $$os = linux ]; then CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch $(GO) build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o dist/$$name/bitvoice-dahdi ./cmd/bitvoice-dahdi; \
-			dist/.bvsign -key "$(SIGNING_KEY)" dist/$$name/bitvoice-dahdi > /dev/null; fi; \
-		cp LICENSE NOTICE docs/manual/bitvoice-manual.pdf dist/$$name/; \
-		if [ $$os = windows ]; then (cd dist && TZ=UTC zip -qrX $$name.zip $$name); \
-		else COPYFILE_DISABLE=1 tar -C dist --uid 0 --gid 0 --uname root --gname root -czf dist/$$name.tar.gz $$name; fi; \
+		exe=bitvoice; [ $$os = windows ] && exe=bitvoice.exe; mkdir -p $(DIST)/$$name; \
+		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch $(GO) build -trimpath -ldflags "-s -w -X main.version=$(VERSION) -X main.releaseKey=$(BIODREAM_KEY)" -o $(DIST)/$$name/$$exe $(PKG); \
+		$(DIST)/.bvsign -key "$(SIGNING_KEY)" $(DIST)/$$name/$$exe > /dev/null; \
+		if [ $$os = linux ]; then CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch $(GO) build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o $(DIST)/$$name/bitvoice-dahdi ./cmd/bitvoice-dahdi; \
+			$(DIST)/.bvsign -key "$(SIGNING_KEY)" $(DIST)/$$name/bitvoice-dahdi > /dev/null; fi; \
+		cp LICENSE NOTICE docs/manual/bitvoice-manual.pdf $(DIST)/$$name/; \
+		if [ $$os = windows ]; then (cd $(DIST) && TZ=UTC zip -qrX $$name.zip $$name); \
+		else COPYFILE_DISABLE=1 tar -C $(DIST) --uid 0 --gid 0 --uname root --gname root -czf $(DIST)/$$name.tar.gz $$name; fi; \
 		echo "built $$name"; done
-	rm dist/.bvsign
-	cd dist && shasum -a 256 *.tar.gz *.zip > SHA256SUMS
+	rm $(DIST)/.bvsign
+	cd $(DIST) && shasum -a 256 $$(ls *.tar.gz *.zip 2>/dev/null) > SHA256SUMS
 
 # The bitvoice.org website, built from README.md, docs/manual and docs/assets (site/ holds its pages).
 # Needs cwebp for the screenshots (brew install webp; without it they stay PNG). Publish with
