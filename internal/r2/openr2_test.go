@@ -116,6 +116,23 @@ func (k *circuit) read() {
 	}
 }
 
+// bothIdle waits until each end has seen the other idle: OpenR2 says so, and our circuit has read
+// OpenR2's idle bits (it refuses to seize a line whose far end it has not yet heard).
+func bothIdle(t *testing.T, ch *Chan, o *r2oracle) {
+	t.Helper()
+	o.expect("IDLE")
+	for end := time.Now().Add(15 * time.Second); ; time.Sleep(5 * time.Millisecond) {
+		idle := make(chan bool, 1)
+		ch.do(func() { idle <- ch.call == csIdle && ch.line == lsIdle && ch.casRead == casIdle })
+		if <-idle {
+			return
+		}
+		if time.Now().After(end) {
+			t.Fatal("our circuit never heard OpenR2's line idle")
+		}
+	}
+}
+
 type r2oracle struct {
 	t     *testing.T
 	lines chan string
@@ -208,7 +225,7 @@ func TestAgainstOpenR2Forward(t *testing.T) {
 				return Events{Accepted: func(bool) { got <- "accepted" }, Answered: func() { got <- "answered" },
 					Disconnected: func(cs Cause) { got <- "disconnected " + cs.String(); (*c).Hangup() }, Ended: func() { got <- "ended" }}
 			})
-			o.expect("IDLE") // OpenR2 has seen the line idle: it is ready for the call
+			bothIdle(t, ch, o)
 			k.setForward(true)
 			if err := ch.Dial("3125550199", "5550100", CategoryNational, false); err != nil {
 				t.Fatal(err)
@@ -263,7 +280,7 @@ func TestAgainstOpenR2Busy(t *testing.T) {
 	ch, k, o := startOpenR2(t, "itu", []string{"busy"}, func(c **Chan) Events {
 		return Events{Disconnected: func(cs Cause) { got <- "disconnected " + cs.String(); (*c).Hangup() }, Ended: func() { got <- "ended" }}
 	})
-	o.expect("IDLE") // OpenR2 has seen the line idle: it is ready for the call
+	bothIdle(t, ch, o)
 	k.setForward(true)
 	if err := ch.Dial("", "5550100", CategoryNational, true); err != nil {
 		t.Fatal(err)

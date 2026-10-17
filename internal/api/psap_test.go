@@ -79,18 +79,25 @@ func TestEmergencyToCAD(t *testing.T) {
 	case <-time.After(15 * time.Second):
 		t.Fatal("no EIDO")
 	}
-	time.Sleep(200 * time.Millisecond)
 	admin := newClient(t, ts.URL)
 	if code, _ := admin.do("POST", "/api/setup/complete", setupBody()); code != 200 {
 		t.Fatal("setup")
 	}
-	code, out := admin.do("GET", "/api/psap/log", nil)
-	items, _ := out["items"].([]any)
-	var kinds []string
-	for _, it := range items {
-		kinds = append(kinds, it.(map[string]any)["logEventType"].(string))
+	// The EIDO's log event is written once its sending is done: poll for it.
+	var code int
+	var all string
+	for end := time.Now().Add(15 * time.Second); time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
+		var out map[string]any
+		code, out = admin.do("GET", "/api/psap/log", nil)
+		items, _ := out["items"].([]any)
+		var kinds []string
+		for _, it := range items {
+			kinds = append(kinds, it.(map[string]any)["logEventType"].(string))
+		}
+		if all = strings.Join(kinds, ","); strings.Contains(all, "EidoLogEvent") {
+			break
+		}
 	}
-	all := strings.Join(kinds, ",")
 	if code != 200 || !strings.Contains(all, "CallStateChangeLogEvent") || !strings.Contains(all, "EidoLogEvent") {
 		t.Fatalf("log %d %s", code, all)
 	}

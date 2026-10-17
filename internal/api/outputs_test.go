@@ -126,9 +126,18 @@ func TestSNMPAndCDROutputs(t *testing.T) {
 	if code, out := admin.do("PUT", "/api/settings", cfg2); code != 200 {
 		t.Fatalf("tcp syslog %v", out)
 	}
+	// The output connects once the settings are in: publish until it has (a slow machine takes longer).
+	stop := make(chan struct{})
+	defer close(stop)
 	go func() {
-		time.Sleep(100 * time.Millisecond)
-		s.Bus.Publish("call.logged", store.CDR{ID: "c-2", Start: time.Now(), End: time.Now(), Direction: "inbound", Disposition: "busy"})
+		for {
+			select {
+			case <-stop:
+				return
+			case <-time.After(100 * time.Millisecond):
+			}
+			s.Bus.Publish("call.logged", store.CDR{ID: "c-2", Start: time.Now(), End: time.Now(), Direction: "inbound", Disposition: "busy"})
+		}
 	}()
 	c, err := tcp.Accept()
 	if err != nil {

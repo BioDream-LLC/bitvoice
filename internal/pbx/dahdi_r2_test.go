@@ -39,7 +39,7 @@ func TestTelephonyCardR2(t *testing.T) {
 	t.Cleanup(br.Close)
 	caller := registered(t, e, "100")[0]
 	callee := registered(t, e, "101")[0]
-	time.Sleep(300 * time.Millisecond)
+	waitFor(t, "the R2 circuits are not idle", func() bool { return br.Status()["1"] == "idle" && br.Status()["2"] == "idle" })
 	done := make(chan *dialog, 1)
 	go func() { d, _ := caller.dial("95550100"); done <- d }()
 	ring := callee.waitRing(15 * time.Second)

@@ -11,6 +11,7 @@ import (
 
 	"github.com/biodream-llc/bitvoice/internal/config"
 	"github.com/biodream-llc/bitvoice/internal/events"
+	"github.com/biodream-llc/bitvoice/internal/media"
 	"github.com/biodream-llc/bitvoice/internal/pbx"
 	"github.com/biodream-llc/bitvoice/internal/sdp"
 	"github.com/biodream-llc/bitvoice/internal/store"
@@ -205,15 +206,17 @@ func TestCallBetweenTwoPorts(t *testing.T) {
 		t.Fatal("CRCX without our SDP")
 	}
 	// Audio from port 1 reaches port 2.
-	time.Sleep(300 * time.Millisecond)
-	a.mu.Lock()
-	l1 := a.gateways["gw1.test"].lines["aaln/1"]
-	a.mu.Unlock()
-	l1.mu.Lock()
-	ep1 := l1.rtp
-	l1.mu.Unlock()
-	if ep1 == nil {
-		t.Fatal("port 1 has no audio endpoint")
+	var ep1 *media.Endpoint
+	for end := time.Now().Add(15 * time.Second); ep1 == nil; time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(end) {
+			t.Fatal("port 1 has no audio endpoint")
+		}
+		a.mu.Lock()
+		l1 := a.gateways["gw1.test"].lines["aaln/1"]
+		a.mu.Unlock()
+		l1.mu.Lock()
+		ep1 = l1.rtp
+		l1.mu.Unlock()
 	}
 	pkt := make([]byte, 172)
 	pkt[0], pkt[1] = 0x80, 0

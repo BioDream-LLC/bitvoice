@@ -140,21 +140,29 @@ func TestVideoRoomFollowsTheSpeaker(t *testing.T) {
 	}
 	// 102 speaks: everyone sees 102, and 102 sees 100.
 	speak(ds[2], 5)
-	time.Sleep(400 * time.Millisecond)
-	got = look()
-	if got[0]['C'] == 0 || got[1]['C'] == 0 || got[2]['A'] == 0 || got[2]['C'] != 0 {
-		t.Fatalf("after 102 spoke: %v", got)
+	// The switch is made on 200 ms ticks; a slow machine may take a few more to make it.
+	for until := time.Now().Add(6 * time.Second); ; {
+		got = look()
+		if got[0]['C'] != 0 && got[1]['C'] != 0 && got[2]['A'] != 0 && got[2]['C'] == 0 {
+			break
+		}
+		if time.Now().After(until) {
+			t.Fatalf("after 102 spoke: %v", got)
+		}
 	}
 	if v := e.Conferences(); len(v) != 1 || v[0].Video != "talker" || v[0].Showing == "" {
 		t.Fatalf("view %+v", v)
 	}
 	// 102 leaves: the picture goes back to the one before.
 	ps[2].send(ds[2].request(sip.BYE))
-	time.Sleep(300 * time.Millisecond)
 	vs = vs[:2]
-	got = look()
-	if got[1]['A'] == 0 {
-		t.Fatalf("after 102 left: %v", got)
+	for until := time.Now().Add(6 * time.Second); ; {
+		if got = look(); got[1]['A'] != 0 {
+			break
+		}
+		if time.Now().After(until) {
+			t.Fatalf("after 102 left: %v", got)
+		}
 	}
 	// A phone without H.264 joins with sound only.
 	c := registered(t, e, "102")[0]

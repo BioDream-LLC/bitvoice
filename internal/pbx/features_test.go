@@ -118,9 +118,23 @@ func TestBlindTransfer(t *testing.T) {
 	a, b, c := ps[0], ps[1], ps[2]
 	ad, bd := answeredCall(t, a, b, "101")
 	var sa, sb uint16 = 1, 1
-	ad.speak(10, &sa, 0) // what was said before the transfer is kept for the briefing
-	bd.speak(10, &sb, 0)
-	time.Sleep(100 * time.Millisecond)
+	// What was said before the transfer is kept for the briefing, from the moment the call is bridged:
+	// speak until both sides' audio is kept (a slow machine bridges later).
+	waitFor(t, "no audio kept for the briefing", func() bool {
+		ad.speak(5, &sa, 0)
+		bd.speak(5, &sb, 0)
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		for _, c := range e.calls {
+			c.mu.Lock()
+			r := c.briefing
+			c.mu.Unlock()
+			if r != nil && len(r.caller.Samples()) > 0 && len(r.callee.Samples()) > 0 {
+				return true
+			}
+		}
+		return false
+	})
 
 	// 101 transfers 100 to 102.
 	refer := bd.request(sip.REFER)

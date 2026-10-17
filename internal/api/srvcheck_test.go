@@ -46,7 +46,12 @@ func TestSRVCheck(t *testing.T) {
 	defer cancel()
 	go a.Run(ctx, func() cluster.State { return cluster.State{} })
 	go b.Run(ctx, func() cluster.State { return cluster.State{} })
-	time.Sleep(300 * time.Millisecond)
+	// Each server announces itself on its first beat; wait until a has heard b.
+	for end := time.Now().Add(15 * time.Second); len(a.Nodes()) < 2; time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(end) {
+			t.Fatalf("server a sees %d servers", len(a.Nodes()))
+		}
+	}
 	s.Cluster = a
 	_, rev := s.Store.Config()
 	s.Store.Update("t", "name", rev, func(c *config.Config) error { c.System.Cluster.Name = "sip.example.com"; return nil })
