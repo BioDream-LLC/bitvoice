@@ -187,7 +187,7 @@ Where something has only been tested against stand-ins rather than real equipmen
 <table width="100%">
 <thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/migration.svg" width="168" height="40" alt="Moving in"></th><th align="left" valign="middle">Bring your old system with you</th></tr></thead>
 <tbody>
-<tr><td colspan="2">Import from <b>FreePBX</b> and <b>Asterisk</b> (pjsip.conf, sip.conf), <b>3CX</b>, <b>Cisco Unified CM</b>, <b>Avaya IP Office and Communication Manager</b> and <b>Mitel MiVoice Business</b></td></tr>
+<tr><td colspan="2">Import from <b>FreePBX</b> (a whole Backup &amp; Restore backup, SIP passwords, trunks, routes, groups and queues included) and <b>Asterisk</b> (pjsip.conf, sip.conf), <b>3CX</b>, <b>Cisco Unified CM</b>, <b>Avaya IP Office and Communication Manager</b> and <b>Mitel MiVoice Business</b></td></tr>
 <tr><td colspan="2">Every import shows exactly what would change first, and becomes a revision you can undo</td></tr>
 <tr><td colspan="2"><b>Asterisk AMI and ARI</b> compatibility, so tools written for Asterisk keep working</td></tr>
 </tbody></table>
@@ -446,8 +446,11 @@ codecs, plus GopherTrunk's IMBE decoder.
 <summary><b>Can I move from FreePBX, Asterisk, 3CX, Cisco, Avaya or Mitel?</b></summary>
 
 Yes. Upload the exported files on **Import**; BitVoice shows exactly what would change before anything is
-applied, and the import is a revision you can undo. Tools that talk to Asterisk's AMI or ARI can control
-BitVoice too.
+applied, and the import is a revision you can undo. From FreePBX, drop a whole **Backup & Restore** backup
+(.tar.gz, FreePBX 13 to 17): extensions with their SIP passwords and voicemail PINs, PJSIP and chan_sip trunks,
+outbound and incoming routes, ring groups and queues come over in one step, and the preview lists what cannot
+(IVRs, time conditions). The step-by-step move is in the manual's Import chapter. Tools that talk to Asterisk's
+AMI or ARI can control BitVoice too.
 
 </details>
 

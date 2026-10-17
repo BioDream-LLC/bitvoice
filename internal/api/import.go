@@ -86,6 +86,11 @@ func (s *Server) importRoutes() {
 				exists["group:"+g.Number] = true
 			}
 		}
+		for _, q := range res.Queues {
+			if taken(q.Number) {
+				exists["queue:"+q.Number] = true
+			}
+		}
 		for _, t := range res.Trunks {
 			for _, have := range cfg.Trunks {
 				if have.Name == t.Name || have.Host == t.Host && have.Username == t.Username {
@@ -117,6 +122,7 @@ func (s *Server) importRoutes() {
 			Extensions     []config.Extension     `json:"extensions"`
 			Trunks         []config.Trunk         `json:"trunks"`
 			RingGroups     []config.RingGroup     `json:"ringGroups"`
+			Queues         []config.Queue         `json:"queues"`
 			InboundRoutes  []config.InboundRoute  `json:"inboundRoutes"`
 			OutboundRoutes []config.OutboundRoute `json:"outboundRoutes"`
 		}
@@ -126,8 +132,8 @@ func (s *Server) importRoutes() {
 		}
 		added, skipped := 0, 0
 		var notes []string
-		what := fmt.Sprintf("Imported %d extensions, %d trunks, %d groups and %d routes", len(in.Extensions), len(in.Trunks), len(in.RingGroups),
-			len(in.InboundRoutes)+len(in.OutboundRoutes))
+		what := fmt.Sprintf("Imported %d extensions, %d trunks, %d groups, %d queues and %d routes", len(in.Extensions), len(in.Trunks), len(in.RingGroups),
+			len(in.Queues), len(in.InboundRoutes)+len(in.OutboundRoutes))
 		_, _, err := s.Store.Update(u.Username, what, 0, func(c *config.Config) error {
 			added, skipped, notes = 0, 0, nil
 			taken := func(n string) bool {
@@ -156,6 +162,42 @@ func (s *Server) importRoutes() {
 				c.Trunks = append(c.Trunks, t)
 				added++
 			}
+			// Groups and queues go in first, their overflows after, as each may overflow to the other.
+			type overflow struct {
+				what, number string
+				d            *config.Destination
+				set          func(*config.Destination)
+			}
+			var overflows []overflow
+			for _, q := range in.Queues {
+				if taken(q.Number) {
+					skipped++
+					continue
+				}
+				var as []string
+				for _, a := range q.Agents {
+					if c.FindExtension(a) != nil {
+						as = append(as, a)
+					} else {
+						notes = append(notes, fmt.Sprintf("queue %s: %s is not an extension here, left out", q.Number, a))
+						delete(q.Penalties, a)
+					}
+				}
+				if len(as) == 0 {
+					notes = append(notes, fmt.Sprintf("queue %s has no agents here, not added", q.Number))
+					skipped++
+					continue
+				}
+				q.Agents, q.ID = as, ""
+				to := q.Timeout
+				q.Timeout = nil
+				c.Queues = append(c.Queues, q)
+				if to != nil {
+					n := q.Number
+					overflows = append(overflows, overflow{"queue", n, to, func(d *config.Destination) { c.FindQueue(n).Timeout = d }})
+				}
+				added++
+			}
 			for _, g := range in.RingGroups {
 				if taken(g.Number) {
 					skipped++
@@ -182,16 +224,21 @@ func (s *Server) importRoutes() {
 				if g.RingSeconds == 0 {
 					g.RingSeconds = 20
 				}
-				if g.NoAnswer != nil {
-					if d, ok := destinationFor(c, g.NoAnswer.Target); ok {
-						g.NoAnswer = &d
-					} else {
-						notes = append(notes, fmt.Sprintf("group %s: its overflow %s is not here; set its no-answer destination by hand", g.Number, g.NoAnswer.Target))
-						g.NoAnswer = nil
-					}
-				}
+				to := g.NoAnswer
+				g.NoAnswer = nil
 				c.RingGroups = append(c.RingGroups, g)
+				if to != nil {
+					n := g.Number
+					overflows = append(overflows, overflow{"group", n, to, func(d *config.Destination) { c.FindRingGroup(n).NoAnswer = d }})
+				}
 				added++
+			}
+			for _, o := range overflows {
+				if d, ok := importedDestination(c, *o.d); ok {
+					o.set(&d)
+				} else {
+					notes = append(notes, fmt.Sprintf("%s %s: its overflow %s is not here; set it by hand", o.what, o.number, o.d.Target))
+				}
 			}
 			for _, o := range in.OutboundRoutes {
 				dup := false
@@ -224,7 +271,7 @@ func (s *Server) importRoutes() {
 				for _, have := range c.InboundRoutes {
 					dup = dup || have.DID == ir.DID
 				}
-				d, ok := destinationFor(c, ir.Destination.Target)
+				d, ok := importedDestination(c, ir.Destination)
 				if dup || !ok {
 					if !ok {
 						notes = append(notes, fmt.Sprintf("calls to %s go to %s, which is not here: not added", ir.DID, ir.Destination.Target))
@@ -248,6 +295,22 @@ func (s *Server) importRoutes() {
 		}
 		writeJSON(w, 200, map[string]any{"added": added, "skipped": skipped, "notes": notes})
 	})
+}
+
+// importedDestination is an imported destination as it stands here: a number is found among the
+// extensions, groups and queues (whatever type the other system gave it), voicemail needs its
+// extension, and hanging up needs nothing.
+func importedDestination(c *config.Config, d config.Destination) (config.Destination, bool) {
+	switch d.Type {
+	case "hangup":
+		return config.Destination{Type: "hangup"}, true
+	case "voicemail":
+		if x := c.FindExtension(d.Target); x != nil && x.Voicemail.Enabled {
+			return config.Destination{Type: "voicemail", Target: d.Target}, true
+		}
+		return d, false
+	}
+	return destinationFor(c, d.Target)
 }
 
 // destinationFor is where a number goes here: an extension, a ring group or a queue.

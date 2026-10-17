@@ -98,6 +98,14 @@ func unpack(f File) ([]File, error) {
 func ParseFiles(files []File) (Result, error) {
 	var all []File
 	for _, f := range files {
+		if isFreePBXBackup(f) {
+			// A whole FreePBX backup stands alone: everything is in it.
+			r, err := parseFreePBX(f)
+			if err == nil && len(files) > 1 {
+				r.Warnings = append(r.Warnings, "only the FreePBX backup was read; import the other files on their own")
+			}
+			return r, err
+		}
 		fs, err := unpack(f)
 		if err != nil {
 			return Result{}, err

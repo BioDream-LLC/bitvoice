@@ -911,3 +911,33 @@ test('inbox: a WhatsApp template after 24 hours', async ({ page }) => {
     graph.close()
   }
 })
+
+// A whole FreePBX backup (Admin > Backup & Restore, as FreePBX 17 writes it): read in the browser,
+// what cannot come over is said, and everything new is added in one go.
+test('import a FreePBX backup', async ({ page }) => {
+  await signIn(page)
+  const before = await page.evaluate(async () => (await (await fetch('./api/queues')).json()).items as { number: string }[])
+  await page.goto('/#/import')
+  await page.getByLabel('Files to import').setInputFiles(
+    new URL('../../internal/importer/testdata/20261001-100000-1790000000-17.0.19-1234567.tar.gz', import.meta.url).pathname)
+  await expect(page.getByText('FreePBX backup (FreePBX 17.0.19)')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Queues' })).toBeVisible()
+  await expect(page.getByLabel('Import queue 400')).toBeAttached()
+  await expect(page.getByText('round-robin, 15 s each, 10 s wrap-up')).toBeVisible()
+  await expect(page.getByText(/102 Sam Lee \(penalty 3\)/)).toBeVisible()
+  await expect(page.getByText(/goes to ivr-1,s,1, which BitVoice does not bring over/)).toBeVisible()
+  await expect(page.getByText(/also rings outside number 3125559999/)).toBeVisible()
+  await expect(page.getByLabel('Import trunk Carrier')).toBeAttached()
+  await expect(page.getByText('any number')).toBeVisible()
+  await expect(page.getByText('hang up')).toBeVisible()
+  await page.getByRole('button', { name: /^Add \d+ items?$/ }).click()
+  await expect(page.getByText(/^Imported \d+/)).toBeVisible()
+  const after = await page.evaluate(async () => (await (await fetch('./api/queues')).json()).items as { number: string; name: string; strategy: string }[])
+  if (!before.some((q) => q.number === '400')) {
+    const q = after.find((q) => q.number === '400')
+    expect(q?.name).toBe('Support')
+    expect(q?.strategy).toBe('round-robin')
+  }
+  await page.goto('/#/trunks')
+  await expect(page.getByRole('cell', { name: 'Carrier', exact: true })).toBeVisible()
+})

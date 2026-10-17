@@ -1751,13 +1751,34 @@ Every ten minutes BitVoice copies new recordings and messages that are not in th
 Deleting something here (by retention or by hand) does not delete the archive's copy: set the bucket's or container's own lifecycle rules for how long the archive keeps things.`,
   },
   {
-    id: 'import', title: 'Import', route: '/import', keys: 'import migrate freepbx asterisk 3cx cisco cucm avaya ip office mitel move from replace hunt group hunt pilot line group ring group route pattern bat tar',
+    id: 'import', title: 'Import', route: '/import', keys: 'import migrate migration backup restore mysqldump freepbx asterisk 3cx cisco cucm avaya ip office mitel move from replace hunt group hunt pilot line group ring group route pattern bat tar',
     body: `Brings extensions, ring groups, queues and trunks over from FreePBX, Asterisk or 3CX; and people, hunt and ring groups, SIP trunks, incoming numbers and dial patterns from Cisco, Avaya and Mitel. Upload the exported files, several at once (a .zip or .tar of them works too); BitVoice shows exactly what would change before anything is applied, and the import becomes a revision you can undo on [Changes](#/changes).
 
 ::figure import
 
+## Moving from FreePBX
+The best file is a FreePBX backup: it holds everything, SIP passwords included.
+1. In FreePBX: **Admin → Backup & Restore → Add Backup**. Tick at least **Core**, **Ring Groups**, **Queues** and **Voicemail** (all modules is fine), save, and **Run**.
+2. Download the backup from its row (the file is named like \`20261001-100000-1790000000-17.0.19-1234567.tar.gz\`).
+3. Install BitVoice on the new server and finish the setup with one extension that FreePBX does not use (say 199) and no phone line: the import brings the lines.
+4. On [Import](#/import), drop the .tar.gz as it is. Read the preview: the warnings list everything that cannot come over.
+5. Choose **Add**. It is one revision on [Changes](#/changes): undo it there if anything looks wrong, and import again.
+6. Move the phones: point each at BitVoice (or provision them from [Phones](#/phones)), with the same extension number and SIP password they had.
+7. Test calls in and out, then move the carrier's registration (or the number porting) last.
+
+What comes over:
+- **Extensions:** the number, name, outbound caller ID, ring time and SIP password (BitVoice makes a new one when FreePBX's is shorter than 12 characters: re-enter it in that phone). Voicemail with its PIN and email address (and whether messages are sent attached).
+- **Trunks:** PJSIP and chan_sip carrier accounts: server, port, username, password, registration, from domain, codecs, caller ID, channel limit. Switched-off trunks stay off. DAHDI trunks become the Telephony cards trunk.
+- **Outbound routes,** in FreePBX's order: each pattern's prefix becomes digits dropped, its prepend digits added. A route whose patterns drop or add different digits becomes one BitVoice route for each.
+- **Ring groups:** members, ring time, ring-all or one-after-another (hunt, memory hunt, first available), and where unanswered calls go.
+- **Queues:** members with their penalties, strategy (ring all, least recent, fewest calls, round robin, linear, random), ring time, wrap-up time and longest wait.
+- **Incoming routes:** each DID to its extension, ring group, queue, voicemail box, or hang-up.
+
+What does not, and is said in the preview: IVRs, time conditions, announcements, follow-me, custom trunks and contexts, caller-ID matching on routes, and outside numbers in ring groups. Build those on [Menus](#/menus), [Schedules](#/schedules) and the extension's **Follow me**. Older backups (FreePBX 13 and before) and a plain \`mysqldump asterisk\` of the FreePBX database are read the same way.
+
+## Other systems
 Where each export is:
-- **FreePBX:** Admin → Bulk Handler → Export → Extensions (CSV).
+- **FreePBX (extensions only):** Admin → Bulk Handler → Export → Extensions (CSV).
 - **Asterisk:** pjsip.conf or sip.conf.
 - **3CX:** Users → Export (CSV).
 - **Cisco Unified CM:** Bulk Administration → Phones → Export Phones, all details; or Users → Export Users. The phones' first line becomes the extension, with the line's alerting name or label as its name.
@@ -1771,9 +1792,9 @@ Where each export is:
 - **Avaya Communication Manager:** \`list hunt-group\` saved as CSV, with the members in a Members column or a separate members file.
 - **Mitel MiVoice Business:** Ring Groups and Ring Group Assignment (Cascade is one after another, Ring All everyone at once), and Hunt Groups.
 
-Trunks come in switched off and without passwords, as exports do not carry them. Routes go out on the imported trunk of the same name; a route whose trunk is not here is left out and said. Rotating and longest-idle ringing is closer to a queue than a ring group: the preview says so, so you can make it one.
+Trunks from these exports come in switched off and without passwords, as the exports do not carry them. Routes go out on the imported trunk of the same name; a route whose trunk is not here is left out and said. Rotating and longest-idle ringing is closer to a queue than a ring group: the preview says so, so you can make it one.
 
-These exports hold no SIP passwords, so each extension gets a new one; voicemail PINs, names and email addresses come over when the export has them. Cisco, Avaya H.323/DCP and Mitel phones run their maker's own software and cannot be set up by BitVoice: the import says how many were listed. Cisco phones can be re-flashed with Cisco's multiplatform (SIP) firmware; Avaya J100 and Mitel 6800/6900 phones can register to BitVoice by hand in SIP mode.`,
+These exports (all but a FreePBX backup) hold no SIP passwords, so each extension gets a new one; voicemail PINs, names and email addresses come over when the export has them. Cisco, Avaya H.323/DCP and Mitel phones run their maker's own software and cannot be set up by BitVoice: the import says how many were listed. Cisco phones can be re-flashed with Cisco's multiplatform (SIP) firmware; Avaya J100 and Mitel 6800/6900 phones can register to BitVoice by hand in SIP mode.`,
   },
   {
     id: 'video', title: 'Video calls', route: '/settings', keys: 'video calls camera h264 h.264 vp8 video phone face to face picture convert transcode transcoding ffmpeg',

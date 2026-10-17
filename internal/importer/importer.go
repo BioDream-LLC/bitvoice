@@ -1,5 +1,6 @@
 // Package importer reads other phone systems' configuration and turns it into BitVoice extensions and
-// trunks, so a site can move without retyping: FreePBX's Bulk Handler extension CSV, Asterisk's
+// trunks, so a site can move without retyping: FreePBX full backups (Backup & Restore, current and
+// legacy) and its Bulk Handler extension CSV, Asterisk's
 // pjsip.conf and sip.conf, 3CX's users CSV, and the CSV exports of Cisco Unified CM, Avaya IP Office,
 // Avaya Communication Manager and Mitel MiVoice Business. It reports what it could not bring over instead of guessing.
 package importer
@@ -25,6 +26,7 @@ type Result struct {
 	Trunks     []config.Trunk     `json:"trunks"`
 	// Call flows: groups, incoming numbers and dial patterns from systems that export them.
 	RingGroups     []config.RingGroup     `json:"ringGroups"`
+	Queues         []config.Queue         `json:"queues"`
 	InboundRoutes  []config.InboundRoute  `json:"inboundRoutes"`
 	OutboundRoutes []config.OutboundRoute `json:"outboundRoutes"`
 	Warnings       []string               `json:"warnings"`
@@ -55,6 +57,9 @@ func fill(r *Result) {
 	if r.RingGroups == nil {
 		r.RingGroups = []config.RingGroup{}
 	}
+	if r.Queues == nil {
+		r.Queues = []config.Queue{}
+	}
 	if r.InboundRoutes == nil {
 		r.InboundRoutes = []config.InboundRoute{}
 	}
@@ -67,6 +72,9 @@ func fill(r *Result) {
 }
 
 func parse(name string, data []byte) (Result, error) {
+	if isFreePBXBackup(File{Name: name, Data: data}) {
+		return parseFreePBX(File{Name: name, Data: data})
+	}
 	lower := strings.ToLower(name)
 	text := string(data)
 	first, _, _ := strings.Cut(strings.ToLower(strings.TrimPrefix(text, "\xef\xbb\xbf")), "\n")
@@ -83,7 +91,7 @@ func parse(name string, data []byte) (Result, error) {
 	case strings.Contains(lower, "sip") || strings.Contains(text, "type=friend") || strings.Contains(text, "type=peer"):
 		return parseSIPConf(data), nil
 	}
-	return Result{}, fmt.Errorf("this is not a file BitVoice can import: use a FreePBX Bulk Handler extensions CSV, a 3CX users CSV, pjsip.conf, sip.conf, or a CSV export from Cisco Unified CM, Avaya IP Office, Avaya Communication Manager or Mitel MiVoice Business")
+	return Result{}, fmt.Errorf("this is not a file BitVoice can import: use a FreePBX backup (Backup & Restore), a FreePBX Bulk Handler extensions CSV, a 3CX users CSV, pjsip.conf, sip.conf, or a CSV export from Cisco Unified CM, Avaya IP Office, Avaya Communication Manager or Mitel MiVoice Business")
 }
 
 func looksCSV(text string) bool {

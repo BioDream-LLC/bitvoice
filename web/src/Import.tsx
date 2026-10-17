@@ -1,12 +1,12 @@
-import { AlertTriangle, ArrowDownLeft, ArrowUpRight, CheckCircle2, FileUp, Import as ImportIcon, Server, Users } from 'lucide-react'
+import { AlertTriangle, ArrowDownLeft, ArrowUpRight, CheckCircle2, FileUp, Import as ImportIcon, ListOrdered, Server, Users } from 'lucide-react'
 import { useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
-import { api, errorOf, type Extension, type InboundRoute, type OutboundRoute, type RingGroup, type Trunk } from './api'
+import { api, errorOf, type Extension, type InboundRoute, type OutboundRoute, type Queue, type RingGroup, type Trunk } from './api'
 import { store } from './store'
 import { Chip, Page } from './ui'
 
 interface Result {
-  format: string; extensions: Extension[]; trunks: Trunk[]; ringGroups: RingGroup[]
+  format: string; extensions: Extension[]; trunks: Trunk[]; ringGroups: RingGroup[]; queues: Queue[]
   inboundRoutes: InboundRoute[]; outboundRoutes: OutboundRoute[]; warnings: string[]
 }
 interface Preview { result: Result; exists: Record<string, boolean> }
@@ -25,6 +25,7 @@ const keys = {
   x: (x: Extension) => ['x:' + x.number, x.number],
   t: (t: Trunk) => ['t:' + t.name, 'trunk:' + t.name],
   g: (g: RingGroup) => ['g:' + g.number, 'group:' + g.number],
+  q: (q: Queue) => ['q:' + q.number, 'queue:' + q.number],
   i: (r: InboundRoute) => ['i:' + r.did, 'in:' + r.did],
   o: (r: OutboundRoute) => ['o:' + r.patterns[0], 'out:' + r.patterns[0]],
 }
@@ -51,6 +52,7 @@ export function ImportPage() {
       p.result.extensions.forEach((x) => add(keys.x(x)))
       p.result.trunks.forEach((t) => add(keys.t(t)))
       p.result.ringGroups.forEach((g) => add(keys.g(g)))
+      p.result.queues.forEach((q) => add(keys.q(q)))
       p.result.inboundRoutes.forEach((r) => add(keys.i(r)))
       p.result.outboundRoutes.forEach((r) => add(keys.o(r)))
       setPick(all)
@@ -68,12 +70,13 @@ export function ImportPage() {
         extensions: r0.extensions.filter((x) => pick.has(keys.x(x)[0])),
         trunks: r0.trunks.filter((t) => pick.has(keys.t(t)[0])),
         ringGroups: r0.ringGroups.filter((g) => pick.has(keys.g(g)[0])),
+        queues: r0.queues.filter((q) => pick.has(keys.q(q)[0])),
         inboundRoutes: r0.inboundRoutes.filter((r) => pick.has(keys.i(r)[0])),
         outboundRoutes: r0.outboundRoutes.filter((r) => pick.has(keys.o(r)[0])),
       }
       const r = await post<{ added: number; skipped: number; notes: string[] }>('./api/import/apply', JSON.stringify(body), 'application/json')
       toast.success(`Imported ${r.added}${r.skipped ? `, skipped ${r.skipped}` : ''}`)
-      store.dispatch(api.util.invalidateTags(['Extensions', 'Trunks', 'RingGroups', 'Inbound', 'Outbound', 'History', 'Health']))
+      store.dispatch(api.util.invalidateTags(['Extensions', 'Trunks', 'RingGroups', 'Queues', 'Inbound', 'Outbound', 'History', 'Health']))
       setNotes(r.notes)
       setPreview(null)
     } catch (e) {
@@ -94,7 +97,7 @@ export function ImportPage() {
 
   return (
     <Page icon={ImportIcon} title="Import" accent="from-sky-400 to-emerald-400"
-      intro="Bring extensions, trunks, hunt and ring groups and call routes over from FreePBX, Asterisk, 3CX, Cisco, Avaya or Mitel. Nothing changes until you choose what to add.">
+      intro="Bring extensions, trunks, hunt and ring groups, queues and call routes over from FreePBX, Asterisk, 3CX, Cisco, Avaya or Mitel. Nothing changes until you choose what to add.">
       <button type="button" onClick={() => file.current?.click()}
         onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
         onDrop={(e) => { e.preventDefault(); setOver(false); read(Array.from(e.dataTransfer.files)) }}
@@ -105,7 +108,8 @@ export function ImportPage() {
           Several files go together: the people file with the groups file, so members are found. A .zip or .tar of CSV files works too.
         </span>
         <span className="text-sm text-slate-400">
-          FreePBX: Admin → Bulk Handler → Export → Extensions (CSV). Asterisk: <span className="font-mono text-amber-300">pjsip.conf</span> or <span className="font-mono text-amber-300">sip.conf</span>. 3CX: Users → Export (CSV).
+          FreePBX, best: Admin → Backup &amp; Restore, a backup with Core, Ring Groups, Queues and Voicemail ticked; download it and drop the <span className="font-mono text-amber-300">.tar.gz</span> here as it is (FreePBX 13 and older backups and a <span className="font-mono text-amber-300">mysqldump</span> of the asterisk database work too).
+          Or FreePBX: Admin → Bulk Handler → Export → Extensions (CSV). Asterisk: <span className="font-mono text-amber-300">pjsip.conf</span> or <span className="font-mono text-amber-300">sip.conf</span>. 3CX: Users → Export (CSV).
           Cisco Unified CM: Bulk Administration → Users (or Phones) → Export, and Import/Export → Export with Line Group, Hunt List, Hunt Pilot, SIP Trunk and Route Pattern ticked (the .tar as it comes).
           Avaya IP Office: Manager → File → Import/Export → Export, Users and Hunt Group. Avaya Communication Manager: list station and list hunt-group, saved as CSV.
           Mitel MiVoice Business: User and Device Configuration, Ring Groups and Ring Group Assignment, each exported.
@@ -156,6 +160,23 @@ export function ImportPage() {
               })}
             </section>
           )}
+          {res.queues.length > 0 && (
+            <section className="card divide-y divide-slate-800/70">
+              <h2 className="flex items-center gap-2 px-4 py-3 font-semibold text-slate-100"><ListOrdered size={16} className="text-orange-300" aria-hidden /> Queues</h2>
+              {res.queues.map((q) => {
+                const [k, e] = keys.q(q)
+                return row(k, preview.exists[e], `Import queue ${q.number}`, <>
+                  <Chip kind="queue">{q.number}</Chip>
+                  <span className="text-slate-200">{q.name}</span>
+                  <span className="text-xs text-sky-300">{q.strategy}{q.ringSeconds ? `, ${q.ringSeconds} s each` : ''}{q.wrapUpSeconds ? `, ${q.wrapUpSeconds} s wrap-up` : ''}</span>
+                  <span className="text-xs text-slate-400">{q.agents.map((m) => {
+                    const pen = q.penalties?.[m]
+                    return (ext(m) ? `${m} ${ext(m)}` : m) + (pen ? ` (penalty ${pen})` : '')
+                  }).join(', ')}</span>
+                </>, 'number already used here')
+              })}
+            </section>
+          )}
           {res.trunks.length > 0 && (
             <section className="card divide-y divide-slate-800/70">
               <h2 className="px-4 py-3 font-semibold text-slate-100">Trunks</h2>
@@ -176,11 +197,12 @@ export function ImportPage() {
               <h2 className="px-4 py-3 font-semibold text-slate-100">Call routes</h2>
               {res.inboundRoutes.map((r) => {
                 const [k, e] = keys.i(r)
-                return row(k, preview.exists[e], `Import incoming route ${r.did}`, <>
+                return row(k, preview.exists[e], `Import incoming route ${r.did || 'any number'}`, <>
                   <ArrowDownLeft size={14} className="text-sky-300" aria-hidden />
-                  <span className="font-mono text-amber-300">{r.did}</span>
+                  <span className="font-mono text-amber-300">{r.did || 'any number'}</span>
                   <span className="text-slate-400">to</span>
-                  <span className="font-mono text-emerald-300">{r.destination.target}</span>
+                  {r.destination.type === 'hangup' ? <span className="text-rose-300">hang up</span>
+                    : <span className="font-mono text-emerald-300">{r.destination.type === 'voicemail' ? `voicemail ${r.destination.target}` : r.destination.target}</span>}
                 </>)
               })}
               {res.outboundRoutes.map((r) => {
