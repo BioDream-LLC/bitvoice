@@ -52,8 +52,9 @@ func (k *circuit) setForward(f bool) {
 	k.mu.Unlock()
 }
 
-// tick sends a frame every 20 ms, as an E1's clock does. It polls the clock rather than sleeping on a
-// timer: macOS defers the timers of a process it thinks idle (by seconds), which a line cannot afford.
+// tick sends a frame every 20 ms, as an E1's clock does. It polls the clock and never sleeps: macOS
+// defers the timers of a busy machine's processes, even a millisecond's sleep, by seconds, which stops
+// the line (the far end's MF timers then run out). Yielding only costs one core while the test runs.
 func (k *circuit) tick() {
 	pcm := make([]int16, 160)
 	next := time.Now()
@@ -65,11 +66,7 @@ func (k *circuit) tick() {
 				return
 			default:
 			}
-			if d := time.Until(next); d > 2*time.Millisecond {
-				time.Sleep(time.Millisecond)
-			} else {
-				runtime.Gosched()
-			}
+			runtime.Gosched()
 		}
 		k.mu.Lock()
 		if k.forward {
