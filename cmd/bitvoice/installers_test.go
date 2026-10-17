@@ -15,7 +15,7 @@ func TestInstallersMatchTheBuild(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return string(b)
+		return strings.ReplaceAll(string(b), "\r\n", "\n") // a Windows checkout may turn line ends into CRLF
 	}
 	sh, ps, unit, mk := read("../../deploy/install.sh"), read("../../deploy/install.ps1"), read("../../deploy/cloud/bitvoice.service"), read("../../Makefile")
 

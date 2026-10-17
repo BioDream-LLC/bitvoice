@@ -1,0 +1,2 @@
+# Shell scripts keep LF line ends everywhere (a CRLF install.sh would not run).
+*.sh text eol=lf
