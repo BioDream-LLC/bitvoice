@@ -2,8 +2,8 @@
 
 A server anyone can open at `https://demo.bitvoice.org`, sign in to as a visitor, look around every
 screen, and call from the browser, with no download and nothing at stake. It is how a FreePBX or 3CX
-user sees BitVoice working in two minutes. **Nothing here has been deployed:** it creates a paid cloud
-server, so it waits for the owner's go-ahead.
+user sees BitVoice working in two minutes. Live since 17 October 2026 on Lightsail (nano, us-east-1,
+static IP 52.7.26.145), with a Let's Encrypt certificate BitVoice got itself.
 
 ## What a visitor gets
 
@@ -54,4 +54,5 @@ used about 100 MB of memory at 200 calls at once, so the smallest plan is enough
 `deploy/demo/seed` was run against a local server: setup, the visitor login (a change refused with 403),
 the people, groups, queue, menu, schedule, call script and routes, 20 calls from the generator, and the
 browser phone signed in as 150 calling `810` (answered by the script, which hung up after its timeout).
-`provision.sh` and `setup.sh` have not been run: they need the owner's go-ahead and a cloud account.
+Deployed with `provision.sh` on 17 October 2026 (v0.1.6). Checked from outside: a visitor signs in, sees the
+extensions, is refused a change (403), and the browser phone's call to `810` connects over the internet.

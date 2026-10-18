@@ -15,6 +15,10 @@ browser opens on a setup wizard; a few minutes later a phone rings.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go](https://img.shields.io/badge/Go-1.26%2B-00ADD8.svg?logo=go&logoColor=white)](https://go.dev) [![Release](https://img.shields.io/badge/release-v0.1.6-success.svg)](#download) [![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)](#download) [![CI](https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml/badge.svg)](https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml)
 
+<a href="https://demo.bitvoice.org"><img src="docs/assets/buttons/try.svg" alt="Try BitVoice now: the live demonstration, no install" width="300"></a>
+
+<sub><b>Sign in as</b> <code>demo</code> <b>with password</b> <code>try-bitvoice-demo</code> · then open the browser phone as extension <code>150</code>, password <code>try-the-demo-phone</code>, and dial <code>810</code> or <code>*43</code> · an invented business, reset every night · look at everything, change nothing</sub>
+
 ### Download v0.1.6
 
 <a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.6/bitvoice-v0.1.6-linux-amd64.tar.gz"><img src="docs/assets/buttons/download-linux.svg" alt="Download BitVoice for Linux, x86-64" width="240"></a>&nbsp;<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.6/bitvoice-v0.1.6-darwin-arm64.tar.gz"><img src="docs/assets/buttons/download-macos.svg" alt="Download BitVoice for macOS, Apple Silicon" width="240"></a>&nbsp;<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.6/bitvoice-v0.1.6-windows-amd64.zip"><img src="docs/assets/buttons/download-windows.svg" alt="Download BitVoice for Windows, x64" width="240"></a>
