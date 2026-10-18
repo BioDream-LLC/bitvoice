@@ -82,10 +82,7 @@ func shapeOffer(m *sdp.Media, allowed []string) {
 	}
 	if len(have) > 0 {
 		for _, c := range keep {
-			clock := 8000
-			if strings.EqualFold(c.Name, "opus") {
-				clock = 48000
-			}
+			clock := eventClock(c.Name)
 			if have[clock] {
 				continue
 			}
@@ -100,6 +97,19 @@ func shapeOffer(m *sdp.Media, allowed []string) {
 		}
 	}
 	filterFormats(m, pts)
+	// Key presses only at the clocks the kept codecs run at: a browser's 48 kHz telephone-event means
+	// nothing to a trunk that is not offered Opus.
+	clocks := map[int]bool{}
+	for _, c := range keep {
+		clocks[eventClock(c.Name)] = true
+	}
+	var drop []string
+	for _, c := range m.Codecs() {
+		if strings.EqualFold(c.Name, "telephone-event") && !clocks[c.ClockRate] {
+			drop = append(drop, strconv.Itoa(c.PT))
+		}
+	}
+	removeFormats(m, drop)
 	// Our order first, then telephone-event and comfort noise.
 	rest := slices.DeleteFunc(slices.Clone(m.Formats), func(f string) bool { return slices.Contains(pts, f) })
 	m.Formats = append(pts, rest...)
@@ -223,4 +233,25 @@ func codecsForKind(list []string, kind string) []string {
 		return []string{"PCMU", "PCMA"}
 	}
 	return out
+}
+
+// eventClock is the clock key presses travel at beside a codec (RFC 4733): Opus's 48000, else 8000
+// (G.722 included, whose RTP clock is 8000 by RFC 3551).
+func eventClock(codec string) int {
+	if strings.EqualFold(codec, "opus") {
+		return 48000
+	}
+	return 8000
+}
+
+// removeFormats takes payload types out of a media description, with their rtpmap and fmtp lines.
+func removeFormats(m *sdp.Media, pts []string) {
+	m.Formats = slices.DeleteFunc(m.Formats, func(f string) bool { return slices.Contains(pts, f) })
+	m.Lines = slices.DeleteFunc(m.Lines, func(l sdp.Line) bool {
+		if l.Type != 'a' || !(strings.HasPrefix(l.Value, "rtpmap:") || strings.HasPrefix(l.Value, "fmtp:")) {
+			return false
+		}
+		pt, _, _ := strings.Cut(l.Value[strings.IndexByte(l.Value, ':')+1:], " ")
+		return slices.Contains(pts, pt)
+	})
 }
