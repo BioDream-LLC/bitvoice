@@ -403,6 +403,13 @@ setting in the web interface.
   registration with digest authentication; calls in to the main number and out through the trunk, with sound
   (no loss, MOS 4.4); DTMF both ways (RFC 4733); the caller's number and name; busy and failed numbers passed
   back as such. Real carriers are not yet tried.
+- **Across the internet on Amazon EC2:** Asterisk 20 as the carrier and as a desk phone, each on its own server,
+  BitVoice on others: registration, calls in and out with caller ID, busy, keys pressed both ways (RFC 4733),
+  the browser phone from outside, MOS 4.4. Two BitVoice servers sharing PostgreSQL, a provider line held by one
+  at a time: a call in on one server answered by a phone on the other; the server carrying it killed (kill -9)
+  or stopped as for an upgrade: the call carries on (about 5 seconds of silence after a kill, none after a
+  stop), the provider line moves, one call record. One-command install on Ubuntu 24.04 (x86 and Arm),
+  Debian 12 and Amazon Linux 2023, running again by itself after a reboot.
 - **IAX2** checked against a real Asterisk 23: registration, calls both ways with sound, busy; **GSM** decoded
   sample for sample as ffmpeg does, and **G.726** streams exchanged with ffmpeg.
 
@@ -431,6 +438,17 @@ data and services running:
 | 200 | 200 of 200 | 20.9 ms | 0% | 4.41 | 186% | 101 MB |
 
 A nano's CPU is burstable: 200 calls at once uses nearly both vCPUs, which it can do for a while, not all day.
+
+On Amazon EC2 with Ubuntu 24.04, v0.1.7 installed with the one-command installer and nothing else running
+(CPU is the peak, of one vCPU):
+
+| Machine | 50 calls at once | 100 calls | 200 calls |
+|---|---|---|---|
+| c7g.large (Graviton3, Arm, 2 vCPUs, 4 GB) | 23% CPU, 44 MB | 40%, 59 MB | 84%, 88 MB, 3.6 ms set-up |
+| c7i.large (Intel, 2 vCPUs, 4 GB) | 28% CPU, 46 MB | 52%, 60 MB | 101%, 89 MB, 6.6 ms set-up |
+| t4g.small (Graviton2, Arm, 2 vCPUs, 2 GB, burstable) | 45% CPU, 44 MB | 104%, 60 MB | 147%, 90 MB, 8.5 ms set-up |
+
+Every run: all calls answered, 0% audio loss, MOS 4.41.
 200 is the generator's own ceiling, not BitVoice's. Your numbers depend on the codec, conversion,
 recording and the network: run the generator on your own server before you go live.
 

@@ -269,6 +269,12 @@ UNIT
   [ "$port" = 443 ] && open_url="https://$addr" || open_url="https://$addr:$port"
   say ""
   say "BitVoice $VERSION is running. Open $open_url in a browser to set it up."
+  case $addr in
+    10.* | 192.168.* | 172.1[6-9].* | 172.2[0-9].* | 172.3[01].*)
+      # A cloud server's own address is private: from the internet, it is reached at its public one.
+      say "  That is this machine's address on its own network. From elsewhere (a cloud server), use its public"
+      say "  address or name instead, with the port open in the provider's firewall." ;;
+  esac
   code=$(journalctl -u bitvoice --no-pager 2>/dev/null | sed -n 's/.*Setup code for another computer: \([^ ]*\).*/\1/p' | tail -n 1)
   [ -n "$code" ] && say "  Setup code (the wizard asks for it from another computer): $code"
   say "  The browser warns once about BitVoice's own certificate until you give it yours (Settings, Certificate)."
