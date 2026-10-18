@@ -260,3 +260,13 @@ func TestReceptionistNeverLoopsBack(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestConsentForParties(t *testing.T) {
+	r := Recording{Notice: "off", Rules: []ConsentRule{{Prefix: "1415", Name: "California", Action: "announce"}, {Prefix: "1512", Name: "Texas", Action: "off"}}}
+	if a, applied := r.ConsentForParties("+15125550100", "+14155550123"); a != "announce" || len(applied) != 2 {
+		t.Fatalf("%s %v", a, applied)
+	}
+	if a, _ := r.ConsentForParties("+15125550100", ""); a != "off" {
+		t.Fatalf("%s", a)
+	}
+}

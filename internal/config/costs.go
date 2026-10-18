@@ -175,6 +175,33 @@ func (r Recording) ConsentFor(number string) (action, rule string) {
 	return r.Notice, ""
 }
 
+// consentRank orders recording actions from the most to the least protective of the people on a call.
+var consentRank = map[string]int{"never": 4, "announce": 3, "beep": 2, "off": 1}
+
+// ConsentForParties chooses how a recorded call is treated when its parties are under different rules (a caller
+// in a place that needs every party's consent, an office in a place that needs one): the most protective of the
+// rules that apply to any of the numbers wins. It returns the action and, for each number, the rule that applied.
+func (r Recording) ConsentForParties(numbers ...string) (action string, applied []string) {
+	best := ""
+	for _, n := range numbers {
+		if digitsOnly(n) == "" {
+			continue
+		}
+		a, rule := r.ConsentFor(n)
+		if rule == "" {
+			rule = "no rule, so the usual notice"
+		}
+		applied = append(applied, n+" ("+rule+": "+a+")")
+		if consentRank[a] > consentRank[best] {
+			best = a
+		}
+	}
+	if best == "" {
+		best, _ = r.ConsentFor("")
+	}
+	return best, applied
+}
+
 func (c *Config) validateConsent(p *Problems) {
 	r := &c.System.Recording
 	switch r.Notice {

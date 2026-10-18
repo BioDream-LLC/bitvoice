@@ -1,5 +1,5 @@
 import { ChevronRight, CircleCheck, CircleX, FlaskConical, Play, TriangleAlert } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { errorOf, useSimulateMutation, useTrunksQuery, type ApiErrorBody, type SimResult, type SimStep } from './api'
 import { Field, problemFor } from './ui'
 
@@ -18,6 +18,17 @@ export function Simulator() {
   const [res, setRes] = useState<SimResult | null>(null)
   const [err, setErr] = useState<ApiErrorBody | null>(null)
   const p = (f: string) => problemFor(err?.problems, f)
+  // "Try this call" from the situation checker: fill the form with that situation and trace it.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ from: string; to: string; trunk: string; at: string; toggles?: Record<string, boolean> }>).detail
+      const next = { from: d.from, to: d.to, trunk: d.trunk, at: d.at, assumePhones: true }
+      setV(next)
+      run({ ...next, toggles: d.toggles }).unwrap().then((r) => { setRes(r); setErr(null) }, (x) => { setErr(errorOf(x)); setRes(null) })
+    }
+    window.addEventListener('bv-simulate', on)
+    return () => window.removeEventListener('bv-simulate', on)
+  }, [run])
   const go = async (e: React.FormEvent) => {
     e.preventDefault()
     try {

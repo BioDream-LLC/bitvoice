@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/biodream-llc/bitvoice/internal/config"
+	"github.com/biodream-llc/bitvoice/internal/reason"
 	"github.com/biodream-llc/bitvoice/internal/store"
 )
 
@@ -30,6 +31,8 @@ type QualityPlace struct {
 	Status    string `json:"status"`    // ok, warn, fail, idle (too few calls)
 	Diagnosis string `json:"diagnosis"` // in plain words
 	Advice    string `json:"advice,omitempty"`
+	// Reasons is how the diagnosis was reached (the call-quality rulebook), in plain words.
+	Reasons []string `json:"reasons,omitempty"`
 }
 
 // QualityReport is call quality over a window, by place, with an overall reading.
@@ -47,6 +50,15 @@ type acc struct {
 	mos, jit       float64
 	packets, lost  uint64
 	hourPk, hourLo [24]uint64
+	// For this place's lossy calls, how the other half of the same call fared: clean, lossy too, or not measured.
+	otherClean, otherLossy, otherSeen int
+}
+
+func lossPct(q store.LegQuality) float64 {
+	if q.Packets+q.Lost == 0 {
+		return 0
+	}
+	return 100 * float64(q.Lost) / float64(q.Packets+q.Lost)
 }
 
 // qualityReport reads call records into quality by site and by provider, with a diagnosis for each.
@@ -69,7 +81,8 @@ func qualityReport(cfg config.Config, rs []store.CDR, days int) QualityReport {
 		}
 		rep.Calls++
 		h := r.Start.In(loc).Hour()
-		for _, q := range r.Quality {
+		legAcc := make([]*acc, len(r.Quality))
+		for i, q := range r.Quality {
 			var a *acc
 			switch {
 			case q.Ext != "":
@@ -92,6 +105,7 @@ func qualityReport(cfg config.Config, rs []store.CDR, days int) QualityReport {
 			default:
 				continue
 			}
+			legAcc[i] = a
 			p := a.place
 			p.Calls++
 			a.mos += q.MOS
@@ -104,6 +118,33 @@ func qualityReport(cfg config.Config, rs []store.CDR, days int) QualityReport {
 			if q.MOS > 0 && q.MOS < poorMOS {
 				p.Poor++
 				p.Hours[h].Poor++
+			}
+		}
+		// Each lossy half of the call against the other half: where was the sound lost?
+		for i, q := range r.Quality {
+			if legAcc[i] == nil || lossPct(q) < 2 {
+				continue
+			}
+			clean, lossy, seen := false, false, false
+			for j, o := range r.Quality {
+				if j == i || legAcc[j] == nil || legAcc[j] == legAcc[i] || o.Packets+o.Lost == 0 {
+					continue
+				}
+				seen = true
+				switch l := lossPct(o); {
+				case l < 0.5:
+					clean = true
+				case l >= 2:
+					lossy = true
+				}
+			}
+			if seen {
+				legAcc[i].otherSeen++
+				if lossy {
+					legAcc[i].otherLossy++
+				} else if clean {
+					legAcc[i].otherClean++
+				}
 			}
 		}
 	}
@@ -120,11 +161,19 @@ func qualityReport(cfg config.Config, rs []store.CDR, days int) QualityReport {
 				p.Hours[h].LossPct = round1(100 * float64(a.hourLo[h]) / float64(a.hourPk[h]))
 			}
 		}
-		diagnose(p, a)
 		if p.LossPct >= 2 && p.Calls >= 3 {
 			lossy++
 		}
-		rep.Places = append(rep.Places, *p)
+	}
+	withCalls := 0
+	for _, a := range places {
+		if a.place.Calls >= 3 {
+			withCalls++
+		}
+	}
+	for _, a := range places {
+		diagnose(a.place, a, lossy > 1 && lossy == withCalls)
+		rep.Places = append(rep.Places, *a.place)
 	}
 	slices.SortFunc(rep.Places, func(x, y QualityPlace) int {
 		if c := rank(y.Status) - rank(x.Status); c != 0 {
@@ -151,36 +200,73 @@ func qualityReport(cfg config.Config, rs []store.CDR, days int) QualityReport {
 	return rep
 }
 
-func diagnose(p *QualityPlace, a *acc) {
+// diagnose puts a place's measures to the call-quality rulebook (internal/reason) and words its answer.
+// everywhere is every place with calls losing sound at once.
+func diagnose(p *QualityPlace, a *acc, everywhere bool) {
 	where := p.Name + "'s network"
 	advice := "Check the internet link and the network equipment at " + p.Name + "; something else using the link heavily at those times (backups, video, large downloads) is a common cause. Giving voice priority (QoS) on the router helps."
 	if p.Kind == "provider" {
 		where = "the line from " + p.Name
 		advice = "Sound is lost between " + p.Name + " and this system: check this system's internet link first, then ask " + p.Name + " about their side."
 	}
-	poorPct := 100 * float64(p.Poor) / float64(p.Calls)
-	switch {
-	case p.Calls < 3:
+	poorPct := 0.0
+	if p.Calls > 0 {
+		poorPct = 100 * float64(p.Poor) / float64(p.Calls)
+	}
+	facts := map[string]reason.Truth{
+		"few_calls":        truthOf(p.Calls < 3),
+		"loss_high":        truthOf(p.LossPct >= 2),
+		"jitter_high":      truthOf(p.JitterMS >= 30),
+		"poor_many":        truthOf(poorPct >= 10),
+		"everywhere_lossy": truthOf(everywhere),
+	}
+	// The other half of the lossy calls: measured only when the calls had one (an extension calling the
+	// echo test has none). Clean or lossy for most of them; neither when they were mixed.
+	if a.otherSeen > 0 {
+		facts["other_side_clean"] = truthOf(3*a.otherClean >= 2*a.otherSeen)
+		facts["other_side_lossy"] = truthOf(3*a.otherLossy >= 2*a.otherSeen)
+	}
+	v := reason.Quality.Decide(facts)
+	p.Reasons = v.Reasons
+	switch v.Action {
+	case "idle":
 		p.Status, p.Diagnosis = "idle", "Too few calls to judge."
-	case p.LossPct >= 2:
+	case "here", "shared":
 		p.Status = "warn"
 		if p.LossPct >= 5 || poorPct >= 25 {
 			p.Status = "fail"
 		}
 		p.Diagnosis = fmt.Sprintf("Packet loss on %s: %.1f%% of the sound never arrived%s.", where, p.LossPct, when(p, a))
 		p.Advice = advice
-	case p.JitterMS >= 30:
+		if v.Action == "shared" {
+			p.Diagnosis = fmt.Sprintf("%.1f%% of the sound never arrived%s, and not at %s alone: the other half of the same calls, or every other place, lost sound too.", p.LossPct, when(p, a), p.Name)
+			p.Advice = "Look at what these calls share: this system's own internet link and router first, then the provider."
+		} else if facts["other_side_clean"] == reason.Yes {
+			p.Diagnosis += " The other half of the same calls arrived clean, so it is on this side."
+		}
+	case "jitter":
 		p.Status = "warn"
 		p.Diagnosis = fmt.Sprintf("Uneven delay on %s (jitter of %.0f ms): words may sound choppy%s.", where, p.JitterMS, when(p, a))
 		p.Advice = "This is often Wi-Fi, or an internet link that is full at times. Use a cable for desk phones where you can, and give voice priority (QoS) on the router."
-	case poorPct >= 10:
+	case "poor":
 		p.Status = "warn"
 		p.Diagnosis = fmt.Sprintf("%.0f%% of calls at %s sounded poor, without one clear cause.", poorPct, p.Name)
 		p.Advice = "Look at the poor calls in Call history (the Quality column) for a pattern: a phone, a time, a codec."
+	case "unsure":
+		p.Status = "warn"
+		p.Diagnosis = "Sound is being lost, but the measures do not say where."
+		p.Advice = "Look at the poor calls in Call history for a pattern."
 	default:
 		p.Status = "ok"
 		p.Diagnosis = fmt.Sprintf("Calls sound good (an average score of %.1f out of 5).", p.MOS)
 	}
+}
+
+func truthOf(b bool) reason.Truth {
+	if b {
+		return reason.Yes
+	}
+	return reason.No
 }
 
 // when says when the trouble happens, if most of it falls in a few hours: " mostly between 14:00 and 16:00".

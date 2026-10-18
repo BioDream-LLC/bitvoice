@@ -171,6 +171,10 @@ type Engine struct {
 	// presenceMu keeps busy-lamp updates in order.
 	presenceMu sync.Mutex
 	trunks     map[string]*trunkState
+	judgeMu    sync.Mutex
+	fraudMu    sync.Mutex
+	fraud      fraudState              // the toll-fraud guard's memory (guarded by fraudMu)
+	judged     map[string]*trunkJudged // the trunk judge's view of each trunk (guarded by judgeMu)
 	started    time.Time
 	ctx        context.Context
 	cancel     context.CancelFunc
@@ -182,7 +186,7 @@ func New(cfg config.Config, bus *events.Bus, rec Recorder, log *slog.Logger) *En
 		log = slog.Default()
 	}
 	e := &Engine{Log: log, Bus: bus, Recorder: rec, calls: map[string]*Call{}, legs: map[string]*Leg{}, subs: map[string]*subscription{}, queues: map[string]*queueState{}, parked: map[string]*Call{},
-		pending: map[string]*Call{}, trunks: map[string]*trunkState{}}
+		pending: map[string]*Call{}, trunks: map[string]*trunkState{}, judged: map[string]*trunkJudged{}}
 	e.cfg.Store(&cfg)
 	e.auth = sip.NewAuthenticator("bitvoice")
 	e.reg = newRegistrar(e)
@@ -241,6 +245,7 @@ func (e *Engine) Start(ctx context.Context, listen string) error {
 	e.started = time.Now()
 	go e.reg.run(e.ctx)
 	go e.runTrunks(e.ctx)
+	go e.trunkJudgeLoop(e.ctx.Done())
 	go e.watchdog(e.ctx)
 	go e.wakeUpLoop(e.ctx)
 	go e.dialerLoop(e.ctx)
@@ -687,16 +692,18 @@ func (e *Engine) NewMediaEndpoint() (*media.Endpoint, error) {
 
 // Emergency is a 911 call's data for the call-taker.
 type Emergency struct {
-	Location    *i3.Location  `json:"location,omitempty"`
-	LocationURI string        `json:"locationUri,omitempty"` // by reference: rebid fetches it again
-	Rebid       time.Time     `json:"rebid,omitzero"`        // when the location was last fetched
-	Additional  i3.Additional `json:"additional"`
-	Service     string        `json:"service,omitempty"`
-	Problems    []string      `json:"problems,omitempty"`
-	ESInet      bool          `json:"esinet"`            // came from the emergency services network
-	TakenBy     string        `json:"takenBy,omitempty"` // the call-taker's extension, once one answers
-	TakenName   string        `json:"takenName,omitempty"`
-	TakenAt     time.Time     `json:"takenAt,omitzero"`
+	Location    *i3.Location `json:"location,omitempty"`
+	LocationURI string       `json:"locationUri,omitempty"` // by reference: rebid fetches it again
+	Rebid       time.Time    `json:"rebid,omitzero"`        // when the location was last fetched
+	// LocationCheck is the caller location check after a rebid changed the location: which to show first, why.
+	LocationCheck *LocationCheck `json:"locationCheck,omitempty"`
+	Additional    i3.Additional  `json:"additional"`
+	Service       string         `json:"service,omitempty"`
+	Problems      []string       `json:"problems,omitempty"`
+	ESInet        bool           `json:"esinet"`            // came from the emergency services network
+	TakenBy       string         `json:"takenBy,omitempty"` // the call-taker's extension, once one answers
+	TakenName     string         `json:"takenName,omitempty"`
+	TakenAt       time.Time      `json:"takenAt,omitzero"`
 	// PIDF is the location document as it came, for CAD and transfers (not sent to screens).
 	PIDF []byte `json:"-"`
 	// Text is the call's text conversation; TextVia the ways text has come (tty, rtt, msrp, sip).

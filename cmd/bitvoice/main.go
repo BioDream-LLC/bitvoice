@@ -40,6 +40,7 @@ import (
 	"github.com/biodream-llc/bitvoice/internal/inbox"
 	"github.com/biodream-llc/bitvoice/internal/mgcp"
 	"github.com/biodream-llc/bitvoice/internal/pbx"
+	"github.com/biodream-llc/bitvoice/internal/reason"
 	"github.com/biodream-llc/bitvoice/internal/sccp"
 	"github.com/biodream-llc/bitvoice/internal/store"
 	"github.com/biodream-llc/bitvoice/internal/turn"
@@ -160,6 +161,15 @@ func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 	cfg, _ := st.Config()
 	bus := events.New()
 	trace := api.NewTraceBuffer(2000)
+	// The judges' rulebooks are checked in every combination of their facts before any call is judged.
+	for _, b := range reason.Books {
+		if err := b.Validate(); err != nil {
+			return err
+		}
+		if rep := b.Check(); len(rep.Problems) > 0 {
+			log.Warn("a rulebook has problems", "rulebook", b.Name, "problems", len(rep.Problems), "first", rep.Problems[0].Says)
+		}
+	}
 	eng := pbx.New(cfg, bus, st, log)
 	eng.Trace = trace.Add
 	sw := pbx.NewSwitch(eng) // one SIP port for the main system and every hosted tenant

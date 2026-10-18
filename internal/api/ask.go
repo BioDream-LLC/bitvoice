@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/biodream-llc/bitvoice/internal/config"
+	"github.com/biodream-llc/bitvoice/internal/pbx"
 	"github.com/biodream-llc/bitvoice/internal/store"
 )
 
@@ -139,7 +140,14 @@ func (s *Server) askRoutes() {
 			changes = []config.Change{}
 		}
 		s.audit(r, u.Username, "ask", in.Request)
-		writeJSON(w, 200, map[string]any{"id": id, "explanation": why, "changes": changes})
+		check := []pbx.PlanFinding{}
+		s.ask.mu.Lock()
+		next, ok := s.ask.open[id]
+		s.ask.mu.Unlock()
+		if ok {
+			check = s.newFindings(&next.cfg)
+		}
+		writeJSON(w, 200, map[string]any{"id": id, "explanation": why, "changes": changes, "check": check})
 	})
 	s.handle("POST /api/ask/{id}/apply", true, func(w http.ResponseWriter, r *http.Request, u store.User) {
 		s.ask.mu.Lock()

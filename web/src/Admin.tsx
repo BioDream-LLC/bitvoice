@@ -1,3 +1,4 @@
+import { FraudDecisions, FraudGuardSettings, Rulebooks, TrunkJudgingSettings } from './Judges'
 import { Link } from 'react-router-dom'
 import { DatabaseSettings } from './Database'
 import { CertificateSettings } from './Teams'
@@ -57,6 +58,8 @@ export function Security() {
           </ul>
         )}
       </section>
+      <FraudDecisions />
+      <Rulebooks />
       {admin && (
         <section>
           <h2 className="mb-3 text-lg font-semibold text-slate-100">Audit log</h2>
@@ -460,6 +463,8 @@ export function Settings() {
           </Field>
           <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={sec.blockPremium} onChange={(v) => setSec({ blockPremium: v })} label="Block premium numbers" /> Block premium-rate numbers (900, 976), the usual target of toll fraud</label>
         </section>
+        <FraudGuardSettings value={sec.fraudGuard} onChange={(v) => setSec({ fraudGuard: v })} p={p} />
+        <TrunkJudgingSettings value={sys.trunkJudging} onChange={(v) => setSys({ trunkJudging: v })} p={p} />
       </fieldset>
     </Page>
   )

@@ -19,6 +19,8 @@ func (s *Server) simulateRoutes() {
 			Trunk        string `json:"trunk"`
 			At           string `json:"at"` // YYYY-MM-DDTHH:MM in the system's time zone; empty is now
 			AssumePhones bool   `json:"assumePhones"`
+			// Toggles, when given, says which day/night toggles are switched over instead of how they are now.
+			Toggles map[string]bool `json:"toggles"`
 		}
 		if err := readJSON(r, &in); err != nil {
 			writeErr(w, err)
@@ -48,6 +50,6 @@ func (s *Server) simulateRoutes() {
 			writeErr(w, p)
 			return
 		}
-		writeJSON(w, 200, s.Engine.Simulate(pbx.SimInput{From: in.From, To: in.To, Trunk: in.Trunk, At: at, AssumePhones: in.AssumePhones}))
+		writeJSON(w, 200, s.Engine.Simulate(pbx.SimInput{From: in.From, To: in.To, Trunk: in.Trunk, At: at, AssumePhones: in.AssumePhones, Toggles: in.Toggles}))
 	})
 }

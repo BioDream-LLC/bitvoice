@@ -1,3 +1,4 @@
+import { FindingList } from './Judges'
 import { Check, Sparkles, X } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -37,6 +38,12 @@ export function Ask() {
               {data.changes.length === 0 ? <p className="text-sm text-slate-400">Nothing to change.</p> : (
                 <>
                   <ChangeList items={data.changes.filter((c) => !data.changes.some((o) => o.path.startsWith(c.path + '.') && o.before === c.before && o.after === c.after))} />
+                  {data.check && data.check.length > 0 && (
+                    <div className="space-y-2" role="alert">
+                      <p className="text-sm font-semibold text-amber-300">Checked in every situation, this change would cause:</p>
+                      <FindingList items={data.check} />
+                    </div>
+                  )}
                   <div className="flex gap-2">
                     <button className="btn btn-primary" disabled={applying} onClick={async () => {
                       try { await apply(data.id).unwrap(); toast.success('Changed'); reset(); setText('') } catch (e) { toast.error(errorOf(e).message) }

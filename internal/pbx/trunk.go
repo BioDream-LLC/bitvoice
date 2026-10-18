@@ -52,6 +52,8 @@ type TrunkStatus struct {
 	Since     time.Time `json:"since,omitzero"`
 	// HeldBy names the server registering a trunk shared one server at a time, when not this one.
 	HeldBy string `json:"heldBy,omitempty"`
+	// Judged is what the trunk judge decided: used in its place, or tried after the others, and why.
+	Judged *TrunkJudgement `json:"judged,omitempty"`
 }
 
 // IAXLink is the IAX2 gateway as the engine sees it.
@@ -81,11 +83,15 @@ func (e *Engine) iax() IAXLink {
 // TrunkStatus returns every trunk's state.
 func (e *Engine) TrunkStatus() []TrunkStatus {
 	cfg := e.Config()
+	judged := e.TrunkJudgements()
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	out := []TrunkStatus{}
 	for _, t := range cfg.Trunks {
 		ts := TrunkStatus{ID: t.ID, Name: t.Name, State: "disabled", Addresses: []string{}}
+		if j, ok := judged[t.ID]; ok && t.Enabled && j.Reasons != nil {
+			ts.Judged = &j
+		}
 		if st := e.trunks[t.ID]; st != nil {
 			ts.State, ts.Error, ts.Expires, ts.LatencyMS, ts.Since, ts.HeldBy = st.state, st.lastError, st.expires, st.latencyMS, st.lastChange, st.owner
 			for _, a := range st.addrs {

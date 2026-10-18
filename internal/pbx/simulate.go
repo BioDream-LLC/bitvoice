@@ -18,6 +18,8 @@ type SimInput struct {
 	// AssumePhones treats every extension as having a phone connected, to see the plan as designed
 	// rather than as it is right now.
 	AssumePhones bool `json:"assumePhones"`
+	// Toggles, when set, says which day/night toggles are switched over (by ID), instead of how they are now.
+	Toggles map[string]bool `json:"toggles,omitempty"`
 }
 
 // SimStep is one place a call goes, with where it can go next.
@@ -59,7 +61,11 @@ const simMaxSteps = 120
 // Simulate traces where a call would go through routes, schedules, scripts, menus and the rest, at a
 // given time, without ringing anything. Scripts run (sandboxed, as for a real call) but nothing is logged.
 func (e *Engine) Simulate(in SimInput) SimResult {
-	cfg := e.Config()
+	return e.simulateWith(e.Config(), in)
+}
+
+// simulateWith traces a call through a given configuration (a proposed one, or the one in force).
+func (e *Engine) simulateWith(cfg *config.Config, in SimInput) SimResult {
 	s := &sim{e: e, cfg: cfg, in: in, at: in.At}
 	if s.at.IsZero() {
 		s.at = time.Now()
@@ -386,6 +392,9 @@ func (s *sim) walk(d config.Destination, depth int, path []string, direction, fr
 			return missing("toggle")
 		}
 		over := s.e.ToggleOn(t.ID)
+		if s.in.Toggles != nil {
+			over = s.in.Toggles[t.ID]
+		}
 		state := "normal"
 		if over {
 			state = "switched over"
@@ -559,8 +568,16 @@ func noAnswerWhen(ringing bool) string {
 func (s *sim) exists(d config.Destination) bool { return s.cfg.DestinationExists(d) }
 
 // nameOf names a destination in words.
-func (s *sim) nameOf(d config.Destination) string {
-	c := s.cfg
+func (s *sim) nameOf(d config.Destination) string { return destinationName(s.cfg, d) }
+
+// destinationName names a destination in words: "ring group Sales", "voicemail 100", "hang up".
+func destinationName(c *config.Config, d config.Destination) string {
+	if d.Type == "hangup" {
+		return "hang up"
+	}
+	if d.Type == "number" {
+		return d.Target
+	}
 	switch d.Type {
 	case "extension":
 		if x := c.FindExtension(d.Target); x != nil {

@@ -64,6 +64,8 @@ type System struct {
 	Timezone string `json:"timezone"`
 	// Language is the language callers hear prompts in, unless an extension or queue says otherwise.
 	Language string `json:"language"`
+	// TrunkJudging decides whether each trunk is used in its place or tried after the others.
+	TrunkJudging TrunkJudging `json:"trunkJudging"`
 	// PromptLanguages are languages added beside the ones BitVoice ships the words of; their prompts
 	// are recorded or uploaded.
 	PromptLanguages []string `json:"promptLanguages"`
@@ -1465,6 +1467,8 @@ type Security struct {
 	BlockPremium bool `json:"blockPremium"`
 	// MaxCallsPerExtension bounds concurrent calls (a compromised phone cannot run up a bill).
 	MaxCallsPerExtension int `json:"maxCallsPerExtension"`
+	// FraudGuard judges calls out of the country before they are placed.
+	FraudGuard FraudGuard `json:"fraudGuard"`
 }
 
 // Default returns the configuration of a fresh installation.
@@ -1594,6 +1598,7 @@ func (c *Config) Validate() error {
 	c.validateCosts(&p)
 	c.validateHotDesk(&p)
 	c.validateConsent(&p)
+	c.validateJudges(&p)
 	c.validateVIPs(&p)
 	c.validateScreening(&p)
 	c.validateTexting(&p)

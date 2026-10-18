@@ -1,3 +1,4 @@
+import { Reasons } from './Judges'
 import { AlertTriangle, Building2, Crosshair, ExternalLink, FileJson, Hand, Keyboard, MapPin, MessageSquareText, Phone, PhoneOff, RefreshCw, Send, Smartphone, User } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -88,6 +89,15 @@ export function EmergencyCard({ call }: { call: Call }) {
       </div>
       {add.comments?.map((c, i) => <p key={i} className="text-sm text-amber-200">Note: {c}</p>)}
       {em.problems?.map((p, i) => <p key={i} className="flex items-center gap-2 text-xs text-amber-300"><AlertTriangle size={12} aria-hidden />{p}</p>)}
+      {em.locationCheck && (
+        <div className={`rounded-lg border p-2 text-sm ${em.locationCheck.show === 'both' ? 'border-amber-700 bg-amber-950/30' : 'border-slate-800'}`} role="status" aria-label="Location check">
+          <p className={em.locationCheck.show === 'both' ? 'font-semibold text-amber-200' : 'text-slate-300'}>Location check: {em.locationCheck.text}</p>
+          {em.locationCheck.previous && em.locationCheck.show !== 'new' && (
+            <p className="text-xs text-slate-400">First location: {em.locationCheck.previous.lat != null ? `${em.locationCheck.previous.lat.toFixed(5)}, ${em.locationCheck.previous.lon?.toFixed(5)}` : ''}{em.locationCheck.previous.radius ? ` within ${Math.round(em.locationCheck.previous.radius)} m` : ''}{em.locationCheck.previous.method ? ` (${em.locationCheck.previous.method})` : ''}</p>
+          )}
+          <Reasons items={em.locationCheck.reasons} />
+        </div>
+      )}
 
       <Conversation call={call} answered={answered} />
       <CallVideoPanel call={call} />

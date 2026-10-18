@@ -21,6 +21,7 @@ type FailBan struct {
 	bans      map[netip.Addr]ban
 	buckets   map[netip.Addr]*bucket
 	now       func() time.Time
+	lastFail  time.Time // when an untrusted address last failed three times in a window
 }
 
 type ban struct {
@@ -83,6 +84,9 @@ func (f *FailBan) fail(ip netip.Addr, reason string) bool {
 	}
 	list = append(list[cut:], now)
 	f.failures[ip] = list
+	if len(list) >= 3 { // a mistyped password is not an attack; three in a row from one address are
+		f.lastFail = now
+	}
 	if len(list) >= f.threshold {
 		f.bans[ip] = ban{until: now.Add(f.duration), reason: reason}
 		delete(f.failures, ip)
@@ -160,4 +164,20 @@ func (f *FailBan) unban(ip netip.Addr) {
 	delete(f.bans, ip)
 	delete(f.failures, ip)
 	f.mu.Unlock()
+}
+
+// attackedWithin reports repeated failed sign-ins from an untrusted address within d, or a ban in force.
+func (f *FailBan) attackedWithin(d time.Duration) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	now := f.now()
+	if !f.lastFail.IsZero() && now.Sub(f.lastFail) <= d {
+		return true
+	}
+	for _, b := range f.bans {
+		if b.until.After(now) {
+			return true
+		}
+	}
+	return false
 }

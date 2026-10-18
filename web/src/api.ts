@@ -126,7 +126,8 @@ export interface MediaItem { n: number; name: string; type: string; size: number
 export interface ExposureRow { who: string; looks: number; calls: number; last: string }
 export type TextVia = 'tty' | 'rtt' | 'msrp' | 'sip'
 export interface TextLine { at: string; from: 'caller' | 'taker'; name?: string; via: TextVia; text: string; open?: boolean }
-export interface Emergency { location?: Location; locationUri?: string; rebid?: string; additional: Additional; service?: string; problems?: string[]; esinet: boolean; takenBy?: string; takenName?: string; takenAt?: string; text?: TextLine[]; textVia?: TextVia[]; textOnly?: boolean; cama?: string; aliLookup?: string; aliClass?: string; video?: CallVideoState }
+export interface Emergency { location?: Location; locationUri?: string; rebid?: string; additional: Additional; service?: string; problems?: string[]; esinet: boolean; takenBy?: string; takenName?: string; takenAt?: string; text?: TextLine[]; textVia?: TextVia[]; textOnly?: boolean; cama?: string; aliLookup?: string; aliClass?: string; video?: CallVideoState
+  locationCheck?: { show: 'new' | 'old' | 'both'; text: string; reasons: string[]; previous?: Location } }
 export interface CorePSAP { uri: string; name: string; trunk: string; overflow: string }
 export interface CoreRule {
   id: string; name: string; services: string[]; psaps: string[]; schedule: string; whenOpen: boolean
@@ -237,6 +238,7 @@ export interface DnsCheck {
 }
 export interface SystemSettings {
   name: string; purpose: 'office' | 'contact-centre' | '911'; country: string; timezone: string; language: string
+  trunkJudging?: TrunkJudging
   promptLanguages?: string[] | null; music?: MusicClass[] | null; holdMusic?: string; hotel?: Hotel
   chat?: { off: boolean; keepDays: number; rooms: { id: string; name: string; members: string[] | null }[] | null }
   snmp?: { enabled: boolean; listen: string; community: string; allowFrom: string[] | null; baseOid: string; contact: string; location: string; traps: { host: string; community: string }[] | null }
@@ -278,7 +280,21 @@ export interface SystemSettings {
 export interface Security {
   failBanThreshold: number; failBanWindowSecs: number; failBanMinutes: number; trustedNetworks: string[]
   blockPremium: boolean; maxCallsPerExtension: number
+  fraudGuard?: FraudGuard
 }
+export interface FraudGuard {
+  on: boolean; schedule: string; burst: number; allowedCountries: string[]; pinSet: string
+  exceptions: { ext: string; until: string; note: string }[]
+}
+export interface TrunkJudging { off: boolean; failures: number; windowMinutes: number }
+export interface TrunkJudgement { order: 'use' | 'last'; text: string; how: string; reasons: string[]; since: string }
+export interface FraudDecision { at: string; ext: string; number: string; country: string; action: 'allow' | 'alert' | 'challenge' | 'block'; how: string; outside: boolean; reasons: string[] }
+export interface PlanSituation { from: string; to: string; trunk?: string; at: string; when: string; toggles: Record<string, boolean>; path: string[] }
+export interface PlanFinding { severity: 'error' | 'warning' | 'info'; kind: string; title: string; says: string; where: { kind?: string; target?: string; name?: string }; situations: PlanSituation[]; count: number }
+export interface PlanReport { situations: number; times: number; findings: PlanFinding[]; errors: number; warnings: number; truncated?: boolean }
+export interface Rule { name: string; kind: 'fact' | 'conclusion' | 'action'; text: string; needs?: string[]; does?: string }
+export interface Rulebook { id: string; name: string; about: string; rules: Rule[]; attacks: { from: string; to: string }[]; choices: { does: string; text: string }[]
+  cautious: string; default: string; check: { situations: number; problems: { kind: string; says: string; situation?: string[] }[]; reached: Record<string, number> } }
 export interface Settings { system: SystemSettings; security: Security; rev: number }
 
 export interface MediaStats { packets: number; lost: number; jitterMs: number; mos: number; lastSeen: number }
@@ -291,7 +307,7 @@ export interface Registration {
   extension: string; name: string; contact: string; source: string; transport: string; userAgent: string
   expires: string; since: string
 }
-export interface TrunkStatus { id: string; name: string; state: string; error?: string; addresses: string[]; latencyMs: number; since?: string; heldBy?: string }
+export interface TrunkStatus { id: string; name: string; state: string; error?: string; addresses: string[]; latencyMs: number; since?: string; heldBy?: string; judged?: TrunkJudgement }
 export interface Stats {
   uptimeSeconds: number; calls: number; registrations: number; extensions: number; online: number
   trunks: number; trunksUp: number; banned: number; sipPort: number
@@ -299,7 +315,7 @@ export interface Stats {
 export interface CDR {
   id: string; start: string; answer?: string; end: string; direction: string; from: string; fromName: string
   to: string; toName: string; answeredBy: string; trunk: string; disposition: string; cause: string
-  duration: number; billsec: number; hangupBy: string; mos: number; recording?: string
+  duration: number; billsec: number; hangupBy: string; mos: number; recording?: string; why?: string[]
   paused?: { from: number; to: number }[]; held?: boolean; attest?: string; signed?: string; verified?: string; screened?: string; ext?: string; department?: string; cost?: number; rate?: string; charged?: string
 }
 export interface Check { id: string; status: 'ok' | 'warn' | 'fail'; title: string; detail: string; fix?: string }
@@ -350,9 +366,9 @@ export interface CallerCard { number: string; contact: Contact | null; lookupErr
 export interface SimBranch { when: string; taken: boolean; step: SimStep }
 export interface SimStep { kind: string; target?: string; name: string; says: string; status: 'ok' | 'warn' | 'fail'; branches?: SimBranch[] }
 export interface SimResult { direction: string; at: string; start: SimStep; outcome: string }
-export type SimInput = { from: string; to: string; trunk: string; at: string; assumePhones: boolean }
+export type SimInput = { from: string; to: string; trunk: string; at: string; assumePhones: boolean; toggles?: Record<string, boolean> }
 export interface QualityPlace { kind: 'site' | 'provider'; name: string; calls: number; mos: number; poor: number; lossPct: number; jitterMs: number
-  hours: { calls: number; lossPct: number; poor: number }[]; status: 'ok' | 'warn' | 'fail' | 'idle'; diagnosis: string; advice?: string }
+  hours: { calls: number; lossPct: number; poor: number }[]; status: 'ok' | 'warn' | 'fail' | 'idle'; diagnosis: string; advice?: string; reasons?: string[] }
 export interface QualityReport { days: number; calls: number; places: QualityPlace[]; overall: string }
 export interface TranscriptLine { second: number; side: 'caller' | 'callee'; text: string }
 export interface CallTranscript { recording: string; callId: string; at: string; from: string; fromName: string; to: string; toName: string
@@ -419,7 +435,7 @@ const baseQuery = fetchBaseQuery({
 })
 
 const tags = ['Me', 'Extensions', 'RingGroups', 'Trunks', 'Inbound', 'Outbound', 'Settings', 'Users', 'Calls',
-  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail', 'Tenants', 'System', 'Prompts', 'Music', 'Directories', 'DialIns', 'Inbox', 'AudioStreams', 'Campaigns', 'Dialer', 'DNC', 'Toggles', 'ToggleState', 'PINSets', 'Lookups', 'Hotel', 'WakeUps', 'Chat', 'Core'] as const
+  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail', 'Tenants', 'System', 'Prompts', 'Music', 'Directories', 'DialIns', 'Inbox', 'AudioStreams', 'Campaigns', 'Dialer', 'DNC', 'Toggles', 'ToggleState', 'PINSets', 'Lookups', 'Hotel', 'WakeUps', 'Chat', 'Core', 'PlanCheck', 'Fraud'] as const
 
 export const api = createApi({
   reducerPath: 'api',
@@ -752,7 +768,11 @@ export const api = createApi({
       setSupervision: b.mutation<unknown, { id: string; mode: string }>({ query: ({ id, ...body }) => ({ url: `calls/${id}/supervise`, method: 'PUT', body }) }),
       compatibility: b.query<{ tested: { kind: string; vendor: string; models: string; provision: boolean; notes: string }[]; seen: { userAgent: string; vendor: string; extensions: string[]; first: string; last: string; count: number }[]; trunks: TrunkStatus[] }, void>({ query: () => 'compatibility', providesTags: ['Registrations'] }),
       checkVault: b.mutation<{ ok: boolean; length: number }, { ref: string }>({ query: (body) => ({ url: 'vault/check', method: 'POST', body }) }),
-      ask: b.mutation<{ id: string; explanation: string; changes: Change[] }, { request: string }>({ query: (body) => ({ url: 'ask', method: 'POST', body }) }),
+      ask: b.mutation<{ id: string; explanation: string; changes: Change[]; check?: PlanFinding[] }, { request: string }>({ query: (body) => ({ url: 'ask', method: 'POST', body }) }),
+      planCheck: b.query<PlanReport, void>({ query: () => 'plan-check', providesTags: ['PlanCheck'] }),
+      revisionCheck: b.query<List<PlanFinding>, number>({ query: (rev) => `history/${rev}/check` }),
+      rulebooks: b.query<List<Rulebook>, void>({ query: () => 'rulebooks' }),
+      fraudDecisions: b.query<List<FraudDecision>, void>({ query: () => 'security/fraud', providesTags: ['Fraud'] }),
       applyAsk: b.mutation<{ rev: number }, string>({ query: (id) => ({ url: `ask/${id}/apply`, method: 'POST' }), invalidatesTags: ['History', 'Settings', 'Extensions', 'RingGroups', 'Queues', 'Menus', 'Schedules', 'Scripts', 'Inbound', 'Outbound', 'PageGroups', 'Health'] }),
       transcript: b.query<CallTranscript, string>({ query: (name) => `recordings/${name}/transcript`, providesTags: (_r, _e, name) => [{ type: 'Transcripts', id: name }] }),
       makeTranscript: b.mutation<{ status: string }, string>({ query: (name) => ({ url: `recordings/${name}/transcript`, method: 'POST' }), invalidatesTags: (_r, _e, name) => [{ type: 'Transcripts', id: name }] }),
@@ -882,7 +902,7 @@ export const {
   useOutboundRoutesQuery, useCreateOutboundMutation, useUpdateOutboundMutation, useDeleteOutboundMutation, useReorderOutboundMutation,
   useSettingsQuery, useSaveSettingsMutation, useUsersQuery, useSaveUserMutation, useDeleteUserMutation, useChangePasswordMutation,
   useCallsQuery, useHangupMutation, useRegistrationsQuery, useStatsQuery, useCdrQuery, useHealthQuery, useHistoryQuery,
-  useRestoreMutation, useImportConfigMutation, useBansQuery, useUnbanMutation, useAuditQuery, useTraceQuery, useSystemQuery, useOpenDoorMutation, useEmergencyModeMutation, useReceptionistsQuery, useCallbacksQuery, useCallerQuery, useSimulateMutation, useMetricsTestMutation, useAwayQuery, useReputationQuery, useCertificateQuery, useInstallCertificateMutation, useDatabaseQuery, useServersQuery, useServersDnsQuery, useSetServerMutation, useForgetServerMutation, useTestDatabaseMutation, useMoveDatabaseMutation, useSetAwayMutation, useCheckCalendarMutation, useMakeInsightMutation, useAddCoachingMutation, useDeleteCoachingMutation, useInsightQuery, useTimelineQuery, useAddNoteMutation, useDeleteNoteMutation, useConversationsQuery, useThreadQuery, useSendTextMutation, useMarkReadMutation, usePutNoticeMutation, useDeleteNoticeMutation, useHotDesksQuery, useHotDeskSignInMutation, useHotDeskSignOutMutation, useDirectoryQuery, useAddContactMutation, useSaveContactMutation, useDeleteContactMutation, useCostsQuery, usePriceMutation, useQualityQuery, useCrmTestMutation, useTranscriptQuery, useMakeTranscriptMutation, useSearchTranscriptsQuery, useAddCallbackMutation, useSetCallbackMutation, useDeleteCallbackMutation, useRingBackMutation, useCreateReceptionistMutation, useUpdateReceptionistMutation, useDeleteReceptionistMutation, useAskMutation, useApplyAskMutation, useCheckVaultMutation, useSitesQuery, useCreateSiteMutation, useUpdateSiteMutation, useDeleteSiteMutation, useRemoteAddressQuery, useCompatibilityQuery, useSetAgentMutation, useSuperviseMutation, useSetSupervisionMutation, useTokensQuery, useAddTokenMutation, useRevokeTokenMutation, useGitOpsQuery, useSyncGitOpsMutation, useMobileDevicesQuery, usePairMobileMutation, useUnpairMobileMutation, useHoldsQuery, useAddHoldMutation, useUpdateHoldMutation, useReleaseHoldMutation, usePauseRecordingMutation, useLoadTestQuery, useStartLoadTestMutation, useStopLoadTestMutation, useUpgradeQuery, useUploadUpgradeMutation, useApplyUpgradeMutation, useRollbackUpgradeMutation, useCancelUpgradeMutation,
+  useRestoreMutation, useImportConfigMutation, useBansQuery, useUnbanMutation, useAuditQuery, useTraceQuery, useSystemQuery, useOpenDoorMutation, useEmergencyModeMutation, useReceptionistsQuery, useCallbacksQuery, useCallerQuery, useSimulateMutation, useMetricsTestMutation, useAwayQuery, useReputationQuery, useCertificateQuery, useInstallCertificateMutation, useDatabaseQuery, useServersQuery, useServersDnsQuery, useSetServerMutation, useForgetServerMutation, useTestDatabaseMutation, useMoveDatabaseMutation, useSetAwayMutation, useCheckCalendarMutation, useMakeInsightMutation, useAddCoachingMutation, useDeleteCoachingMutation, useInsightQuery, useTimelineQuery, useAddNoteMutation, useDeleteNoteMutation, useConversationsQuery, useThreadQuery, useSendTextMutation, useMarkReadMutation, usePutNoticeMutation, useDeleteNoticeMutation, useHotDesksQuery, useHotDeskSignInMutation, useHotDeskSignOutMutation, useDirectoryQuery, useAddContactMutation, useSaveContactMutation, useDeleteContactMutation, useCostsQuery, usePriceMutation, useQualityQuery, useCrmTestMutation, useTranscriptQuery, useMakeTranscriptMutation, useSearchTranscriptsQuery, useAddCallbackMutation, useSetCallbackMutation, useDeleteCallbackMutation, useRingBackMutation, useCreateReceptionistMutation, useUpdateReceptionistMutation, useDeleteReceptionistMutation, useAskMutation, useApplyAskMutation, usePlanCheckQuery, useRevisionCheckQuery, useRulebooksQuery, useFraudDecisionsQuery, useCheckVaultMutation, useSitesQuery, useCreateSiteMutation, useUpdateSiteMutation, useDeleteSiteMutation, useRemoteAddressQuery, useCompatibilityQuery, useSetAgentMutation, useSuperviseMutation, useSetSupervisionMutation, useTokensQuery, useAddTokenMutation, useRevokeTokenMutation, useGitOpsQuery, useSyncGitOpsMutation, useMobileDevicesQuery, usePairMobileMutation, useUnpairMobileMutation, useHoldsQuery, useAddHoldMutation, useUpdateHoldMutation, useReleaseHoldMutation, usePauseRecordingMutation, useLoadTestQuery, useStartLoadTestMutation, useStopLoadTestMutation, useUpgradeQuery, useUploadUpgradeMutation, useApplyUpgradeMutation, useRollbackUpgradeMutation, useCancelUpgradeMutation,
   useScriptsQuery, useCreateScriptMutation, useUpdateScriptMutation, useDeleteScriptMutation, useTestScriptMutation,
   useMenusQuery, useCreateMenuMutation, useUpdateMenuMutation, useDeleteMenuMutation, useSavePromptMutation, useResetPromptMutation,
   useSchedulesQuery, useCreateScheduleMutation, useUpdateScheduleMutation, useDeleteScheduleMutation,

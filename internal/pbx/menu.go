@@ -54,6 +54,11 @@ func (c *Call) runMenu(id string) {
 			if o.Key == string(key) {
 				stopKeys()
 				c.e.publish("call.updated", c.info())
+				label := ""
+				if o.Label != "" {
+					label = " (" + o.Label + ")"
+				}
+				c.note("In the menu " + m.Name + " the caller pressed " + o.Key + label + ": " + destinationName(cfg, o.Destination) + ".")
 				c.goTo(cfg, o.Destination)
 				return
 			}
@@ -62,6 +67,7 @@ func (c *Call) runMenu(id string) {
 			number := c.collectDigits(capt.Keys, string(key))
 			if x := cfg.FindExtension(number); x != nil {
 				stopKeys()
+				c.note("In the menu " + m.Name + " the caller typed the extension " + number + ".")
 				c.goTo(cfg, config.Destination{Type: "extension", Target: number})
 				return
 			}
@@ -74,6 +80,7 @@ func (c *Call) runMenu(id string) {
 	}
 	stopKeys()
 	if m.Timeout != nil {
+		c.note("In the menu " + m.Name + " the caller pressed nothing, so it went to " + destinationName(cfg, *m.Timeout) + ".")
 		c.goTo(cfg, *m.Timeout)
 		return
 	}
@@ -108,9 +115,10 @@ func (c *Call) collectDigits(keys <-chan byte, first string) string {
 func (c *Call) goTo(cfg *config.Config, d config.Destination) {
 	for depth := 1; depth < 5; depth++ {
 		c.mu.Lock()
-		sc := scriptCall{from: c.from, fromName: c.fromName, to: c.to, direction: c.direction, trunk: c.trunk}
+		sc := scriptCall{from: c.from, fromName: c.fromName, to: c.to, direction: c.direction, trunk: c.trunk, real: true}
 		c.mu.Unlock()
 		p := c.e.resolveFor(cfg, d, depth, sc)
+		c.note(p.why...)
 		switch {
 		case p.reject != 0:
 			c.play(media.ToneSamples(media.ToneConfirm), nil)
@@ -135,6 +143,7 @@ func (c *Call) goTo(cfg *config.Config, d config.Destination) {
 			c.hangup("no answer", "system")
 			return
 		}
+		c.note("Nobody answered " + firstNonEmptyStr(p.toName, "the call") + ", so the no-answer destination took it.")
 		d = *p.noAnswer
 	}
 	c.hangup("too many forwards", "system")

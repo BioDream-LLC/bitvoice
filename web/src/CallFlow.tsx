@@ -1,3 +1,4 @@
+import { PlanCheck } from './Judges'
 import { Simulator } from './Simulator'
 import { Background, Controls, Position, ReactFlow, type Edge, type Node } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -170,6 +171,7 @@ export function CallFlow() {
     <Page icon={Workflow} title="Call flow" accent="from-amber-400 to-sky-400"
       intro={admin ? 'Where calls from outside go, step by step. Click a box to change where calls go from it.' : 'Where calls from outside go, step by step. Click a box to see it.'}
       actions={admin && <button className="btn btn-primary" onClick={() => setAdding(true)}><Plus size={15} aria-hidden /> Add incoming route</button>}>
+      <PlanCheck />
       <Simulator />
       {!nodes.length ? <Empty icon={Workflow} title="No incoming routes yet">Add an incoming route to see its flow here.</Empty> : (
         <div className="card h-[70vh] overflow-hidden" aria-label="Call flow diagram"

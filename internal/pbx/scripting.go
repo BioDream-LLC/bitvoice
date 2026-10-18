@@ -20,7 +20,10 @@ type ScriptRun struct {
 }
 
 // scriptCall is the call a destination script is deciding.
-type scriptCall struct{ from, fromName, to, direction, trunk string }
+type scriptCall struct {
+	from, fromName, to, direction, trunk string
+	real                                 bool // a real call (not a simulation): calls forwarded out are judged
+}
 
 // runScript lets a script choose the destination; anything wrong uses the script's fallback.
 func (e *Engine) runScript(cfg *config.Config, s *config.Script, depth int, sc scriptCall) plan {
@@ -42,11 +45,15 @@ func (e *Engine) runScript(cfg *config.Config, s *config.Script, depth int, sc s
 		if p := e.resolveFor(cfg, cand, depth+1, sc); p.reject != 404 && p.reject != 482 {
 			run.Decision = d.Type + " " + d.Target
 			e.publish("script.ran", run)
-			return p
+			return because(p, "The script "+s.Name+" sent the call to "+destinationName(cfg, cand)+".")
 		}
 		run.Error = "the script chose " + d.Type + " " + d.Target + ", which does not exist"
 	}
 	run.Decision = "fallback: " + next.Type + " " + next.Target
 	e.publish("script.ran", run)
-	return e.resolveFor(cfg, next, depth+1, sc)
+	why := "The script " + s.Name + " chose nothing, so its fallback took the call: " + destinationName(cfg, next) + "."
+	if run.Error != "" {
+		why = "The script " + s.Name + " failed (" + run.Error + "), so its fallback took the call: " + destinationName(cfg, next) + "."
+	}
+	return because(e.resolveFor(cfg, next, depth+1, sc), why)
 }

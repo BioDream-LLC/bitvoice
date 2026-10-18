@@ -1,3 +1,5 @@
+import { FindingList } from './Judges'
+import { useRevisionCheckQuery } from './api'
 import { ChevronDown, ChevronRight, RotateCcw } from 'lucide-react'
 import { useState } from 'react'
 import type { ApiErrorBody } from './api'
@@ -69,6 +71,7 @@ export function RestoreButton({ rev, onRestore }: { rev: number; onRestore: () =
     <div className="mt-3 w-full rounded-lg border border-amber-700/50 bg-amber-950/30 p-3" role="group" aria-label={`Restore revision ${rev}`}>
       <p className="mb-2 text-sm text-amber-200">Restoring revision {rev} makes {items.length} change{items.length === 1 ? '' : 's'} to the system as it is now:</p>
       <ChangeList items={items} />
+      <RestoreCheck rev={rev} />
       {refused && <div className="mt-3"><ErrorBox message={`Revision ${rev} cannot be restored as it is: ${refused.message}`} problems={refused.problems} fields /></div>}
       <div className="mt-3 flex gap-2">
         <button type="button" className="btn btn-primary" disabled={!items.length} onClick={async () => { const e = await onRestore(); setRefused(e); if (!e) setItems(null) }}>
@@ -76,6 +79,18 @@ export function RestoreButton({ rev, onRestore }: { rev: number; onRestore: () =
         </button>
         <button type="button" className="btn" onClick={() => { setItems(null); setRefused(null) }}>Cancel</button>
       </div>
+    </div>
+  )
+}
+
+/** RestoreCheck says what restoring a revision would break, checked in every situation. */
+function RestoreCheck({ rev }: { rev: number }) {
+  const { data } = useRevisionCheckQuery(rev)
+  if (!data?.items.length) return null
+  return (
+    <div className="mt-3 space-y-2" role="alert">
+      <p className="text-sm font-semibold text-amber-300">Checked in every situation, restoring it would cause:</p>
+      <FindingList items={data.items} />
     </div>
   )
 }

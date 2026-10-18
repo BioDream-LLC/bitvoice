@@ -259,6 +259,9 @@ func (e *Engine) forwardPlan(cfg *config.Config, x *config.Extension, n string, 
 		return plan{reject: 403, reason: "Forwarding Outside Not Allowed"}
 	}
 	p := e.outbound(cfg, x, n)
+	if sc.real {
+		p = e.fraudGate(cfg, x, n, true, p)
+	}
 	p.toName = x.Name + " (forwarded)"
 	return p
 }

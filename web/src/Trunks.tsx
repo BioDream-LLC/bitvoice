@@ -1,3 +1,4 @@
+import { Reasons } from './Judges'
 import { createColumnHelper } from '@tanstack/react-table'
 import { TeamsSetup } from './Teams'
 import { Eye, EyeOff, Plus, Server } from 'lucide-react'
@@ -107,6 +108,12 @@ function Editor({ t: initial, status, onClose }: { t: Trunk; status?: TrunkStatu
         <div className="card flex items-center gap-3 p-3 text-sm">
           {trunkBadge(status)}
           <span className={status?.error ? 'text-rose-300' : 'text-slate-400'}>{status?.error || (status?.state === 'standby' ? <>Held by <span className="text-teal-300">{status.heldBy || 'another server'}</span>; calls out go through it, and this server takes the line if it stops</> : status?.addresses?.length ? `Provider at ${status.addresses.join(', ')}` : '')}</span>
+        </div>
+      )}
+      {!isNew && status?.judged && (
+        <div className="card space-y-1 p-3 text-sm">
+          <p><span className="text-slate-500">Trunk health judge: </span><span className={status.judged.order === 'last' ? 'text-amber-300' : 'text-emerald-300'}>{status.judged.text}</span></p>
+          <Reasons items={status.judged.reasons} />
         </div>
       )}
       <fieldset disabled={!admin} className="space-y-5">

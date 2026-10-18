@@ -51,6 +51,7 @@ type Call struct {
 	place *Place
 	// i3 is what an NG911 call brought: the caller's location, Additional Data (nil otherwise).
 	i3                 *i3.Call
+	locCheck           *LocationCheck                // the location check of the latest rebid (guarded by mu)
 	text               []TextLine                    // a 911 call's text conversation
 	textOn             map[string]bool               // the ways text has come: tty, rtt, msrp, sip
 	textAt             time.Time                     // the caller's last character
@@ -91,6 +92,7 @@ type Call struct {
 	vip                                          bool // on the VIP list: to the front of queues
 	screen                                       *screen.Verdict
 	screened                                     string     // labelled, when screening marked it
+	why                                          []string   // how it was routed, in plain words (guarded by mu)
 	presented                                    string     // the caller ID sent out on a trunk
 	endCode                                      int        // the SIP failure an unanswered call ended with
 	briefing                                     *recording // both sides kept for a transfer briefing
@@ -125,6 +127,7 @@ func (c *Call) info() CallInfo {
 		em := &Emergency{ESInet: c.esinet, Rebid: c.rebidAt, TakenBy: c.takenBy, TakenName: c.takenName, TakenAt: c.takenAt}
 		if d := c.i3; d != nil {
 			em.Location, em.LocationURI, em.Additional, em.Service, em.Problems = d.Location, d.LocationURI, d.Additional, d.Service, d.Problems
+			em.LocationCheck = c.locCheck
 			em.PIDF = d.LocationRaw
 		}
 		em.Text = append([]TextLine(nil), c.text...)
@@ -276,7 +279,12 @@ func (c *Call) run(p plan) {
 			break
 		}
 		depth++
-		next := c.e.resolve(cfg, *p.noAnswer, depth)
+		c.note("Nobody answered " + firstNonEmptyStr(p.toName, "the call") + ", so the no-answer destination took it.")
+		c.mu.Lock()
+		sc := scriptCall{from: c.from, fromName: c.fromName, to: c.to, direction: c.direction, trunk: c.trunk, real: true}
+		c.mu.Unlock()
+		next := c.e.resolveFor(cfg, *p.noAnswer, depth, sc)
+		c.note(next.why...)
 		if next.reject != 0 {
 			c.reject(next.reject, next.reason)
 			return
@@ -601,6 +609,9 @@ func (c *Call) watchFork(l *Leg, trunk *config.Trunk) {
 		}
 		if final == nil {
 			final = sip.NewResponse(tx.Req, 408, "")
+		}
+		if trunk != nil && final.StatusCode != 401 && final.StatusCode != 407 {
+			c.e.noteTrunkOutcome(trunk.ID, final.StatusCode)
 		}
 		if final.StatusCode < 300 {
 			c.forkAnswered(l, tx, final)
@@ -1308,6 +1319,7 @@ func (c *Call) writeRecord(info CallInfo, recording string) {
 	if c.screen != nil {
 		r.Attest, r.Verified, r.Screened = c.screen.Attest, c.screen.Verified, c.screened
 	}
+	r.Why = append([]string(nil), c.why...) // c.mu is held here
 	if c.callee != nil {
 		r.AnsweredExt = c.callee.Ext
 	}
@@ -1476,7 +1488,7 @@ func (c *Call) blindTransfer(transferor, stay *Leg, number string) {
 		}
 		return
 	}
-	p := c.e.route(cfg, caller, number)
+	p := c.e.routeCall(cfg, caller, number, false)
 	if p.reject != 0 || p.local != "" || len(p.stages) == 0 {
 		notifyReferIf(transferor, "404 Not Found", true)
 		return
@@ -1820,5 +1832,26 @@ func (e *Engine) price(r *store.CDR, trunkID, number string) {
 		if r.Rate == "" {
 			r.Rate = "Starting " + rate.Prefix
 		}
+	}
+}
+
+// whyMax bounds a call's trail: a call that loops through menus for an hour keeps its first steps.
+const whyMax = 40
+
+// note adds reasons to the call's trail, how it was routed in plain words (for its call record).
+func (c *Call) note(reasons ...string) {
+	if len(reasons) == 0 {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, r := range reasons {
+		if r == "" || len(c.why) >= whyMax {
+			continue
+		}
+		if n := len(c.why); n > 0 && c.why[n-1] == r {
+			continue
+		}
+		c.why = append(c.why, r)
 	}
 }

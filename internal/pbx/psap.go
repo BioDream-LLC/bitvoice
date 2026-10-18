@@ -58,6 +58,11 @@ func (e *Engine) Rebid(ctx context.Context, id string) (*i3.Location, error) {
 		return nil, err
 	}
 	c.mu.Lock()
+	if d.Location != nil {
+		chk := judgeLocations(d.Location, &loc, time.Now())
+		chk.Previous = d.Location
+		c.locCheck = &chk
+	}
 	d.Location, d.LocationRaw = &loc, raw
 	c.rebidAt = time.Now()
 	c.mu.Unlock()

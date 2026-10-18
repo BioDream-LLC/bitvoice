@@ -46,7 +46,16 @@ func (c *Call) startRecording(callee *Leg) {
 	if c.e.Recordings == nil || c.rec != nil || c.direction == "cluster" || !shouldRecord(cfg, c.callerExt, callee.Ext) {
 		return // a call another server sent is recorded there
 	}
-	switch action, _ := cfg.System.Recording.ConsentFor(c.outsideNumber(callee)); action {
+	// Every party's rule counts, ours too: an office under an all-party law announces whoever it calls.
+	ours := c.presented
+	if c.direction == "inbound" {
+		ours = c.to
+	}
+	action, applied := cfg.System.Recording.ConsentForParties(c.outsideNumber(callee), ours)
+	if len(applied) > 1 && len(c.why) < whyMax { // c.mu is held
+		c.why = append(c.why, "Recorded under the most protective rule ("+action+") of "+strings.Join(applied, " and ")+".")
+	}
+	switch action {
 	case "never":
 		return
 	case "announce":

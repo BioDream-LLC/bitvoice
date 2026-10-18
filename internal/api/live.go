@@ -91,6 +91,7 @@ func (s *Server) liveRoutes() {
 	s.transcriptRoutes()
 	s.crmRoutes()
 	s.simulateRoutes()
+	s.planCheckRoutes()
 	s.qualityRoutes()
 	s.metricsRoutes()
 	s.costRoutes()

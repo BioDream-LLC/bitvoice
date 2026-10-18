@@ -326,7 +326,7 @@ func (h *callHost) planFor(d config.Destination) (plan, error) {
 		return p, nil
 	}
 	h.c.mu.Lock()
-	sc := scriptCall{from: h.c.from, fromName: h.c.fromName, to: h.c.to, direction: h.c.direction, trunk: h.c.trunk}
+	sc := scriptCall{from: h.c.from, fromName: h.c.fromName, to: h.c.to, direction: h.c.direction, trunk: h.c.trunk, real: true}
 	h.c.mu.Unlock()
 	p := h.c.e.resolveFor(h.cfg, d, 1, sc)
 	if p.reject == 404 {

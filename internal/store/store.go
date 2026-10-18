@@ -93,6 +93,9 @@ type CDR struct {
 	Signed   string `json:"signed,omitempty"`
 	Verified string `json:"verified,omitempty"`
 	Screened string `json:"screened,omitempty"`
+	// Why is how the call was routed, step by step in plain words: the route that matched, the hours, toggles,
+	// scripts, forwards and keys that decided where it went, and what the judges decided.
+	Why []string `json:"why,omitempty"`
 	// AnsweredExt is the extension that answered, when one did.
 	AnsweredExt string `json:"answeredExt,omitempty"`
 	// Emergency marks a 911 call this system answered as a PSAP (from the ESInet, or with location).

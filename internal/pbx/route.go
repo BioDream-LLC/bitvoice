@@ -25,6 +25,7 @@ type plan struct {
 	box       string // the mailbox, for voicemail and messages
 	reject    int    // a SIP code to refuse with, when nothing can be rung
 	reason    string
+	why       []string // how this plan was reached, in plain words
 	toName    string
 	direction string
 	trunk     string
@@ -128,11 +129,12 @@ func (e *Engine) resolveFor(cfg *config.Config, d config.Destination, depth int,
 		if s == nil {
 			return plan{reject: 404}
 		}
-		next := s.Closed
-		if s.IsOpen(time.Now().In(cfg.System.Location())) {
-			next = s.Open
+		next, state := s.Closed, "closed"
+		now := time.Now().In(cfg.System.Location())
+		if s.IsOpen(now) {
+			next, state = s.Open, "open"
 		}
-		return e.resolveFor(cfg, next, depth+1, sc)
+		return because(e.resolveFor(cfg, next, depth+1, sc), s.Name+" was "+state+" ("+now.Format("Mon 15:04")+"), so the call went to "+destinationName(cfg, next)+".")
 	case "audiosocket":
 		s := cfg.FindAudioStream(d.Target)
 		if s == nil {
@@ -144,11 +146,11 @@ func (e *Engine) resolveFor(cfg *config.Config, d config.Destination, depth int,
 		if t == nil {
 			return plan{reject: 404}
 		}
-		next := t.Normal
+		next, state := t.Normal, "normal"
 		if e.ToggleOn(t.ID) {
-			next = t.Override
+			next, state = t.Override, "switched over"
 		}
-		return e.resolveFor(cfg, next, depth+1, sc)
+		return because(e.resolveFor(cfg, next, depth+1, sc), t.Name+" was "+state+", so the call went to "+destinationName(cfg, next)+".")
 	case "esrp":
 		return plan{local: "esrp", toName: "ESRP"} // routed by the caller's location, in newCall
 	case "fax":
@@ -176,28 +178,32 @@ func (e *Engine) resolveFor(cfg *config.Config, d config.Destination, depth int,
 		}
 		dv := e.DivertOf(x.Number)
 		if dv.All != "" && depth < 4 {
-			return diverted(e.forwardPlan(cfg, x, dv.All, depth, sc), x, "unconditional")
+			return because(diverted(e.forwardPlan(cfg, x, dv.All, depth, sc), x, "unconditional"), x.Name+" forwards every call to "+dv.All+".")
 		}
 		if a, away := e.awayNow(x.Number); away && depth < 8 {
 			if to, ok := whileAway(x, a); ok {
+				why := x.Name + " is away, so the call went to " + destinationName(cfg, to) + "."
 				if to.Type == "number" {
 					if cfg.FindExtension(to.Target) != nil {
-						return e.resolveFor(cfg, config.Destination{Type: "extension", Target: to.Target}, depth+1, sc)
+						return because(e.resolveFor(cfg, config.Destination{Type: "extension", Target: to.Target}, depth+1, sc), why)
 					}
 					if x.Outbound { // forwarded to a mobile, through the outbound routes
 						p := e.outbound(cfg, x, to.Target)
+						if sc.real {
+							p = e.fraudGate(cfg, x, to.Target, true, p)
+						}
 						p.toName = x.Name + " (forwarded)"
 						if p.reject == 0 {
-							return p
+							return because(p, why)
 						}
 					}
 				} else {
-					return e.resolveFor(cfg, to, depth+1, sc)
+					return because(e.resolveFor(cfg, to, depth+1, sc), why)
 				}
 			}
 		}
 		if dv.Busy != "" && depth < 4 && e.onCall(x.Number) {
-			return diverted(e.forwardPlan(cfg, x, dv.Busy, depth, sc), x, "user-busy")
+			return because(diverted(e.forwardPlan(cfg, x, dv.Busy, depth, sc), x, "user-busy"), x.Name+" was on a call and forwards when busy to "+dv.Busy+".")
 		}
 		p := plan{toName: x.Name, noAnswer: x.NoAnswer}
 		if dv.NoAnswer != "" && depth < 4 {
@@ -217,9 +223,9 @@ func (e *Engine) resolveFor(cfg *config.Config, d config.Destination, depth int,
 		}
 		if len(ts) == 0 && len(follow) == 0 {
 			if p.noAnswer != nil {
-				return e.resolveFor(cfg, *p.noAnswer, depth+1, sc)
+				return because(e.resolveFor(cfg, *p.noAnswer, depth+1, sc), x.Name+" had no phone connected, so its no-answer destination took the call.")
 			}
-			return plan{reject: 480, reason: "Not Registered", toName: x.Name}
+			return plan{reject: 480, reason: "Not Registered", toName: x.Name, why: []string{x.Name + " had no phone connected and nowhere to go when nobody answers."}}
 		}
 		if len(ts) > 0 {
 			p.stages = []stage{{targets: ts, timeout: time.Duration(x.RingSeconds) * time.Second}}
@@ -240,6 +246,7 @@ func (e *Engine) resolveFor(cfg *config.Config, d config.Destination, depth int,
 				continue
 			}
 			if _, away := e.awayNow(m); away {
+				p.why = append(p.why, x.Name+" was away, so "+g.Name+" rang the others.")
 				continue // in a meeting or off: the group rings the others
 			}
 			var ts []target
@@ -266,9 +273,9 @@ func (e *Engine) resolveFor(cfg *config.Config, d config.Destination, depth int,
 		}
 		if len(p.stages) == 0 {
 			if g.NoAnswer != nil {
-				return e.resolveFor(cfg, *g.NoAnswer, depth+1, sc)
+				return because(e.resolveFor(cfg, *g.NoAnswer, depth+1, sc), append(p.why, "Nobody in "+g.Name+" had a phone connected, so its no-answer destination took the call.")...)
 			}
-			return plan{reject: 480, reason: "Nobody Available", toName: g.Name}
+			return plan{reject: 480, reason: "Nobody Available", toName: g.Name, why: append(p.why, "Nobody in "+g.Name+" had a phone connected, and it has nowhere to go when nobody answers.")}
 		}
 		return p
 	}
@@ -277,6 +284,19 @@ func (e *Engine) resolveFor(cfg *config.Config, d config.Destination, depth int,
 
 // route decides where a number dialled from an extension goes.
 func (e *Engine) route(cfg *config.Config, caller *config.Extension, dialled string) plan {
+	return e.routeFor(cfg, caller, dialled, nil)
+}
+
+// judging marks a real call (not a simulation): calls out are put to the toll-fraud guard. outside is a call
+// placed from outside the office.
+type judging struct{ outside bool }
+
+// routeCall routes a real call, judged by the toll-fraud guard.
+func (e *Engine) routeCall(cfg *config.Config, caller *config.Extension, dialled string, outside bool) plan {
+	return e.routeFor(cfg, caller, dialled, &judging{outside: outside})
+}
+
+func (e *Engine) routeFor(cfg *config.Config, caller *config.Extension, dialled string, j *judging) plan {
 	dialled = cleanNumber(dialled)
 	if em := cfg.System.EmergencyMode; em.Code != "" && dialled == em.Code {
 		if caller == nil || !slices.Contains(em.Allowed, caller.Number) {
@@ -379,6 +399,9 @@ func (e *Engine) route(cfg *config.Config, caller *config.Extension, dialled str
 		return plan{reject: 403, reason: "Room Not Checked In", direction: "outbound"}
 	}
 	p := e.outbound(cfg, caller, dialled)
+	if j != nil {
+		p = e.fraudGate(cfg, caller, dialled, j.outside, p)
+	}
 	p.direction = "outbound"
 	if p.pinSet != "" && p.reject == 0 {
 		// The route asks for a PIN: BitVoice answers, asks for it, then places the call.
@@ -416,10 +439,12 @@ func (e *Engine) outbound(cfg *config.Config, caller *config.Extension, dialled 
 		}
 		number = r.Prepend + number
 		if cfg.Security.BlockPremium && isPremium(number) && !slices.Contains(cfg.System.EmergencyNumbers, dialled) {
-			return plan{reject: 403, reason: "Premium Number Blocked"}
+			return plan{reject: 403, reason: "Premium Number Blocked", why: []string{number + " is a premium-rate or high-fraud number, and those are blocked (Security)."}}
 		}
 		var p plan
-		for _, id := range r.Trunks {
+		ids, reordered := e.orderTrunks(cfg, r.Trunks)
+		p.why = append(p.why, reordered...)
+		for _, id := range ids {
 			t := cfg.FindTrunk(id)
 			if t == nil || !t.Enabled {
 				continue
@@ -456,6 +481,13 @@ func (e *Engine) outbound(cfg *config.Config, caller *config.Extension, dialled 
 		if !slices.Contains(cfg.System.EmergencyNumbers, dialled) {
 			p.pinSet = r.PINSet
 		}
+		var names []string
+		for _, id := range ids {
+			if t := cfg.FindTrunk(id); t != nil && t.Enabled {
+				names = append(names, t.Name)
+			}
+		}
+		p.why = append(p.why, "The outbound route "+r.Name+" took "+dialled+", out through "+strings.Join(names, ", then ")+".")
 		return p
 	}
 	return plan{reject: 404, reason: "No Route"}
@@ -653,7 +685,15 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 			c.fromName = strings.TrimSpace(labelOf(cfg) + " " + c.fromName)
 		}
 		c.to = did
-		p = e.resolveFor(cfg, route.Destination, 0, scriptCall{from: c.from, fromName: c.fromName, to: did, direction: "inbound", trunk: trunk.Name})
+		match := "took " + did
+		if route.DID == "" {
+			match = "takes every number (" + did + " here)"
+		}
+		c.note("The incoming route " + route.Name + " on " + trunk.Name + " " + match + ".")
+		if c.screened == "labelled" {
+			c.note("The caller was labelled as possible spam (Screening).")
+		}
+		p = e.resolveFor(cfg, route.Destination, 0, scriptCall{from: c.from, fromName: c.fromName, to: did, direction: "inbound", trunk: trunk.Name, real: true})
 		c.testCall = trunk.ESInet && IsTestCall(m.RequestURI)
 		if p.local == "esrp" {
 			p = e.esrpPlan(cfg, c, did)
@@ -687,7 +727,7 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 		c.callerExt = ""
 		c.linkID = "web:" + link.ID
 		c.to = link.Name
-		p = e.resolveFor(cfg, link.Destination, 0, scriptCall{from: c.from, fromName: c.fromName, to: link.Name, direction: "inbound", trunk: "web"})
+		p = e.resolveFor(cfg, link.Destination, 0, scriptCall{from: c.from, fromName: c.fromName, to: link.Name, direction: "inbound", trunk: "web", real: true})
 		p.direction = "inbound"
 		p.trunk = "Call link: " + link.Name
 	} else {
@@ -731,7 +771,7 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 		if hd := cfg.System.HotDesk; desk.HotDesk && (cleanNumber(dialled) == hd.Login || cleanNumber(dialled) == hd.Logout) {
 			p = plan{local: "hotdesk", box: cleanNumber(dialled), toName: "Hot desk", direction: "internal"}
 		} else {
-			p = e.route(cfg, ext, dialled)
+			p = e.routeCall(cfg, ext, dialled, false)
 		}
 		c.from, c.fromName = ext.Number, ext.Name
 		c.callerExt = ext.Number
@@ -812,6 +852,7 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 	e.publish("call.started", c.info())
 	go c.locateByNumber()
 
+	c.note(p.why...)
 	if p.reject != 0 {
 		c.reject(p.reject, p.reason)
 		return
@@ -821,6 +862,12 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 		return
 	}
 	go c.run(p)
+}
+
+// because adds reasons in front of a plan's own: what led to it comes before what it found.
+func because(p plan, reasons ...string) plan {
+	p.why = append(append([]string(nil), reasons...), p.why...)
+	return p
 }
 
 func inboundRoute(cfg *config.Config, trunkID, did string) *config.InboundRoute {

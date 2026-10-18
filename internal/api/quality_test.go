@@ -38,6 +38,10 @@ func TestQualityReport(t *testing.T) {
 	if ho.Status != "warn" && ho.Status != "fail" || !strings.Contains(ho.Diagnosis, "Packet loss on Head office's network") || !strings.Contains(ho.Diagnosis, "between 14:00 and 16:00") {
 		t.Fatalf("head office: %+v", ho)
 	}
+	// The trunk half of the same calls arrived clean: the loss is on the head office's side, and it says why.
+	if !strings.Contains(ho.Diagnosis, "The other half of the same calls arrived clean") || !strings.Contains(strings.Join(ho.Reasons, " "), "so the loss is on this place's side") {
+		t.Fatalf("head office reasons: %+v", ho)
+	}
 	if c := by["Carrier"]; c.Status != "ok" || c.Kind != "provider" {
 		t.Fatalf("carrier: %+v", c)
 	}
@@ -52,5 +56,26 @@ func TestQualityReport(t *testing.T) {
 	}
 	if qualityReport(cfg, nil, 7).Overall != "No calls with sound to judge in this time." {
 		t.Fatal("empty")
+	}
+}
+
+// Both halves of the same calls lost sound: not the site alone, which the diagnosis says.
+func TestQualityBothHalvesLossy(t *testing.T) {
+	cfg := config.Default()
+	cfg.System.Timezone = "UTC"
+	cfg.Sites = []config.Site{{ID: "s1", Name: "Head office"}}
+	cfg.Extensions = []config.Extension{{Number: "100", Name: "A", Site: "s1"}}
+	cfg.Trunks = []config.Trunk{{ID: "t1", Name: "Carrier"}}
+	day := time.Date(2026, 10, 5, 9, 0, 0, 0, time.UTC)
+	var rs []store.CDR
+	for i := range 5 {
+		rs = append(rs, store.CDR{Start: day.Add(time.Duration(i) * time.Minute), Quality: []store.LegQuality{
+			{Ext: "100", Packets: 3000, Lost: 200, MOS: 3.2}, {Trunk: "t1", Packets: 3000, Lost: 180, MOS: 3.3}}})
+	}
+	rep := qualityReport(cfg, rs, 7)
+	for _, p := range rep.Places {
+		if !strings.Contains(p.Diagnosis, "not at "+p.Name+" alone") {
+			t.Errorf("%s: %+v", p.Name, p)
+		}
 	}
 }

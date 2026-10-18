@@ -84,7 +84,7 @@ func (c *Call) runDialIn(id string) {
 			c.hangup("dial-in: its extension may not call out", "system")
 			return
 		}
-		p := c.e.route(cfg, as, number)
+		p := c.e.routeCall(cfg, as, number, true)
 		if p.reject != 0 {
 			if _, ended := c.sayPrompts(lang, nil, toneDeleted, "invalid"); ended {
 				return

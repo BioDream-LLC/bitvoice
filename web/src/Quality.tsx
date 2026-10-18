@@ -1,3 +1,4 @@
+import { Reasons } from './Judges'
 import { Building2, RadioTower, Signal } from 'lucide-react'
 import { useState } from 'react'
 import { useInsightQuery, useQualityQuery, type QualityPlace } from './api'
@@ -81,6 +82,7 @@ function PlaceCard({ p }: { p: QualityPlace }) {
       </dl>
       <p className="text-sm text-slate-200">{p.diagnosis}</p>
       {p.advice && <p className="text-sm text-slate-400">{p.advice}</p>}
+      <Reasons items={p.reasons} label="How this was worked out" />
       {busy && p.status !== 'idle' && (
         <Chart height={110} label={`Sound lost by hour of day at ${p.name}`} option={{
           grid: { left: 30, right: 6, top: 8, bottom: 20 },

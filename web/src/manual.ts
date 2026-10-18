@@ -343,6 +343,9 @@ BitVoice wakes the app; it connects, rings on the phone's own call screen, and i
 2. Enter the **provider server** your phone company gave you (\`sip.provider.com\`), and the port if it is not 5060.
 3. Enter the **username** and **password**, and switch on **Register** if the provider says to (most do).
 4. Save. Within a few seconds the trunk shows **registered**; if not, the reason is shown beside it.
+
+## The trunk health judge
+With two or more trunks on an outbound route, BitVoice judges every 15 seconds whether each is used in its place or **tried after the other trunks**. A trunk moves behind the others when its provider stops answering the keep-alive checks, or when its last calls out failed one after another on the provider's side (**Failed calls in a row** within **Within (minutes)**, Settings, **Trunk health judge**), and another trunk is working. It is not moved on a failing keep-alive alone while calls through it still get through; and when every trunk fails at once, the likelier cause is this system's own internet link, so nothing is moved. A change needs two judgements in a row (30 seconds), so a trunk never flaps. A trunk is never taken out altogether: it is still tried when the others fail, so an emergency call always has every way out. The trunk's page shows the judgement and its reasons; a call that went out another way says so in its record.
 5. Add an **incoming route** for your number and an **outgoing route** that uses this trunk ([Call routing](#routes)).
 
 | Field | What it does |
@@ -1072,6 +1075,8 @@ Most providers sign their customers' calls themselves. If yours lets you sign (o
 
 **Rules** pick by the outside number (the caller on calls in, the number dialled on calls out), longest match first: for example numbers starting 1415 (California) **Announce**, 49 (Germany) **Never record**, everything else as above. A rule's **No notice** records without one; **Never record** leaves those calls out of recording altogether. Calls between extensions follow the main setting.
 
+Your own number counts too: the rules are matched against both the outside number and yours (the number called on calls in, your caller ID on calls out), and the **most protective** of them wins (**Never record** before **Announce** before **Beep** before **No notice**). So an office in a place that needs every party's consent announces whoever it calls, wherever they are. When the parties fall under different rules, the call's record in [Call history](#/history) says which rule applied and why.
+
 Recording can also be paused during a call with the pause code (card payments). None of this is legal advice: check the laws where you and your callers are.`,
   },
   {
@@ -1134,7 +1139,7 @@ Give extensions a **Department** (in the extension). On Costs, add a budget for 
 
 Each place shows its calls, its average score (MOS, out of 5: above 4 is good, under 3.6 sounds poor), the share of sound packets that never arrived, and jitter (uneven delay). Below that, BitVoice says what is wrong in plain words, for example "Packet loss on Head office's network: 3.2% of the sound never arrived, mostly between 14:00 and 16:00", with what to check. The bar chart shows the sound lost by hour of the day.
 
-If every place loses sound at once, the cause is what they share: the internet link or the provider. Places with fewer than three calls are not judged. Per-call quality is also in [Call history](#/history) (the Quality column) and, while calls are live, on [Live calls](#/calls).`,
+The diagnosis compares the two halves of the same calls: the sound from the site's phones and the sound from the provider the same calls went through. When the other half arrived clean, the loss is on this place's side, and it says so; when both halves lost sound, the place is not to blame alone and it points at what the calls share, this system's own internet link. If every place loses sound at once, the cause is likewise what they share. **How this was worked out** lists the reasons, step by step (the call-quality rulebook, see [Security](#security), "How BitVoice decides"). Places with fewer than three calls are not judged. Per-call quality is also in [Call history](#/history) (the Quality column) and, while calls are live, on [Live calls](#/calls).`,
   },
   {
     id: 'callbacks', title: 'Callbacks', route: '/callbacks', keys: 'call back ring back request receptionist',
@@ -1443,8 +1448,29 @@ A different thing: one switch that sends every incoming call to one place (an ev
 ## Against fraud
 - Extensions can call outside numbers only when allowed.
 - Premium-rate numbers are refused unless a route names them.
+- The **toll-fraud guard** (below) judges every call out of the country before it is placed.
 - [Costs](#/costs) alerts on budgets and on runaway spend: many calls to one country in an hour.
 - Each extension may have at most four calls at once (Settings, Protection).
+
+## The toll-fraud guard
+Switch it on in Settings, **Toll-fraud guard**. Every call out of the country (by +, 00 or 011, and the places that share +1 with North America but are other countries, such as Jamaica, a classic toll-fraud destination) is then judged before it is placed:
+| Situation | What it does |
+|---|---|
+| A call abroad to a country this extension called in the last 90 days | lets it through |
+| A first call to that country in 90 days | lets it through and reports it |
+| A first call there outside **Business hours**, or placed from outside (a dial-in, a forward) | asks for the **PIN asked for** (with none chosen, refuses it) |
+| More than **Calls abroad in 10 minutes** from one extension | refuses it |
+| A first call abroad while someone is guessing passwords (three failures in a row from one address, or a ban, in the last hour) | refuses it |
+| An emergency number | always lets it through |
+
+**Countries always allowed** (calling codes, such as 44) and **Exceptions** (an extension excused until a day, for a trip) take away "first call" and "outside hours"; they never excuse many calls in a short time or an attack, because a stolen password looks approved too. If the call history cannot be read, the guard does not know whether a call is a first, and something not measured is never taken for safe: it asks for the PIN. Every judgement is listed on [Security](#/security) with its reasons, and is on the call's record in [Call history](#/history).
+
+## How BitVoice decides
+BitVoice's judges (the toll-fraud guard, the trunk health judge, the call-quality diagnosis and the 911 caller location check) each follow a **rulebook**: facts that are measured, conclusions they support, the exceptions that overrule a conclusion, and the choices. **How BitVoice decides**, on [Security](#/security), shows each rulebook. The rules the judges keep:
+- Every answer comes with its reasons: what held, what was argued against it and what overruled that.
+- Something nobody measured is unknown, never "no". When an unknown could change the answer, the judge takes its cautious choice and says what it could not measure.
+- "Cannot determine" is an answer: when the rules leave a situation undecided, the judge takes its cautious choice and says so.
+- Each rulebook is checked in every combination of its facts before it is used (when BitVoice starts, and by its tests): never two choices at once, and every rule reachable. The screen shows how many situations each was checked in.
 
 ## Encryption
 - **TLS** encrypts signalling (port 5061), so passwords and numbers are not readable on the network.
@@ -1683,8 +1709,19 @@ With **Transcribe and summarise voicemail** on, each message is also marked urge
 On [Changes](#/changes), describe a change ("send sales calls to voicemail after 5 pm"). The AI proposes it, BitVoice checks it like any other change and shows exactly what would change. Nothing changes until you press **Apply**, and it becomes a revision you can restore. Passwords are never sent to the AI.`,
   },
   {
-    id: 'flow', title: 'Call flow', route: '/flow', keys: 'diagram flow chart routing map edit drag where calls go simulate simulator try a call test path',
+    id: 'flow', title: 'Call flow', route: '/flow', keys: 'diagram flow chart routing map edit drag where calls go simulate simulator try a call test path check every situation dead end loop unreachable',
     body: `::figure call-path
+
+## Check every situation
+**Check every situation**, at the top of [Call flow](#/flow), tries your whole call plan in every situation it can be in, not a sample:
+- every combination of open and closed that your schedules really reach over the coming year (each holiday included), found in 15-minute steps;
+- every combination of day/night toggles (or, with more than six, each one switched alone);
+- every incoming route, and every key a caller can press in every menu, every "if nobody answers" and every queue timeout along the way;
+- every extension dialling every emergency number.
+
+It lists what it finds, the worst first: **a call goes nowhere** (a group with nobody to ring and nowhere to go next), **a loop**, **works, but look at it** (a queue with no agents), **nothing routes to it** (a menu or schedule no call reaches), **a branch no situation takes** (a schedule that is never closed, so its closed side is never used), and **emergency calls rest on one trunk** (if it fails, they cannot get out). Each finding names the situations that show it: the time and which schedules were open, the toggles switched over, and the path (\`a call to +12125550100 → Press 2 (Billing) → No answer\`). **Try this call** fills **Try a call** below with that exact situation and traces it.
+
+The same check runs on changes before they are made: a proposal from **Ask in plain words** and the **Restore this** look at an old revision both list what the change would break that works today.
 
 ## Try a call
 Enter who calls (an extension, or an outside number), what they dial and when, and press **Try it**. BitVoice follows the call exactly as it would for real, without ringing anything: the incoming route, schedules at that time, routing scripts (they run, in their sandbox), menus, groups and queues, and what happens if nobody answers. The path this call takes is marked; other ways on (a menu's keys, a schedule's other side) can be opened. Green means it works, amber means look at it (a phone not connected, a script falling back), red means the call fails there. Tick **Assume every phone is connected** to see the plan as designed rather than as it is right now; **Arrives on** picks the trunk for routes that only take one.
@@ -1748,10 +1785,13 @@ To listen, whisper or barge, press **Supervise**, choose the phone to use under 
 When a call ends, it moves to [Call history](#history).`,
   },
   {
-    id: 'history', title: 'Call history', route: '/history', keys: 'cdr call records history log export csv recording transcript search said summary action items',
+    id: 'history', title: 'Call history', route: '/history', keys: 'cdr call records history log export csv recording transcript search said summary action items why routed reasons',
     body: `Every finished call: who called whom, when, for how long and how it ended. Sort the columns, play recordings (a pause for card numbers is marked), and download the list as CSV. How long records are kept is set in Settings, Call recording; a [legal hold](#/holds) keeps them longer.
 
 ::figure history
+
+## How it was routed
+Under each call's result, **How it was routed** lists, in plain words and in order, what decided where the call went: the incoming route that took it, whether a schedule was open or closed and the time, a toggle's side, what a routing script chose (or that its fallback took the call), the keys pressed in a menu, who was away, who had no phone connected, who did not answer, the outbound route and trunks used (and a trunk the health judge moved behind the others), the toll-fraud guard's judgement, and, for a recorded call whose parties are under different consent rules, which rule applied.
 
 ## Transcripts and search
 With AI on and **Transcribe recorded calls** switched on (Settings, AI), every recorded call is written out, with a short summary and its action items: what someone agreed or was asked to do. Each side of the call is written out separately from the recording, so the transcript shows who said what, and when. The transcript button next to a recording opens it; administrators can also transcribe a single call, or transcribe one again.
@@ -1906,6 +1946,8 @@ BitVoice answers 911 calls as a PSAP's call-handling system: calls from the emer
 - anything that went wrong reading it.
 
 Location comes in the call (by value), or as a reference BitVoice fetches with HELD. A call with a reference has **Rebid location**: BitVoice asks again, for a caller who is moving or whose first fix was rough.
+
+When a rebid changes the location, the **location check** says which to show first, and why: the new location as a rule; the first one when it was a precise device fix (GPS, within 100 m) less than two minutes old and the new one is rougher; and **both** when two locations disagree by more than their uncertainty allows, so the call-taker asks the caller. The first location stays on the call either way.
 
 **When a call-taker answers**, CAD gets, each on its own so a CAD that is down never holds up the call:
 - **the ALI spill**: the text block CAD systems read (callback number, class of service, address, position and uncertainty, provider), sent over TCP;
