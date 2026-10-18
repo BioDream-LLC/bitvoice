@@ -88,9 +88,16 @@ func TestHotelSystemLink(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+	// Saved just after the guest is shown checked in: wait for the save, never a fixed pause.
 	var kept []pbx.Guest
-	if err := s.Store.LoadState("guests", &kept); err != nil || len(kept) != 1 {
-		t.Fatalf("guests not kept across restarts: %v %v", err, kept)
+	for deadline := time.Now().Add(15 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+		kept = nil
+		if err = s.Store.LoadState("guests", &kept); err == nil && len(kept) == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("guests not kept across restarts: %v %v", err, kept)
+		}
 	}
 	_, view := admin.do("GET", "/api/hotel", nil)
 	if !strings.Contains(asJSON(view), `"name":"Smith, Ann"`) || !strings.Contains(asJSON(view), `"up":true`) {

@@ -377,7 +377,9 @@ func TestVideoRoomGridWithoutFFmpeg(t *testing.T) {
 	if _, code := p.dial("700"); code != 200 {
 		t.Fatal(code)
 	}
-	if v := e.Conferences(); len(v) != 1 || v[0].Video != "talker" {
+	// The room is listed once the answered call has joined it.
+	waitFor(t, "the room is not listed", func() bool { return len(e.Conferences()) == 1 })
+	if v := e.Conferences(); v[0].Video != "talker" {
 		t.Fatalf("%+v", v)
 	}
 }
