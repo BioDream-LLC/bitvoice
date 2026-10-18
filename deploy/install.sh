@@ -298,6 +298,9 @@ cat > "$plist" <<PLIST
   <key>Label</key><string>org.bitvoice.bitvoice</string>
   <key>ProgramArguments</key>
   <array>
+    <string>/usr/bin/caffeinate</string>
+    <string>-i</string>
+    <string>-s</string>
     <string>$dir/bitvoice</string>$( [ -n "$DATA_MAC" ] && printf '\n    <string>-data</string>\n    <string>%s</string>' "$DATA_MAC")
     <string>-no-browser</string>
     <string>-https</string>
@@ -312,6 +315,7 @@ cat > "$plist" <<PLIST
 PLIST
 launchctl bootstrap "gui/$(id -u)" "$plist" 2>/dev/null || launchctl load "$plist"
 say "  Starts when you sign in (launchd agent org.bitvoice.bitvoice; log: ~/Library/Logs/BitVoice.log)."
+say "  Keeps the Mac awake while it runs (caffeinate): a sleeping Mac answers no calls."
 port=$(port_of "$HTTPS_MAC")
 if ! wait_ready "https://127.0.0.1:$port"; then
   tail -n 30 "$HOME/Library/Logs/BitVoice.log" 2>/dev/null || true
