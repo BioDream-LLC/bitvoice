@@ -17,7 +17,7 @@ browser opens on a setup wizard; a few minutes later a phone rings.
 
 <a href="https://demo.bitvoice.org"><img src="docs/assets/buttons/try.svg" alt="Try BitVoice now: the live demonstration, no install" width="300"></a>
 
-<sub><b>Sign in as</b> <code>demo</code> <b>with password</b> <code>try-bitvoice-demo</code> · then open the browser phone as extension <code>150</code>, password <code>try-the-demo-phone</code>, and dial <code>810</code> or <code>*43</code> · an invented business, reset every night · look at everything, change nothing</sub>
+<sub><b>Sign in as</b> <code>demo</code> <b>with password</b> <code>try-bitvoice-demo</code> · then open the browser phone as extension <code>150</code>, password <code>try-the-demo-phone</code>, and dial <code>810</code> or <code>*43</code> · an invented business, reset every night · look at everything, change nothing · or <a href="docs/assets/tour.mp4">watch the tour</a> (2½ minutes)</sub>
 
 ### Download v0.1.6
 
@@ -408,17 +408,29 @@ setting in the web interface.
 
 ### Capacity
 
-Measured with BitVoice's own call generator (Health, **Call generator**) on an Apple M4 desktop (10 cores,
-16 GB), v0.1.5: one extension calls another, which the generator answers and sends the audio back, G.711
-with media relayed through BitVoice, 45 seconds a call. The generator runs inside the same process, so each
-call is carried three times over (caller, PBX, answerer): the PBX alone needs less.
+Measured with BitVoice's own call generator (Health, **Call generator**) on v0.1.6: one extension calls
+another, which the generator answers and sends the audio back, G.711 with media relayed through BitVoice,
+45 seconds a call. The generator runs inside the same process, so each call is carried three times over
+(caller, PBX, answerer): the PBX alone needs less.
+
+On an Apple M4 desktop (10 cores, 16 GB):
 
 | Calls at once | Answered | Set-up time (p95) | Audio loss | MOS | CPU (peak, of one core) | Memory |
 |---|---|---|---|---|---|---|
-| 50 | 50 of 50 | 3.9 ms | 0% | 4.41 | 81% | 61 MB |
-| 100 | 100 of 100 | 3.4 ms | 0% | 4.41 | 137% | 76 MB |
-| 200 | 200 of 200 | 4.8 ms | 0% | 4.41 | 240% | 111 MB |
+| 50 | 50 of 50 | 4.1 ms | 0% | 4.41 | 77% | 57 MB |
+| 100 | 100 of 100 | 3.6 ms | 0% | 4.41 | 141% | 72 MB |
+| 200 | 200 of 200 | 2.9 ms | 0% | 4.41 | 171% | 98 MB |
 
+On the public demo's server, an Amazon Lightsail nano (2 vCPUs, 512 MB, about $5 a month), with the demo's own
+data and services running:
+
+| Calls at once | Answered | Set-up time (p95) | Audio loss | MOS | CPU (peak, of one vCPU) | Memory |
+|---|---|---|---|---|---|---|
+| 50 | 50 of 50 | 11.4 ms | 0% | 4.41 | 46% | 61 MB |
+| 100 | 100 of 100 | 7.8 ms | 0% | 4.41 | 95% | 74 MB |
+| 200 | 200 of 200 | 20.9 ms | 0% | 4.41 | 186% | 101 MB |
+
+A nano's CPU is burstable: 200 calls at once uses nearly both vCPUs, which it can do for a while, not all day.
 200 is the generator's own ceiling, not BitVoice's. Your numbers depend on the codec, conversion,
 recording and the network: run the generator on your own server before you go live.
 

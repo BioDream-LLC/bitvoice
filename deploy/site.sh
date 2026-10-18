@@ -12,7 +12,7 @@ DIR="dist-site"
 [ -d "$DIR" ] || { echo "no $DIR: run make site first" >&2; exit 1; }
 
 missing=$(find "$DIR" -type f ! -name "*.html" ! -name "*.svg" ! -name "*.webp" ! -name "*.png" \
-  ! -name "*.pdf" ! -name "*.xml" ! -name "*.txt" ! -name "*.css")
+  ! -name "*.pdf" ! -name "*.xml" ! -name "*.txt" ! -name "*.css" ! -name "*.mp4")
 if [ -n "$missing" ]; then
   echo "no Content-Type rule for these; add them to this script:" >&2
   echo "$missing" >&2
@@ -24,7 +24,7 @@ cd "$DIR"
 aws s3 sync . "$BUCKET" --delete --exclude "*" --include "*.html" \
   --content-type "text/html; charset=utf-8" --cache-control "public, max-age=300, must-revalidate" --only-show-errors
 for spec in "*.svg:image/svg+xml" "*.webp:image/webp" "*.png:image/png" "*.pdf:application/pdf" \
-  "*.xml:application/xml; charset=utf-8" "*.txt:text/plain; charset=utf-8" "*.css:text/css; charset=utf-8"; do
+  "*.xml:application/xml; charset=utf-8" "*.txt:text/plain; charset=utf-8" "*.css:text/css; charset=utf-8" "*.mp4:video/mp4"; do
   pattern=${spec%%:*}
   type=${spec#*:}
   [ -n "$(find . -name "$pattern" -type f | head -1)" ] || continue

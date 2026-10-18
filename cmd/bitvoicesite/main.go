@@ -227,7 +227,7 @@ func tables(md string) string {
 // copyAssets copies the logo, artwork and chips, and the screenshots: as WebP at the size they are
 // shown when cwebp is installed (a fifth of the bytes), else the PNGs as they are.
 func copyAssets(root, out string) error {
-	for _, glob := range []string{"docs/assets/*.svg", "docs/assets/chips/*.svg"} {
+	for _, glob := range []string{"docs/assets/*.svg", "docs/assets/chips/*.svg", "docs/assets/*.mp4"} {
 		files, _ := filepath.Glob(filepath.Join(root, glob))
 		for _, f := range files {
 			rel, _ := filepath.Rel(filepath.Join(root, "docs"), f)
