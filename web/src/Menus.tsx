@@ -9,7 +9,7 @@ import { useOpenParam } from './useOpenParam'
 import { attempt, DeleteButton, Drawer, useIsAdmin } from './Editor'
 import { DestinationPicker, useDescribe } from './Extensions'
 import { AudioRecording } from './Greeting'
-import { Badge, Empty, Field, Page, Toggle, problemFor } from './ui'
+import { Badge, Empty, Field, Page, Toggle, problemFor, freshName } from './ui'
 
 const keypad = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#']
 
@@ -25,7 +25,7 @@ export function Menus() {
   return (
     <Page icon={Grid3x3} title="Menus" accent="from-sky-400 to-violet-400"
       intro='Auto attendants: callers hear a recording ("press 1 for sales, 2 for support") and choose with a key.'
-      actions={admin && <button className="btn btn-primary" onClick={() => setEdit(blank)}><Plus size={15} aria-hidden /> Add menu</button>}>
+      actions={admin && <button className="btn btn-primary" onClick={() => setEdit({ ...blank, name: freshName(blank.name, data?.items.map((x) => x.name)) })}><Plus size={15} aria-hidden /> Add menu</button>}>
       {!data?.items.length ? <Empty icon={Grid3x3} title="No menus yet">Send your main number to a menu to greet callers and let them choose.</Empty> : (
         <div className="grid gap-4 lg:grid-cols-2">
           {data.items.map((m) => (

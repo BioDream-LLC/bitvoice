@@ -8,7 +8,7 @@ import {
 } from './api'
 import { attempt, DeleteButton, Drawer, useIsAdmin } from './Editor'
 import { nextFree, useTakenNumbers } from './numbers'
-import { Empty, Field, Page, Toggle, problemFor, relTime } from './ui'
+import { Empty, Field, Page, Toggle, problemFor, relTime, freshName } from './ui'
 
 /** Conference rooms: numbers people dial to talk together, and the rooms in use now. */
 export function Conferences() {
@@ -17,7 +17,7 @@ export function Conferences() {
   const { data: live } = useConferenceLiveQuery(undefined, { pollingInterval: 2000 })
   const [edit, setEdit] = useState<Conference | null>(null)
   const taken = useTakenNumbers()
-  const add = () => setEdit({ id: '', number: nextFree(taken, 500), name: 'Team room', pin: '', leaderPin: '', waitForLeader: false, muteMembers: false, maxMembers: 50, record: false, quiet: false, hd: true })
+  const add = () => setEdit({ id: '', number: nextFree(taken, 500), name: freshName('Team room', data?.items.map((x) => x.name)), pin: '', leaderPin: '', waitForLeader: false, muteMembers: false, maxMembers: 50, record: false, quiet: false, hd: true })
   const inUse = new Map((live?.items ?? []).map((r) => [r.number, r]))
   return (
     <Page icon={Users2} title="Conference rooms" accent="from-teal-400 to-sky-400"

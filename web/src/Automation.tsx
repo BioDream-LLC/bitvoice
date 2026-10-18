@@ -1,3 +1,4 @@
+import { useIsAdmin } from './Editor'
 import { Copy, GitBranch, KeyRound, Plus, RefreshCw, Trash2, Vault } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -76,7 +77,8 @@ type Git = Settings['system']['gitops']
 
 /** The configuration read from a file in a Git repository. */
 export function GitSettings({ value, onChange, error }: { value: Git; onChange: (v: Partial<Git>) => void; error: (f: string) => string | undefined }) {
-  const { data } = useGitOpsQuery(undefined, { pollingInterval: 30000 })
+  const admin = useIsAdmin()
+  const { data } = useGitOpsQuery(undefined, { pollingInterval: 30000, skip: !admin })
   const [sync, { isLoading }] = useSyncGitOpsMutation()
   return (
     <section className="card space-y-4 p-5 lg:col-span-2" aria-labelledby="git-h">

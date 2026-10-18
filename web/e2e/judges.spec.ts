@@ -21,7 +21,7 @@ test('check every situation finds a dead end and traces it', async ({ page }) =>
   await expect(pc.getByText(/calls tried across/)).toBeVisible({ timeout: 20000 })
   const dead = pc.getByRole('listitem').filter({ hasText: 'Nobody in Nobody here' }).first()
   await expect(dead.getByText('A call goes nowhere')).toBeVisible()
-  await expect(dead.getByText('a call to +15550001111 → Then')).toBeVisible()
+  await expect(dead.getByText('a call to +15550001111 → Then').first()).toBeVisible()
   await dead.getByRole('button', { name: 'Try this call' }).first().click()
   await expect(page.getByLabel('Dials')).toHaveValue('+15550001111')
   await expect(page.getByRole('list', { name: 'The path the call takes' }).getByText(/Nobody in Nobody here/).first()).toBeVisible()

@@ -7,7 +7,7 @@ import {
 import { useOpenParam } from './useOpenParam'
 import { attempt, DeleteButton, Drawer, useIsAdmin } from './Editor'
 import { DestinationPicker } from './Extensions'
-import { Badge, Empty, Field, Page, problemFor } from './ui'
+import { Badge, Empty, Field, Page, problemFor, freshName } from './ui'
 import { useNow } from './useNow'
 
 const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -45,7 +45,7 @@ export function Schedules() {
   return (
     <Page icon={CalendarClock} title="Schedules" accent="from-amber-400 to-sky-400"
       intro={<>Opening hours and holidays. Use a schedule as a call destination to send calls one way when open and another when closed. Times are in <span className="text-sky-300">{tz || 'UTC'}</span>.</>}
-      actions={admin && <button className="btn btn-primary" onClick={() => setEdit(blank)}><Plus size={15} aria-hidden /> Add schedule</button>}>
+      actions={admin && <button className="btn btn-primary" onClick={() => setEdit({ ...blank, name: freshName(blank.name, data?.items.map((x) => x.name)) })}><Plus size={15} aria-hidden /> Add schedule</button>}>
       {!data?.items.length ? <Empty icon={CalendarClock} title="No schedules yet">For example: weekdays 9 to 5 ring the front desk, otherwise voicemail.</Empty> : (
         <div className="grid gap-4 lg:grid-cols-2">
           {data.items.map((s) => {

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { manual } from './manual'
+import { freshName } from './ui'
 
 // The manual must follow the code: every page has a place in the menu with search words, and every
 // page in the menu has an article in the manual that opens from it.
@@ -41,4 +42,10 @@ describe('the manual is complete', () => {
       for (const m of a.body.matchAll(/\]\(#([a-z0-9-]+)\)/g)) expect(manual.some((x) => x.id === m[1]), `${a.id} links to chapter ${m[1]}`).toBe(true)
     }
   })
+})
+
+it('numbers a default name already taken', () => {
+  expect(freshName('Main menu', [])).toBe('Main menu')
+  expect(freshName('Main menu', ['Main menu'])).toBe('Main menu 2')
+  expect(freshName('Main menu', ['main menu', 'Main menu 2'])).toBe('Main menu 3')
 })

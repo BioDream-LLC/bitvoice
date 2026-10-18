@@ -1,8 +1,9 @@
+import { useIsAdmin } from './Editor'
 import { Database as DbIcon, MoveRight, PlugZap } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { errorOf, useDatabaseQuery, useMoveDatabaseMutation, useTestDatabaseMutation } from './api'
-import { Field, Spinner } from './ui'
+import { AdminsOnly, Field, Spinner } from './ui'
 import { useComeBack } from './Updates'
 
 const tableWords: Record<string, string> = { cdrs: 'call records', revisions: 'settings versions', audit: 'audit entries', texts: 'texts', transcripts: 'transcripts', docs: 'lists (users, contacts …)' }
@@ -14,13 +15,15 @@ function size(b?: number) {
 
 /** DatabaseSettings: where BitVoice keeps its data, and moving it into (or out of) PostgreSQL. */
 export function DatabaseSettings() {
-  const { data } = useDatabaseQuery()
+  const admin = useIsAdmin()
+  const { data } = useDatabaseQuery(undefined, { skip: !admin })
   const [test, { isLoading: testing }] = useTestDatabaseMutation()
   const [move, { isLoading: moving }] = useMoveDatabaseMutation()
   const [url, setUrl] = useState('')
   const [checked, setChecked] = useState<{ where: string; empty: boolean } | null>(null)
   const [restarting, setRestarting] = useState(false)
   useComeBack(restarting)
+  if (!admin) return <section className="card p-5 lg:col-span-2"><AdminsOnly what="Where BitVoice keeps its data" /></section>
   if (!data) return null
   const pg = data.kind === 'postgres'
   const doTest = async () => {

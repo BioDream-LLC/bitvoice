@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { EmergencySwitch } from './EmergencyMode'
 import { CallerCard } from './Crm'
 import { Link } from 'react-router-dom'
-import { errorOf, useExtensionsQuery, useSetSupervisionMutation, useSuperviseMutation, useCallsQuery, useCdrQuery, useHangupMutation, useOpenDoorMutation, usePauseRecordingMutation, useHealthQuery, useMeQuery, useStatsQuery, useSystemQuery, type Call } from './api'
+import { errorOf, useExtensionsQuery, useSetSupervisionMutation, useSuperviseMutation, useCallsQuery, useCdrQuery, useHangupMutation, useOpenDoorMutation, usePauseRecordingMutation, useHealthQuery, useMeQuery, useSettingsQuery, useStatsQuery, useSystemQuery, type Call } from './api'
 import { Chart } from './Chart'
 import { AttestBadge } from './Screening'
 import { Copyable } from './Setup'
@@ -17,6 +17,9 @@ import { useNow } from './useNow'
 export function Dashboard() {
   const { data: stats } = useStatsQuery()
   const { data: sys } = useSystemQuery()
+  // A server behind a cloud's NAT is reached at its public address, not the private one it sees on its own card.
+  const { data: settings } = useSettingsQuery()
+  const reachAt = settings?.system.publicAddress || sys?.addresses?.[0]
   const { data: health } = useHealthQuery()
   const { data: calls } = useCallsQuery()
   const { data: cdr } = useCdrQuery({})
@@ -47,7 +50,7 @@ export function Dashboard() {
 
   return (
     <Page icon={LayoutDashboard} title={sys?.name || 'Dashboard'}
-      intro={<>Your phone system at a glance. Phones connect to <Copyable text={`${sys?.addresses?.[0] ?? '…'}${sys && sys.sipPort !== 5060 ? ':' + sys.sipPort : ''}`} /></>}>
+      intro={<>Your phone system at a glance. Phones connect to <Copyable text={`${reachAt ?? '…'}${sys && sys.sipPort !== 5060 ? ':' + sys.sipPort : ''}`} /></>}>
       <div className="mb-4"><EmergencySwitch /></div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {tiles.map((t) => (

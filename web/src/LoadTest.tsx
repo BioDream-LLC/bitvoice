@@ -20,7 +20,7 @@ function Kpi({ label, value, color, hint }: { label: string; value: string | num
 /** The built-in call generator: real calls into BitVoice, for load and regression tests. */
 export function LoadTest() {
   const admin = useIsAdmin()
-  const { data, refetch } = useLoadTestQuery()
+  const { data, refetch } = useLoadTestQuery(undefined, { skip: !admin })
   const run = data?.run
   const running = !!run?.running
   useEffect(() => {

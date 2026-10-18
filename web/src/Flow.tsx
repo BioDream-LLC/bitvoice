@@ -10,7 +10,7 @@ import {
 } from './api'
 import { attempt, DeleteButton, Drawer, useIsAdmin } from './Editor'
 import { DestinationPicker, useDescribe } from './Extensions'
-import { Empty, Field, ListInput, Page, problemFor, Toggle } from './ui'
+import { Empty, Field, ListInput, Page, problemFor, Toggle, freshName } from './ui'
 
 /** Day/night toggles: switch a call flow over from a phone (*28 and its code), a busy lamp key or here. */
 export function Toggles() {
@@ -27,7 +27,7 @@ export function Toggles() {
   return (
     <Page icon={ToggleRight} title="Day/night toggles" accent="from-indigo-400 to-amber-300"
       intro={`A switch for a call flow: calls go to the normal destination, or to the other one while someone has switched it over. Switch it from any phone by dialling ${code} and its code, from a busy lamp key watching ${code} and its code (lit while switched over), or here. It stays as it was left until switched back, and a schedule can sit behind either side.`}
-      actions={admin && <button className="btn btn-primary" onClick={() => setEdit({ id: '', name: 'Night service', code: nextCode, normal: { type: 'hangup', target: '' }, override: { type: 'hangup', target: '' }, allowed: [] })}><Plus size={15} aria-hidden /> Add toggle</button>}>
+      actions={admin && <button className="btn btn-primary" onClick={() => setEdit({ id: '', name: freshName('Night service', data?.items.map((x) => x.name)), code: nextCode, normal: { type: 'hangup', target: '' }, override: { type: 'hangup', target: '' }, allowed: [] })}><Plus size={15} aria-hidden /> Add toggle</button>}>
       {!data?.items.length ? <Empty icon={ToggleRight} title="No toggles yet">For example: the office closes early, someone dials {code}1 on the way out, and calls go to voicemail until the morning.</Empty> : (
         <div className="grid gap-3 md:grid-cols-2">
           {data.items.map((t) => {

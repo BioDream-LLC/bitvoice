@@ -10,7 +10,7 @@ import {
 } from './api'
 import { attempt, DeleteButton, Drawer, useIsAdmin } from './Editor'
 import { AudioRecording } from './Greeting'
-import { Empty, Field, ListInput, Page, problemFor, Toggle } from './ui'
+import { Empty, Field, ListInput, Page, problemFor, Toggle, freshName } from './ui'
 
 const modes = [
   ['preview', 'Preview', 'The agent sees the contact first, then calls (or skips). Nobody is ever kept waiting.'],
@@ -36,7 +36,7 @@ export function Dialer() {
   return (
     <Page icon={PhoneForwarded} title="Outbound dialer" accent="from-emerald-400 to-sky-400"
       intro="Campaigns call lists of contacts for a queue's agents: preview, progressive, power or predictive. Numbers on the do-not-call list are never called, calls are made only within the campaign's hours, answering machines are told apart from people, and a person answered with no agent free hears your message, with 9 to be taken off the list."
-      actions={admin && <button className="btn btn-primary" disabled={!queues?.items.length} onClick={() => setEdit(blank(queues?.items[0]?.number ?? ''))}><Plus size={15} aria-hidden /> Add campaign</button>}>
+      actions={admin && <button className="btn btn-primary" disabled={!queues?.items.length} onClick={() => setEdit({ ...blank(queues?.items[0]?.number ?? ''), name: freshName('New campaign', data?.items.map((x) => x.name)) })}><Plus size={15} aria-hidden /> Add campaign</button>}>
       {!queues?.items.length && <p className="mb-3 text-sm text-amber-300">Make a queue with its agents first: a campaign's calls go to a queue.</p>}
       {!data?.items.length ? <Empty icon={PhoneForwarded} title="No campaigns yet">For example: renewals, called progressively by the Sales queue, weekdays 9 to 8.</Empty> : (
         <div className="space-y-3">

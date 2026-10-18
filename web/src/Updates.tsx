@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { errorOf, useApplyUpgradeMutation, useCancelUpgradeMutation, useRollbackUpgradeMutation, useUpgradeQuery, useUploadUpgradeMutation, type ApiErrorBody } from './api'
 import { useIsAdmin } from './Editor'
-import { Badge, ErrorBox, Field, Page, problemFor, relTime, Spinner } from './ui'
+import { AdminsOnly, Badge, ErrorBox, Field, Page, problemFor, relTime, Spinner } from './ui'
 
 /** Waits for the server to come back after a restart, then reloads the page on the new version. */
 export function useComeBack(active: boolean) {
@@ -27,7 +27,7 @@ export function useComeBack(active: boolean) {
 
 export function Updates() {
   const admin = useIsAdmin()
-  const { data, isLoading } = useUpgradeQuery(undefined, { pollingInterval: 3000 })
+  const { data, isLoading } = useUpgradeQuery(undefined, { pollingInterval: 3000, skip: !admin })
   const [upload, { isLoading: uploading }] = useUploadUpgradeMutation()
   const [apply] = useApplyUpgradeMutation()
   const [rollback] = useRollbackUpgradeMutation()
@@ -38,6 +38,7 @@ export function Updates() {
   const [restarting, setRestarting] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   useComeBack(restarting)
+  if (!admin) return <Page icon={PackageCheck} title="Updates"><AdminsOnly what="Updating BitVoice" /></Page>
   if (isLoading || !data) return <Page icon={PackageCheck} title="Updates"><Spinner /></Page>
   const st = data.state
   const busy = data.calls > 0

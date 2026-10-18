@@ -255,3 +255,20 @@ export function ListInput({ id, value, onChange, placeholder, mono, invalid }: {
     </div>
   )
 }
+
+/** AdminsOnly stands in for what only administrators may see, on a viewer's screen. */
+export function AdminsOnly({ what }: { what: string }) {
+  return (
+    <div className="card flex items-center gap-3 p-4 text-sm text-slate-400" role="note">
+      <Info size={16} className="shrink-0 text-sky-300" aria-hidden />
+      <span>{what} is shown to administrators only. You are signed in as a viewer.</span>
+    </div>
+  )
+}
+
+/** freshName numbers a default name that is already taken: "Main menu", then "Main menu 2", "Main menu 3". */
+export function freshName(name: string, taken: (string | undefined)[] = []): string {
+  const used = new Set(taken.map((t) => t?.trim().toLowerCase()))
+  if (!used.has(name.toLowerCase())) return name
+  for (let i = 2; ; i++) if (!used.has(`${name} ${i}`.toLowerCase())) return `${name} ${i}`
+}

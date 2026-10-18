@@ -10,7 +10,7 @@ import { CodeEditor } from './CodeEditor'
 import { attempt, DeleteButton, Drawer, useIsAdmin } from './Editor'
 import { DestinationPicker } from './Extensions'
 import { onServerEvent } from './store'
-import { Badge, Empty, Field, Page, problemFor, relTime, radioKeys, Toggle } from './ui'
+import { Badge, Empty, Field, Page, problemFor, relTime, radioKeys, Toggle, freshName } from './ui'
 
 const examples: Record<'js' | 'lua', string> = {
   js: `// The call is in \`call\`: from, fromName, to, direction, trunk, weekday (0 = Sunday), hour, minute, date.
@@ -74,7 +74,7 @@ export function Scripts() {
   return (
     <Page icon={Braces} title="Scripts" accent="from-fuchsia-400 to-sky-400"
       intro="Route calls, or run whole calls (prompts, speech, keys, recordings, ringing people), with a few lines of JavaScript or Lua when menus and schedules are not enough. A script that fails or takes too long never loses the call: it goes to the fallback. Emergency calls never run scripts."
-      actions={admin && <button className="btn btn-primary" onClick={() => setEdit({ id: '', name: 'Route by caller', language: 'js', source: examples.js, fallback: { type: 'hangup', target: '' } })}><Plus size={15} aria-hidden /> Add script</button>}>
+      actions={admin && <button className="btn btn-primary" onClick={() => setEdit({ id: '', name: freshName('Route by caller', data?.items.map((x) => x.name)), language: 'js', source: examples.js, fallback: { type: 'hangup', target: '' } })}><Plus size={15} aria-hidden /> Add script</button>}>
       {!data?.items.length ? <Empty icon={Braces} title="No scripts yet">Use a script as the destination of an incoming route.</Empty> : (
         <div className="grid gap-3 md:grid-cols-2">
           {data.items.map((s) => (

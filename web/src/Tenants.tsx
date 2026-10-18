@@ -1,9 +1,10 @@
+import { useIsAdmin } from './Editor'
 import { clsx } from 'clsx'
 import { Building2, ExternalLink, PauseCircle, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { useCreateTenantMutation, useDeleteTenantMutation, useOpenTenantMutation, useTenantsQuery, useUpdateTenantMutation, type ApiErrorBody, type TenantView } from './api'
 import { attempt, DeleteButton, Drawer } from './Editor'
-import { Empty, Field, Page, Toggle, problemFor } from './ui'
+import { AdminsOnly, Empty, Field, Page, Toggle, problemFor } from './ui'
 
 const blank = { id: '', name: '', domain: '', suspended: false, note: '', limits: { extensions: 0, calls: 0, storageMB: 0, aiPerDay: 0 } }
 
@@ -13,7 +14,8 @@ function mb(bytes: number) {
 
 /** Organisations hosted on this BitVoice: each a phone system of its own, sharing this server. */
 export function Tenants() {
-  const { data } = useTenantsQuery(undefined, { pollingInterval: 5000 })
+  const admin = useIsAdmin()
+  const { data } = useTenantsQuery(undefined, { pollingInterval: 5000, skip: !admin })
   const [edit, setEdit] = useState<TenantView | null>(null)
   const [adding, setAdding] = useState(false)
   const [open] = useOpenTenantMutation()
@@ -23,8 +25,8 @@ export function Tenants() {
   return (
     <Page icon={Building2} title="Organisations" accent="from-violet-400 to-sky-400"
       intro="Host other organisations on this server. Each one is a phone system of its own: its own extensions, numbers, trunks, administrators, recordings and call history, which no other organisation can see. They share only this server's SIP port and media ports."
-      actions={<button className="btn btn-primary" onClick={() => setAdding(true)}><Plus size={15} aria-hidden /> Add organisation</button>}>
-      {!data?.items.length ? <Empty icon={Building2} title="No hosted organisations">This server runs one phone system. Add an organisation to host another one beside it.</Empty> : (
+      actions={admin && <button className="btn btn-primary" onClick={() => setAdding(true)}><Plus size={15} aria-hidden /> Add organisation</button>}>
+      {!admin ? <AdminsOnly what="Hosting other organisations" /> : !data?.items.length ? <Empty icon={Building2} title="No hosted organisations">This server runs one phone system. Add an organisation to host another one beside it.</Empty> : (
         <div className="grid gap-3 lg:grid-cols-2">
           {data.items.map((t) => (
             <div key={t.id} className={clsx('card p-4', t.suspended && 'border-amber-900/70')}>

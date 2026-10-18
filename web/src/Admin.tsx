@@ -33,7 +33,7 @@ import { StaleBanner, ListInput } from './ui'
 import { ChangeList, RestoreButton, WhatChanged, type Change } from './Revisions'
 import { passwordProblem } from './Setup'
 import { countryCodes, countryName, emergencyFor } from './countries'
-import { Badge, Chip, Empty, ErrorBox, Field, Page, Toggle, problemFor, relTime } from './ui'
+import { AdminsOnly, Badge, Chip, Empty, ErrorBox, Field, Page, Toggle, problemFor, relTime } from './ui'
 
 export function Security() {
   const admin = useIsAdmin()
@@ -149,13 +149,14 @@ export function Changes() {
 
 export function Users() {
   const admin = useIsAdmin()
-  const { data } = useUsersQuery()
+  const { data } = useUsersQuery(undefined, { skip: !admin })
   const { data: me } = useMeQuery()
   const [edit, setEdit] = useState<(User & { existing: boolean }) | null>(null)
   return (
     <Page icon={UserCog} title="Administrators" accent="from-fuchsia-400 to-pink-400"
       intro="People who can sign in to this interface. Viewers see everything but change nothing."
       actions={admin && <button className="btn btn-primary" onClick={() => setEdit({ username: '', name: '', role: 'viewer', created: '', existing: false })}><UserPlus size={15} aria-hidden /> Add person</button>}>
+      {!admin && <div className="mb-4"><AdminsOnly what="The list of people who can sign in" /></div>}
       <div className="grid gap-3 md:grid-cols-2">
         {data?.items.map((u) => (
           <button key={u.username} className="card flex items-center gap-3 p-4 text-left hover:border-slate-700" onClick={() => admin && setEdit({ ...u, existing: true })} disabled={!admin}>

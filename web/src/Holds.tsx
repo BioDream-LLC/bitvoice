@@ -2,7 +2,7 @@ import { Lock, LockOpen, Plus, Scale } from 'lucide-react'
 import { useState } from 'react'
 import { useAddHoldMutation, useHoldsQuery, useReleaseHoldMutation, useSettingsQuery, useUpdateHoldMutation, type ApiErrorBody, type Hold } from './api'
 import { attempt, Drawer, useIsAdmin } from './Editor'
-import { Badge, Empty, Field, ListInput, Page, problemFor, relTime } from './ui'
+import { AdminsOnly, Badge, Empty, Field, ListInput, Page, problemFor, relTime } from './ui'
 
 /** day gives the calendar date of an instant in the system's time zone, as the hold was entered. */
 const day = (iso?: string, tz?: string) => {
@@ -13,7 +13,7 @@ const day = (iso?: string, tz?: string) => {
 /** Legal holds: what they cover is kept whatever the retention settings say, and cannot be deleted. */
 export function Holds() {
   const admin = useIsAdmin()
-  const { data } = useHoldsQuery()
+  const { data } = useHoldsQuery(undefined, { skip: !admin })
   const { data: settings } = useSettingsQuery()
   const [release] = useReleaseHoldMutation()
   const [edit, setEdit] = useState<Hold | null>(null)
@@ -28,7 +28,7 @@ export function Holds() {
       <p className="mb-4 text-sm text-slate-400">
         Kept now: recordings {keep(settings?.system.recording.keepDays)}, call history {keep(r?.callRecordDays)}, voicemail {keep(r?.voicemailDays)} (change in Settings, Call recording).
       </p>
-      {active.length === 0 && done.length === 0 ? <Empty icon={Scale} title="No holds">Add one when a matter needs records kept.</Empty> : (
+      {!admin ? <AdminsOnly what="The list of legal holds" /> : active.length === 0 && done.length === 0 ? <Empty icon={Scale} title="No holds">Add one when a matter needs records kept.</Empty> : (
         <div className="space-y-6">
           <ul className="grid gap-3 md:grid-cols-2" aria-label="Active holds">
             {active.map((h) => (

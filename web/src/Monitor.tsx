@@ -10,7 +10,7 @@ import { TranscriptButton, TranscriptSearch } from './Transcripts'
 import { Table, useIsAdmin } from './Editor'
 import { AttestBadge, BlockButton } from './Screening'
 import { TimelineLink } from './Timeline'
-import { Badge, Direction, Empty, Page, formatDuration, mosStatus, type Status } from './ui'
+import { AdminsOnly, Badge, Direction, Empty, Page, formatDuration, mosStatus, type Status } from './ui'
 
 const col = createColumnHelper<CDR>()
 const dispo: Record<string, [Status, string]> = {
@@ -116,7 +116,8 @@ export function Trace() {
   const [query, setQuery] = useState('')
   useEffect(() => { const t = setTimeout(() => setQuery(q.trim()), 250); return () => clearTimeout(t) }, [q])
   const [selKey, setSelKey] = useState('')
-  const { data, refetch } = useTraceQuery(query)
+  const admin = useIsAdmin()
+  const { data, refetch } = useTraceQuery(query, { skip: !admin })
   const items = data?.items ?? []
   const keyOf = (e: TraceEntry) => `${e.at}|${e.dir}|${e.callId}|${e.summary}`
   // Keep the chosen message across refreshes, which bring new objects.
@@ -130,7 +131,7 @@ export function Trace() {
         <input className="input w-64" placeholder="Filter by number, address, Call-ID…" aria-label="Filter trace" value={q} onChange={(e) => setQ(e.target.value)} />
         <button className="btn" onClick={() => refetch()}>Refresh</button>
       </>}>
-      {!items.length ? (query
+      {!admin ? <AdminsOnly what="The SIP trace" /> : !items.length ? (query
         ? <Empty icon={Waypoints} title={`No message matches “${query}”`}>Try part of a number, an address or a Call-ID.</Empty>
         : <Empty icon={Waypoints} title="No messages captured yet">Make a call or register a phone, then refresh.</Empty>) : (
         <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">

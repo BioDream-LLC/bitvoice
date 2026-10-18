@@ -210,7 +210,7 @@ export function Rulebooks() {
     <section className="mb-8" aria-labelledby="rb-h">
       <h2 id="rb-h" className="mb-1 flex items-center gap-2 text-lg font-semibold text-slate-100"><BookCheck size={18} className="text-emerald-300" aria-hidden /> How BitVoice decides</h2>
       <p className="mb-3 text-sm text-slate-400">The rulebooks BitVoice's judges use. Every answer comes with its reasons, "cannot determine" is an answer, and something not measured is never taken for safety. Each rulebook is checked in every combination of its facts before it is used.</p>
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid items-start gap-3 lg:grid-cols-2">
         {data?.items.map((b: Rulebook) => (
           <details key={b.id} className="card p-4 text-sm">
             <summary className="cursor-pointer list-none">
