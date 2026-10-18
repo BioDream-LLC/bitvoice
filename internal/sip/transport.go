@@ -466,10 +466,12 @@ func (s *Stack) LocalHost(to Peer) string {
 	if to.Local.IsValid() {
 		return to.Local.String() // the peer reached the shared address: it is the one to give
 	}
-	if s.Host != "" {
+	if s.Host != "" && !onPrivateNetwork(to.Addr.Addr()) {
 		return s.Host
 	}
-	// Ask the kernel which local address routes to the peer. No packet is sent.
+	// A peer on a private network (phones on the office LAN, another server or a gateway beside this
+	// one) is on this side of the router: it gets the local address that routes to it, not the public
+	// one, which it may not reach (as Asterisk's local_net). The kernel says which; no packet is sent.
 	if c, err := net.DialUDP("udp", nil, net.UDPAddrFromAddrPort(to.Addr)); err == nil {
 		defer c.Close()
 		return c.LocalAddr().(*net.UDPAddr).IP.String()
@@ -558,4 +560,14 @@ func NewResponse(req *Message, code int, reason string) *Message {
 func ParseInt(s string) int {
 	n, _ := strconv.Atoi(strings.TrimSpace(s))
 	return n
+}
+
+// cgnat is the shared address space carriers use behind their own NAT (RFC 6598).
+var cgnat = netip.MustParsePrefix("100.64.0.0/10")
+
+// onPrivateNetwork reports whether a peer's address is on a private network: RFC 1918, IPv6 unique
+// local, link-local, or carrier-grade NAT space.
+func onPrivateNetwork(a netip.Addr) bool {
+	a = a.Unmap()
+	return a.IsPrivate() || a.IsLinkLocalUnicast() || (a.Is4() && cgnat.Contains(a))
 }

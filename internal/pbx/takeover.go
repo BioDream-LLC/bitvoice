@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/biodream-llc/bitvoice/internal/sdp"
 	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -87,8 +88,9 @@ func snapLeg(l *Leg) legSnap {
 func (c *Call) snapshot() *callSnap {
 	c.mu.Lock()
 	a, b := c.caller, c.callee
+	// A call another server passed on is that server's to save: it has the caller.
 	ok := !c.ended && a != nil && b != nil && c.paging == nil && c.xfer == nil && c.parkSlot == "" &&
-		c.bridge == nil && c.player == nil && !c.answer.IsZero()
+		c.bridge == nil && c.player == nil && !c.answer.IsZero() && c.direction != "cluster"
 	s := &callSnap{ID: c.ID, Direction: c.direction, From: c.from, FromName: c.fromName, To: c.to, ToName: c.toName,
 		Trunk: c.trunk, CallerExt: c.callerExt, Start: c.start, Answer: c.answer, AnsweredBy: c.answeredBy}
 	c.mu.Unlock()
@@ -181,28 +183,47 @@ func (e *Engine) takeOver(s *callSnap) error {
 		results: make(chan forkResult, 4), direction: s.Direction, from: s.From, fromName: s.FromName, to: s.To,
 		toName: s.ToName, trunk: s.Trunk, callerExt: s.CallerExt, answeredBy: s.AnsweredBy}
 	c.ansOnce.Do(func() { close(c.answered) })
-	a, err := e.revive(c, s.Caller)
+	// A party the stopped server reached through this one (a phone registered here, a trunk this server
+	// holds) is still connected here: keep that leg as it is and let the relay go; move only the others.
+	var kept []*Leg
+	party := func(s legSnap) (*Leg, error) {
+		if relay, far := e.relayed(s); relay != nil {
+			e.retire(relay)
+			far.call = c
+			kept = append(kept, far)
+			return far, nil
+		}
+		return e.revive(c, s)
+	}
+	a, err := party(s.Caller)
 	if err != nil {
 		return err
 	}
-	b, err := e.revive(c, s.Callee)
+	b, err := party(s.Callee)
 	if err != nil {
-		a.close()
+		if !slices.Contains(kept, a) {
+			a.close()
+		}
 		return err
 	}
 	c.caller, c.callee = a, b
 	e.mu.Lock()
 	e.calls[c.ID] = c
 	e.mu.Unlock()
-	e.addLeg(a)
-	e.addLeg(b)
-	// Both parties at once: each hears nothing until it has moved, so neither waits on the other.
-	errs := make(chan error, 2)
+	var moving []*Leg
 	for _, l := range []*Leg{a, b} {
+		if !slices.Contains(kept, l) {
+			e.addLeg(l)
+			moving = append(moving, l)
+		}
+	}
+	// Both parties at once: each hears nothing until it has moved, so neither waits on the other.
+	errs := make(chan error, len(moving))
+	for _, l := range moving {
 		go func() { errs <- l.moveHere() }()
 	}
 	var failed error
-	for range 2 {
+	for range moving {
 		if err := <-errs; err != nil {
 			failed = err
 		}
@@ -219,6 +240,44 @@ func (e *Engine) takeOver(s *callSnap) error {
 	e.Log.Info("carried on a call from a stopped server", "call", c.ID, "from", s.From, "to", s.To)
 	e.publish("call.updated", c.info())
 	return nil
+}
+
+// relayed finds a call this server carries on for the stopped server, for the party s: the stopped
+// server's leg to that party was its dialog with this server, whose own end is the leg under our tag
+// (the stopped server's remote tag). It returns the passed-on call and its leg to the party.
+func (e *Engine) relayed(s legSnap) (*Call, *Leg) {
+	e.mu.Lock()
+	in := e.legs[legKey(s.CallID, s.RemoteTag)]
+	e.mu.Unlock()
+	if in == nil || in.call == nil {
+		return nil, nil
+	}
+	rc := in.call
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+	if rc.ended || rc.direction != "cluster" || rc.caller != in || rc.callee == nil {
+		return nil, nil
+	}
+	return rc, rc.callee
+}
+
+// retire ends a passed-on call without a word to anyone and without a record: its party now belongs to
+// the call taken over, and the server it came from is gone.
+func (e *Engine) retire(rc *Call) {
+	rc.mu.Lock()
+	rc.ended = true
+	in := rc.caller
+	rc.callee = nil
+	rc.mu.Unlock()
+	e.mu.Lock()
+	if e.calls[rc.ID] == rc {
+		delete(e.calls, rc.ID)
+	}
+	e.mu.Unlock()
+	if in != nil {
+		in.close()
+	}
+	e.publish("call.ended", map[string]any{"id": rc.ID})
 }
 
 // revive rebuilds a party's leg from its saved dialog, with a new media port here.

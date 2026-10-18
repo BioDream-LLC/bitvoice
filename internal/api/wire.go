@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 
 	"github.com/biodream-llc/bitvoice/internal/config"
 	"github.com/biodream-llc/bitvoice/internal/pbx"
@@ -33,6 +35,21 @@ func (s *Server) WireEngine() {
 	}
 	eng.LoadHotDesks(desks)
 	eng.SaveHotDesks = func(h []pbx.HotDesk) error { return st.SaveState("hotdesk", h) }
+	// Phone registrations: this server's own, in its data folder (servers sharing a database each have
+	// their own phones).
+	regs := filepath.Join(st.Dir(), "registrations.json")
+	if b, err := os.ReadFile(regs); err == nil {
+		if n := eng.LoadRegistrations(b); n > 0 {
+			log.Info("phone registrations kept from before the restart", "phones", n)
+		}
+	}
+	eng.SaveRegistrations = func(b []byte) error {
+		tmp := regs + ".tmp"
+		if err := os.WriteFile(tmp, b, 0o600); err != nil {
+			return err
+		}
+		return os.Rename(tmp, regs)
+	}
 	var div pbx.DivertState
 	if err := st.LoadState("divert", &div); err != nil {
 		log.Warn("could not read call forwarding", "err", err)

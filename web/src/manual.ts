@@ -863,7 +863,7 @@ Set **Call log address** and **Signing secret**, and every call is sent there as
 **Setting it up**
 1. Move the first server's data into PostgreSQL: Settings, **Database**.
 2. Start each other server with the same database: \`bitvoice -database postgres://…\` (or the BITVOICE_DATABASE environment variable). It joins at once; **Servers** lists it.
-3. On **Servers**, check where each server is reached (its address and SIP port on the network the servers share), and give each a name.
+3. On **Servers**, check where each server is reached (its address and SIP port on the network the servers share), and give each a name. Servers that are each reached from the internet at an address of their own (cloud servers with public IPs, no shared address) get **Its own public address** too: providers and phones outside are told that one, so when a server takes over a call, the provider's sound follows it. Left empty, a server uses the public address in Settings.
 4. Tell phones how to find the servers (below).
 5. Provider lines (below).
 
@@ -877,7 +877,9 @@ Set **Call log address** and **Signing secret**, and every call is sent there as
 
 **When a server stops**
 - **Calls carry on.** Each server keeps a note of its calls in the database; when one stops, a running server picks up each call within seconds, moves the sound to itself and tells both ends (a re-INVITE). There is a gap of a few seconds in the sound. A planned stop (an upgrade, a restart) hands calls over at once, with no gap.
+- A call whose phone is registered with the server that takes over is carried on there without disturbing that phone: only the other party is moved.
 - Its phones carry on through their backup server, the DNS name or the shared address.
+- A server that only restarts (an upgrade, a reboot) still knows where its own phones are registered: it keeps them in its data folder (\`registrations.json\`), so calls reach them before they register again.
 - Health and **Servers** show it as stopped; when it comes back it takes nothing back from the server that took over.
 
 **Between servers.** The servers reach each other at their SIP port over TCP, or TLS when they have a certificate (each accepts only the certificate the other published, and the sound between them is then encrypted with SRTP), and send sound to each other's media ports (UDP, the range in Settings). Calls between servers are signed with a secret they share in the database, and only accepted from a running member at its own address. A firewall between them must let those ports through.
@@ -2150,7 +2152,7 @@ Programs (Terraform, scripts) use API tokens instead of a password: made on this
 
 Passwords and keys are never shown again once saved; leave them empty to keep them. Viewers see Settings with every secret removed.
 
-> The public address matters when BitVoice is behind a router: phones and providers outside send sound to the address it advertises. Leave it empty to work it out per phone.
+> The public address matters when BitVoice is behind a router: phones and providers outside send sound to the address it advertises. Phones, gateways and servers on a private network beside BitVoice (10.x, 172.16-31.x, 192.168.x, 100.64.x, IPv6 fd00::/8) are given BitVoice's own address on that network instead, which they can always reach. Leave it empty to work it out per phone.
 
 ## The certificate and Let's Encrypt
 BitVoice starts with a certificate it made itself, which browsers and phones warn about. For a server with a public name, switch on **Let's Encrypt** under Certificate: enter the names (\`pbx.example.com\`), optionally an email address, and apply. BitVoice gets a free certificate from Let's Encrypt, uses it at once for the web interface, SIP over TLS and Teams, and renews it about 30 days before it ends (Let's Encrypt certificates last 90 days or less). The status line says when it was issued, when it renews and, if it failed, why; it tries again after an hour, then less often, within Let's Encrypt's limits. **Check now** tries at once.

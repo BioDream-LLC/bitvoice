@@ -43,10 +43,11 @@ function NodeCard({ n, all }: { n: ClusterNode; all: ClusterNode[] }) {
   const [edit, setEdit] = useState(false)
   const [name, setName] = useState(n.name)
   const [addr, setAddr] = useState(n.sipAddr)
+  const [pub, setPub] = useState(n.publicAddr ?? '')
   const [save, { isLoading }] = useSetServerMutation()
   const [forget] = useForgetServerMutation()
   const doSave = async () => {
-    try { await save({ name, sipAddr: addr }).unwrap(); setEdit(false); toast.success('Server saved') } catch (e) { toast.error(errorOf(e).message) }
+    try { await save({ name, sipAddr: addr, publicAddr: pub }).unwrap(); setEdit(false); toast.success('Server saved') } catch (e) { toast.error(errorOf(e).message) }
   }
   return (
     <li className="card space-y-2 p-4">
@@ -57,6 +58,7 @@ function NodeCard({ n, all }: { n: ClusterNode; all: ClusterNode[] }) {
       </div>
       <dl className="grid grid-cols-[7rem_1fr] gap-y-1 text-sm">
         <dt className="text-slate-500">Reached at</dt><dd className="font-mono text-slate-200">{n.sipAddr}</dd>
+        {n.info.public && <><dt className="text-slate-500">Public address</dt><dd className="font-mono text-amber-300">{n.info.public}{n.self && !n.publicAddr && <span className="ml-2 font-sans text-xs text-slate-500">from Settings</span>}</dd></>}
         <dt className="text-slate-500">Phones</dt><dd className="text-slate-200">{n.info.phones}</dd>
         <dt className="text-slate-500">Calls now</dt><dd className="text-slate-200">{n.info.calls?.length ?? 0}</dd>
         <dt className="text-slate-500">{n.alive ? 'Running since' : 'Last seen'}</dt><dd className="text-slate-300">{relTime(n.alive ? n.started : n.seen)}</dd>
@@ -74,12 +76,15 @@ function NodeCard({ n, all }: { n: ClusterNode; all: ClusterNode[] }) {
           </>
         )}
       </dl>
-      {admin && n.self && !edit && <button type="button" className="btn text-xs" onClick={() => setEdit(true)}><Pencil size={12} aria-hidden /> Name and address</button>}
+      {admin && n.self && !edit && <button type="button" className="btn text-xs" onClick={() => setEdit(true)}><Pencil size={12} aria-hidden /> Name and addresses</button>}
       {edit && (
         <div className="space-y-2">
           <Field label="Name" htmlFor="srvname"><input id="srvname" className="input" value={name} onChange={(e) => setName(e.target.value)} /></Field>
           <Field label="Where the other servers reach it" htmlFor="srvaddr" hint="Its address and SIP port on the network the servers share, such as 10.0.0.11:5060.">
             <input id="srvaddr" className="input font-mono" value={addr} onChange={(e) => setAddr(e.target.value.trim())} />
+          </Field>
+          <Field label="Its own public address (optional)" htmlFor="srvpub" hint="Only when each server is reached from the internet at an address of its own (cloud servers with public IPs). Providers and phones outside are then told this one, so a call this server takes over keeps its sound. Empty: the public address in Settings.">
+            <input id="srvpub" className="input font-mono" placeholder="203.0.113.7" value={pub} onChange={(e) => setPub(e.target.value.trim())} />
           </Field>
           <div className="flex gap-2"><button type="button" className="btn btn-primary" disabled={isLoading} onClick={doSave}>Save</button><button type="button" className="btn" onClick={() => setEdit(false)}>Cancel</button></div>
         </div>

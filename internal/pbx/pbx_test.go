@@ -3,9 +3,13 @@ package pbx
 import (
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"math"
 	"net"
+	"net/netip"
 	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -396,5 +400,44 @@ func TestG722CallsG711(t *testing.T) {
 	}
 	if pt := recvPT(a, ad, func() { bd.sendRTP(1) }); pt != 9 {
 		t.Fatalf("caller got payload type %d, want G.722", pt)
+	}
+}
+
+// A restart keeps where phones are registered: a call after it reaches a phone that has not registered
+// again yet (phones register for up to an hour); an expired or deleted extension's binding is dropped.
+func TestRegistrationsKeptOverRestart(t *testing.T) {
+	var saved []byte
+	keep := func(e *Engine) {
+		e.SaveRegistrations = func(b []byte) error { saved = append([]byte(nil), b...); return nil }
+	}
+	a, _ := startEngine(t, testConfig(), keep)
+	p100 := registered(t, a, "100")[0]
+	a.Stop() // saves on the way out
+	if !strings.Contains(string(saved), `"extension":"100"`) {
+		t.Fatalf("not saved: %s", saved)
+	}
+	cfg := testConfig()
+	b, _ := startEngine(t, cfg, keep, func(e *Engine) {
+		if n := e.LoadRegistrations(saved); n != 1 {
+			t.Fatalf("restored %d registrations", n)
+		}
+	})
+	p100.pbx.Addr = netip.MustParseAddrPort("127.0.0.1:" + strconv.Itoa(b.SIPPort()))
+	p101 := registered(t, b, "101")[0]
+	answeredCall(t, p101, p100, "100") // rings the phone registered before the restart
+	// Expired, or for an extension that no longer exists: dropped.
+	var list []map[string]any
+	_ = json.Unmarshal(saved, &list)
+	list[0]["expires"] = time.Now().Add(-time.Minute).Format(time.RFC3339Nano)
+	old, _ := json.Marshal(list)
+	c, _ := startEngine(t, cfg)
+	if n := c.LoadRegistrations(old); n != 0 {
+		t.Fatalf("restored %d expired registrations", n)
+	}
+	cfg2 := testConfig()
+	cfg2.Extensions = slices.DeleteFunc(cfg2.Extensions, func(x config.Extension) bool { return x.Number == "100" })
+	d, _ := startEngine(t, cfg2)
+	if n := d.LoadRegistrations(saved); n != 0 {
+		t.Fatalf("restored %d registrations of a deleted extension", n)
 	}
 }

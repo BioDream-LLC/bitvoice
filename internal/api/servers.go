@@ -24,19 +24,23 @@ func (s *Server) serverRoutes() {
 			return
 		}
 		var in struct {
-			Name    string `json:"name"`
-			SIPAddr string `json:"sipAddr"`
+			Name       string `json:"name"`
+			SIPAddr    string `json:"sipAddr"`
+			PublicAddr string `json:"publicAddr"`
 		}
 		if err := readJSON(r, &in); err != nil {
 			writeErr(w, err)
 			return
 		}
-		n, err := s.Cluster.SetSelf(in.Name, in.SIPAddr)
+		n, err := s.Cluster.SetSelf(in.Name, in.SIPAddr, in.PublicAddr)
 		if err != nil {
 			writeError(w, 422, err.Error())
 			return
 		}
-		s.audit(r, u.Username, "server.renamed", n.Name+" at "+n.SIPAddr)
+		if s.Engine != nil {
+			s.Engine.Apply(s.config()) // SIP and SDP carry the new public address from now on
+		}
+		s.audit(r, u.Username, "server.renamed", n.Name+" at "+n.SIPAddr+publicNote(n.PublicAddr))
 		writeJSON(w, 200, n)
 	})
 	s.handle("DELETE /api/servers/{id}", true, func(w http.ResponseWriter, r *http.Request, u store.User) {
@@ -51,6 +55,13 @@ func (s *Server) serverRoutes() {
 		s.audit(r, u.Username, "server.forgotten", r.PathValue("id"))
 		w.WriteHeader(204)
 	})
+}
+
+func publicNote(a string) string {
+	if a == "" {
+		return ""
+	}
+	return ", public address " + a
 }
 
 // serverProblems warns about servers that stopped, and a shared address nobody can hold.

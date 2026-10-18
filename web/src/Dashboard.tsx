@@ -19,7 +19,7 @@ export function Dashboard() {
   const { data: sys } = useSystemQuery()
   // A server behind a cloud's NAT is reached at its public address, not the private one it sees on its own card.
   const { data: settings } = useSettingsQuery()
-  const reachAt = settings?.system.publicAddress || sys?.addresses?.[0]
+  const reachAt = sys?.publicAddress || settings?.system.publicAddress || sys?.addresses?.[0]
   const { data: health } = useHealthQuery()
   const { data: calls } = useCallsQuery()
   const { data: cdr } = useCdrQuery({})

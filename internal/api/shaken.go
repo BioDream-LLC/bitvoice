@@ -25,7 +25,7 @@ func (s *Server) stirCert(w http.ResponseWriter, r *http.Request) {
 // WebBase is this server's https:// address for the outside world: its public address (or name) and
 // the HTTPS port; empty when no public address is set.
 func (s *Server) WebBase() string {
-	host := s.config().System.PublicAddress
+	host := s.publicAddress()
 	port := int(s.HTTPSPort.Load())
 	if host == "" || port == 0 {
 		return ""

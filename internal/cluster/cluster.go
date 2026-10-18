@@ -14,6 +14,7 @@ import (
 	"errors"
 	"maps"
 	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"slices"
@@ -42,15 +43,18 @@ const (
 
 // Node is one server.
 type Node struct {
-	ID      string    `json:"id"`
-	Name    string    `json:"name"`
-	SIPAddr string    `json:"sipAddr"` // host:port the other servers send calls to
-	Version string    `json:"version"`
-	Started time.Time `json:"started"`
-	Seen    time.Time `json:"seen"`
-	Alive   bool      `json:"alive"`
-	Self    bool      `json:"self"`
-	Info    Info      `json:"info"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	SIPAddr string `json:"sipAddr"` // host:port the other servers send calls to
+	// PublicAddr is the address this server gives phones and providers in SIP and SDP, when it has one
+	// of its own (servers on public addresses each have their own); empty: the system's.
+	PublicAddr string    `json:"publicAddr,omitempty"`
+	Version    string    `json:"version"`
+	Started    time.Time `json:"started"`
+	Seen       time.Time `json:"seen"`
+	Alive      bool      `json:"alive"`
+	Self       bool      `json:"self"`
+	Info       Info      `json:"info"`
 }
 
 // Info is what a server says about itself with each beat.
@@ -67,6 +71,8 @@ type Info struct {
 	Cert string `json:"cert,omitempty"`
 	// TLSPort is where it takes SIP over TLS (0: none, the others use TCP).
 	TLSPort int `json:"tlsPort,omitempty"`
+	// Public is the address this server gives phones and providers (its own, or the system's).
+	Public string `json:"public,omitempty"`
 	// Unreachable lists the other servers this one could not connect to, by id, with the reason.
 	Unreachable map[string]string `json:"unreachable,omitempty"`
 }
@@ -342,6 +348,9 @@ type identity struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
 	SIPAddr string `json:"sipAddr"`
+	// PublicAddr is this server's own public address (each server of a cluster on public addresses has
+	// its own); empty: the system's public address, from Settings.
+	PublicAddr string `json:"publicAddr,omitempty"`
 }
 
 // New joins the cluster in d. sipAddr is where the others reach this server unless an address was
@@ -366,7 +375,7 @@ func New(d *db.DB, dir, version, sipAddr string) (*Cluster, error) {
 		addr = sipAddr
 	}
 	c.custom = id.SIPAddr != ""
-	c.self = Node{ID: id.ID, Name: id.Name, SIPAddr: addr, Version: version, Started: time.Now().UTC(), Self: true, Alive: true}
+	c.self = Node{ID: id.ID, Name: id.Name, SIPAddr: addr, PublicAddr: id.PublicAddr, Version: version, Started: time.Now().UTC(), Self: true, Alive: true}
 	if err := c.loadSecret(context.Background()); err != nil {
 		return nil, err
 	}
@@ -411,20 +420,28 @@ func (c *Cluster) Self() Node {
 	return c.self
 }
 
-// SetSelf renames this server or changes where the others reach it.
-func (c *Cluster) SetSelf(name, sipAddr string) (Node, error) {
-	name, sipAddr = strings.TrimSpace(name), strings.TrimSpace(sipAddr)
+// SetSelf renames this server, changes where the others reach it, or its own public address ("" for
+// the system's).
+func (c *Cluster) SetSelf(name, sipAddr, publicAddr string) (Node, error) {
+	name, sipAddr, publicAddr = strings.TrimSpace(name), strings.TrimSpace(sipAddr), strings.TrimSpace(publicAddr)
 	if name == "" || len(name) > 60 {
 		return Node{}, errors.New("give the server a name of up to 60 characters")
 	}
 	if sipAddr == "" || !strings.Contains(sipAddr, ":") {
 		return Node{}, errors.New("enter where the other servers reach this one, as address:port (192.0.2.10:5060)")
 	}
+	if publicAddr != "" {
+		if a, err := netip.ParseAddr(publicAddr); err != nil && !hostName(publicAddr) {
+			return Node{}, errors.New("the public address is an IP address or a host name, without a port (203.0.113.7, pbx2.example.com)")
+		} else if err == nil && (a.IsPrivate() || a.IsLoopback() || a.IsUnspecified()) {
+			return Node{}, errors.New("that is a private address: leave this empty unless the server is reached from the internet at an address of its own")
+		}
+	}
 	c.mu.Lock()
-	c.self.Name, c.self.SIPAddr, c.custom = name, sipAddr, true
+	c.self.Name, c.self.SIPAddr, c.self.PublicAddr, c.custom = name, sipAddr, publicAddr, true
 	self := c.self
 	c.mu.Unlock()
-	return self, c.saveIdentity(identity{ID: self.ID, Name: name, SIPAddr: sipAddr})
+	return self, c.saveIdentity(identity{ID: self.ID, Name: name, SIPAddr: sipAddr, PublicAddr: publicAddr})
 }
 
 // Nodes lists every server, this one first, then by name.
@@ -837,4 +854,17 @@ func (c *Cluster) Unreachable() map[string]string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return maps.Clone(c.unreachable)
+}
+
+// hostName reports whether s looks like a DNS name (letters, digits, dashes and dots, with a dot).
+func hostName(s string) bool {
+	if len(s) > 253 || !strings.Contains(s, ".") || strings.HasPrefix(s, ".") || strings.HasSuffix(s, ".") {
+		return false
+	}
+	for _, r := range s {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '.') {
+			return false
+		}
+	}
+	return true
 }

@@ -40,7 +40,7 @@ func (s *Server) provisionFile(w http.ResponseWriter, r *http.Request) {
 	}
 	name := r.PathValue("file")
 	// The address the phone used to reach BitVoice is the one it can register to.
-	server := cfg.System.PublicAddress
+	server := s.publicAddress()
 	srvName := cfg.System.Cluster.Name
 	if pr, err := netip.ParsePrefix(cfg.System.Cluster.SharedAddress); err == nil && s.Cluster != nil {
 		server = pr.Addr().String() // the address that moves to a running server

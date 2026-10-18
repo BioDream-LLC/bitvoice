@@ -129,7 +129,7 @@ func (e *Engine) queueURI(cfg *config.Config) string {
 	}
 	host := cfg.System.Core.Source
 	if host == "" {
-		host = cfg.System.PublicAddress
+		host = e.PublicAddress(*cfg)
 	}
 	if host == "" {
 		host = "esrp.invalid"

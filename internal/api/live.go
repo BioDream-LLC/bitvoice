@@ -213,7 +213,7 @@ func (s *Server) liveRoutes() {
 	s.handle("GET /api/system", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
 		cfg, rev := s.Store.Config()
 		writeJSON(w, 200, map[string]any{"version": s.Version, "name": cfg.System.Name, "rev": rev,
-			"addresses": s.Engine.PhoneAddresses(localAddresses()), "sipPort": s.Engine.SIPPort(), "tlsPort": s.Engine.TLSPort(), "httpsPort": s.HTTPSPort.Load(), "ffmpeg": media.FFmpegHas(s.config().System.FFmpeg), "amiAddress": s.amiAddr(), "uptimeSeconds": int(time.Since(s.started).Seconds()),
+			"addresses": s.Engine.PhoneAddresses(localAddresses()), "publicAddress": s.publicAddress(), "sipPort": s.Engine.SIPPort(), "tlsPort": s.Engine.TLSPort(), "httpsPort": s.HTTPSPort.Load(), "ffmpeg": media.FFmpegHas(s.config().System.FFmpeg), "amiAddress": s.amiAddr(), "uptimeSeconds": int(time.Since(s.started).Seconds()),
 			"instanceId": s.Store.State().InstanceID, "tenant": s.Tenant, "hosts": s.Tenancy != nil,
 			"publicSafety": cfg.System.PublicSafety || cfg.PublicSafetyInUse() != "", "publicSafetyInUse": cfg.PublicSafetyInUse()})
 	})

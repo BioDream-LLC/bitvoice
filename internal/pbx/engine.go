@@ -113,6 +113,9 @@ type Engine struct {
 	NameFor func(number string) string
 	// SaveHotDesks keeps hot desk sign-ins across restarts.
 	SaveHotDesks func([]HotDesk) error
+	// SaveRegistrations keeps where phones are registered across restarts (this server's own phones:
+	// a file of its own, not the shared database).
+	SaveRegistrations func([]byte) error
 	// SaveDiverts keeps call forwarding and hand-set do not disturb across restarts.
 	SaveDiverts func(DivertState) error
 	// LastAgent is the extension that last answered this caller since a time, for sticky queues; "" if none.
@@ -212,7 +215,7 @@ func (e *Engine) Start(ctx context.Context, listen string) error {
 	e.stack = sip.NewStack(h)
 	e.stack.TLSClient = e.TLSClient
 	e.stack.Log = e.Log
-	e.stack.Host = cfg.System.PublicAddress
+	e.stack.Host = e.PublicAddress(*cfg)
 	e.stack.Trace = e.Trace
 	if e.T1 > 0 {
 		e.stack.T1, e.stack.T2 = e.T1, e.T2
@@ -244,6 +247,7 @@ func (e *Engine) Start(ctx context.Context, listen string) error {
 	e.stack.Serve(e.ctx)
 	e.started = time.Now()
 	go e.reg.run(e.ctx)
+	go e.reg.saveLoop(e.ctx)
 	go e.runTrunks(e.ctx)
 	go e.trunkJudgeLoop(e.ctx.Done())
 	go e.watchdog(e.ctx)
@@ -273,9 +277,21 @@ func (e *Engine) Stop() {
 	if e.cancel != nil {
 		e.cancel()
 	}
+	e.reg.save()
 	if e.stack != nil && !e.shared {
 		e.stack.Close()
 	}
+}
+
+// PublicAddress is the address this server gives in SIP and SDP: its own, when the servers of a
+// cluster each have a public address of their own (Servers), else the system's (Settings).
+func (e *Engine) PublicAddress(cfg config.Config) string {
+	if e.Cluster != nil {
+		if p := e.Cluster.Self().PublicAddr; p != "" {
+			return p
+		}
+	}
+	return cfg.System.PublicAddress
 }
 
 // SIPPort returns the port SIP listens on.
@@ -337,7 +353,7 @@ func (e *Engine) Apply(cfg config.Config) {
 	e.bans.apply(cfg.Security)
 	applyG723(cfg)
 	if e.stack != nil {
-		e.stack.Host = cfg.System.PublicAddress
+		e.stack.Host = e.PublicAddress(cfg)
 	}
 	e.reg.prune(cfg)
 	e.pruneHotDesks()

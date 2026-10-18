@@ -351,8 +351,8 @@ export interface Screening { failed: 'allow' | 'label' | 'block'; unverified: 'a
 export interface VIP { number: string; name: string }
 export interface ClusterCall { id: string; from: string; fromName: string; to: string; toName: string; state: string; start: string }
 export interface ClusterNode {
-  id: string; name: string; sipAddr: string; version: string; started: string; seen: string; alive: boolean; self: boolean
-  info: { phones: number; calls?: ClusterCall[] | null; busy?: string[] | null; tlsPort?: number; cert?: string; unreachable?: Record<string, string> | null }
+  id: string; name: string; sipAddr: string; publicAddr?: string; version: string; started: string; seen: string; alive: boolean; self: boolean
+  info: { phones: number; public?: string; calls?: ClusterCall[] | null; busy?: string[] | null; tlsPort?: number; cert?: string; unreachable?: Record<string, string> | null }
 }
 export interface Brand { number: string; name: string; logo: string; reason: string; watch: boolean }
 export interface NumberReputation {
@@ -408,7 +408,7 @@ export interface DeskProtocols {
   sccp: { enabled: boolean; port: number; phones: { device: string; extension: string }[] }
   mgcp: { enabled: boolean; port: number; gateways: { name: string; host: string; port: number; lines: { endpoint: string; extension: string }[] }[] }
 }
-export interface SystemInfo { version: string; name: string; rev: number; addresses: string[]; sipPort: number; tlsPort: number; httpsPort: number; ffmpeg?: boolean; amiAddress: string; uptimeSeconds: number; tenant?: Tenant | null; hosts?: boolean; publicSafety?: boolean; publicSafetyInUse?: string }
+export interface SystemInfo { version: string; name: string; rev: number; addresses: string[]; publicAddress?: string; sipPort: number; tlsPort: number; httpsPort: number; ffmpeg?: boolean; amiAddress: string; uptimeSeconds: number; tenant?: Tenant | null; hosts?: boolean; publicSafety?: boolean; publicSafetyInUse?: string }
 export interface TenantLimits { extensions: number; calls: number; storageMB: number; aiPerDay: number }
 export interface Tenant { id: string; name: string; domain: string; suspended: boolean; limits: TenantLimits; note: string; created?: string }
 export interface TenantView extends Tenant { running: boolean; extensions: number; phones: number; calls: number; storageBytes: number; url: string; sipUser: string; admins: number }
@@ -814,7 +814,7 @@ export const api = createApi({
       moveDatabase: b.mutation<{ where: string; counts: Record<string, number>; restarting: boolean }, { url: string }>({ query: (body) => ({ url: 'database/move', method: 'POST', body }), invalidatesTags: ['Database'] }),
       servers: b.query<{ shared: boolean; postgres: boolean; self?: ClusterNode; nodes?: ClusterNode[]; address?: SharedAddress }, void>({ query: () => 'servers', providesTags: ['Servers'] }),
       serversDns: b.query<DnsCheck, void>({ query: () => 'servers/dns', providesTags: ['Servers'] }),
-      setServer: b.mutation<ClusterNode, { name: string; sipAddr: string }>({ query: (body) => ({ url: 'servers/self', method: 'PUT', body }), invalidatesTags: ['Servers'] }),
+      setServer: b.mutation<ClusterNode, { name: string; sipAddr: string; publicAddr: string }>({ query: (body) => ({ url: 'servers/self', method: 'PUT', body }), invalidatesTags: ['Servers'] }),
       forgetServer: b.mutation<void, string>({ query: (id) => ({ url: `servers/${id}`, method: 'DELETE' }), invalidatesTags: ['Servers', 'Health'] }),
       away: b.query<{ items: { ext: string; reason: string; until?: string; source: 'calendar' | 'manual'; offSite?: boolean }[]; problems: Record<string, string> }, void>({ query: () => 'away', providesTags: ['Away'] }),
       setAway: b.mutation<void, { ext: string; on: boolean; reason?: string; until?: string }>({ query: ({ ext, ...body }) => ({ url: `away/${ext}`, method: 'PUT', body }), invalidatesTags: ['Away', 'QueueStatus'] }),

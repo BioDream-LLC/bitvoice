@@ -2,11 +2,13 @@ package pbx
 
 import (
 	"context"
+	"encoding/json"
 	"net/netip"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/biodream-llc/bitvoice/internal/config"
@@ -36,6 +38,7 @@ type Registrar struct {
 	e        *Engine
 	mu       sync.Mutex
 	bindings map[string][]*Binding // by extension number
+	dirty    atomic.Bool           // changed since last saved
 }
 
 const (
@@ -185,6 +188,7 @@ func (r *Registrar) handle(tx *sip.ServerTx, in *sip.Incoming) {
 		}
 	}
 	r.mu.Unlock()
+	r.dirty.Store(true)
 	tx.Respond(resp)
 	r.e.publish("registrations.changed", map[string]any{"extension": number})
 	if fresh != nil {
@@ -337,9 +341,97 @@ func (r *Registrar) run(ctx context.Context) {
 			_ = r.e.stack.SendRaw([]byte("\r\n\r\n"), p)
 		}
 		if expired {
+			r.dirty.Store(true)
 			r.e.publish("registrations.changed", map[string]any{})
 		}
 	}
+}
+
+// saveLoop writes the registrations out within two seconds of a change.
+func (r *Registrar) saveLoop(ctx context.Context) {
+	t := time.NewTicker(2 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			r.save()
+		}
+	}
+}
+
+// savedBinding is a registration as kept across a restart.
+type savedBinding struct {
+	Binding
+	PeerTransport string `json:"peerTransport"`
+	PeerAddr      string `json:"peerAddr"`
+	PeerLocal     string `json:"peerLocal,omitempty"`
+	CallID        string `json:"callId"`
+	CSeq          uint32 `json:"cseq"`
+}
+
+// save writes the registrations out when they changed. Phones register for minutes to an hour; a
+// server that restarts must still reach them meanwhile (FreePBX's Asterisk keeps them the same way).
+func (r *Registrar) save() {
+	if r.e.SaveRegistrations == nil || !r.dirty.Swap(false) {
+		return
+	}
+	r.mu.Lock()
+	var out []savedBinding
+	for _, list := range r.bindings {
+		for _, b := range list {
+			s := savedBinding{Binding: *b, PeerTransport: b.peer.Transport, PeerAddr: b.peer.Addr.String(), CallID: b.callID, CSeq: b.cseq}
+			if b.peer.Local.IsValid() {
+				s.PeerLocal = b.peer.Local.String()
+			}
+			out = append(out, s)
+		}
+	}
+	r.mu.Unlock()
+	if out == nil {
+		out = []savedBinding{}
+	}
+	j, err := json.Marshal(out)
+	if err == nil {
+		err = r.e.SaveRegistrations(j)
+	}
+	if err != nil {
+		r.dirty.Store(true) // try again on the next tick
+		r.e.Log.Warn("could not save phone registrations", "err", err)
+	}
+}
+
+// LoadRegistrations restores registrations saved before a restart: the ones not yet expired, of
+// extensions that still exist.
+func (e *Engine) LoadRegistrations(j []byte) int {
+	var in []savedBinding
+	if len(j) == 0 || json.Unmarshal(j, &in) != nil {
+		return 0
+	}
+	cfg := e.Config()
+	now := time.Now()
+	r := e.reg
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n := 0
+	for _, s := range in {
+		x := cfg.FindExtension(s.Extension)
+		addr, err := netip.ParseAddrPort(s.PeerAddr)
+		uri, uerr := sip.ParseURI(s.Contact)
+		if x == nil || !x.Enabled || !now.Before(s.Expires) || err != nil || uerr != nil {
+			continue
+		}
+		b := s.Binding
+		b.peer = sip.Peer{Transport: s.PeerTransport, Addr: addr}
+		if l, err := netip.ParseAddr(s.PeerLocal); err == nil {
+			b.peer.Local = l
+		}
+		b.uri, b.callID, b.cseq = uri, s.CallID, s.CSeq
+		r.bindings[b.Extension] = append(r.bindings[b.Extension], &b)
+		n++
+	}
+	return n
 }
 
 // requestURIFor is where to address a request to a binding: its registered contact.

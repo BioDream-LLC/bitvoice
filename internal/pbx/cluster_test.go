@@ -49,8 +49,11 @@ func (f *fakeCluster) set(id string, e *Engine) {
 func (l fakeLink) Leader() bool { return true }
 
 func (l fakeLink) Self() cluster.Node {
-	e := l.f.all()[l.id]
-	return cluster.Node{ID: l.id, SIPAddr: "127.0.0.1:" + strconv.Itoa(e.SIPPort()), Self: true, Alive: true}
+	n := cluster.Node{ID: l.id, Self: true, Alive: true}
+	if e := l.f.all()[l.id]; e != nil { // not yet while the engine starts
+		n.SIPAddr = "127.0.0.1:" + strconv.Itoa(e.SIPPort())
+	}
+	return n
 }
 
 func (l fakeLink) Remote() []cluster.Reg {
@@ -528,5 +531,59 @@ func TestCallBetweenServersTLS(t *testing.T) {
 	p101.waitBye(t, 2*time.Second)
 	if _, code := p100.dial("101"); code == 200 {
 		t.Fatal("called through a server with the wrong certificate")
+	}
+}
+
+// The server carrying a call stops while the answering phone is registered with the server that takes it
+// over: the call reached that phone through the taker, so the taker keeps its own leg to the phone (no
+// re-INVITE to it) and moves only the caller.
+func TestCallSurvivesServerWithPhoneOnTaker(t *testing.T) {
+	f := &fakeCluster{engines: map[string]*Engine{}}
+	a, _ := startEngine(t, testConfig(), func(e *Engine) { e.Cluster = fakeLink{f, "a"} })
+	b, recB := startEngine(t, testConfig(), func(e *Engine) { e.Cluster = fakeLink{f, "b"} })
+	f.set("a", a)
+	f.set("b", b)
+	p100 := registered(t, a, "100")[0]
+	p101 := registered(t, b, "101")[0]
+	d100, d101 := answeredCall(t, p100, p101, "101")
+	waitFor(t, "the call is not shown", func() bool { return len(a.Calls()) == 1 && len(b.Calls()) == 1 })
+	var snaps [][]byte
+	for _, s := range a.CallSnapshots() {
+		snaps = append(snaps, s)
+	}
+	if len(snaps) != 1 {
+		t.Fatalf("%d calls saved", len(snaps))
+	}
+	if n := len(b.CallSnapshots()); n != 0 {
+		t.Fatalf("server b saved %d calls it only passed on: the server with the caller saves them", n)
+	}
+	crash(a)
+	if n := b.TakeOver(snaps); n != 1 {
+		t.Fatalf("took over %d calls", n)
+	}
+	d100.follow(t, b) // the caller moves
+	select {
+	case <-p101.reinvite:
+		t.Fatal("101 was re-INVITEd, though its leg was already on server b")
+	case <-time.After(300 * time.Millisecond):
+	}
+	p100.drainRTP()
+	p101.drainRTP()
+	d100.sendRTP(20)
+	d101.sendRTP(20)
+	if !p101.gotRTP(2*time.Second) || !p100.gotRTP(2*time.Second) {
+		t.Fatal("the parties do not hear each other through the server that took over")
+	}
+	if n := len(b.Calls()); n != 1 {
+		t.Fatalf("server b lists %d calls, want the one it carries on", n)
+	}
+	p101.send(d101.request(sip.BYE))
+	p100.waitBye(t, 2*time.Second)
+	r := recB.last(t)
+	if r.Disposition != "answered" || r.From != "100" || r.Direction == "cluster" {
+		t.Fatalf("record %+v", r)
+	}
+	if len(b.Calls()) != 0 {
+		t.Fatal("the call is still listed")
 	}
 }

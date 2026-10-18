@@ -73,6 +73,7 @@ func (e *Engine) ClusterState() cluster.State {
 			Transport: b.Transport, Since: b.Since, Expires: b.Expires, Via: viaOf(b.peer)})
 	}
 	st.Info.Phones = len(st.Regs)
+	st.Info.Public = e.PublicAddress(*e.Config())
 	if e.CertPin != nil && e.TLSPort() > 0 {
 		st.Info.Cert, st.Info.TLSPort = e.CertPin(), e.TLSPort()
 	}

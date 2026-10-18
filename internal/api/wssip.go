@@ -24,7 +24,7 @@ func (s *Server) wsRoutes(m *http.ServeMux) {
 				Enabled:    func() bool { return s.config().System.WebSocket.Enabled },
 				Banned:     s.Engine.IsBanned,
 				MediaHost: func(r *http.Request) string {
-					if pa := s.config().System.PublicAddress; pa != "" {
+					if pa := s.publicAddress(); pa != "" {
 						if a, err := netip.ParseAddr(pa); err == nil && !clientIP(r).IsPrivate() && !clientIP(r).IsLoopback() {
 							return a.String() // from outside: the address the router forwards
 						}

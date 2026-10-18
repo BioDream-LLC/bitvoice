@@ -134,7 +134,7 @@ func (s *Server) exposures(from, to time.Time) []Exposure {
 // mediaHost is the address a browser reaches media on: the public address when there is one, else
 // the host the request came to.
 func (s *Server) mediaHostFor(r *http.Request) string {
-	if a := s.config().System.PublicAddress; a != "" {
+	if a := s.publicAddress(); a != "" {
 		return a
 	}
 	h, _, err := net.SplitHostPort(r.Host)

@@ -87,7 +87,16 @@ func TestTwoServers(t *testing.T) {
 		t.Fatalf("forgotten server still listed: %+v", b.Nodes())
 	}
 	// The identity stays across restarts.
-	a.SetSelf(a.Self().Name, "10.0.0.11:5060")
+	a.SetSelf(a.Self().Name, "10.0.0.11:5060", "")
+	if _, err := a.SetSelf(a.Self().Name, "10.0.0.11:5060", "10.0.0.11"); err == nil {
+		t.Fatal("a private address was taken as the public one")
+	}
+	if _, err := a.SetSelf(a.Self().Name, "10.0.0.11:5060", "203.0.113.7:5060"); err == nil {
+		t.Fatal("a public address with a port was taken")
+	}
+	if _, err := a.SetSelf(a.Self().Name, "10.0.0.11:5060", "pbx2.example.com"); err != nil {
+		t.Fatal(err)
+	}
 	a2, _ := New(d, a.dir, "1", "10.9.9.9:5060")
 	if a2.Self().ID != a.Self().ID || a2.Self().SIPAddr != "10.0.0.11:5060" {
 		t.Fatalf("identity %+v", a2.Self())

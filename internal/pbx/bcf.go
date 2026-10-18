@@ -174,7 +174,7 @@ func (e *Engine) sourceIDFor(src string) string {
 	if !ok {
 		host := e.Config().System.Core.Source
 		if host == "" {
-			host = e.Config().System.PublicAddress
+			host = e.PublicAddress(*e.Config())
 		}
 		if host == "" {
 			host = "bcf.invalid"

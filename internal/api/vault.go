@@ -54,6 +54,15 @@ func (s *Server) Resolved(c config.Config) config.Config {
 }
 
 // config is the stored configuration with secrets resolved, for code that uses it.
+// publicAddress is the address this server is reached at from outside: its own in a cluster whose
+// servers each have one (Servers), else the system's (Settings).
+func (s *Server) publicAddress() string {
+	if s.Engine != nil {
+		return s.Engine.PublicAddress(s.config())
+	}
+	return s.config().System.PublicAddress
+}
+
 func (s *Server) config() config.Config {
 	c, _ := s.Store.Config()
 	return s.Resolved(c)
