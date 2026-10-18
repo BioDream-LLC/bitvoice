@@ -54,5 +54,5 @@ used about 100 MB of memory at 200 calls at once, so the smallest plan is enough
 `deploy/demo/seed` was run against a local server: setup, the visitor login (a change refused with 403),
 the people, groups, queue, menu, schedule, call script and routes, 20 calls from the generator, and the
 browser phone signed in as 150 calling `810` (answered by the script, which hung up after its timeout).
-Deployed with `provision.sh` on 17 October 2026 (v0.1.6). Checked from outside: a visitor signs in, sees the
+Deployed with `provision.sh` on 17 October 2026 (v0.1.6); upgraded to v0.1.7 on 18 October 2026 by running it again. Checked from outside: a visitor signs in, sees the
 extensions, is refused a change (403), and the browser phone's call to `810` connects over the internet.
