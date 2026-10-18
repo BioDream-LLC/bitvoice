@@ -175,6 +175,9 @@ func (e *Engine) CheckPlanOf(cfg *config.Config) PlanReport {
 		s := sit
 		s.Path = slices.Clone(path)
 		where := PlanWhere{Kind: st.Kind, Target: st.Target, Name: st.Name}
+		if st.Target == "" {
+			where = PlanWhere{} // a refusal or a hang-up is a step, not something to open
+		}
 		switch {
 		case st.Kind == "loop":
 			add(PlanFinding{Severity: "error", Kind: "loop", Title: "A call goes round in a loop", Says: st.Says, Where: where}, s)

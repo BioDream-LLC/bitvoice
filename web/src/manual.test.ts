@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { manual } from './manual'
 import { freshName } from './ui'
+import { paletteFilter } from './Shell'
 
 // The manual must follow the code: every page has a place in the menu with search words, and every
 // page in the menu has an article in the manual that opens from it.
@@ -48,4 +49,9 @@ it('numbers a default name already taken', () => {
   expect(freshName('Main menu', [])).toBe('Main menu')
   expect(freshName('Main menu', ['Main menu'])).toBe('Main menu 2')
   expect(freshName('Main menu', ['main menu', 'Main menu 2'])).toBe('Main menu 3')
+})
+
+it('ranks a page named what was typed above one with it among its keywords', () => {
+  expect(paletteFilter('Phones devices provisioning', 'phones')).toBeGreaterThan(paletteFilter('Extensions users phones people', 'phones'))
+  expect(paletteFilter('Trunks carrier', 'dr lee')).toBe(0)
 })

@@ -127,7 +127,7 @@ export function Logo({ size = 32 }: { size?: number }) {
 
 /** Every typed word must appear in the item (no scattered-letter matches: "dr lee" is not "Trunks");
  * words at the start of a word rank higher. */
-function paletteFilter(value: string, search: string): number {
+export function paletteFilter(value: string, search: string): number {
   const v = value.toLowerCase()
   const words = search.toLowerCase().split(/\s+/).filter(Boolean)
   if (!words.length) return 1
@@ -137,7 +137,9 @@ function paletteFilter(value: string, search: string): number {
     if (i < 0) return 0
     score += i === 0 || v[i - 1] === ' ' ? 2 : 1
   }
-  return score / (words.length * 2)
+  // An item whose text starts with what was typed (its name, before its keywords) comes before one that only
+  // has it among its keywords: "Phones" opens Phones, not Extensions (whose keywords include phones).
+  return (score / (words.length * 2)) * (v.startsWith(search.toLowerCase().trim()) ? 1 : 0.9)
 }
 
 function Palette({ open, setOpen, me }: { open: boolean; setOpen: (v: boolean) => void; me: Me }) {
