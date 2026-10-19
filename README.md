@@ -363,8 +363,11 @@ git clone https://github.com/BioDream-LLC/bitvoice && cd bitvoice && make build
 ```
 
 The binaries are pure Go with no C libraries, so they run on any Linux, including Alpine and distroless
-images. `deploy/cloud` has a systemd unit and cloud-init file; `deploy/lab` runs several servers as one
-phone system in Docker on one computer.
+images. `deploy/cloud` has a systemd unit, a cloud-init file that runs the installer, and `build-images.sh`,
+which makes an AWS or Azure machine image (tried on EC2: each server made from the image starts as a new
+server, with its own certificate and setup code). `deploy/terraform` configures BitVoice through its API with
+Terraform or OpenTofu (tried with OpenTofu 1.13: create, change, no drift, destroy). `deploy/lab` runs several
+servers as one phone system in Docker on one computer.
 
 </details>
 
@@ -439,6 +442,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | Archive to S3, secrets from AWS Secrets Manager | Field-tested | real AWS, our own SigV4 |
 | SNMP monitoring and traps | Field-tested | net-snmp's snmpwalk and snmptrapd |
 | Let's Encrypt | Field-tested | issues and renews the public demo's certificate |
+| Machine images (AWS) and configuration as code | Field-tested | an EC2 image built by `deploy/cloud/build-images.sh` from Ubuntu 24.04: each server from it starts new; `deploy/terraform` with OpenTofu 1.13 (create, change, no drift, destroy). Azure images not tried |
 | IAX2 trunks | Checked against a reference | Asterisk 23 |
 | H.323 trunks | Checked against a reference | call set-up both ways with Asterisk's chan_ooh323; its own sound is broken in Asterisk 22 (it fails calling itself), so sound over H.323 is not yet checked |
 | SIP over WebSocket | Checked against a reference | JsSIP and SIP.js |

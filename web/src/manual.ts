@@ -126,6 +126,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | Archive to S3, secrets from AWS Secrets Manager | Field-tested | real AWS, our own SigV4 |
 | SNMP monitoring and traps | Field-tested | net-snmp's snmpwalk and snmptrapd |
 | Let's Encrypt | Field-tested | issues and renews the public demo's certificate |
+| Machine images (AWS) and configuration as code | Field-tested | an EC2 image built by \`deploy/cloud/build-images.sh\` from Ubuntu 24.04: each server from it starts new; \`deploy/terraform\` with OpenTofu 1.13 (create, change, no drift, destroy). Azure images not tried |
 | IAX2 trunks | Checked against a reference | Asterisk 23 |
 | H.323 trunks | Checked against a reference | call set-up both ways with Asterisk's chan_ooh323; its own sound is broken in Asterisk 22 (it fails calling itself), so sound over H.323 is not yet checked |
 | SIP over WebSocket | Checked against a reference | JsSIP and SIP.js |
@@ -1660,7 +1661,7 @@ curl -H "Authorization: Bearer bv_..." https://pbx.example.com/api/extensions
 \`\`\`
 
 ## Terraform or OpenTofu
-The repository's \`deploy/terraform\` shows extensions, ring groups and routes managed with the generic REST provider: plan shows what would change, apply makes the change.
+The repository's \`deploy/terraform\` shows extensions, ring groups and routes managed with the generic REST provider: plan shows what would change, apply makes the change. The provider checks BitVoice's certificate; while BitVoice still uses its own self-signed one, either get one from Let's Encrypt (**Settings**, **Certificates**) or set \`bitvoice_insecure = true\` on a network you trust (on Linux, \`SSL_CERT_FILE\` pointing at BitVoice's certificate works too). Resources are matched by the id BitVoice gives them, so a second plan shows no changes until the file or the screens change something.
 
 ## Configuration from Git
 In [Settings](#/settings), **Configuration from Git**, BitVoice reads the configuration from a file in a repository every few minutes and either shows what differs or makes the changes. Start the file with **Export for Git**, which leaves out passwords; BitVoice keeps its own, so secrets never go into the repository.

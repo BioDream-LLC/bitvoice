@@ -21,6 +21,14 @@ variable "bitvoice_url" {
   default = "https://pbx.example.com:8443"
 }
 
+# BitVoice's own certificate is self-signed until it has one from Let's Encrypt (Settings, Certificates),
+# and this provider can only be told to skip the check. Set this true only while that is so, and on a
+# network you trust; on Linux, SSL_CERT_FILE=/path/to/BitVoice's cert.pem works instead.
+variable "bitvoice_insecure" {
+  type    = bool
+  default = false
+}
+
 variable "bitvoice_token" {
   type      = string
   sensitive = true
@@ -28,6 +36,7 @@ variable "bitvoice_token" {
 
 provider "restapi" {
   uri                  = var.bitvoice_url
+  insecure             = var.bitvoice_insecure
   write_returns_object = true
   # Answers wrap the object: {"item": {...}, "rev": 12}.
   id_attribute = "item/id"
@@ -57,7 +66,7 @@ resource "restapi_object" "sales" {
     name        = "Sales"
     members     = ["100"]
     strategy    = "all"
-    ringSeconds = 20
+    ringSeconds = 30
   })
   depends_on = [restapi_object.front_desk]
 }
