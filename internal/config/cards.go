@@ -334,6 +334,35 @@ func (c *Config) validateCards(p *Problems) {
 			used[ch] = fmt.Sprintf("in span %d", i+1)
 		}
 	}
+	// SS7 spans with the same point codes, network indicator and variant are one link set: each
+	// span's signalling link needs its own code in it, and the circuits' codes may not overlap.
+	type lsKey struct{ variant, opc, apc, ni string }
+	slcs, cics := map[lsKey]map[int]int{}, map[lsKey]map[int]int{}
+	for i, s := range k.Spans {
+		if s.Signalling != "ss7" {
+			continue
+		}
+		f := fmt.Sprintf("system.cards.spans[%d]", i)
+		ansi := s.Variant == "ansi"
+		o, _ := PointCode(s.OPC, ansi)
+		a, _ := PointCode(s.APC, ansi)
+		key := lsKey{s.Variant, strconv.Itoa(o), strconv.Itoa(a), s.NI}
+		if slcs[key] == nil {
+			slcs[key], cics[key] = map[int]int{}, map[int]int{}
+		}
+		if prev, ok := slcs[key][s.SLC]; ok {
+			p.add(f+".slc", "span %d has signalling link code %d in this link set already: give each span's link its own (0 to 15)", prev+1, s.SLC)
+		}
+		slcs[key][s.SLC] = i
+		b, _ := s.Channels()
+		for j := range b {
+			if prev, ok := cics[key][s.FirstCIC+j]; ok {
+				p.add(f+".firstCic", "circuit %d is also on span %d of this link set", s.FirstCIC+j, prev+1)
+				break
+			}
+			cics[key][s.FirstCIC+j] = i
+		}
+	}
 	for i, t := range c.Trunks {
 		if t.Protocol == "dahdi" && !k.Enabled {
 			p.add(fmt.Sprintf("trunks[%d].protocol", i), "switch on Telephony cards in Settings first")

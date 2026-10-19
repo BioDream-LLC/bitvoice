@@ -78,6 +78,7 @@ type mtp2 struct {
 	sending   int // the LSSU being sent while not in service; -1: FISUs
 	gotFISU   bool
 	retrans   bool // the far end asked for retransmission and we are doing it
+	left      leftover // what the link held when it failed, until MTP3 takes it
 
 	// Link up and down reach MTP3 in the order they happened: each change is numbered, and a late
 	// one (sent from a goroutine) is dropped if a newer one has already been told.
@@ -86,6 +87,34 @@ type mtp2 struct {
 }
 
 // tellUp numbers a change of the link's state; called with m.mu held. Pass the number to report.
+// leftover is what a failed link held: for MTP3 to send on another link of the link set.
+type leftover struct {
+	rtb      [][]byte
+	rtbFirst int
+	queue    [][]byte
+	bsn      int
+	ok       bool
+}
+
+// takeLeftover hands over (once) what the link held when it last failed.
+func (m *mtp2) takeLeftover() leftover {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	l := m.left
+	m.left = leftover{}
+	return l
+}
+
+// lastAccepted is the FSN of the last MSU accepted from the far end (for a COA).
+func (m *mtp2) lastAccepted() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.left.ok {
+		return m.left.bsn
+	}
+	return m.bsn
+}
+
 func (m *mtp2) tellUp() int { m.upGen++; return m.upGen }
 
 // report tells MTP3 change gen, unless a newer one was told first. Called without m.mu.
@@ -188,6 +217,11 @@ func (m *mtp2) failed() {
 	m.stopAll()
 	m.state = l2OutOfService
 	m.sending = sios
+	if was {
+		// Kept for MTP3's changeover (Q.704 5.4): what was sent and not acknowledged, with the FSN of
+		// the first, and what was not sent yet; and the last FSN accepted from the far end.
+		m.left = leftover{rtb: m.rtb, rtbFirst: m.rtbFirst, queue: m.queue, bsn: m.bsn, ok: true}
+	}
 	m.rtb, m.queue = nil, nil
 	if was {
 		g := m.tellUp()

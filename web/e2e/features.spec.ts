@@ -763,6 +763,21 @@ test('SS7 span on a telephony card', async ({ page }) => {
   expect(s.d).toBe(516)
   expect(s.b).toHaveLength(30)
   expect(s.ss7).toMatchObject({ opc: 2130, apc: 2129, ni: 2, firstCic: 33 })
+  // A second E1 with the same point codes joins the link set: it needs its own link code and circuits.
+  await page.getByRole('button', { name: 'Add a T1, E1 or BRI' }).click()
+  await page.getByLabel('Line', { exact: true }).last().selectOption('e1')
+  await page.getByLabel('First channel').last().fill('532')
+  await page.locator('[id^="sp-g-"]').last().selectOption('ss7')
+  await page.getByLabel('Our point code').last().fill('1-10-2')
+  await page.getByLabel('Adjacent point code').last().fill('1-10-1')
+  await page.getByLabel('First CIC').last().fill('40')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText(/has signalling link code 0 in this link set already/)).toBeVisible()
+  await expect(page.getByText(/circuit 40 is also on span/)).toBeVisible()
+  await page.getByLabel('Link code (SLC)').last().fill('1')
+  await page.getByLabel('First CIC').last().fill('64')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText('Telephony cards saved')).toBeVisible()
 })
 
 // The outbound dialer: a campaign is made for a queue, a CSV list is loaded (one number on the

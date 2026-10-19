@@ -51,7 +51,7 @@ type span struct {
 
 // startSpans opens each span's D-channel and its B-channels' ports.
 func (b *Bridge) startSpans() {
-	for i, sc := range b.cfg.Spans {
+	for _, sc := range b.cfg.Spans {
 		s := &span{b: b, conf: sc, byQ: map[int]int{}, byD: map[int]int{}, byCIC: map[int]int{}}
 		for j, ch := range sc.B {
 			if j < len(sc.Q931) {
@@ -69,6 +69,12 @@ func (b *Bridge) startSpans() {
 		b.mu.Lock()
 		b.spans = append(b.spans, s)
 		b.mu.Unlock()
+	}
+	// Every span is known before any runs: the spans of one SS7 link set find each other.
+	b.mu.Lock()
+	spans := append([]*span(nil), b.spans...)
+	b.mu.Unlock()
+	for i, s := range spans {
 		go s.run(i)
 	}
 }
@@ -145,7 +151,22 @@ func (s *span) status() string {
 			}
 			return "SS7 link set down"
 		}
-		return "SS7 link set up, " + strconv.Itoa(len(l.Busy())) + " of " + strconv.Itoa(len(s.conf.B)) + " circuits in calls"
+		st := "SS7 link set up"
+		if links := l.Links(); len(links) > 1 {
+			// A link set of several spans: this span's own signalling link, and how many are in service.
+			n := 0
+			for _, v := range links {
+				if v == "in service" {
+					n++
+				}
+			}
+			own := links[s.conf.SS7.SLC]
+			if own == "" {
+				own = "down"
+			}
+			st += " (" + strconv.Itoa(n) + " of " + strconv.Itoa(len(links)) + " links in service; this span's link " + own + ")"
+		}
+		return st + ", " + strconv.Itoa(len(l.Busy())) + " circuits in calls"
 	}
 	if p == nil || !p.IsUp() {
 		if err != "" {

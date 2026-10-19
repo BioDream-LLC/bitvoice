@@ -110,10 +110,11 @@ type Config struct {
 	CICs []int
 }
 
-// SS7 is one signalling link with ISUP over it.
+// SS7 is a link set (one signalling link or several) with ISUP over it.
 type SS7 struct {
-	cfg Config
-	mtp *mtp3
+	cfg  Config
+	mtp  *mtp3
+	link Link // New's link, run by Run
 
 	// Incoming is told of each call arriving (in its own goroutine).
 	Incoming func(*Call)
@@ -129,22 +130,76 @@ type SS7 struct {
 	grs     *time.Timer
 }
 
-// New makes an SS7 link set over a signalling link; Run starts it.
+// New makes an SS7 link set of one signalling link (its code cfg.SLC); Run starts it.
 func New(link Link, cfg Config) *SS7 {
-	s := &SS7{cfg: cfg, calls: map[int]*Call{}, blocked: map[int]bool{}}
-	sort.Ints(s.cfg.CICs)
-	s.mtp = newMTP3(link, cfg.MTPConfig, s.receive, s.mtpUp)
+	s := NewLinkSet(cfg)
+	s.link = link
 	return s
 }
 
-// Run brings the link up and serves it until the signalling link fails.
-func (s *SS7) Run() error {
-	s.mtp.l2.start()
-	return s.mtp.l2.run()
+// NewLinkSet makes an SS7 link set with no link yet: AddLink adds each signalling link.
+func NewLinkSet(cfg Config) *SS7 {
+	s := &SS7{cfg: cfg, calls: map[int]*Call{}, blocked: map[int]bool{}}
+	sort.Ints(s.cfg.CICs)
+	s.mtp = newLinkSet(cfg.MTPConfig, s.receive, s.mtpUp)
+	return s
+}
+
+// Run brings New's link up and serves it until it fails.
+func (s *SS7) Run() error { return s.AddLink(s.link, s.cfg.SLC) }
+
+// AddLink brings a signalling link of the link set up, with its signalling link code (0 to 15,
+// each link its own), and serves it until its frames stop; the link set carries on over its
+// other links meanwhile.
+func (s *SS7) AddLink(link Link, slc int) error {
+	sl, err := s.mtp.add(link, slc)
+	if err != nil {
+		return err
+	}
+	sl.l2.start()
+	err = sl.l2.run()
+	s.mtp.remove(sl)
+	return err
+}
+
+// AddCICs adds voice circuits (a span joining the link set).
+func (s *SS7) AddCICs(cics []int) {
+	s.mu.Lock()
+	s.cfg.CICs = append(s.cfg.CICs, cics...)
+	sort.Ints(s.cfg.CICs)
+	up := s.mtpOK
+	s.mu.Unlock()
+	if up {
+		for _, g := range groups(cics) {
+			_ = s.sendISUP(g[0], msgGRS, nil, [][]byte{{byte(g[1] - g[0])}}, nil)
+		}
+	}
+}
+
+// Links says how each signalling link of the link set stands, by its code: in service (carrying
+// traffic), changed over (its traffic on the others), changing back, or down.
+func (s *SS7) Links() map[int]string {
+	m := s.mtp
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := map[int]string{}
+	for _, l := range m.links {
+		switch {
+		case l.available():
+			out[l.slc] = "in service"
+		case l.co == coChangeback:
+			out[l.slc] = "changing back"
+		case l.co == coWaiting || l.co == coDone:
+			out[l.slc] = "changed over"
+		default:
+			out[l.slc] = "down"
+		}
+	}
+	return out
 }
 
 // Close stops it.
-func (s *SS7) Close() { s.mtp.l2.close() }
+func (s *SS7) Close() { s.mtp.close() }
 
 // IsUp says whether calls can be made.
 func (s *SS7) IsUp() bool {
@@ -197,8 +252,8 @@ func (s *SS7) mtpUp(up bool) {
 // resetCircuits sends a GRS for every group of circuits and, until each is acknowledged, again every
 // T22 (Q.764 2.10.3.1).
 func (s *SS7) resetCircuits() {
-	gs := groups(s.cfg.CICs)
 	s.mu.Lock()
+	gs := groups(s.cfg.CICs)
 	if !s.mtpOK {
 		s.mu.Unlock()
 		return

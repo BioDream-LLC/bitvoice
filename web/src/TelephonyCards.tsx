@@ -199,7 +199,7 @@ export function TelephonyCards() {
                           <option value="national">National</option><option value="international">International</option>
                         </select>
                       </Field>
-                      <Field label="Link code (SLC)" htmlFor={`sp-slc-${i}`} error={sp('slc')}>
+                      <Field label="Link code (SLC)" htmlFor={`sp-slc-${i}`} error={sp('slc')} hint="Spans with the same point codes are one link set: give each span's link its own code.">
                         <input id={`sp-slc-${i}`} type="number" min={0} max={15} className="input" value={s.slc ?? 0} onChange={(e) => setSpan(i, { slc: Number(e.target.value) })} />
                       </Field>
                       <Field label="First CIC" htmlFor={`sp-cic-${i}`} error={sp('firstCic')}>

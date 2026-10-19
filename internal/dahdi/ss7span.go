@@ -6,9 +6,12 @@ import (
 	"github.com/biodream-llc/bitvoice/internal/ss7"
 )
 
-// SS7 spans: the span's voice circuits are lines of the card trunk, each named by its circuit
+// SS7 spans: the span's voice channels are lines of the card trunk, each named by its circuit
 // identification code, signalled by ISUP on a signalling link (a timeslot of this span set up as an
-// HDLC channel) to the adjacent signalling point (the carrier's STP or switch).
+// HDLC channel) to the adjacent signalling point (the carrier's STP or switch). Spans with the same
+// point codes, network indicator and variant form one link set: each span's signalling link is one
+// of its links (with its own signalling link code), traffic is shared between them, and when one
+// fails the others carry its traffic; every span's circuits belong to the link set.
 
 // SS7Conf is a span's link set as bitvoice-dahdi needs it.
 type SS7Conf struct {
@@ -21,27 +24,75 @@ type SS7Conf struct {
 	FirstCIC int `json:"firstCic"`
 }
 
-func (s *span) runSS7(i int, link isdn.Link) error {
-	b := s.b
-	c := s.conf.SS7
-	cics := make([]int, len(s.conf.B))
-	for j := range s.conf.B {
-		cics[j] = c.FirstCIC + j
-		s.byCIC[cics[j]] = s.conf.B[j]
+func (c SS7Conf) key() [4]int {
+	a := 0
+	if c.ANSI {
+		a = 1
 	}
-	l := ss7.New(link, ss7.Config{MTPConfig: ss7.MTPConfig{ANSI: c.ANSI, OPC: c.OPC, APC: c.APC, NI: c.NI, SLC: c.SLC, Emergency: true}, CICs: cics})
+	return [4]int{a, c.OPC, c.APC, c.NI}
+}
+
+// linkSet is the link set a span's SS7 belongs to, made by its first span; every span of it adds its
+// circuits at once (calls on them may come over any link).
+func (b *Bridge) linkSet(s *span) *ss7.SS7 {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	k := s.conf.SS7.key()
+	if b.linkSets == nil {
+		b.linkSets = map[[4]int]*ss7.SS7{}
+	}
+	if l := b.linkSets[k]; l != nil {
+		return l
+	}
+	var cics []int
+	var members []*span
+	for _, o := range b.spans {
+		if o.conf.SS7 != nil && o.conf.SS7.key() == k {
+			members = append(members, o)
+		}
+	}
+	for _, o := range members {
+		for j := range o.conf.B {
+			cic := o.conf.SS7.FirstCIC + j
+			cics = append(cics, cic)
+			o.byCIC[cic] = o.conf.B[j]
+		}
+	}
+	c := s.conf.SS7
+	l := ss7.NewLinkSet(ss7.Config{MTPConfig: ss7.MTPConfig{ANSI: c.ANSI, OPC: c.OPC, APC: c.APC, NI: c.NI, SLC: c.SLC, Emergency: len(members) == 1}, CICs: cics})
 	l.Incoming = func(call *ss7.Call) {
 		b.mu.Lock()
-		p := b.ports[s.byCIC[call.CIC]]
+		p := b.ports[b.channelOfCIC(k, call.CIC)]
 		b.mu.Unlock()
 		b.incomingCall(fromSS7(call), p)
 	}
-	l.Up = func(up bool) { b.log.Info("dahdi: SS7 link set", "span", i+1, "up", up) }
+	l.Up = func(up bool) { b.log.Info("dahdi: SS7 link set", "opc", c.OPC, "apc", c.APC, "up", up) }
+	b.linkSets[k] = l
+	go func() { <-b.ctx.Done(); l.Close() }()
+	return l
+}
+
+// channelOfCIC is the DAHDI channel of a link set's circuit, on whichever span holds it. Called with
+// b.mu held.
+func (b *Bridge) channelOfCIC(k [4]int, cic int) int {
+	for _, o := range b.spans {
+		if o.conf.SS7 != nil && o.conf.SS7.key() == k {
+			if ch, ok := o.byCIC[cic]; ok {
+				return ch
+			}
+		}
+	}
+	return 0
+}
+
+func (s *span) runSS7(i int, link isdn.Link) error {
+	b := s.b
+	l := b.linkSet(s)
 	b.mu.Lock()
 	s.ss7, s.err = l, ""
 	b.mu.Unlock()
-	go func() { <-b.ctx.Done(); l.Close(); closeLink(link) }()
-	return l.Run()
+	go func() { <-b.ctx.Done(); closeLink(link) }()
+	return l.AddLink(link, s.conf.SS7.SLC)
 }
 
 // ss7Out places the engine's call on a free circuit of an SS7 span.
@@ -55,7 +106,7 @@ func (b *Bridge) ss7Out(tx *sip.ServerTx, m *sip.Message, s *span, l *ss7.SS7, s
 		return false
 	}
 	b.mu.Lock()
-	p := b.ports[s.byCIC[c.CIC]]
+	p := b.ports[b.channelOfCIC(s.conf.SS7.key(), c.CIC)]
 	b.mu.Unlock()
 	if p == nil {
 		c.Hangup(ss7.CauseNoCircuit)

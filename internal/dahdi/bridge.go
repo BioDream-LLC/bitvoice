@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/biodream-llc/bitvoice/internal/mf"
 	"github.com/biodream-llc/bitvoice/internal/r2"
+	"github.com/biodream-llc/bitvoice/internal/ss7"
 	"log/slog"
 	"math"
 	"net"
@@ -62,6 +63,8 @@ type Bridge struct {
 	mu    sync.Mutex
 	ports map[int]*port
 	spans []*span
+	// linkSets are the SS7 link sets, by variant, point codes and network indicator.
+	linkSets map[[4]int]*ss7.SS7
 }
 
 type portState int
