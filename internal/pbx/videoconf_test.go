@@ -204,7 +204,21 @@ func TestVideoRoomShowsTheLeader(t *testing.T) {
 		}
 		vs = append(vs, vphone{p: p, port: videoOf(t, d.body).Port})
 		ds = append(ds, d)
-		time.Sleep(1500 * time.Millisecond)
+		// In the room once its keys are read (the leader as leader): wait for that, not a fixed time.
+		n := i + 1
+		waitFor(t, "member not in the room", func() bool {
+			rs := e.Conferences()
+			if len(rs) != 1 || len(rs[0].Members) != n {
+				return false
+			}
+			leaders := 0
+			for _, m := range rs[0].Members {
+				if m.Leader {
+					leaders++
+				}
+			}
+			return (i < 1 && leaders == 0) || (i >= 1 && leaders == 1)
+		})
 	}
 	look := func() []map[byte]int {
 		done := make(chan struct{})
