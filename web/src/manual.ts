@@ -7,7 +7,7 @@ export interface Article { id: string; title: string; route?: string; keys: stri
  * its chapters through them. Every article is in exactly one part. */
 export const parts: { title: string; intro: string; ids: string[] }[] = [
   { title: 'Getting started', intro: 'From a new install to a working phone system: extensions, phones, a phone company, where calls go, emergency calling from your offices, and how to tell everything is ready.',
-    ids: ['start', 'extensions', 'phones', 'deskphones', 'cards', 'trunks', 'routes', 'pinsets', 'lookups', 'emergency', 'sites', 'health', 'settings'] },
+    ids: ['start', 'maturity', 'extensions', 'phones', 'deskphones', 'cards', 'trunks', 'routes', 'pinsets', 'lookups', 'emergency', 'sites', 'health', 'settings'] },
   { title: 'Where calls go', intro: 'The building blocks callers move through: groups and queues, menus and schedules, scripts and the AI receptionist, voicemail, and the diagram that shows it all.',
     ids: ['flow', 'ringgroups', 'queues', 'dialer', 'sounds', 'menus', 'directory', 'dialin', 'voicebots', 'toggles', 'schedules', 'scripts', 'ai', 'voicemail', 'callbacks', 'calllinks'] },
   { title: 'Everyday calling', intro: 'What people do on their phones every day, and what they set for themselves: forwarding, follow-me, pickup, conference rooms, paging, hot desks, faxes and texts.',
