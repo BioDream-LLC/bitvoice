@@ -160,7 +160,9 @@ func TestTelephonyCardSS7LinkSet(t *testing.T) {
 	ss7.T4E, ss7.Fill = 200*time.Millisecond, 10*time.Millisecond
 	ss7.SLTWait, ss7.SLTPeriod = 300*time.Millisecond, 500*time.Millisecond
 	ss7.T2MTP3, ss7.T1MTP3, ss7.T4MTP3 = 300*time.Millisecond, 100*time.Millisecond, 300*time.Millisecond
-	t.Cleanup(func() { ss7.SLTWait, ss7.SLTPeriod = 4*time.Second, 30*time.Second })
+	oldT4N := ss7.T4N
+	ss7.T4N = 300 * time.Millisecond // a link set of two aligns with the normal proving period
+	t.Cleanup(func() { ss7.SLTWait, ss7.SLTPeriod, ss7.T4N = 4*time.Second, 30*time.Second, oldT4N })
 	cfg := testConfig()
 	cfg.System.Cards = config.Cards{Enabled: true, Token: "abcdefghijklmnopqrstuvwxyz012345", LinePort: 25397, ALaw: true,
 		Spans: []config.CardSpan{

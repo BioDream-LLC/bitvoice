@@ -40,9 +40,9 @@ func waitLinks(t *testing.T, s *SS7, want map[int]string) {
 func TestLinkSetChangeover(t *testing.T) {
 	fast()
 	T2MTP3, T1MTP3, T4MTP3 = 300*time.Millisecond, 100*time.Millisecond, 300*time.Millisecond
-	oldWait, oldPeriod := SLTWait, SLTPeriod
-	SLTWait, SLTPeriod = 300*time.Millisecond, 500*time.Millisecond // a cut line is noticed quickly
-	defer func() { SLTWait, SLTPeriod = oldWait, oldPeriod }()
+	oldWait, oldPeriod, oldT4N := SLTWait, SLTPeriod, T4N
+	SLTWait, SLTPeriod, T4N = 300*time.Millisecond, 500*time.Millisecond, 300*time.Millisecond // quick
+	defer func() { SLTWait, SLTPeriod, T4N = oldWait, oldPeriod, oldT4N }()
 	for _, ansi := range []bool{false, true} {
 		t.Run(map[bool]string{false: "itu", true: "ansi"}[ansi], func(t *testing.T) {
 			a0, b0 := pair()

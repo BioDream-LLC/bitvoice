@@ -104,9 +104,7 @@ func TestHoldPlaysToneAndResumes(t *testing.T) {
 	if r := a.send(resume); r == nil || !strings.Contains(string(r.Body), "a=sendrecv") {
 		t.Fatalf("resume answer: %v", r)
 	}
-	if e.Calls()[0].State != "answered" {
-		t.Fatalf("state after resume %s", e.Calls()[0].State)
-	}
+	waitFor(t, "the call is not answered again after the resume", func() bool { return e.Calls()[0].State == "answered" })
 }
 
 func TestBlindTransfer(t *testing.T) {

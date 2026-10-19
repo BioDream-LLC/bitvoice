@@ -346,7 +346,9 @@ func TestConferenceRoom(t *testing.T) {
 	})
 	ps[1].drainRTP()
 	var seq uint16 = 100
+	spoken := make(chan struct{})
 	go func() {
+		defer close(spoken)
 		for range 3 {
 			da.speak(10, &seq, 0)
 		}
@@ -379,6 +381,7 @@ func TestConferenceRoom(t *testing.T) {
 	if err := e.MuteConferenceMember("500", a, true); err != nil {
 		t.Fatal(err)
 	}
+	<-spoken // one speaker at a time: they share the sequence number
 	time.Sleep(100 * time.Millisecond)
 	ps[1].drainRTP()
 	go func() {
