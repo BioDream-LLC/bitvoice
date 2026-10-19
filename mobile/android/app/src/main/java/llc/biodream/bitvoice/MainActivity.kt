@@ -54,7 +54,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun show() {
         val p = Vault.load(this)
-        if (p == null) setContentView(pairScreen()) else setContentView(phoneScreen(p))
+        val v = if (p == null) pairScreen() else phoneScreen(p)
+        // From Android 15 apps are drawn edge to edge: keep the content clear of the status and
+        // navigation bars (they covered the extension and the Unpair button).
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(v) { view, insets ->
+            val b = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars() or androidx.core.view.WindowInsetsCompat.Type.displayCutout())
+            view.setPadding(b.left, b.top, b.right, b.bottom)
+            insets
+        }
+        setContentView(v)
     }
 
     private fun pairScreen(): LinearLayout {

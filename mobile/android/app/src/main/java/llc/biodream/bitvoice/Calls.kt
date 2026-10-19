@@ -58,7 +58,11 @@ object Calls {
                     BitVoiceApp.incoming(ctx, id, m.optString("number"), m.optString("name"))
                 }
             }
-            "connected" -> connections[id]?.setActive()
+            "connected" -> {
+                // Answered (on the page or the notification): the ringing notification goes.
+                connections[id]?.setActive()
+                ctx.getSystemService(NotificationManager::class.java).cancel(NOTIFY)
+            }
             "ended" -> connections.remove(id)?.let {
                 it.setDisconnected(DisconnectCause(DisconnectCause.REMOTE))
                 it.destroy()
