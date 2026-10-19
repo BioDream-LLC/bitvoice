@@ -19,6 +19,24 @@ type pipeLink struct {
 	done    chan struct{}
 	mu      sync.Mutex
 	drop    func([]byte) bool
+	holding bool     // frames written are kept back, as on a slow line, until release
+	held    [][]byte // what was kept back
+}
+
+func (l *pipeLink) hold() { l.mu.Lock(); l.holding = true; l.mu.Unlock() }
+
+// release lets the frames kept back go, in order.
+func (l *pipeLink) release() {
+	l.mu.Lock()
+	h := l.held
+	l.held, l.holding = nil, false
+	l.mu.Unlock()
+	for _, f := range h {
+		select {
+		case l.out <- f:
+		case <-l.done:
+		}
+	}
 }
 
 func pair() (*pipeLink, *pipeLink) {
@@ -38,6 +56,11 @@ func (l *pipeLink) ReadFrame() ([]byte, error) {
 func (l *pipeLink) WriteFrame(f []byte) error {
 	l.mu.Lock()
 	d := l.drop
+	if l.holding {
+		l.held = append(l.held, append([]byte(nil), f...))
+		l.mu.Unlock()
+		return nil
+	}
 	l.mu.Unlock()
 	if d != nil && d(f) {
 		return nil
@@ -201,8 +224,16 @@ func TestDualSeizure(t *testing.T) {
 	go a.Run()
 	go b.Run()
 	waitUp(t, a, b)
-	ca, _ := a.Dial(Setup{Called: "1"})
-	cb, _ := b.Dial(Setup{Called: "2"})
+	// Both IAMs cross on the line: each end has taken the circuit before the other's arrives.
+	la.hold()
+	lb.hold()
+	ca, errA := a.Dial(Setup{Called: "1"})
+	cb, errB := b.Dial(Setup{Called: "2"})
+	la.release()
+	lb.release()
+	if errA != nil || errB != nil {
+		t.Fatalf("dial: %v %v", errA, errB)
+	}
 	next(t, ca, "released") // b (200) controls the even CIC 2: a backs off
 	got := <-in
 	if got.Called != "2" {

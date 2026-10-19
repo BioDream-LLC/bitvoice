@@ -30,13 +30,14 @@ func TestDevFileCloseWhileReading(t *testing.T) {
 	if took := time.Since(start); took > 2*pollEvery+50*time.Millisecond {
 		t.Errorf("Close took %v", took)
 	}
+	// Close has waited for the read's system call; the read itself returns straight after.
 	select {
 	case err := <-done:
 		if err != errClosed {
 			t.Fatalf("read ended with %v, want errClosed", err)
 		}
-	default:
-		t.Fatal("the read had not ended when Close returned")
+	case <-time.After(time.Second):
+		t.Fatal("the read did not end after Close")
 	}
 	if _, err := d.write([]byte{1}); err != errClosed {
 		t.Fatalf("write after Close: %v", err)

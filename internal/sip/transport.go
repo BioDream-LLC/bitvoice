@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	mrand "math/rand/v2"
 	"net"
 	"net/netip"
 	"strconv"
@@ -121,9 +122,17 @@ func (s *Stack) Listen(addr string) error {
 	}
 	if ua.Port == 0 {
 		// Any free port: UDP picks one, and TCP must get the same number, which something else may
-		// hold. Try a few.
-		for range 20 {
-			if err = s.listen(addr, ua); err == nil || !addrInUse(err) {
+		// hold. Try a few. The system hands out UDP ports in order, so after a failure the next
+		// tries pick numbers at random: on Windows a reserved block of TCP ports (Hyper-V, WinNAT)
+		// can hold every port the system would hand out next.
+		for i := range 40 {
+			try := ua
+			if i > 0 {
+				c := *ua
+				c.Port = 20000 + mrand.IntN(40000)
+				try = &c
+			}
+			if err = s.listen(addr, try); err == nil || !addrInUse(err) {
 				return err
 			}
 		}
