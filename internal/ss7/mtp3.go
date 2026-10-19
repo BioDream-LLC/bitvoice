@@ -104,10 +104,10 @@ var ErrLinkSetFull = errors.New("the link set already has 16 links, or one with 
 
 // Link states for changeover.
 const (
-	coNone      = iota // in service, or never was
-	coWaiting          // failed: COO or ECO sent, waiting for COA/ECA
-	coDone             // changed over: its traffic goes on the other links
-	coChangeback       // back in service: CBD sent, waiting for CBA
+	coNone       = iota // in service, or never was
+	coWaiting           // failed: COO or ECO sent, waiting for COA/ECA
+	coDone              // changed over: its traffic goes on the other links
+	coChangeback        // back in service: CBD sent, waiting for CBA
 )
 
 type sigLink struct {

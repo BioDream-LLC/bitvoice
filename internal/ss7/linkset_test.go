@@ -40,6 +40,9 @@ func waitLinks(t *testing.T, s *SS7, want map[int]string) {
 func TestLinkSetChangeover(t *testing.T) {
 	fast()
 	T2MTP3, T1MTP3, T4MTP3 = 300*time.Millisecond, 100*time.Millisecond, 300*time.Millisecond
+	oldWait, oldPeriod := SLTWait, SLTPeriod
+	SLTWait, SLTPeriod = 300*time.Millisecond, 500*time.Millisecond // a cut line is noticed quickly
+	defer func() { SLTWait, SLTPeriod = oldWait, oldPeriod }()
 	for _, ansi := range []bool{false, true} {
 		t.Run(map[bool]string{false: "itu", true: "ansi"}[ansi], func(t *testing.T) {
 			a0, b0 := pair()
@@ -83,6 +86,9 @@ func TestLinkSetChangeover(t *testing.T) {
 			}
 			c2, _ := a.Dial(Setup{Called: "2125551235", Calling: "3125550199"})
 			g1, g2 := <-in, <-in
+			if g1.CIC != c1.CIC { // the IAMs may arrive either way round
+				g1, g2 = g2, g1
+			}
 			g1.Alerting()
 			g2.Alerting()
 			next(t, c1, "alerting")
@@ -252,8 +258,8 @@ func TestLinkSetAgainstLibss7(t *testing.T) {
 	next(t, c, "connected")
 	links[0].set(true)
 	waitLinks(t, s, map[int]string{0: "changed over", 1: "in service"})
-	if l := o.expect("MSG"); !strings.Contains(strings.ToLower(l), "changeover") {
-		t.Fatalf("libss7: %s", l)
+	for l := o.expect("MSG"); !strings.Contains(strings.ToLower(l), "changeover"); l = o.expect("MSG") {
+		// libss7's changeback at the start may be said late: wait for its changeover
 	}
 	c.Hangup(CauseNormal)
 	if l := o.expect("REL"); !strings.Contains(l, "cause=16") {

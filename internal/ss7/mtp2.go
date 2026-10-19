@@ -77,7 +77,7 @@ type mtp2 struct {
 	closed    bool
 	sending   int // the LSSU being sent while not in service; -1: FISUs
 	gotFISU   bool
-	retrans   bool // the far end asked for retransmission and we are doing it
+	retrans   bool     // the far end asked for retransmission and we are doing it
 	left      leftover // what the link held when it failed, until MTP3 takes it
 
 	// Link up and down reach MTP3 in the order they happened: each change is numbered, and a late
