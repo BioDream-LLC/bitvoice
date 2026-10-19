@@ -33,7 +33,7 @@ static IP 52.7.26.145), with a Let's Encrypt certificate BitVoice got itself.
 ## Running it
 
 1. Cut a release (the demo installs a release, as any user would, checked against its signature).
-2. `DOMAIN=demo.bitvoice.org VERSION=v0.1.7 sh deploy/demo/provision.sh` (EMAIL= is optional) creates the Lightsail
+2. `DOMAIN=demo.bitvoice.org VERSION=v0.1.8 sh deploy/demo/provision.sh` (EMAIL= is optional) creates the Lightsail
    server and static IP and prints the IP.
 3. At Namecheap, add an A record `demo` → that IP. Run the same command again: it installs, seeds and
    turns on Let's Encrypt and the nightly reset.
