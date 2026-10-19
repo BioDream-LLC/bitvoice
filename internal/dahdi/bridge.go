@@ -60,6 +60,10 @@ type Bridge struct {
 	pool   *media.Pool
 	lines  *sip.Stack
 
+	// running counts the ports' and spans' goroutines: Close waits for them, so the card's channels are
+	// free when it returns (a bridge started next can open them).
+	running sync.WaitGroup
+
 	mu    sync.Mutex
 	ports map[int]*port
 	spans []*span
@@ -154,6 +158,7 @@ func New(ctx context.Context, cfg Config, open func(int, bool) (Channel, error),
 		b.lines.Serve(ctx)
 	}
 	for _, p := range b.ports {
+		b.running.Add(1)
 		go p.run()
 	}
 	b.startSpans()
@@ -188,6 +193,7 @@ func (b *Bridge) Status() map[string]string {
 
 // Close hangs up and closes every port.
 func (b *Bridge) Close() {
+	b.cancel() // first: no port or span starts anything new
 	b.mu.Lock()
 	ports := b.ports
 	b.ports = map[int]*port{}
@@ -208,7 +214,13 @@ func (b *Bridge) Close() {
 	if b.lines != nil {
 		b.lines.Close()
 	}
-	b.cancel()
+	done := make(chan struct{})
+	go func() { b.running.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		b.log.Warn("dahdi: some channels were still closing after 5 seconds")
+	}
 }
 
 func (p *port) set(s portState) {
@@ -224,12 +236,37 @@ func (p *port) is(s portState) bool {
 }
 
 func (p *port) run() {
-	ch, err := p.b.open(p.conf.Channel, p.b.cfg.ALaw)
-	if err != nil {
+	defer p.b.running.Done()
+	var ch Channel
+	logged := false
+	for {
+		var err error
+		if ch, err = p.b.open(p.conf.Channel, p.b.cfg.ALaw); err == nil {
+			break
+		}
+		// Kept trying: the channel may still be held by a program stopping, or the drivers may not
+		// be set up yet (dahdi_cfg).
 		p.mu.Lock()
 		p.state, p.err = stBroken, err.Error()
 		p.mu.Unlock()
-		p.b.log.Error("dahdi: channel not opened", "channel", p.conf.Channel, "err", err)
+		if !logged {
+			p.b.log.Error("dahdi: channel not opened; trying again every 2 seconds", "channel", p.conf.Channel, "err", err)
+			logged = true
+		}
+		select {
+		case <-p.b.ctx.Done():
+			return
+		case <-time.After(2 * time.Second):
+		}
+	}
+	if logged {
+		p.b.log.Info("dahdi: channel opened", "channel", p.conf.Channel)
+		p.mu.Lock()
+		p.state, p.err = stIdle, ""
+		p.mu.Unlock()
+	}
+	if p.b.ctx.Err() != nil {
+		_ = ch.Close()
 		return
 	}
 	p.mu.Lock()

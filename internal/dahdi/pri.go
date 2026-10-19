@@ -64,6 +64,7 @@ func (b *Bridge) startSpans() {
 			b.mu.Lock()
 			b.ports[ch] = p
 			b.mu.Unlock()
+			b.running.Add(1)
 			go p.run()
 		}
 		b.mu.Lock()
@@ -75,12 +76,14 @@ func (b *Bridge) startSpans() {
 	spans := append([]*span(nil), b.spans...)
 	b.mu.Unlock()
 	for i, s := range spans {
+		b.running.Add(1)
 		go s.run(i)
 	}
 }
 
 func (s *span) run(i int) {
 	b := s.b
+	defer b.running.Done()
 	for b.ctx.Err() == nil {
 		link, err := OpenD(s.conf.D)
 		if err != nil {
@@ -91,12 +94,13 @@ func (s *span) run(i int) {
 			select {
 			case <-b.ctx.Done():
 				return
-			case <-time.After(10 * time.Second):
+			case <-time.After(2 * time.Second):
 			}
 			continue
 		}
 		if s.conf.SS7 != nil {
 			err = s.runSS7(i, link)
+			closeLink(link) // closed before the next try, or before Close returns
 			b.mu.Lock()
 			s.err = "the signalling link stopped: " + errString(err)
 			b.mu.Unlock()
@@ -116,6 +120,8 @@ func (s *span) run(i int) {
 		b.mu.Unlock()
 		go func() { <-b.ctx.Done(); p.Close(); closeLink(link) }()
 		err = p.Run()
+		p.Close()
+		closeLink(link) // closed before the next try, or before Close returns
 		b.mu.Lock()
 		s.err = "the D-channel stopped: " + errString(err)
 		b.mu.Unlock()

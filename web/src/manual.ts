@@ -132,7 +132,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | SIP over WebSocket | Checked against a reference | JsSIP and SIP.js |
 | Codecs: GSM, G.726, iLBC, MP3 hold music | Checked against a reference | ffmpeg, the RFC 3951 reference program and minimp3, sample for sample |
 | Codecs: G.711, G.722, Opus, G.729, AMR, Speex | Software-tested | own round-trip tests; Opus and G.729 through their pinned Go libraries; Opus calls with the Android app |
-| ISDN PRI and BRI, T1/E1 | Checked against a reference | libpri (Asterisk's), both sides. No real card or line tried |
+| ISDN PRI and BRI, T1/E1 | Checked against a reference | libpri (Asterisk's), both sides; and on EC2 through the real DAHDI 3.4 kernel driver (two spans wired together in the kernel, Asterisk 20's chan_dahdi as the phone company): calls both ways with numbers and names, all 23 channels at once, MOS 4.39. No physical card or line yet |
 | MFC-R2, E&M | Checked against a reference | OpenR2; MF tones by our own tests. No real card or line tried |
 | SS7 (ISUP, MTP, link sets of several links with changeover) | Checked against a reference | libss7 (Asterisk's chan_dahdi library), ITU and ANSI. No real carrier link tried |
 | Fax (T.30, T.38) | Software-tested | own tests between BitVoice ends; no fax provider or gateway tried |
@@ -229,7 +229,7 @@ Neither protocol has passwords. Skinny phones are accepted only from the local n
 2. In **Telephony cards** (under Calls) switch on **Use telephony cards**. A token is made; copy it into a file only root can read, such as /etc/bitvoice/cards.token.
 3. Add each port by its DAHDI channel number: a **phone** port (FXS, a phone, fax or door phone plugged in) with its extension, or a **line** port (FXO, a phone company line) with the line's number. Choose A-law for Europe and most of the world, µ-law for North America and Japan.
 4. For lines, add a trunk with the protocol **Telephony card lines** on Trunks, and route numbers to it as to any trunk; inbound routes match each line's number.
-5. Start \`bitvoice-dahdi -server https://127.0.0.1:8443 -token-file /etc/bitvoice/cards.token\` as a service user that may open /dev/dahdi. It is in the Linux download beside bitvoice. The page shows whether it is running and each port's state; changes reach it within ten seconds.
+5. Start \`bitvoice-dahdi -server https://127.0.0.1:8443 -token-file /etc/bitvoice/cards.token\` as a service user that may open /dev/dahdi. It is in the Linux download beside bitvoice. The page shows whether it is running and each port's state; changes reach it within ten seconds. A channel another program still holds (or one dahdi_cfg has not set up yet) is tried again every two seconds, so the order things start in does not matter.
 
 ## What works
 - Phones: dial tone, dialling (digits are heard by BitVoice's own tone detector; the number goes after a pause or #), ringback, busy and congestion tones from the card's tone zone, ringing for incoming calls, and keys pressed during a call (sent on as RFC 4733 events too).
@@ -248,6 +248,20 @@ Calls out take a PRI first, the analogue lines after; a busy number, a wrong num
 **Names, forwarding and transfers.** A caller's name comes in with the call (from the Display element, or on National ISDN-2 from the name the network sends as a facility) and phones show it; calls out send the extension's name the same way. The number a call was forwarded from comes in as its redirecting number (BitVoice passes it on as SIP's Diversion, with the reason: busy, no answer, unconditional), and when an extension's forwarding sends a call back out on the PRI, the extension's number goes with it as the redirecting number, so the far end and the phone company know whose call it is. When an outside call is answered, BitVoice tells the network the number that answered (the connected number).
 
 Switch on **Transfers through the phone company** on a span (user side, National ISDN-2, 5ESS, DMS-100 or EuroISDN) and when someone transfers a caller on that line to another number on the same line, BitVoice asks the network to join the two calls itself: Two B-Channel Transfer on National ISDN-2 and 5ESS lines, Release Link Trunk transfer on a Nortel DMS-100, explicit call transfer (the caller held, then joined) on EuroISDN. A DMS-100 gives a transfer identifier only to calls BitVoice places, so there one of the two calls must be a call out (the usual case: a caller forwarded or transferred to an outside number). Both channels are freed as soon as the network has joined them. The line needs the service (ask the phone company for "two B-channel transfer" or "ECT"); if the network refuses, the transfer still works, through BitVoice, using both channels as before. On a span where BitVoice is the network side, another PBX may ask BitVoice to join two of its calls; BitVoice declines (it is not a switch), and the PBX keeps the calls itself.
+
+## Trying it without a card
+DAHDI's own dynamic spans can stand in for a card: two spans joined inside the kernel, BitVoice on one and another PBX (Asterisk's chan_dahdi, say) as the phone company on the other. Load \`dahdi\`, \`dahdi_dynamic\` and \`dahdi_dynamic_loc\`, and in /etc/dahdi/system.conf:
+
+\`\`\`
+dynamic=loc,1:0,24,0
+dynamic=loc,1:1,24,0
+bchan=1-23
+dchan=24
+bchan=25-47
+dchan=48
+\`\`\`
+
+Leave the last number (timing) at 0 on both: DAHDI's own timer then drives them. Spans that are each other's timing source tick only when the other sends, and the D-channel comes and goes. Add span 1 here as a T1 (first channel 1), and set the other PBX up as the network side on channels 25 to 48.
 
 ## Basic rate ISDN (BRI)
 A BRI carries two calls at once (B1 and B2) and is common in Europe for small offices; it also connects ISDN desk phones. BRI cards (Digium B410P, the HFC-based cards from OpenVox, Junghanns and others) work through DAHDI as the PRI cards do: in /etc/dahdi/system.conf the span is \`span=1,1,0,ccs,ami\` with \`bchan=1-2\` and \`hardhdlc=3\`. Add it under **Digital lines** with **BRI** as the line type; its channels are B1, B2 and then the D-channel.
