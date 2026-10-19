@@ -4,12 +4,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/biodream-llc/bitvoice/internal/config"
 	"github.com/biodream-llc/bitvoice/internal/lost"
 	"github.com/biodream-llc/bitvoice/internal/store"
 )
@@ -120,6 +124,10 @@ func (s *Server) lvfRoutes() {
 	s.handle("GET /api/core/bcf", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
 		writeJSON(w, 200, map[string]any{"items": s.Engine.BCFLog()})
 	})
+	// What each PSAP has said of its queue and service (NENA i3 state events).
+	s.handle("GET /api/core/states", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		writeJSON(w, 200, map[string]any{"items": s.Engine.PSAPStates()})
+	})
 	// Check one civic address (PIDF-LO tokens: A1, A3, RD, HNO ...).
 	s.handle("POST /api/core/validate", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
 		var in lost.Civic
@@ -132,6 +140,38 @@ func (s *Server) lvfRoutes() {
 			writeError(w, 409, "no address data is loaded")
 			return
 		}
-		writeJSON(w, 200, d.Validate(in))
+		// A position may come with the address (lat, lon, radius in metres): it is checked against
+		// the address's own point.
+		var pos []float64
+		for _, k := range []string{"lat", "lon", "radius"} {
+			if v := strings.TrimSpace(in[k]); v != "" {
+				f, err := strconv.ParseFloat(v, 64)
+				if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
+					writeErr(w, config.Problems{{Field: k, Message: "a number"}})
+					return
+				}
+				pos = append(pos, f)
+			} else if k != "radius" {
+				pos = nil
+			}
+			delete(in, k)
+		}
+		v := d.Validate(in)
+		out := map[string]any{"valid": v.Valid, "invalid": v.Invalid, "unchecked": v.Unchecked, "matched": v.Matched, "found": v.Found}
+		if !v.OK() {
+			out["suggestions"] = d.Suggest(in, 5)
+		}
+		if len(pos) >= 2 {
+			if pos[0] < -90 || pos[0] > 90 || pos[1] < -180 || pos[1] > 180 {
+				writeErr(w, config.Problems{{Field: "lat", Message: "a position in degrees"}})
+				return
+			}
+			radius := 0.0
+			if len(pos) == 3 {
+				radius = pos[2]
+			}
+			out["position"] = d.CheckPosition(in, pos[0], pos[1], radius, 0)
+		}
+		writeJSON(w, 200, out)
 	})
 }

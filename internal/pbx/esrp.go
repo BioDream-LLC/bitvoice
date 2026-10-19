@@ -94,10 +94,37 @@ func (e *Engine) esrpPlan(cfg *config.Config, c *Call, to string) plan {
 		e.publish("esrp.route", Route{Call: c.ID, Service: service, Why: "no PSAP to send it to: " + why, At: time.Now()})
 		return plan{reject: 503, reason: "No PSAP Available", direction: "inbound"}
 	}
-	p := plan{direction: "inbound", toName: first.Name, trunk: first.Name}
+	// The PSAP and its overflows in turn; one whose own state says it cannot take calls now
+	// (NENA queue and service state, when subscribed to) is passed over, unless none is left.
+	var chain []*config.CorePSAP
 	seen := map[string]bool{}
 	for ps := first; ps != nil && !seen[ps.URI]; ps = find(ps.Overflow) {
 		seen[ps.URI] = true
+		chain = append(chain, ps)
+	}
+	var able []*config.CorePSAP
+	var passed []string
+	for _, ps := range chain {
+		if why := e.cannotTake(cfg, ps); why != "" {
+			passed = append(passed, ps.Name+" ("+why+")")
+			continue
+		}
+		able = append(able, ps)
+	}
+	switch {
+	case len(passed) > 0 && len(able) > 0:
+		why += "; passed over " + strings.Join(passed, ", ")
+		c.note("The ESRP passed over " + strings.Join(passed, ", ") + ".")
+	case len(passed) > 0:
+		able = chain // never leave a 911 call with nowhere to go
+		why += "; every PSAP says it cannot take calls (" + strings.Join(passed, ", ") + "), so sent as listed"
+		c.note("Every PSAP said it could not take calls; the call was sent as listed.")
+	}
+	if len(able) > 0 {
+		first = able[0]
+	}
+	p := plan{direction: "inbound", toName: first.Name, trunk: first.Name}
+	for _, ps := range able {
 		if st, ok := e.psapStage(cfg, ps, to, 30*time.Second); ok {
 			p.stages = append(p.stages, st)
 		}

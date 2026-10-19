@@ -133,10 +133,12 @@ export interface CoreRule {
   id: string; name: string; services: string[]; psaps: string[]; schedule: string; whenOpen: boolean
   noLocation: boolean; suspicious: boolean; trunks: string[]; action: 'route' | 'reject'; to: string
 }
-export interface BCFSettings { enabled: boolean; perMinute: number; concurrent: number; deny: string[]; mark: boolean; verifyIdentity: boolean; badActors?: boolean; badActorBlock?: boolean; badActorScore?: number; badActorHours?: number }
-export interface LISRecordView { number: string; civic: Civic; lat?: number; lon?: number; radius?: number }
+export interface BCFSettings { enabled: boolean; perMinute: number; concurrent: number; deny: string[]; mark: boolean; verifyIdentity: boolean; badActors?: boolean; badActorBlock?: boolean; badActorScore?: number; badActorHours?: number; inspectMedia?: boolean; mediaPerSecond?: number; mediaMaxBytes?: number }
+export interface LISRecordView { number?: string; network?: string; mac?: string; civic: Civic; lat?: number; lon?: number; radius?: number }
 export interface CoreSettings { ecrf: boolean; lis: boolean; logging: boolean; pcaRoots: string; source: string; allowFrom: string[]; psaps: CorePSAP[]; default: string; lostUrl: string; forestGuide: string; rules: CoreRule[]; bcf: BCFSettings
-  policyStore?: boolean; queueUri?: string; discrepancy?: boolean; drContact?: string; geocode?: boolean; msag?: boolean; adr?: boolean; locator?: boolean; dequeue?: boolean; testCalls?: boolean; maxDequeueS?: number }
+  policyStore?: boolean; queueUri?: string; discrepancy?: boolean; drContact?: string; geocode?: boolean; msag?: boolean; adr?: boolean; locator?: boolean; dequeue?: boolean; testCalls?: boolean; maxDequeueS?: number
+  watchStates?: boolean; states?: boolean; queueMax?: number }
+export interface PSAPStateView { uri: string; name: string; queue?: string; length: number; max: number; queueAt?: string; service?: string; reason?: string; posture?: string; domain?: string; serviceAt?: string; subscriptions: Record<string, string> }
 export interface StoredPolicyView { owner: string; type: string; queue?: string; id?: string; expires?: string; signer: string; chained: boolean; modified: string; from: string; key: string; expired?: boolean
   rules?: { id: string; priority: number; description?: string; conditions?: Record<string, unknown>[]; actions: Record<string, unknown>[] }[] }
 export interface DiscrepancyReport { id: string; direction: 'received' | 'filed'; report: Record<string, unknown>; at: string; from?: string; to?: string; status: 'open' | 'resolved'; resolution?: Record<string, unknown>; error?: string }
@@ -146,8 +148,11 @@ export interface ADRRecordView { id: string; caller: string; type: string; xml: 
 export interface LocatorRecordView { recordId: string; serviceAgencyId: string; serviceAgencyName: string; serviceAgencyTypes: string[]; loggerUri: string; dscRptUri?: string; emergencySipInterfaceUri?: string; eidoInterfaceUri?: string }
 export interface TestCallResultView { at: string; psap: string; status: number; reason?: string; answer?: string; sent: number; echoed: number; ok: boolean; problem?: string; seconds: number }
 export interface TestCallRequestView { psapId: string; psapUri: string; frequency: number; startDate: string; endDate: string; last?: string; results?: TestCallResultView[]; from: string }
-export interface Validation { valid: string[]; invalid: string[]; unchecked: string[]; matched?: string; found?: Record<string, string> }
-export interface BCFEvent { at: string; source: string; from: string; action: 'refused' | 'marked'; why: string }
+export interface AddressPoint { id: string; number: number; numberSuffix?: string; preDir?: string; name: string; type?: string; postDir?: string; city?: string; state?: string; lat?: number; lon?: number }
+export interface Validation { valid: string[]; invalid: string[]; unchecked: string[]; matched?: string; found?: Record<string, string>
+  suggestions?: { civic: Record<string, string>; why: string; source: string }[]
+  position?: { checked: boolean; metres?: number; limit?: number; within: boolean; point?: AddressPoint; nearest?: AddressPoint; why: string } }
+export interface BCFEvent { at: string; source: string; from: string; action: 'refused' | 'marked' | 'media'; why: string }
 export interface Boundary { id: string; service: string; name: string; uri: string; number: string; cities?: string[] | null; counties?: string[] | null; states?: string[] | null; corners: number }
 export interface RadioChannel { id: string; name: string; port: number; gateway: string; color: string; kind: 'roip' | 'p25'; group: number; home: string; homeRfss: number; txKey: string }
 export interface P25Key { id: string; name: string; alg: 'aes256' | 'des' | 'tdes'; keyId: number; key: string }
@@ -501,12 +506,13 @@ export const api = createApi({
       saveBoundary: b.mutation<void, Boundary>({ query: (x) => ({ url: `core/boundaries/${x.id}`, method: 'PUT', body: x }), invalidatesTags: ['Settings'] }),
       deleteBoundary: b.mutation<void, string>({ query: (id) => ({ url: `core/boundaries/${id}`, method: 'DELETE' }), invalidatesTags: ['Settings'] }),
       receivedLog: b.query<{ day: string; items: { logEventId: string; received: string; from: string; signer: string; chained: boolean; type: string; elementId?: string; agencyId?: string; callId?: string }[] }, string>({ query: (day) => ({ url: 'core/i3log', params: { day } }), providesTags: ['Calls'] }),
-      lisData: b.query<{ records: number; updated?: string; found?: LISRecordView }, string | void>({ query: (n) => ({ url: 'core/lis', params: n ? { number: n } : undefined }), providesTags: ['Settings'] }),
+      lisData: b.query<{ records: number; numbers?: number; networks?: number; macs?: number; updated?: string; found?: LISRecordView }, string | void>({ query: (n) => ({ url: 'core/lis', params: n ? { number: n } : undefined }), providesTags: ['Settings'] }),
       deleteLIS: b.mutation<void, void>({ query: () => ({ url: 'core/lis', method: 'DELETE' }), invalidatesTags: ['Settings'] }),
       addressData: b.query<{ streets: number; points: number; updated?: string }, void>({ query: () => 'core/addresses', providesTags: ['Settings'] }),
       deleteAddresses: b.mutation<void, void>({ query: () => ({ url: 'core/addresses', method: 'DELETE' }), invalidatesTags: ['Settings'] }),
       validateAddress: b.mutation<Validation, Record<string, string>>({ query: (body) => ({ url: 'core/validate', method: 'POST', body }) }),
       bcfLog: b.query<List<BCFEvent>, void>({ query: () => 'core/bcf', providesTags: ['Calls'] }),
+      psapStates: b.query<List<PSAPStateView>, void>({ query: () => 'core/states', providesTags: ['Calls'] }),
       laidOut: b.query<LaidOut, { id: string; from: string; to: string }>({ query: ({ id, ...params }) => ({ url: `psap/layouts/${id}`, params }), providesTags: ['Settings'] }),
       aliParse: b.mutation<{ lines: string[]; record: ALIRecordView; error?: string }, { text: string; layout: ALIField[] }>({ query: (body) => ({ url: 'psap/ali/parse', method: 'POST', body }) }),
       aliTest: b.mutation<{ text?: string; record?: ALIRecordView; error?: string }, { number: string; link: ALILink }>({ query: (body) => ({ url: 'psap/ali/test', method: 'POST', body }) }),
@@ -890,7 +896,7 @@ export const api = createApi({
 })
 
 export const {
-  useFaxBoxesQuery, useCreateFaxBoxMutation, useUpdateFaxBoxMutation, useDeleteFaxBoxMutation, useFaxesQuery, useDeleteFaxMutation, useFaxKindsQuery, useSendFaxMutation, useRetryFaxMutation, useTestFaxMailMutation, usePsapReportQuery, usePsapLogQuery, useRebidMutation, useSendCallTextMutation, useTakeTextCallMutation, useEndTextCallMutation, useVideoLinkMutation, useCallMediaQuery, useHoldMediaMutation, useRevealMutation, useExposureQuery, useBoundariesQuery, useSaveBoundaryMutation, useDeleteBoundaryMutation, useLazyFindAreaQuery, useAddressDataQuery, useLisDataQuery, useLazyLisDataQuery, useReceivedLogQuery, useDeleteLISMutation, useDeleteAddressesMutation, useValidateAddressMutation, useBcfLogQuery, useAliParseMutation, useAliTestMutation, useLazyLaidOutQuery, useCorePoliciesQuery, useStorePolicyMutation, useDeletePolicyMutation, useDiscrepanciesQuery, useResolveDiscrepancyMutation, useFileDiscrepancyMutation,
+  useFaxBoxesQuery, useCreateFaxBoxMutation, useUpdateFaxBoxMutation, useDeleteFaxBoxMutation, useFaxesQuery, useDeleteFaxMutation, useFaxKindsQuery, useSendFaxMutation, useRetryFaxMutation, useTestFaxMailMutation, usePsapReportQuery, usePsapLogQuery, useRebidMutation, useSendCallTextMutation, useTakeTextCallMutation, useEndTextCallMutation, useVideoLinkMutation, useCallMediaQuery, useHoldMediaMutation, useRevealMutation, useExposureQuery, useBoundariesQuery, useSaveBoundaryMutation, useDeleteBoundaryMutation, useLazyFindAreaQuery, useAddressDataQuery, useLisDataQuery, useLazyLisDataQuery, useReceivedLogQuery, useDeleteLISMutation, useDeleteAddressesMutation, useValidateAddressMutation, useBcfLogQuery, usePsapStatesQuery, useAliParseMutation, useAliTestMutation, useLazyLaidOutQuery, useCorePoliciesQuery, useStorePolicyMutation, useDeletePolicyMutation, useDiscrepanciesQuery, useResolveDiscrepancyMutation, useFileDiscrepancyMutation,
   useBadActorsQuery, useClearBadActorMutation, useDequeueRegsQuery, useAdrRecordsQuery, useAddADRMutation, useDeleteADRMutation, useLocatorRecordsQuery, useAddLocatorMutation, useDeleteLocatorMutation,
   useTestCallRequestsQuery, useRunTestCallMutation, useDeleteTestCallsMutation, useRadioQuery, usePttMutation, useSimulSelectMutation, useAckEmergencyMutation, useMonitorMutation, usePatchMutation, useAlertToneMutation, useUnitCallMutation, useHangUpMutation, useRadioLogQuery, useRadioLocationsQuery, useMapSourceQuery,
   useTextingKindsQuery,

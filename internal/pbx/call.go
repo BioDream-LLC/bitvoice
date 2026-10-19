@@ -64,6 +64,7 @@ type Call struct {
 	esinet             bool                      // arrived on a trunk from the ESInet
 	srcIP              string                    // the address an ESInet call came from (for the BCF)
 	suspicious         bool                      // the BCF let it through marked suspicious
+	mediaFindings      map[string]int            // the BCF's media inspection: packets dropped, by rule
 	suspicion          int                       // the call's suspicion score (Call-Info emergency-CallSuspicion, raised by the BCF)
 	sourceID           string                    // the BCF's ID for its source (Call-Info emergency-source)
 	facts              *policyFacts              // what i3 routing policies may test, read from its INVITE

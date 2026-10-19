@@ -511,6 +511,17 @@ type Core struct {
 	// ECRF chose. Without a stored policy, Rules decide.
 	PolicyStore bool   `json:"policyStore"`
 	QueueURI    string `json:"queueUri"` // this ESRP's incoming queue; sip:sos@ and the server's name when empty
+	// WatchStates subscribes (SIP SUBSCRIBE, NENA-STA-010.3 emergency-QueueState and
+	// emergency-ServiceState) to each PSAP listed, over its trunk: the policy rules' queue and service
+	// state conditions use what they say, and a PSAP that says it cannot take calls (its queue
+	// inactive, disabled or full; its service down, overloaded or unstaffed) is passed over for its
+	// overflow, unless no PSAP is left.
+	WatchStates bool `json:"watchStates"`
+	// States answers other elements' subscriptions (from AllowFrom) to this server's own element
+	// state, service state and incoming queue state; QueueMax is that queue's most calls waiting
+	// (20 when 0): at it the queue says Full.
+	States   bool `json:"states"`
+	QueueMax int  `json:"queueMax"`
 	// Discrepancy takes discrepancy reports (DRs) about this server's services, and resolutions of
 	// those it filed; DRContact is who answers them (name, email or phone), sent as a jCard.
 	Discrepancy bool   `json:"discrepancy"`
@@ -565,6 +576,13 @@ type BCF struct {
 	BadActorBlock bool `json:"badActorBlock"`
 	BadActorScore int  `json:"badActorScore"`
 	BadActorHours int  `json:"badActorHours"`
+	// InspectMedia checks every RTP packet of an ESInet call before it is used: packets from an
+	// address other than the one the call's SDP gave, with a payload type it did not offer, with
+	// header lengths that do not fit, over MediaMaxBytes, or past MediaPerSecond in a second are
+	// dropped and counted, and the call is marked suspicious. A call is never ended for it.
+	InspectMedia   bool `json:"inspectMedia"`
+	MediaPerSecond int  `json:"mediaPerSecond"` // 0: 150 (G.711 at 20 ms sends 50)
+	MediaMaxBytes  int  `json:"mediaMaxBytes"`  // 0: 1,500
 }
 
 // CorePSAP is a PSAP the ESRP can send calls to: the URI the ECRF answers with, the trunk that
@@ -2282,6 +2300,9 @@ func (c *Config) Validate() error {
 	{
 		co := &c.System.Core
 		co.QueueURI = strings.TrimSpace(co.QueueURI)
+		if co.QueueMax < 0 || co.QueueMax > 10000 {
+			p.add("system.core.queueMax", "0 to 10,000 calls (0: 20)")
+		}
 		if co.QueueURI != "" && !strings.HasPrefix(co.QueueURI, "sip:") && !strings.HasPrefix(co.QueueURI, "sips:") {
 			p.add("system.core.queueUri", "a sip: URI, like sip:esrp@esrp.example.gov")
 		}
@@ -2296,6 +2317,12 @@ func (c *Config) Validate() error {
 		}
 		if b := co.BCF; b.BadActorScore < 0 || b.BadActorScore > 100 || b.BadActorHours < 0 || b.BadActorHours > 24*30 {
 			p.add("system.core.bcf.badActorScore", "a score of 0 to 100, for 0 to 720 hours")
+		}
+		if b := co.BCF; b.MediaPerSecond < 0 || b.MediaPerSecond > 10000 {
+			p.add("system.core.bcf.mediaPerSecond", "0 to 10,000 packets a second (0: 150)")
+		}
+		if b := co.BCF; b.MediaMaxBytes != 0 && (b.MediaMaxBytes < 200 || b.MediaMaxBytes > 9000) {
+			p.add("system.core.bcf.mediaMaxBytes", "200 to 9,000 bytes (0: 1,500)")
 		}
 	}
 	{

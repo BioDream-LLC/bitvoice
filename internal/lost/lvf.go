@@ -432,3 +432,225 @@ func (a *Addresses) FromMSAG(m string) (Civic, bool) {
 	}
 	return nil, false
 }
+
+// Suggestion is an address the data holds that is close to one that was not found: a street
+// name a letter or two away, the same street in the next town, or the nearest number the street
+// has.
+type Suggestion struct {
+	Civic  Civic  `json:"civic"`
+	Why    string `json:"why"`
+	Source string `json:"source"` // address point or road centerline
+	score  int
+}
+
+// Suggest lists up to n addresses close to one Validate did not find, best first.
+func (a *Addresses) Suggest(c Civic, n int) []Suggestion {
+	want := norm(c["RD"])
+	if want == "" || n <= 0 {
+		return nil
+	}
+	num, numErr := strconv.Atoi(strings.TrimSpace(c["HNO"]))
+	var out []Suggestion
+	seen := map[string]bool{}
+	add := func(s Suggestion) {
+		k := strings.Join([]string{s.Civic["HNO"], norm(s.Civic["PRD"]), norm(s.Civic["RD"]), norm(s.Civic["STS"]), norm(s.Civic["A3"])}, "|")
+		if !seen[k] {
+			seen[k] = true
+			out = append(out, s)
+		}
+	}
+	// How far a street's name is from the one asked for: 0 the same, then letters changed; -1 too far.
+	nameGap := func(name string) int {
+		got := norm(name)
+		if got == want {
+			return 0
+		}
+		d := editDistance(got, want)
+		if d > max(1, min(3, len([]rune(want))/3)) {
+			return -1
+		}
+		return d
+	}
+	areaGap := func(city, state string) (int, string) {
+		if c["A1"] != "" && state != "" && !same(c["A1"], state) {
+			return -1, ""
+		}
+		if c["A3"] != "" && city != "" && !same(c["A3"], city) {
+			return 4, "in " + city + ", not " + c["A3"]
+		}
+		return 0, ""
+	}
+	street := func(pre, name, typ, post string) string {
+		return strings.Join(strings.Fields(strings.Join([]string{pre, name, typ, post}, " ")), " ")
+	}
+	reasons := func(nameD int, name string, areaWhy string, numWhy string) string {
+		var r []string
+		if nameD > 0 {
+			r = append(r, "a street of a similar name ("+name+", not "+c["RD"]+")")
+		}
+		if numWhy != "" {
+			r = append(r, numWhy)
+		}
+		if areaWhy != "" {
+			r = append(r, areaWhy)
+		}
+		if len(r) == 0 {
+			return "the same street"
+		}
+		return strings.Join(r, "; ")
+	}
+	for _, p := range a.Points {
+		nd := nameGap(p.Name)
+		ad, aw := areaGap(p.City, p.State)
+		if nd < 0 || ad < 0 {
+			continue
+		}
+		score, numWhy := nd*10+ad, ""
+		if numErr == nil && p.Number != num {
+			gap := p.Number - num
+			if gap < 0 {
+				gap = -gap
+			}
+			score += 1 + min(gap/2, 1000)
+			numWhy = "the nearest number on " + street(p.PreDir, p.Name, p.Type, p.PostDir)
+		}
+		add(Suggestion{Civic: Civic{"HNO": strconv.Itoa(p.Number) + p.NumberSuf, "PRD": p.PreDir, "RD": p.Name, "STS": p.Type, "POD": p.PostDir,
+			"A3": p.City, "A2": p.County, "A1": p.State, "PC": p.Postal}, Source: "address point", score: score,
+			Why: reasons(nd, street(p.PreDir, p.Name, p.Type, p.PostDir), aw, numWhy)})
+	}
+	for _, s := range a.Streets {
+		nd := nameGap(s.Name)
+		if nd < 0 {
+			continue
+		}
+		for _, side := range []Side{s.Left, s.Right} {
+			ad, aw := areaGap(side.City, side.State)
+			if ad < 0 || side.Parity == "Z" || max(side.From, side.To) == 0 {
+				continue
+			}
+			hn, numWhy, score := num, "", nd*10+ad+2 // a range is weaker evidence than a point
+			if numErr != nil || !inRange(num, side) {
+				if numErr != nil {
+					continue
+				}
+				hn = nearestInRange(num, side)
+				gap := hn - num
+				if gap < 0 {
+					gap = -gap
+				}
+				score += 1 + min(gap/2, 1000)
+				if hn%2 != num%2 {
+					score += 2 // the other side of the street
+				}
+				numWhy = "the nearest number " + street(s.PreDir, s.Name, s.Type, s.PostDir) + " has on that side"
+			}
+			add(Suggestion{Civic: Civic{"HNO": strconv.Itoa(hn), "PRD": s.PreDir, "RD": s.Name, "STS": s.Type, "POD": s.PostDir,
+				"A3": side.City, "A2": side.County, "A1": side.State, "PC": side.Postal}, Source: "road centerline", score: score,
+				Why: reasons(nd, street(s.PreDir, s.Name, s.Type, s.PostDir), aw, numWhy)})
+		}
+	}
+	slices.SortStableFunc(out, func(x, y Suggestion) int { return x.score - y.score })
+	if len(out) > n {
+		out = out[:n]
+	}
+	return out
+}
+
+// nearestInRange is the number in a side's range (and parity) closest to n.
+func nearestInRange(n int, s Side) int {
+	lo, hi := min(s.From, s.To), max(s.From, s.To)
+	x := min(max(n, lo), hi)
+	switch strings.ToUpper(s.Parity) {
+	case "O":
+		if x%2 == 0 {
+			if x+1 <= hi {
+				x++
+			} else {
+				x--
+			}
+		}
+	case "E":
+		if x%2 != 0 {
+			if x+1 <= hi {
+				x++
+			} else {
+				x--
+			}
+		}
+	}
+	return x
+}
+
+// editDistance is the edit distance between two strings, by rune, counting a swap of two
+// neighbouring letters as one edit (optimal string alignment): MIAN is one from MAIN.
+func editDistance(a, b string) int {
+	ra, rb := []rune(a), []rune(b)
+	d := make([][]int, len(ra)+1)
+	for i := range d {
+		d[i] = make([]int, len(rb)+1)
+		d[i][0] = i
+	}
+	for j := range d[0] {
+		d[0][j] = j
+	}
+	for i := 1; i <= len(ra); i++ {
+		for j := 1; j <= len(rb); j++ {
+			cost := 1
+			if ra[i-1] == rb[j-1] {
+				cost = 0
+			}
+			d[i][j] = min(d[i-1][j]+1, d[i][j-1]+1, d[i-1][j-1]+cost)
+			if i > 1 && j > 1 && ra[i-1] == rb[j-2] && ra[i-2] == rb[j-1] {
+				d[i][j] = min(d[i][j], d[i-2][j-2]+1)
+			}
+		}
+	}
+	return d[len(ra)][len(rb)]
+}
+
+// PositionCheck is how a position agrees with a civic address: the distance from the address's
+// own point in the data, and whether it is within the limit (the position's radius plus a
+// tolerance). Checked is false when the data has no point for the address.
+type PositionCheck struct {
+	Checked bool    `json:"checked"`
+	Metres  float64 `json:"metres,omitempty"`
+	Limit   float64 `json:"limit,omitempty"`
+	Within  bool    `json:"within"`
+	Point   *Point  `json:"point,omitempty"`   // the address's own point
+	Nearest *Point  `json:"nearest,omitempty"` // the address point nearest the position, when it is another
+	Why     string  `json:"why"`
+}
+
+// CheckPosition compares a position (with its uncertainty radius, metres) with a civic address,
+// allowing tolerance metres more (100 when 0): the size of a building plot and of GIS error.
+func (a *Addresses) CheckPosition(c Civic, lat, lon, radius, tolerance float64) PositionCheck {
+	if tolerance <= 0 {
+		tolerance = 100
+	}
+	pc := PositionCheck{Limit: math.Round(radius + tolerance)}
+	if near, ok := a.Reverse(lat, lon, 1000); ok {
+		pc.Nearest = &near
+	}
+	p, ok := a.Geocode(c)
+	if !ok {
+		pc.Why = "the address data has no point for this address, so the position cannot be checked against it"
+		return pc
+	}
+	pc.Checked, pc.Point = true, &p
+	pc.Metres = math.Round(metres(lat, lon, p.Lat, p.Lon))
+	pc.Within = pc.Metres <= pc.Limit
+	if pc.Nearest != nil && pc.Nearest.ID == p.ID {
+		pc.Nearest = nil
+	}
+	where := fmt.Sprintf("%d %s", p.Number, strings.Join(strings.Fields(strings.Join([]string{p.PreDir, p.Name, p.Type, p.PostDir}, " ")), " "))
+	if pc.Within {
+		pc.Why = fmt.Sprintf("the position is %.0f m from %s's address point, within %.0f m", pc.Metres, where, pc.Limit)
+	} else {
+		pc.Why = fmt.Sprintf("the position is %.0f m from %s's address point, more than %.0f m: the two do not agree", pc.Metres, where, pc.Limit)
+		if n := pc.Nearest; n != nil {
+			pc.Why += fmt.Sprintf("; the address point nearest the position is %d %s", n.Number,
+				strings.Join(strings.Fields(strings.Join([]string{n.PreDir, n.Name, n.Type, n.PostDir}, " ")), " "))
+		}
+	}
+	return pc
+}

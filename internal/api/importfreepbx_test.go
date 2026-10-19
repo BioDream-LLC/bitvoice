@@ -108,3 +108,76 @@ func TestImportFreePBXBackup(t *testing.T) {
 		t.Fatalf("again %d %v", code, out)
 	}
 }
+
+// A real FreePBX backup (BITVOICE_TEST_FREEPBX_BACKUP; one made by FreePBX 17.0.33 Backup &
+// Restore is kept in the test oracles): read as a stream (real backups are mostly sound files and
+// call history), previewed and applied in one go; the result is a configuration that passes the
+// same checks as any change, every extension with a password, and every incoming route reaching
+// something imported.
+func TestImportRealFreePBXBackup(t *testing.T) {
+	p := os.Getenv("BITVOICE_TEST_FREEPBX_BACKUP")
+	if p == "" {
+		t.Skip("BITVOICE_TEST_FREEPBX_BACKUP is not set")
+	}
+	backup, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, ts := newServer(t)
+	admin := newClient(t, ts.URL)
+	setup := setupBody()
+	setup["extensions"] = []map[string]any{{"number": "199", "name": "IT desk"}}
+	delete(setup, "trunk")
+	if code, out := admin.do("POST", "/api/setup/complete", setup); code != 200 {
+		t.Fatal("setup", out)
+	}
+	var b bytes.Buffer
+	mw := multipart.NewWriter(&b)
+	f, _ := mw.CreateFormFile("file", "backup.tar.gz")
+	f.Write(backup)
+	mw.Close()
+	req, _ := http.NewRequest("POST", ts.URL+"/api/import/preview", &b)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("X-BitVoice", "1")
+	resp, err := admin.http.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out map[string]any
+	json.NewDecoder(resp.Body).Decode(&out)
+	if resp.StatusCode != 200 {
+		t.Fatalf("preview %d %v", resp.StatusCode, out)
+	}
+	res := out["result"].(map[string]any)
+	body := map[string]any{}
+	n := 0
+	for _, k := range []string{"extensions", "trunks", "ringGroups", "queues", "inboundRoutes", "outboundRoutes"} {
+		body[k] = res[k]
+		if l, ok := res[k].([]any); ok {
+			n += len(l)
+		}
+	}
+	if n == 0 {
+		t.Fatalf("nothing to import: %v", res)
+	}
+	code, applied := admin.do("POST", "/api/import/apply", body)
+	if code != 200 || applied["added"].(float64) != float64(n) {
+		t.Fatalf("apply %d %v (want %d added)", code, applied, n)
+	}
+	cfg, _ := s.Store.Config()
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("the imported configuration does not validate: %v", err)
+	}
+	for _, x := range cfg.Extensions {
+		if len(x.Secret) < 8 {
+			t.Errorf("extension %s has no usable password", x.Number)
+		}
+	}
+	for _, r := range cfg.InboundRoutes {
+		if r.Destination.Type == "" {
+			t.Errorf("incoming route %s reaches nothing", r.Name)
+		}
+	}
+	t.Logf("%s: %d items imported", res["format"], n)
+}

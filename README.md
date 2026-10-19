@@ -502,7 +502,7 @@ Yes. Upload the exported files on **Import**; BitVoice shows exactly what would 
 applied, and the import is a revision you can undo. From FreePBX, drop a whole **Backup & Restore** backup
 (.tar.gz, FreePBX 13 to 17): extensions with their SIP passwords and voicemail PINs, PJSIP and chan_sip trunks,
 outbound and incoming routes, ring groups and queues come over in one step, and the preview lists what cannot
-(IVRs, time conditions). The step-by-step move is in the manual's Import chapter. Tools that talk to Asterisk's
+(IVRs, time conditions). Tried on a real FreePBX 17.0.33 backup (70 MB, read as a stream). The step-by-step move is in the manual's Import chapter. Tools that talk to Asterisk's
 AMI or ARI can control BitVoice too.
 
 </details>

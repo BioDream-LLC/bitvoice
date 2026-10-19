@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,13 +17,14 @@ import (
 	"github.com/biodream-llc/bitvoice/internal/store"
 )
 
-// The LIS (NG911 Core Services): location records by telephone number (DATA/core/lis.json), served
-// to HELD requests at /held from the allowed addresses.
+// The LIS (NG911 Core Services): location records by telephone number, network or MAC address
+// (DATA/core/lis.json), served to HELD requests at /held from the allowed addresses.
 
 type lisStore struct {
 	mu    sync.RWMutex
 	read  bool
 	by    map[string]i3.LISRecord
+	ix    *i3.LISIndex
 	saved time.Time
 }
 
@@ -43,16 +46,44 @@ func (s *Server) lisRecords() (map[string]i3.LISRecord, time.Time) {
 			var list []i3.LISRecord
 			if json.Unmarshal(data, &list) == nil {
 				for _, r := range list {
-					l.by[r.Number] = r
+					l.by[r.Key()] = r
 				}
 			}
 			if st, err := os.Stat(s.lisFile()); err == nil {
 				l.saved = st.ModTime()
 			}
 		}
+		l.ix = i3.NewLISIndex(l.by)
 		l.read = true
 	}
 	return l.by, l.saved
+}
+
+func (s *Server) lisIndex() *i3.LISIndex {
+	s.lisRecords()
+	s.lis.mu.RLock()
+	defer s.lis.mu.RUnlock()
+	return s.lis.ix
+}
+
+// lisFind looks up a number, an address or a MAC address, as typed into the GUI.
+func (s *Server) lisFind(q string) (i3.LISRecord, bool) {
+	q = strings.TrimSpace(q)
+	ix := s.lisIndex()
+	if a, err := netip.ParseAddr(q); err == nil {
+		return ix.Address(a)
+	}
+	if strings.Contains(q, "/") {
+		if k, err := i3.NetworkKey(q); err == nil {
+			by, _ := s.lisRecords()
+			r, ok := by["net:"+k]
+			return r, ok
+		}
+	}
+	if m, err := i3.MACKey(q); err == nil {
+		return ix.Find(i3.HELDTarget{MAC: m}, netip.Addr{})
+	}
+	return ix.Find(i3.HELDTarget{Tel: q}, netip.Addr{})
 }
 
 func (s *Server) saveLIS(by map[string]i3.LISRecord) error {
@@ -78,7 +109,7 @@ func (s *Server) saveLIS(by map[string]i3.LISRecord) error {
 		return err
 	}
 	s.lis.mu.Lock()
-	s.lis.by, s.lis.read, s.lis.saved = by, true, time.Now()
+	s.lis.by, s.lis.ix, s.lis.read, s.lis.saved = by, i3.NewLISIndex(by), true, time.Now()
 	s.lis.mu.Unlock()
 	return nil
 }
@@ -100,33 +131,61 @@ func (s *Server) lisRoutes() {
 			w.Write(i3.HELDErrorResponse("badRequest", "the request is too large"))
 			return
 		}
-		n, err := i3.HELDDevice(body)
+		target, err := i3.HELDQuery(body)
 		var he i3.HELDError
 		if errors.As(err, &he) {
-			msg := "this LIS locates devices by telephone number only"
+			msg := "this LIS locates devices by telephone number, IP address or MAC address"
 			if he == "badRequest" {
 				msg = "not a HELD location request"
 			}
 			w.Write(i3.HELDErrorResponse(he, msg))
 			return
 		}
-		by, _ := s.lisRecords()
-		rec, ok := by[i3.NumberKey(n)]
+		var requester netip.Addr
+		if ap, err := netip.ParseAddrPort(r.RemoteAddr); err == nil {
+			requester = ap.Addr()
+		}
+		rec, ok := s.lisIndex().Find(target, requester)
 		if !ok {
-			w.Write(i3.HELDErrorResponse("locationUnknown", "no location is kept for this number"))
+			w.Write(i3.HELDErrorResponse("locationUnknown", "no location is kept for this device"))
 			return
 		}
-		host := firstNonEmpty(cfg.System.Core.Source, cfg.System.Name, "lis")
-		w.Write(i3.HELDResponse(i3.BuildPIDF("pres:"+rec.Number+"@"+host, rec, time.Now())))
+		host := strings.Map(func(r rune) rune { // a URI's host: letters, digits, dots and dashes
+			if r == '.' || r == '-' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
+				return r
+			}
+			return '-'
+		}, firstNonEmpty(cfg.System.Core.Source, cfg.System.Name, "lis"))
+		entity := rec.Number
+		switch {
+		case target.Tel != "":
+			entity = i3.NumberKey(target.Tel)
+		case target.MAC != "":
+			entity = strings.ReplaceAll(target.MAC, ":", "")
+		case target.IP.IsValid():
+			entity = strings.NewReplacer(":", "-", ".", "-").Replace(target.IP.String())
+		case requester.IsValid():
+			entity = strings.NewReplacer(":", "-", ".", "-").Replace(requester.Unmap().String())
+		}
+		w.Write(i3.HELDResponse(i3.BuildPIDF("pres:"+entity+"@"+host, rec, time.Now())))
 	})
 	s.handle("GET /api/core/lis", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
 		by, saved := s.lisRecords()
-		out := map[string]any{"records": len(by)}
+		nets, macs := 0, 0
+		for _, r := range by {
+			switch {
+			case r.Network != "":
+				nets++
+			case r.MAC != "":
+				macs++
+			}
+		}
+		out := map[string]any{"records": len(by), "numbers": len(by) - nets - macs, "networks": nets, "macs": macs}
 		if !saved.IsZero() {
 			out["updated"] = saved
 		}
-		if q := i3.NumberKey(r.URL.Query().Get("number")); q != "" {
-			if rec, ok := by[q]; ok {
+		if q := r.URL.Query().Get("number"); strings.TrimSpace(q) != "" {
+			if rec, ok := s.lisFind(q); ok {
 				out["found"] = rec
 			}
 		}
@@ -147,7 +206,7 @@ func (s *Server) lisRoutes() {
 			}
 		}
 		for _, rec := range recs {
-			by[rec.Number] = rec
+			by[rec.Key()] = rec
 		}
 		if err := s.saveLIS(by); err != nil {
 			writeErr(w, err)

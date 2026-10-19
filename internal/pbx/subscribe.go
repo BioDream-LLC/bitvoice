@@ -27,6 +27,8 @@ type subscription struct {
 	peer      sip.Peer
 	expires   time.Time
 	seq       uint32
+	lastSent  time.Time // the last state NOTIFY (i3 state events are sent at most once a second)
+	held      bool      // a state NOTIFY waits for the second to pass
 }
 
 const (
@@ -38,6 +40,10 @@ const (
 func (e *Engine) subscribe(tx *sip.ServerTx, in *sip.Incoming) {
 	m := in.Msg
 	ev := strings.ToLower(strings.TrimSpace(strings.SplitN(m.Get("Event"), ";", 2)[0]))
+	if ev == evQueueState || ev == evServiceState || ev == evElementState {
+		e.subscribeState(tx, in, ev) // another NG911 element, not a phone
+		return
+	}
 	if ev != "message-summary" && ev != "dialog" {
 		r := sip.NewResponse(m, 489, "Bad Event")
 		r.Set("Allow-Events", "message-summary, dialog")
@@ -143,6 +149,15 @@ func (e *Engine) refreshSubscription(tx *sip.ServerTx, m *sip.Message, s *subscr
 	r.Set("Expires", strconv.Itoa(exp))
 	r.Set("Contact", e.localContact(s.peer, ""))
 	tx.Respond(r)
+	if strings.HasPrefix(s.event, "emergency-") {
+		if exp > 0 {
+			s.mu.Lock()
+			s.lastSent = time.Now()
+			s.mu.Unlock()
+		}
+		go e.sendStateNotify(s) // the state now (with Expires: 0, the final one)
+		return
+	}
 	if s.event == "dialog" {
 		go e.sendDialog(s, e.extensionState(s.box), true)
 		return
@@ -267,6 +282,10 @@ func (e *Engine) presenceChanged() {
 }
 
 func (e *Engine) sendNotify(s *subscription, contentType, body string) {
+	e.sendNotifyEvent(s, s.event, contentType, body)
+}
+
+func (e *Engine) sendNotifyEvent(s *subscription, event, contentType, body string) {
 	s.mu.Lock()
 	s.seq++
 	seq := s.seq
@@ -285,7 +304,7 @@ func (e *Engine) sendNotify(s *subscription, contentType, body string) {
 	m.Set("Call-ID", s.callID)
 	m.Set("CSeq", fmt.Sprintf("%d NOTIFY", seq))
 	m.Set("Contact", e.localContact(s.peer, ""))
-	m.Set("Event", s.event)
+	m.Set("Event", event)
 	m.Set("Subscription-State", state)
 	m.Set("Content-Type", contentType)
 	m.Body = []byte(body)

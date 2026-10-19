@@ -169,6 +169,7 @@ type Engine struct {
 	legs    map[string]*Leg  // by Call-ID and our tag, for in-dialog requests
 	pending map[string]*Call // by INVITE branch, for CANCEL
 	subs    map[string]*subscription
+	watch   stateWatch // NENA i3 state events: the PSAPs' (subscribed to) and this server's own
 	queues  map[string]*queueState
 	parked  map[string]*Call // park slot -> call
 	// presenceMu keeps busy-lamp updates in order.
@@ -248,6 +249,7 @@ func (e *Engine) Start(ctx context.Context, listen string) error {
 	e.started = time.Now()
 	go e.reg.run(e.ctx)
 	go e.reg.saveLoop(e.ctx)
+	go e.watchLoop(e.ctx)
 	go e.runTrunks(e.ctx)
 	go e.trunkJudgeLoop(e.ctx.Done())
 	go e.watchdog(e.ctx)
@@ -372,6 +374,7 @@ func (e *Engine) publish(typ string, data any) {
 	}
 	if strings.HasPrefix(typ, "call.") {
 		go e.presenceChanged()
+		go e.statesChanged(false)
 	}
 	if e.Cluster != nil && (strings.HasPrefix(typ, "call.") || typ == "registrations.changed" && data != nil && !emptyMap(data)) {
 		e.Cluster.Poke() // the other servers hear of it at once
@@ -465,6 +468,9 @@ func (e *Engine) inDialog(tx *sip.ServerTx, in *sip.Incoming, tag string) {
 	leg := e.legs[legKey(m.CallID(), tag)]
 	sub := e.subs[legKey(m.CallID(), tag)]
 	e.mu.Unlock()
+	if leg == nil && sub == nil && m.Method == sip.NOTIFY && e.stateNotify(tx, m) {
+		return // a PSAP's queue or service state
+	}
 	if leg == nil && sub != nil {
 		e.subscriptionRequest(tx, in, sub)
 		return

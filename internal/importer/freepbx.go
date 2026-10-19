@@ -84,22 +84,40 @@ func isAsteriskDump(data []byte) bool {
 
 // readFreePBX opens a backup (or dump) into its tables.
 func readFreePBX(f File) (*fpbxBackup, error) {
-	data := f.Data
-	if bytes.HasPrefix(data, []byte{0x1f, 0x8b}) {
-		var err error
-		if data, err = gunzip(data); err != nil {
+	// A backup is read as a stream: a real one is mostly sound files, voicemail and call history
+	// (tens or hundreds of megabytes) that are passed over; only the configuration in it is kept,
+	// and only that counts against the size limit.
+	var in io.Reader = bytes.NewReader(f.Data)
+	if bytes.HasPrefix(f.Data, []byte{0x1f, 0x8b}) {
+		zr, err := gzip.NewReader(in)
+		if err != nil {
+			return nil, fmt.Errorf("%s: not a gzip file", f.Name)
+		}
+		in = zr
+	}
+	head := make([]byte, 512)
+	n, err := io.ReadFull(in, head)
+	if err != nil && err != io.ErrUnexpectedEOF && err != io.EOF {
+		return nil, fmt.Errorf("%s: %w", f.Name, err)
+	}
+	head = head[:n]
+	in = io.MultiReader(bytes.NewReader(head), in)
+	b := &fpbxBackup{tables: map[string][]fpbxRow{}}
+	if !(len(head) > 262 && string(head[257:262]) == "ustar") {
+		data, err := io.ReadAll(io.LimitReader(in, maxUnpacked+1))
+		if err != nil {
 			return nil, fmt.Errorf("%s: %w", f.Name, err)
 		}
-	}
-	b := &fpbxBackup{tables: map[string][]fpbxRow{}}
-	if !(len(data) > 262 && string(data[257:262]) == "ustar") {
+		if len(data) > maxUnpacked {
+			return nil, errors.New("the database dump is too large once opened")
+		}
 		b.kind = "FreePBX database dump"
 		if err := b.addDump(data); err != nil {
 			return nil, fmt.Errorf("%s: %w", f.Name, err)
 		}
 		return b, nil
 	}
-	tr := tar.NewReader(bytes.NewReader(data))
+	tr := tar.NewReader(in)
 	total := 0
 	var modules = map[string][]byte{}
 	for {
@@ -116,6 +134,10 @@ func readFreePBX(f File) (*fpbxBackup, error) {
 		n := strings.TrimPrefix(path.Clean("/"+h.Name), "/")
 		want := strings.HasPrefix(n, "modulejson/") && strings.HasSuffix(n, ".json") || n == "manifest" || n == "metadata.json" ||
 			strings.HasSuffix(n, ".sql") || strings.HasSuffix(n, ".sql.gz") || strings.HasSuffix(n, "etc/asterisk/voicemail.conf") || n == "voicemail.conf"
+		if base := strings.ToLower(path.Base(n)); want && (strings.Contains(base, "cdr") || strings.Contains(base, "cel") || strings.Contains(base, "queuelog") ||
+			strings.Contains(base, "callaccounting") || strings.Contains(base, "recording_report") || strings.Contains(base, "qxact")) {
+			want = false // call history and reports: not configuration, and the biggest part of a dump
+		}
 		if !want {
 			continue
 		}
@@ -148,9 +170,6 @@ func readFreePBX(f File) (*fpbxBackup, error) {
 				if body, err = gunzip(body); err != nil {
 					return nil, fmt.Errorf("%s: %w", n, err)
 				}
-			}
-			if base := strings.ToLower(path.Base(n)); strings.Contains(base, "cdr") || strings.Contains(base, "cel") || strings.Contains(base, "queuelog") {
-				continue // call history: not configuration
 			}
 			if err := b.addDump(body); err != nil {
 				return nil, fmt.Errorf("%s: %w", n, err)

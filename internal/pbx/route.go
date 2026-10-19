@@ -840,6 +840,9 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 	}
 	c.caller = a
 	c.offer = offer
+	if c.esinet && c.cama == "" {
+		e.bcfMedia(cfg, c, a, offer) // before the first packet is read
+	}
 	ep.Start()
 	c.startText()
 	tx.NoAck = func() { c.hangup("caller never acknowledged the answer", "caller") }

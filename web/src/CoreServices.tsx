@@ -1,9 +1,9 @@
-import { ArrowDown, ArrowUp, CheckCircle2, FileSignature, Flag, ListOrdered, Map as MapIcon, MapPinCheck, Network, PhoneCall, Plus, Save, Search, Shield, ShieldAlert, Trash2, Upload, Waypoints, XCircle } from 'lucide-react'
+import { Activity, ArrowDown, ArrowUp, CheckCircle2, FileSignature, Flag, ListOrdered, Map as MapIcon, MapPinCheck, Network, PhoneCall, Plus, Save, Search, Shield, ShieldAlert, Trash2, Upload, Waypoints, XCircle } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   api, errorOf, useBoundariesQuery, useDeleteBoundaryMutation, useLazyFindAreaQuery, useSaveBoundaryMutation, useSaveSettingsMutation, useSettingsQuery, useTrunksQuery, useSchedulesQuery,
-  useAddressDataQuery, useDeleteAddressesMutation, useValidateAddressMutation, useBcfLogQuery, useLisDataQuery, useLazyLisDataQuery, useDeleteLISMutation, useReceivedLogQuery,
+  useAddressDataQuery, useDeleteAddressesMutation, useValidateAddressMutation, useBcfLogQuery, usePsapStatesQuery, useLisDataQuery, useLazyLisDataQuery, useDeleteLISMutation, useReceivedLogQuery,
   useCorePoliciesQuery, useStorePolicyMutation, useDeletePolicyMutation, useDiscrepanciesQuery, useResolveDiscrepancyMutation, useFileDiscrepancyMutation, useBadActorsQuery, useClearBadActorMutation,
   useDequeueRegsQuery, useAdrRecordsQuery, useAddADRMutation, useDeleteADRMutation, useLocatorRecordsQuery, useAddLocatorMutation, useDeleteLocatorMutation, useTestCallRequestsQuery, useRunTestCallMutation, useDeleteTestCallsMutation,
   type ApiErrorBody, type Boundary, type CoreRule, type CoreSettings, type Validation, type DiscrepancyReport,
@@ -13,9 +13,9 @@ import { store } from './store'
 import { useDraft } from './useDraft'
 import { Badge, Empty, Field, Page, StaleBanner, Toggle, problemFor } from './ui'
 
-const blankBCF = { enabled: false, perMinute: 0, concurrent: 0, deny: [] as string[], mark: false, verifyIdentity: false, badActors: false, badActorBlock: false, badActorScore: 0, badActorHours: 0 }
+const blankBCF = { enabled: false, perMinute: 0, concurrent: 0, deny: [] as string[], mark: false, verifyIdentity: false, badActors: false, badActorBlock: false, badActorScore: 0, badActorHours: 0, inspectMedia: false, mediaPerSecond: 0, mediaMaxBytes: 0 }
 const blankCore: CoreSettings = { ecrf: false, lis: false, logging: false, pcaRoots: '', source: '', allowFrom: [], psaps: [], default: '', lostUrl: '', forestGuide: '', rules: [], bcf: blankBCF,
-  policyStore: false, queueUri: '', discrepancy: false, drContact: '', geocode: false, msag: false, adr: false, locator: false, dequeue: false, testCalls: false, maxDequeueS: 0 }
+  policyStore: false, queueUri: '', discrepancy: false, drContact: '', geocode: false, msag: false, adr: false, locator: false, dequeue: false, testCalls: false, maxDequeueS: 0, watchStates: false, states: false, queueMax: 0 }
 /** Place names may have spaces in them: split on commas only. */
 const commas = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean)
 const list = (s: string) => s.split(/[,\s]+/).map((x) => x.trim()).filter(Boolean)
@@ -32,6 +32,7 @@ export function CoreServices() {
       <LocationRecords />
       <ReceivedLog />
       <BCFLog />
+      <PSAPStates />
       <I3Services />
     </Page>
   )
@@ -65,8 +66,8 @@ function CoreSetup() {
       <div className="space-y-3">
         <Toggle checked={draft.ecrf} onChange={(v) => set({ ecrf: v })} label="Answer LoST queries (ECRF)" />
         <p className="text-sm text-slate-400">Other NG911 elements ask at <span className="font-mono text-amber-300">{origin}/lost</span> (LoST, RFC 5222). Only the addresses below get an answer.</p>
-        <Toggle checked={draft.lis} onChange={(v) => set({ lis: v })} label="Answer location requests by telephone number (LIS)" />
-        <p className="text-sm text-slate-400">PSAPs and legacy network gateways ask at <span className="font-mono text-amber-300">{origin}/held</span> (HELD, RFC 5985, by number as RFC 6155 has it), from the location records below. The same addresses only.</p>
+        <Toggle checked={draft.lis} onChange={(v) => set({ lis: v })} label="Answer location requests (LIS)" />
+        <p className="text-sm text-slate-400">PSAPs and legacy network gateways ask at <span className="font-mono text-amber-300">{origin}/held</span> (HELD, RFC 5985), from the location records below: for a device named by number, IP address or MAC address (RFC 6155), or, when a request names none, for the address it came from. The same addresses only.</p>
         <Toggle checked={draft.logging} onChange={(v) => set({ logging: v })} label="Run an i3 logging service (NENA-STA-010)" />
         <p className="text-sm text-slate-400">The other elements send their log events, signed (JWS), to <span className="font-mono text-amber-300">{origin}/i3log/LogEvents</span>; they are kept and can be read back by ID, call or incident. The same addresses only.</p>
         <Field label="PSAP Credentialing Agency roots" htmlFor="cspca" error={p('pcaRoots')} hint="The PCA's root certificates, PEM. With them, a log event is taken only when its signer's certificate comes from the PCA; without, the signature alone is checked.">
@@ -137,6 +138,12 @@ function CoreSetup() {
             {!draft.bcf.badActorBlock && <Field label="Raise suspicion by" htmlFor="cbbs" error={p('bcf.badActorScore')} hint="0 to 100 (50 when blank), for the policy rules' suspicion conditions."><input id="cbbs" className="input w-24" inputMode="numeric" value={draft.bcf.badActorScore || ''} placeholder="50" onChange={(e) => set({ bcf: { ...draft.bcf, badActorScore: Number(e.target.value.replace(/\D/g, '')) || 0 } })} /></Field>}
             <Field label="A report lasts (hours)" htmlFor="cbbh" hint="24 when blank."><input id="cbbh" className="input w-24" inputMode="numeric" value={draft.bcf.badActorHours || ''} placeholder="24" onChange={(e) => set({ bcf: { ...draft.bcf, badActorHours: Number(e.target.value.replace(/\D/g, '')) || 0 } })} /></Field>
           </div>}
+          <Toggle checked={!!draft.bcf.inspectMedia} onChange={(v) => set({ bcf: { ...draft.bcf, inspectMedia: v } })} label="Inspect media: drop RTP from the wrong address, with a payload type not offered, malformed, too large or a flood" />
+          {draft.bcf.inspectMedia && <div className="grid gap-3 md:grid-cols-3">
+            <Field label="Packets a second, at most" htmlFor="cbmp" error={p('bcf.mediaPerSecond')} hint="150 when blank. G.711 at 20 ms sends 50; the rest of each second is dropped."><input id="cbmp" className="input w-28" inputMode="numeric" value={draft.bcf.mediaPerSecond || ''} placeholder="150" onChange={(e) => set({ bcf: { ...draft.bcf, mediaPerSecond: Number(e.target.value.replace(/\D/g, '')) || 0 } })} /></Field>
+            <Field label="Largest packet (bytes)" htmlFor="cbmb" error={p('bcf.mediaMaxBytes')} hint="1,500 when blank; 200 to 9,000."><input id="cbmb" className="input w-28" inputMode="numeric" value={draft.bcf.mediaMaxBytes || ''} placeholder="1500" onChange={(e) => set({ bcf: { ...draft.bcf, mediaMaxBytes: Number(e.target.value.replace(/\D/g, '')) || 0 } })} /></Field>
+            <p className="self-end text-xs text-slate-500">What is dropped is counted in the BCF log and the call's notes. A call is never ended for its media.</p>
+          </div>}
         </>}
       </div>
       <div className="space-y-3">
@@ -151,12 +158,16 @@ function CoreSetup() {
           <Toggle checked={!!draft.locator} onChange={(v) => set({ locator: v })} label="Service/agency locator" />
           <Toggle checked={!!draft.dequeue} onChange={(v) => set({ dequeue: v })} label="Dequeue registration: positions sign up to take a queue's calls" />
           <Toggle checked={!!draft.testCalls} onChange={(v) => set({ testCalls: v })} label="Test call generator: PSAPs ask for test calls" />
+          <Toggle checked={!!draft.watchStates} onChange={(v) => set({ watchStates: v })} label="Subscribe to each PSAP's queue and service state (SIP SUBSCRIBE), and pass over a PSAP that says it cannot take calls" />
+          <Toggle checked={!!draft.states} onChange={(v) => set({ states: v })} label="Tell other elements this server's element, service and queue state (they SUBSCRIBE)" />
         </div>
         <div className="grid gap-3 md:grid-cols-3">
           {draft.policyStore && <Field label="This ESRP's incoming queue" htmlFor="csq" error={p('queueUri')} hint="The policyQueueName of the OriginationRoutePolicy run first. Blank: sip:sos@ and the ECRF name.">
             <input id="csq" className="input font-mono" value={draft.queueUri ?? ''} placeholder="sip:esrp@esrp.state.example.gov" onChange={(e) => set({ queueUri: e.target.value.trim() })} /></Field>}
           {draft.discrepancy && <Field label="Who answers discrepancy reports" htmlFor="csdr" error={p('drContact')} hint="A name, and an email or phone, separated by commas: sent as a jCard.">
             <input id="csdr" className="input" value={draft.drContact ?? ''} placeholder="Core services desk, core@state.example.gov" onChange={(e) => set({ drContact: e.target.value })} /></Field>}
+          {draft.states && <Field label="Most calls waiting in the queue" htmlFor="csqm" error={p('queueMax')} hint="At this many 911 calls not yet answered the queue says Full. 20 when blank.">
+            <input id="csqm" className="input w-28" inputMode="numeric" value={draft.queueMax || ''} placeholder="20" onChange={(e) => set({ queueMax: Number(e.target.value.replace(/\D/g, '')) || 0 })} /></Field>}
           {draft.dequeue && <Field label="Longest registration (seconds)" htmlFor="csdq" error={p('maxDequeueS')} hint="86400 (a day) when blank.">
             <input id="csdq" className="input w-28" inputMode="numeric" value={draft.maxDequeueS || ''} placeholder="86400" onChange={(e) => set({ maxDequeueS: Number(e.target.value.replace(/\D/g, '')) || 0 })} /></Field>}
         </div>
@@ -394,9 +405,33 @@ function AddressData() {
               <Field key={k} label={label} htmlFor={`cv${k}`}><input id={`cv${k}`} className="input" value={addr[k] ?? ''} placeholder={ph} onChange={(e) => setAddr((a) => ({ ...a, [k]: e.target.value }))} /></Field>
             ))}
           </div>
+          <div className="grid gap-3 sm:grid-cols-3 lg:max-w-xl">
+            <Field label="Latitude (optional)" htmlFor="cvlat" hint="With a longitude, the position is checked against the address's own point."><input id="cvlat" className="input font-mono" inputMode="decimal" value={addr.lat ?? ''} placeholder="39.81" onChange={(e) => setAddr((a) => ({ ...a, lat: e.target.value }))} /></Field>
+            <Field label="Longitude" htmlFor="cvlon"><input id="cvlon" className="input font-mono" inputMode="decimal" value={addr.lon ?? ''} placeholder="-89.61" onChange={(e) => setAddr((a) => ({ ...a, lon: e.target.value }))} /></Field>
+            <Field label="Radius (m)" htmlFor="cvrad" hint="The position's uncertainty; 100 m more is allowed."><input id="cvrad" className="input font-mono" inputMode="decimal" value={addr.radius ?? ''} placeholder="0" onChange={(e) => setAddr((a) => ({ ...a, radius: e.target.value }))} /></Field>
+          </div>
           <button className="btn btn-primary" disabled={checking}><Search size={15} aria-hidden /> Check</button>
           {error && <p className="text-sm text-rose-300">{errorOf(error).message}</p>}
           {result && <ValidationResult v={result} />}
+          {result?.suggestions && result.suggestions.length > 0 && (
+            <div className="space-y-1" role="region" aria-label="Did you mean">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-amber-300">Did you mean</h4>
+              <ul className="space-y-1">
+                {result.suggestions.map((s, i) => (
+                  <li key={i} className="flex flex-wrap items-center gap-2 text-sm">
+                    <button type="button" className="btn text-xs" aria-label={`Use ${[s.civic.HNO, s.civic.RD].join(" ")}`} onClick={() => { setAddr((a) => ({ ...a, ...Object.fromEntries(Object.entries(s.civic).filter(([, v]) => v)) })); reset() }}>Use</button>
+                    <span className="text-slate-100">{[s.civic.HNO, s.civic.PRD, s.civic.RD, s.civic.STS, s.civic.POD].filter(Boolean).join(' ')}, {[s.civic.A3, s.civic.A1].filter(Boolean).join(' ')}</span>
+                    <span className="text-xs text-slate-400">{s.why} ({s.source})</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {result?.position && (
+            <p role="status" className={`flex items-start gap-2 rounded-lg border p-3 text-sm ${!result.position.checked ? 'border-slate-700 text-slate-300' : result.position.within ? 'border-emerald-800 bg-emerald-950/30 text-emerald-200' : 'border-rose-800 bg-rose-950/30 text-rose-200'}`}>
+              <MapPinCheck size={16} className="mt-0.5 shrink-0" aria-hidden /><span><span className="font-semibold">{!result.position.checked ? 'Position not checked: ' : result.position.within ? 'Position agrees: ' : 'Position does not agree: '}</span>{result.position.why}.</span>
+            </p>
+          )}
         </form>
       )}
     </section>
@@ -427,7 +462,7 @@ function ReceivedLog() {
   )
 }
 
-/** The LIS's location records: a spreadsheet of numbers and their addresses. */
+/** The LIS's location records: a spreadsheet of numbers, networks or MAC addresses and their addresses. */
 function LocationRecords() {
   const admin = useIsAdmin()
   const { data } = useLisDataQuery()
@@ -452,9 +487,9 @@ function LocationRecords() {
   return (
     <section className="card mt-6 space-y-4 p-5" aria-labelledby="cr-h">
       <h2 id="cr-h" className="flex items-center gap-2 font-semibold text-slate-100"><MapPinCheck size={17} className="text-amber-300" aria-hidden /> Location records (LIS)</h2>
-      <p className="text-sm text-slate-400">What the LIS answers with: a spreadsheet (CSV) with a header row, a <span className="font-mono text-slate-300">number</span> column and the address as <span className="font-mono text-slate-300">hno, rd, sts, unit, floor, a3 (city), a1 (state), pc, country</span>, with <span className="font-mono text-slate-300">lat, lon, radius</span> when known. A number listed again replaces its old record.</p>
+      <p className="text-sm text-slate-400">What the LIS answers with: a spreadsheet (CSV) with a header row; each row names a <span className="font-mono text-slate-300">number</span>, a <span className="font-mono text-slate-300">network</span> (an address range such as 10.20.3.0/24: a building, a floor, a VLAN) or a device's <span className="font-mono text-slate-300">mac</span> address, then the address as <span className="font-mono text-slate-300">hno, rd, sts, unit, floor, a3 (city), a1 (state), pc, country</span>, with <span className="font-mono text-slate-300">lat, lon, radius</span> when known. An address is located by the narrowest network that holds it. A number, network or MAC address listed again replaces its old record.</p>
       <div className="flex flex-wrap items-center gap-3">
-        <span className="text-sm text-slate-300">{n ? <><span className="font-semibold text-emerald-300">{n.toLocaleString()}</span> numbers</> : 'No location records yet.'}</span>
+        <span className="text-sm text-slate-300">{n ? <><span className="font-semibold text-emerald-300">{(data?.numbers ?? n).toLocaleString()}</span> numbers, <span className="font-semibold text-sky-300">{(data?.networks ?? 0).toLocaleString()}</span> networks, <span className="font-semibold text-violet-300">{(data?.macs ?? 0).toLocaleString()}</span> MAC addresses</> : 'No location records yet.'}</span>
         {admin && <>
           <Toggle checked={replace} onChange={setReplace} label="Replace every record" />
           <button className="btn btn-primary" disabled={busy} onClick={() => file.current?.click()}><Upload size={15} aria-hidden /> {busy ? 'Reading…' : 'Upload CSV'}</button>
@@ -463,12 +498,12 @@ function LocationRecords() {
         </>}
       </div>
       {n > 0 && (
-        <form className="flex flex-wrap items-end gap-3" aria-label="Look up a number" onSubmit={(e) => { e.preventDefault(); if (num.trim()) find(num.trim()) }}>
-          <Field label="Look up a number" htmlFor="crn"><input id="crn" className="input w-48 font-mono" value={num} placeholder="7175550100" onChange={(e) => setNum(e.target.value)} /></Field>
+        <form className="flex flex-wrap items-end gap-3" aria-label="Look up a device" onSubmit={(e) => { e.preventDefault(); if (num.trim()) find(num.trim()) }}>
+          <Field label="Look up a number, address or MAC address" htmlFor="crn"><input id="crn" className="input w-56 font-mono" value={num} placeholder="7175550100 or 10.20.3.17" onChange={(e) => setNum(e.target.value)} /></Field>
           <button className="btn" disabled={isFetching}><Search size={14} aria-hidden /> Look up</button>
           {found && (found.found
-            ? <span className="text-sm text-emerald-200">{[found.found.civic.number, found.found.civic.preDir, found.found.civic.street, found.found.civic.streetType].filter(Boolean).join(' ')}{found.found.civic.unit ? `, ${found.found.civic.unit}` : ''}, {found.found.civic.city} {found.found.civic.state}{found.found.lat ? <span className="ml-2 font-mono text-xs text-slate-400">{found.found.lat}, {found.found.lon}</span> : null}</span>
-            : <span className="text-sm text-amber-300">No record for this number.</span>)}
+            ? <span className="text-sm text-emerald-200">{[found.found.civic.number, found.found.civic.preDir, found.found.civic.street, found.found.civic.streetType].filter(Boolean).join(' ')}{found.found.civic.unit ? `, ${found.found.civic.unit}` : ''}, {found.found.civic.city} {found.found.civic.state}{found.found.civic.floor ? `, floor ${found.found.civic.floor}` : ''}{found.found.lat ? <span className="ml-2 font-mono text-xs text-slate-400">{found.found.lat}, {found.found.lon}</span> : null}{(found.found.network || found.found.mac) && <span className="ml-2 font-mono text-xs text-sky-300">from {found.found.network || found.found.mac}</span>}</span>
+            : <span className="text-sm text-amber-300">No record for this device.</span>)}
         </form>
       )}
     </section>
@@ -493,6 +528,40 @@ function ValidationResult({ v }: { v: Validation }) {
   )
 }
 
+const stateTone = (s?: string) => !s ? 'text-slate-500' : ['Active', 'Normal', 'Standby'].includes(s) ? 'text-emerald-300' : ['Partial', 'MajorIncidentInProgress', 'ScheduledMaintenanceAvailable'].includes(s) ? 'text-amber-300' : 'text-rose-300'
+
+/** What each PSAP has said of its queue and service (NENA i3 state events), when subscribed to. */
+function PSAPStates() {
+  const { data: settings } = useSettingsQuery()
+  const on = !!settings?.system.core?.watchStates
+  const { data } = usePsapStatesQuery(undefined, { pollingInterval: 5000, skip: !on })
+  if (!on || !data?.items.length) return null
+  return (
+    <section className="card mt-6 space-y-3 p-5" aria-labelledby="cps-h">
+      <h2 id="cps-h" className="flex items-center gap-2 font-semibold text-slate-100"><Activity size={17} className="text-sky-300" aria-hidden /> PSAP states</h2>
+      <p className="text-sm text-slate-400">What each PSAP's own NOTIFYs say (emergency-QueueState and emergency-ServiceState). A PSAP whose queue is inactive, disabled or full, or whose service is down, overloaded or unstaffed, is passed over for its overflow; when every PSAP says so, calls are sent as listed.</p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm" aria-label="PSAP states">
+          <thead><tr className="text-left text-xs text-slate-500"><th className="py-1 pr-3">PSAP</th><th className="pr-3">Queue</th><th className="pr-3">Waiting</th><th className="pr-3">Service</th><th className="pr-3">Security</th><th>Subscriptions</th></tr></thead>
+          <tbody>
+            {data.items.map((s) => (
+              <tr key={s.uri} className="border-t border-slate-800">
+                <td className="py-1.5 pr-3"><span className="text-slate-100">{s.name}</span> <span className="font-mono text-xs text-slate-500">{s.uri}</span></td>
+                <td className={`pr-3 font-semibold ${stateTone(s.queue)}`}>{s.queue || 'not told yet'}</td>
+                <td className="pr-3 font-mono text-slate-300">{s.queue ? `${s.length} of ${s.max}` : '—'}</td>
+                <td className={`pr-3 ${stateTone(s.service)}`}><span className="font-semibold">{s.service || 'not told yet'}</span>{s.reason && <span className="ml-1 text-xs text-slate-400">({s.reason})</span>}</td>
+                <td className={`pr-3 ${s.posture === 'Green' || !s.posture ? 'text-slate-300' : 'text-amber-300'}`}>{s.posture || '—'}</td>
+                <td className="text-xs">{Object.entries(s.subscriptions).map(([ev, st]) => (
+                  <span key={ev} className={`mr-2 ${st === 'active' ? 'text-emerald-300' : 'text-amber-300'}`}>{ev.replace('emergency-', '').replace('queuestate', 'queue').replace('servicestate', 'service')}: {st}</span>))}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
 /** What the BCF refused or marked lately. */
 function BCFLog() {
   const { data } = useBcfLogQuery(undefined, { pollingInterval: 10000 })
@@ -506,7 +575,7 @@ function BCFLog() {
             <td className="py-1 text-slate-400">{new Date(x.at).toLocaleString()}</td>
             <td className="font-mono text-xs text-amber-300">{x.source}</td>
             <td className="text-slate-300">{x.from}</td>
-            <td>{x.action === 'refused' ? <Badge status="fail">refused</Badge> : <Badge status="warn">marked</Badge>}</td>
+            <td>{x.action === 'refused' ? <Badge status="fail">refused</Badge> : x.action === 'media' ? <Badge status="info">media dropped</Badge> : <Badge status="warn">marked</Badge>}</td>
             <td className="text-slate-400">{x.why}</td>
           </tr>))}</tbody></table>
     </section>

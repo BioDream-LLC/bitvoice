@@ -139,7 +139,8 @@ type Endpoint struct {
 	// other receives non-RTP datagrams (STUN, DTLS) on WebRTC legs; nil drops them.
 	other func(pkt []byte, from netip.AddrPort)
 	// tap, when set, sees every audio packet this party sends (a mixing bridge).
-	tap func(pkt []byte)
+	tap     func(pkt []byte)
+	inspect *Inspector // the BCF's media rules, when set
 	// onRTCP takes this party's RTCP instead of relaying it (a video conference's keyframe requests).
 	onRTCP func(pkt []byte)
 	// cleaner, when set, cleans the audio this party sends (G.711 only) before it goes on.
@@ -562,6 +563,13 @@ func (e *Endpoint) readRTP() {
 		}
 		now := time.Now()
 		e.mu.Lock()
+		if ins := e.inspect; ins != nil {
+			e.mu.Unlock()
+			if !ins.Check(pkt, from.Addr(), now) {
+				continue
+			}
+			e.mu.Lock()
+		}
 		if np, ok := e.inMap[pkt[1]&0x7f]; ok {
 			if in == nil {
 				pkt = append([]byte(nil), pkt...) // buf is reused for the next read

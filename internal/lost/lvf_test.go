@@ -64,3 +64,53 @@ func TestLoSTValidation(t *testing.T) {
 		t.Fatal(out)
 	}
 }
+
+// Suggestions for addresses not found: a misspelt street, the nearest number a street has (on the
+// right side), a street in the next town; nothing for a street nowhere near. A position checked
+// against the address point: near, far (with the point nearest it), and no point to check against.
+func TestSuggestAndPosition(t *testing.T) {
+	a, _ := ParseAddressGeoJSON([]byte(gis))
+	first := func(c Civic) Suggestion {
+		t.Helper()
+		s := a.Suggest(c, 3)
+		if len(s) == 0 {
+			t.Fatalf("no suggestion for %v", c)
+		}
+		return s[0]
+	}
+	if s := first(Civic{"A1": "IL", "A3": "Springfield", "HNO": "250", "RD": "Oka", "STS": "Ave"}); s.Civic["RD"] != "Oak" || s.Civic["HNO"] != "250" || !strings.Contains(s.Why, "similar name (Oak Ave, not Oka)") {
+		t.Errorf("misspelt: %+v", s)
+	}
+	if s := first(Civic{"A1": "IL", "A3": "Springfield", "HNO": "900", "RD": "Main"}); s.Civic["HNO"] != "198" || s.Source != "road centerline" || !strings.Contains(s.Why, "nearest number") {
+		t.Errorf("number off the street: %+v", s)
+	}
+	if s := first(Civic{"A1": "IL", "A3": "Springfield", "HNO": "901", "RD": "Main"}); s.Civic["HNO"] != "199" {
+		t.Errorf("odd stays odd: %+v", s)
+	}
+	if s := a.Suggest(Civic{"A1": "IL", "A3": "Springfield", "HNO": "150", "RD": "Main"}, 3); len(s) == 0 || s[0].Civic["HNO"] != "150" {
+		t.Errorf("even: %+v", s)
+	}
+	if s := first(Civic{"A1": "IL", "A3": "Shelbyville", "HNO": "122", "RD": "Main"}); s.Civic["A3"] != "Springfield" || !strings.Contains(s.Why, "in Springfield, not Shelbyville") {
+		t.Errorf("next town: %+v", s)
+	}
+	if s := a.Suggest(Civic{"A1": "IL", "HNO": "1", "RD": "Washington"}, 3); len(s) != 0 {
+		t.Errorf("a street nowhere near: %+v", s)
+	}
+	if s := a.Suggest(Civic{"A1": "WI", "HNO": "250", "RD": "Oak"}, 3); len(s) != 0 {
+		t.Errorf("another state: %+v", s)
+	}
+	if editDistance("MAIN", "MIAN") != 1 || editDistance("OAK", "OKA") != 1 || editDistance("KITTEN", "SITTING") != 3 || editDistance("", "AB") != 2 || editDistance("ÉLM", "ELM") != 1 {
+		t.Error("editDistance")
+	}
+	oak := Civic{"A1": "IL", "A3": "Springfield", "HNO": "250", "RD": "Oak"}
+	if pc := a.CheckPosition(oak, 39.8102, -89.6101, 10, 0); !pc.Checked || !pc.Within || pc.Metres > 30 || pc.Limit != 110 {
+		t.Errorf("near: %+v", pc)
+	}
+	pc := a.CheckPosition(oak, 39.82, -89.61, 20, 50)
+	if !pc.Checked || pc.Within || pc.Metres < 1000 || pc.Limit != 70 || !strings.Contains(pc.Why, "do not agree") {
+		t.Errorf("far: %+v", pc)
+	}
+	if pc := a.CheckPosition(Civic{"HNO": "122", "RD": "Main"}, 39.8, -89.6, 0, 0); pc.Checked || !strings.Contains(pc.Why, "no point") {
+		t.Errorf("no point: %+v", pc)
+	}
+}

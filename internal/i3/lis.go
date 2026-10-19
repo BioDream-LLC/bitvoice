@@ -7,23 +7,81 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// A location information server (LIS): it answers HELD location requests (RFC 5985) for devices
-// named by telephone number (RFC 6155), from the records the authority keeps: each a number, its
-// civic address and, when known, a position.
+// A location information server (LIS): it answers HELD location requests (RFC 5985) from the records
+// the authority keeps: each a telephone number, a network (an address range: a building's subnet, a
+// floor's VLAN) or a device's MAC address, with its civic address and, when known, a position. A
+// request names its device by number, IP address or MAC address (RFC 6155); a request naming none
+// is answered for the requester's own address, as a LIS on an access network does.
 
 // LISRecord is one number's location.
 type LISRecord struct {
-	Number string  `json:"number"` // digits, as the device identity carries them
-	Civic  Civic   `json:"civic"`
-	Lat    float64 `json:"lat,omitempty"`
-	Lon    float64 `json:"lon,omitempty"`
-	Radius float64 `json:"radius,omitempty"` // metres
-	Method string  `json:"method,omitempty"` // Manual unless the file says
+	Number  string  `json:"number,omitempty"`  // digits, as the device identity carries them
+	Network string  `json:"network,omitempty"` // an address range, 10.1.2.0/24 (one address is a /32 or /128)
+	MAC     string  `json:"mac,omitempty"`     // a device's MAC address, a0:12:34:56:78:90
+	Civic   Civic   `json:"civic"`
+	Lat     float64 `json:"lat,omitempty"`
+	Lon     float64 `json:"lon,omitempty"`
+	Radius  float64 `json:"radius,omitempty"` // metres
+	Method  string  `json:"method,omitempty"` // Manual unless the file says
+}
+
+// Key is the record's place in the LIS: its number, network or MAC address.
+func (r LISRecord) Key() string {
+	switch {
+	case r.Network != "":
+		return "net:" + r.Network
+	case r.MAC != "":
+		return "mac:" + r.MAC
+	}
+	return r.Number
+}
+
+// Identity is the record's device as a person reads it.
+func (r LISRecord) Identity() string { return firstNonEmpty(r.Number, r.Network, r.MAC) }
+
+// NetworkKey reads an address range or one address as a record's network (masked, canonical).
+func NetworkKey(s string) (string, error) {
+	s = strings.TrimSpace(s)
+	if p, err := netip.ParsePrefix(s); err == nil {
+		return p.Masked().String(), nil
+	}
+	a, err := netip.ParseAddr(s)
+	if err != nil {
+		return "", fmt.Errorf("%q is not an address or an address range (10.1.2.0/24)", s)
+	}
+	a = a.Unmap()
+	return netip.PrefixFrom(a, a.BitLen()).String(), nil
+}
+
+// MACKey reads a MAC address in any usual form (a0:12:.., A0-12-.., a012.3456.7890) as a0:12:34:56:78:90.
+func MACKey(s string) (string, error) {
+	s = strings.TrimSpace(s)
+	if hw, err := net.ParseMAC(s); err == nil && len(hw) == 6 {
+		return hw.String(), nil
+	}
+	d := strings.Map(func(r rune) rune {
+		if strings.ContainsRune("0123456789abcdefABCDEF", r) {
+			return r
+		}
+		if strings.ContainsRune(":-. ", r) {
+			return -1
+		}
+		return '!'
+	}, s)
+	if len(d) == 12 && !strings.Contains(d, "!") {
+		if hw, err := net.ParseMAC(strings.Join([]string{d[0:2], d[2:4], d[4:6], d[6:8], d[8:10], d[10:12]}, ":")); err == nil {
+			return hw.String(), nil
+		}
+	}
+	return "", fmt.Errorf("%q is not a MAC address", s)
 }
 
 // NumberKey is how numbers are matched: digits only, a North American 11-digit number without its 1.
@@ -43,7 +101,9 @@ func NumberKey(n string) string {
 // ParseLISCSV reads location records from a spreadsheet with a header row. Columns (any order, any
 // case): number, and the civic address as house number (hno), street (rd), street type (sts),
 // direction (prd), unit, floor, room, location (loc), building (bld), city (a3), county (a2), state
-// (a1), postal code (pc), country, name (nam); optionally lat, lon, radius, method.
+// (a1), postal code (pc), country, name (nam); optionally lat, lon, radius, method. Instead of a number a
+// row may name a network (an address range, or one address) or a MAC address: the header then needs
+// at least one of the number, network and mac columns.
 func ParseLISCSV(r io.Reader) ([]LISRecord, error) {
 	cr := csv.NewReader(r)
 	cr.FieldsPerRecord = -1
@@ -54,8 +114,9 @@ func ParseLISCSV(r io.Reader) ([]LISRecord, error) {
 	col := map[string]int{}
 	alias := map[string]string{"hno": "number_house", "house number": "number_house", "house": "number_house", "rd": "street", "sts": "streettype",
 		"street type": "streettype", "prd": "predir", "direction": "predir", "a3": "city", "a2": "county", "a1": "state", "pc": "postalcode",
-		"postal code": "postalcode", "zip": "postalcode", "loc": "location", "bld": "building", "nam": "name", "latitude": "lat", "longitude": "lon",
-		"phone": "number", "telephone": "number", "tn": "number", "callback": "number"}
+		"postal code": "postalcode", "zip": "postalcode", "loc": "location", "bld": "building", "flr": "floor", "nam": "name", "latitude": "lat", "longitude": "lon",
+		"phone": "number", "telephone": "number", "tn": "number", "callback": "number", "subnet": "network", "cidr": "network",
+		"address range": "network", "ip": "network", "ip address": "network", "mac address": "mac", "hardware address": "mac"}
 	for i, h := range head {
 		k := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(h, "\ufeff")))
 		if a, ok := alias[k]; ok {
@@ -63,8 +124,11 @@ func ParseLISCSV(r io.Reader) ([]LISRecord, error) {
 		}
 		col[k] = i
 	}
-	if _, ok := col["number"]; !ok {
-		return nil, errors.New("the header has no number column")
+	_, hasNum := col["number"]
+	_, hasNet := col["network"]
+	_, hasMAC := col["mac"]
+	if !hasNum && !hasNet && !hasMAC {
+		return nil, errors.New("the header has no number, network or mac column")
 	}
 	get := func(row []string, k string) string {
 		if i, ok := col[k]; ok && i < len(row) {
@@ -82,15 +146,36 @@ func ParseLISCSV(r io.Reader) ([]LISRecord, error) {
 		if err != nil {
 			return nil, fmt.Errorf("line %d: %v", line, err)
 		}
-		raw := get(row, "number")
-		if raw == "" {
+		raw, rawNet, rawMAC := get(row, "number"), get(row, "network"), get(row, "mac")
+		named := 0
+		for _, v := range []string{raw, rawNet, rawMAC} {
+			if v != "" {
+				named++
+			}
+		}
+		if named == 0 {
 			continue // a blank line
 		}
-		n := NumberKey(raw)
-		if len(n) < 7 || len(n) > 15 {
-			return nil, fmt.Errorf("line %d: %q is not a telephone number", line, get(row, "number"))
+		if named > 1 {
+			return nil, fmt.Errorf("line %d: name one of a number, a network or a MAC address, not several", line)
 		}
-		rec := LISRecord{Number: n, Method: get(row, "method"), Civic: Civic{
+		var n, network, mac string
+		switch {
+		case raw != "":
+			n = NumberKey(raw)
+			if len(n) < 7 || len(n) > 15 {
+				return nil, fmt.Errorf("line %d: %q is not a telephone number", line, raw)
+			}
+		case rawNet != "":
+			if network, err = NetworkKey(rawNet); err != nil {
+				return nil, fmt.Errorf("line %d: %v", line, err)
+			}
+		default:
+			if mac, err = MACKey(rawMAC); err != nil {
+				return nil, fmt.Errorf("line %d: %v", line, err)
+			}
+		}
+		rec := LISRecord{Number: n, Network: network, MAC: mac, Method: get(row, "method"), Civic: Civic{
 			Number: get(row, "number_house"), Street: get(row, "street"), StreetType: get(row, "streettype"), PreDir: get(row, "predir"),
 			Unit: get(row, "unit"), Floor: get(row, "floor"), Room: get(row, "room"), Location: get(row, "location"), Building: get(row, "building"),
 			City: get(row, "city"), County: get(row, "county"), State: get(row, "state"), PostalCode: get(row, "postalcode"),
@@ -111,13 +196,13 @@ func ParseLISCSV(r io.Reader) ([]LISRecord, error) {
 			return nil, fmt.Errorf("line %d: the position is not in degrees", line)
 		}
 		if rec.Civic.Street == "" && rec.Lat == 0 && rec.Lon == 0 {
-			return nil, fmt.Errorf("line %d: no street and no position for %s", line, n)
+			return nil, fmt.Errorf("line %d: no street and no position for %s", line, rec.Identity())
 		}
-		if i, dup := seen[n]; dup {
-			out[i] = rec // the last line for a number wins
+		if i, dup := seen[rec.Key()]; dup {
+			out[i] = rec // the last line for a number, network or MAC address wins
 			continue
 		}
-		seen[n] = len(out)
+		seen[rec.Key()] = len(out)
 		out = append(out, rec)
 	}
 	return out, nil
@@ -163,8 +248,11 @@ func BuildPIDF(entity string, rec LISRecord, now time.Time) []byte {
 		method = "Manual"
 	}
 	fmt.Fprintf(&b, `</gp:location-info><gp:usage-rules/><gp:method>%s</gp:method></gp:geopriv>`, esc(method))
-	if rec.Number != "" {
+	switch {
+	case rec.Number != "":
 		fmt.Fprintf(&b, `<dm:deviceID>tel:%s</dm:deviceID>`, esc(rec.Number))
+	case rec.MAC != "":
+		fmt.Fprintf(&b, `<dm:deviceID>mac:%s</dm:deviceID>`, strings.ReplaceAll(rec.MAC, ":", ""))
 	}
 	fmt.Fprintf(&b, `<dm:timestamp>%s</dm:timestamp></dm:device></presence>`, now.UTC().Format(time.RFC3339))
 	return b.Bytes()
@@ -194,6 +282,114 @@ func HELDDevice(body []byte) (string, error) {
 		return strings.SplitN(u[4:], ";", 2)[0], nil
 	}
 	return "", HELDError("notLocatable")
+}
+
+// HELDTarget is the device a HELD request asks about: by number, by IP address or by MAC address
+// (RFC 6155); all empty when the request names none (the requester itself).
+type HELDTarget struct {
+	Tel string
+	IP  netip.Addr
+	MAC string
+}
+
+// HELDQuery reads a HELD locationRequest's device identity, or a HELDError. A request with no device
+// element asks for the requester's own location.
+func HELDQuery(body []byte) (HELDTarget, error) {
+	root, err := parseXML(body)
+	if err != nil || root.find("locationRequest") == nil {
+		return HELDTarget{}, HELDError("badRequest")
+	}
+	dev := root.find("device")
+	if dev == nil {
+		return HELDTarget{}, nil
+	}
+	var t HELDTarget
+	if n := strings.TrimSpace(dev.val("tel")); n != "" {
+		t.Tel = n
+	} else if u := strings.TrimSpace(dev.val("uri")); strings.HasPrefix(strings.ToLower(u), "tel:") {
+		t.Tel = strings.SplitN(u[4:], ";", 2)[0]
+	}
+	if s := strings.TrimSpace(dev.val("ip")); s != "" {
+		a, err := netip.ParseAddr(s)
+		if err != nil {
+			return HELDTarget{}, HELDError("badRequest")
+		}
+		t.IP = a.Unmap()
+	}
+	if s := strings.TrimSpace(dev.val("mac")); s != "" {
+		m, err := MACKey(s)
+		if err != nil {
+			return HELDTarget{}, HELDError("badRequest")
+		}
+		t.MAC = m
+	}
+	if t.Tel == "" && !t.IP.IsValid() && t.MAC == "" {
+		return HELDTarget{}, HELDError("notLocatable") // an identity of a kind this LIS does not keep
+	}
+	return t, nil
+}
+
+// LISIndex finds records by number, by MAC address, and by address within the most specific
+// network that holds it.
+type LISIndex struct {
+	by   map[string]LISRecord
+	bits []int // the networks' prefix lengths, longest first
+}
+
+// NewLISIndex indexes records kept by Key.
+func NewLISIndex(by map[string]LISRecord) *LISIndex {
+	ix := &LISIndex{by: by}
+	seen := map[int]bool{}
+	for _, r := range by {
+		if p, err := netip.ParsePrefix(r.Network); err == nil && !seen[p.Bits()] {
+			seen[p.Bits()] = true
+			ix.bits = append(ix.bits, p.Bits())
+		}
+	}
+	slices.Sort(ix.bits)
+	slices.Reverse(ix.bits)
+	return ix
+}
+
+// Find returns the record for a target: its number, its MAC address, then its address (or, when the
+// request named nothing, the requester's) in the narrowest network listed.
+func (ix *LISIndex) Find(t HELDTarget, requester netip.Addr) (LISRecord, bool) {
+	if t.Tel != "" {
+		if r, ok := ix.by[NumberKey(t.Tel)]; ok {
+			return r, true
+		}
+	}
+	if t.MAC != "" {
+		if r, ok := ix.by["mac:"+t.MAC]; ok {
+			return r, true
+		}
+	}
+	a := t.IP
+	if !a.IsValid() && t.Tel == "" && t.MAC == "" {
+		a = requester.Unmap()
+	}
+	if a.IsValid() {
+		return ix.Address(a)
+	}
+	return LISRecord{}, false
+}
+
+// Address is the record of the narrowest network holding a.
+func (ix *LISIndex) Address(a netip.Addr) (LISRecord, bool) {
+	a = a.Unmap()
+	for _, bits := range ix.bits {
+		if bits > a.BitLen() {
+			continue
+		}
+		p, err := a.Prefix(bits)
+		if err != nil {
+			continue
+		}
+		if r, ok := ix.by["net:"+p.String()]; ok {
+			return r, true
+		}
+	}
+	return LISRecord{}, false
 }
 
 // HELDResponse wraps a PIDF-LO in a locationResponse.

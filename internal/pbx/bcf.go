@@ -29,7 +29,7 @@ type BCFEvent struct {
 	At     time.Time `json:"at"`
 	Source string    `json:"source"`
 	From   string    `json:"from"`
-	Action string    `json:"action"` // refused or marked
+	Action string    `json:"action"` // refused, marked, or media (packets dropped by the media inspection)
 	Why    string    `json:"why"`
 }
 

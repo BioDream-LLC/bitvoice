@@ -11,13 +11,17 @@ import (
 	"github.com/biodream-llc/bitvoice/internal/store"
 )
 
+// maxImport is the most an upload may hold: a whole FreePBX backup, sound files and call history
+// included (a small office's is 70 MB; only its configuration is read, see importer).
+const maxImport = 512 << 20
+
 // readImport takes what was uploaded: one file as the body (named by ?name=), or several as a
 // multipart form (field "file").
 func readImport(w http.ResponseWriter, r *http.Request) ([]importer.File, error) {
-	r.Body = http.MaxBytesReader(w, r.Body, 32<<20)
+	r.Body = http.MaxBytesReader(w, r.Body, maxImport)
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
-		if err := r.ParseMultipartForm(8 << 20); err != nil {
-			return nil, fmt.Errorf("the files are larger than 32 MB together")
+		if err := r.ParseMultipartForm(8 << 20); err != nil { // the rest goes to a temporary file
+			return nil, fmt.Errorf("the files are larger than 512 MB together")
 		}
 		defer r.MultipartForm.RemoveAll()
 		var out []importer.File
@@ -40,7 +44,7 @@ func readImport(w http.ResponseWriter, r *http.Request) ([]importer.File, error)
 	}
 	data, err := io.ReadAll(r.Body)
 	if err != nil {
-		return nil, fmt.Errorf("the file is larger than 32 MB")
+		return nil, fmt.Errorf("the file is larger than 512 MB")
 	}
 	return []importer.File{{Name: r.URL.Query().Get("name"), Data: data}}, nil
 }

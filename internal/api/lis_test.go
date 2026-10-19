@@ -53,10 +53,69 @@ func TestLIS(t *testing.T) {
 	}
 	r, _ := http.Post(held, "application/held+xml", strings.NewReader("<locationRequest xmlns=\"urn:ietf:params:xml:ns:geopriv:held\"/>"))
 	b, _ := io.ReadAll(r.Body)
-	if !strings.Contains(string(b), `code="notLocatable"`) {
-		t.Fatalf("by the requester's address: %s", b)
+	if !strings.Contains(string(b), `code="locationUnknown"`) {
+		t.Fatalf("by the requester's address, with no networks listed: %s", b)
 	}
 	if _, out := c.do("GET", "/api/core/lis?number=7175550100", nil); out["records"] != float64(1) || out["found"] == nil {
 		t.Fatalf("summary %v", out)
+	}
+
+	// By network address (RFC 5985: the requester's own; RFC 6155: an ip or mac identity).
+	nets := "network,mac,hno,rd,sts,unit,floor,a3,a1\n" +
+		"127.0.0.0/8,,1,Loopback,Way,,,Harrisburg,PA\n" +
+		"10.20.0.0/16,,100,Campus,Dr,,,Harrisburg,PA\n" +
+		"10.20.3.0/24,,100,Campus,Dr,,3,Harrisburg,PA\n" +
+		",A0-12-34-56-78-90,100,Campus,Dr,Room 301,3,Harrisburg,PA\n"
+	req, _ = http.NewRequest("POST", ts.URL+"/api/core/lis", strings.NewReader(nets))
+	req.Header.Set("X-BitVoice", "1")
+	if resp, err := c.http.Do(req); err != nil || resp.StatusCode != 200 {
+		t.Fatalf("upload networks %v %v", resp, err)
+	}
+	ask := func(device string) string {
+		body := `<?xml version="1.0"?><locationRequest xmlns="urn:ietf:params:xml:ns:geopriv:held" responseTime="8"><locationType exact="true">civic</locationType>` + device + `</locationRequest>`
+		r, err := http.Post(held, "application/held+xml", strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer r.Body.Close()
+		b, _ := io.ReadAll(r.Body)
+		return string(b)
+	}
+	id := func(x string) string {
+		return `<device xmlns="urn:ietf:params:xml:ns:geopriv:held:id">` + x + `</device>`
+	}
+	for _, c := range []struct{ device, want string }{
+		{"", "<ca:RD>Loopback</ca:RD>"},                                     // the requester, 127.0.0.1
+		{id(`<ip v="4">10.20.3.17</ip>`), "<ca:FLR>3</ca:FLR>"},             // the narrowest network
+		{id(`<ip v="4">10.20.9.1</ip>`), "<ca:HNO>100</ca:HNO>"},            // the campus
+		{id(`<mac>A0-12-34-56-78-90</mac>`), "<ca:UNIT>Room 301</ca:UNIT>"}, // the device itself
+		{id(`<ip v="4">10.21.0.1</ip>`), `code="locationUnknown"`},
+		{id(`<ip v="4">not-an-address</ip>`), `code="badRequest"`},
+		{id(`<nai>joe@example.com</nai>`), `code="notLocatable"`},
+	} {
+		if got := ask(c.device); !strings.Contains(got, c.want) {
+			t.Errorf("%s: want %s in %s", c.device, c.want, got)
+		}
+	}
+	if got := ask(id(`<ip v="4">10.20.3.17</ip>`)); strings.Contains(got, "<ca:UNIT>") {
+		t.Errorf("an address took the MAC address's record: %s", got)
+	}
+	for q, want := range map[string]string{"10.20.3.200": "3", "a012.3456.7890": "3", "10.20.0.0/16": ""} {
+		_, out := c.do("GET", "/api/core/lis?number="+q, nil)
+		f, _ := out["found"].(map[string]any)
+		if f == nil || f["civic"].(map[string]any)["floor"] != func() any {
+			if want == "" {
+				return nil
+			}
+			return want
+		}() {
+			t.Errorf("look up %s: %v", q, out)
+		}
+	}
+	if _, out := c.do("GET", "/api/core/lis", nil); out["networks"] != float64(3) || out["macs"] != float64(1) || out["numbers"] != float64(1) {
+		t.Fatalf("counts %v", out)
+	}
+	if got := ask(""); !strings.Contains(got, `entity="pres:127-0-0-1@Acme-Dental"`) {
+		t.Errorf("the entity is not a URI: %s", got)
 	}
 }

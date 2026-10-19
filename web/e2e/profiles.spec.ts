@@ -43,13 +43,18 @@ test('core services: policy rule, border control, address validation', async ({ 
   await expect(sec.getByText('an address or a range, like 203.0.113.0/24')).toBeVisible()
   await sec.locator('#cbd').fill('203.0.113.0/24')
   await sec.getByRole('switch', { name: /Check STIR\/SHAKEN signatures/ }).click()
+  await sec.getByRole('switch', { name: /Inspect media/ }).click()
+  await sec.locator('#cbmb').fill('50')
+  await sec.locator('#cbmp').fill('120')
   await sec.locator('#csfg').fill('fg.example')
   await sec.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(sec.getByText("enter the forest guide's https address")).toBeVisible()
+  await expect(sec.getByText('200 to 9,000 bytes (0: 1,500)')).toBeVisible()
+  await sec.locator('#cbmb').fill('')
   await sec.locator('#csfg').fill('https://fg.example/lost')
   await sec.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(page.getByText('Core services saved')).toBeVisible()
-  expect((await page.evaluate(async () => (await (await fetch('./api/settings')).json()).system.core.bcf)).verifyIdentity).toBe(true)
+  expect(await page.evaluate(async () => (await (await fetch('./api/settings')).json()).system.core.bcf)).toMatchObject({ verifyIdentity: true, inspectMedia: true, mediaPerSecond: 120, mediaMaxBytes: 0 })
   await page.reload()
   await expect(sec.locator('#crn0')).toHaveValue('Fire to West')
   await expect(sec.locator('#cbd')).toHaveValue('203.0.113.0/24')
@@ -66,6 +71,20 @@ test('core services: policy rule, border control, address validation', async ({ 
   await form.getByRole('button', { name: 'Check' }).click()
   await expect(form.getByRole('status')).toContainText('Not a valid address')
   await expect(form.getByRole('status')).toContainText('Number')
+  // Did you mean: the nearest number the street has on that side; Use fills it in and it checks valid.
+  const mean = form.getByRole('region', { name: 'Did you mean' })
+  await expect(mean.getByText('198 N Front St, Harrisburg PA')).toBeVisible()
+  await expect(mean.getByText(/the nearest number N Front St has on that side/).first()).toBeVisible()
+  await mean.getByRole('button', { name: 'Use 198 Front' }).click()
+  await expect(form.locator('#cvHNO')).toHaveValue('198')
+  await form.locator('#cvRD').fill('Frnot')
+  await form.getByRole('button', { name: 'Check' }).click()
+  await expect(mean.getByText(/a street of a similar name \(N Front St, not Frnot\)/).first()).toBeVisible()
+  // A position with the address: road centerlines have no points, so it cannot be checked.
+  await form.locator('#cvRD').fill('Front')
+  await form.locator('#cvlat').fill('40.26'); await form.locator('#cvlon').fill('-76.885')
+  await form.getByRole('button', { name: 'Check' }).click()
+  await expect(form.getByText(/Position not checked: the address data has no point for this address/)).toBeVisible()
 })
 
 test('radio console setup and tiles', async ({ page }) => {
@@ -461,7 +480,7 @@ test('core services: location records answer HELD by number', async ({ page }) =
   await signIn(page)
   await page.goto('./#/core')
   const setup = page.locator('section[aria-labelledby="cs-h"]')
-  await setup.getByRole('switch', { name: /Answer location requests by telephone number/ }).click()
+  await setup.getByRole('switch', { name: /Answer location requests \(LIS\)/ }).click()
   await setup.getByRole('switch', { name: /Run an i3 logging service/ }).click()
   await page.locator('#cspca').fill('not a certificate')
   await page.locator('#csa').fill('127.0.0.1')
@@ -485,6 +504,21 @@ test('core services: location records answer HELD by number', async ({ page }) =
   expect(xml).toContain('<locationResponse')
   expect(xml).toContain('<ca:HNO>123</ca:HNO>')
   expect(xml).toContain('<gml:pos>40.2633 -76.8823</gml:pos>')
+  // By network address: a floor's subnet, found for the address a request names (RFC 6155) and,
+  // with no device named, for the address the request came from (the browser here, 127.0.0.1).
+  await recs.getByLabel('Location records').setInputFiles({ name: 'nets.csv', mimeType: 'text/csv', buffer: Buffer.from('network,hno,rd,sts,flr,a3,a1\n10.20.3.0/24,100,Campus,Dr,3,Harrisburg,PA\n127.0.0.0/8,1,Loopback,Way,,Harrisburg,PA\n') })
+  await expect(page.getByText('2 location records read, 3 in all')).toBeVisible()
+  await expect(recs.getByText(/2\s*networks/)).toBeVisible()
+  await recs.locator('#crn').fill('10.20.3.17')
+  await recs.getByRole('button', { name: 'Look up' }).click()
+  await expect(recs.getByText('from 10.20.3.0/24')).toBeVisible()
+  await expect(recs.getByText(/100 Campus Dr, Harrisburg PA, floor 3/)).toBeVisible()
+  const byIP = await (await page.request.post('/held', { headers: { 'Content-Type': 'application/held+xml' },
+    data: '<locationRequest xmlns="urn:ietf:params:xml:ns:geopriv:held"><device xmlns="urn:ietf:params:xml:ns:geopriv:held:id"><ip v="4">10.20.3.17</ip></device></locationRequest>' })).text()
+  expect(byIP).toContain('<ca:FLR>3</ca:FLR>')
+  const self = await (await page.request.post('/held', { headers: { 'Content-Type': 'application/held+xml' },
+    data: '<locationRequest xmlns="urn:ietf:params:xml:ns:geopriv:held"><locationType>civic</locationType></locationRequest>' })).text()
+  expect(self).toContain('<ca:RD>Loopback</ca:RD>')
   // The logging service: a body that is not a JWS is refused (460 Bad LogEvent); the screen lists
   // what was taken (nothing yet).
   const lg = await page.request.post('/i3log/LogEvents', { headers: { 'Content-Type': 'application/json' }, data: '{"logEventType":"CallStartLogEvent"}' })

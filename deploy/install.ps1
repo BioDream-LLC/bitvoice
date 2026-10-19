@@ -134,6 +134,12 @@ try {
     Get-NetFirewallRule -DisplayName 'BitVoice*' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
     New-NetFirewallRule -DisplayName 'BitVoice' -Direction Inbound -Program $program -Action Allow -Profile Private, Domain | Out-Null
     Write-Host '  Starts with Windows (scheduled task "BitVoice", as SYSTEM). Firewall: phones may connect on private and domain networks.'
+    if (Get-NetConnectionProfile -ErrorAction SilentlyContinue | Where-Object NetworkCategory -eq 'Public') {
+      # A cloud server's network is Public to Windows: the rule above lets nothing in there.
+      Write-Host '  This computer is on a network Windows calls Public, where that rule lets nothing in. On a cloud'
+      Write-Host '  server, allow the ports yourself (and in the provider''s firewall), for example:'
+      Write-Host "    New-NetFirewallRule -DisplayName 'BitVoice (public)' -Direction Inbound -Program '$program' -Action Allow -Profile Public"
+    }
   } else {
     $trigger = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
     $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
@@ -155,8 +161,24 @@ try {
       if ($PSVersionTable.PSVersion.Major -ge 6) {
         $r = Invoke-RestMethod "$url/api/health/live" -SkipCertificateCheck
       } else {
-        [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
-        $r = Invoke-RestMethod "$url/api/health/live" -UseBasicParsing
+        # Windows PowerShell 5.1: a script block as the certificate callback fails ("no Runspace")
+        # when .NET calls it on another thread, as it does on Windows Server 2022; a compiled one
+        # does not. It is used for this one request to this computer only.
+        if (-not ('BitVoiceLocalCheck' -as [type])) {
+          Add-Type -TypeDefinition 'public static class BitVoiceLocalCheck { static bool Accept(object s, System.Security.Cryptography.X509Certificates.X509Certificate c, System.Security.Cryptography.X509Certificates.X509Chain ch, System.Net.Security.SslPolicyErrors e) { return true; } public static readonly System.Net.Security.RemoteCertificateValidationCallback Callback = Accept; }'
+        }
+        $was = [Net.ServicePointManager]::ServerCertificateValidationCallback
+        $protocols = [Net.ServicePointManager]::SecurityProtocol
+        try {
+          [Net.ServicePointManager]::ServerCertificateValidationCallback = [BitVoiceLocalCheck]::Callback
+          if ($protocols -ne [Net.SecurityProtocolType]::SystemDefault) {
+            [Net.ServicePointManager]::SecurityProtocol = $protocols -bor [Net.SecurityProtocolType]::Tls12 # older Windows offers TLS 1.0 alone
+          }
+          $r = Invoke-RestMethod "$url/api/health/live" -UseBasicParsing
+        } finally {
+          [Net.ServicePointManager]::ServerCertificateValidationCallback = $was
+          [Net.ServicePointManager]::SecurityProtocol = $protocols
+        }
       }
       $ok = $r.status -eq 'ok'
     } catch { Start-Sleep 1 }

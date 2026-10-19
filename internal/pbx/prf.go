@@ -144,7 +144,9 @@ func (e *Engine) policyOutcomes(cfg *config.Config, c *Call, service string, loc
 		return nil, "", false
 	}
 	facts := i3.CallFacts{Now: time.Now(), RequestURI: service, IncomingQueue: e.queueURI(cfg), Suspicion: c.suspicion, Location: loc,
-		QueueState: func(uri string) string { return e.queueState(cfg, uri) }}
+		QueueState:      func(uri string) string { return e.queueState(cfg, uri) },
+		ServiceState:    func(s string) string { return e.watchedService(s, false) },
+		SecurityPosture: func(s string) string { return e.watchedService(s, true) }}
 	if c.suspicious && facts.Suspicion == 0 {
 		facts.Suspicion = 50 // marked by the BCF with no score of its own
 	}
@@ -174,9 +176,14 @@ func (e *Engine) policyOutcomes(cfg *config.Config, c *Call, service string, loc
 	return nil, "", false
 }
 
-// queueState is what this ESRP knows of a queue: a PSAP it routes to is Active while its trunk is
-// enabled and registered or reachable, else Unreachable; others are not known.
+// queueState is what this ESRP knows of a queue: what the PSAP's own NOTIFYs said (with
+// System.Core.WatchStates), else Active while its trunk is enabled, else Unreachable; others are not known.
 func (e *Engine) queueState(cfg *config.Config, uri string) string {
+	if cfg.System.Core.WatchStates {
+		if s := e.watchedQueue(uri); s != "" {
+			return s
+		}
+	}
 	for _, ps := range cfg.System.Core.PSAPs {
 		if strings.EqualFold(ps.URI, uri) {
 			if t := cfg.FindTrunk(ps.Trunk); t != nil && t.Enabled {
