@@ -410,8 +410,57 @@ setting in the web interface.
   or stopped as for an upgrade: the call carries on (about 5 seconds of silence after a kill, none after a
   stop), the provider line moves, one call record. One-command install on Ubuntu 24.04 (x86 and Arm),
   Debian 12 and Amazon Linux 2023, running again by itself after a reboot.
+- **More real systems on EC2:** Windows Server 2022 installed by the one-command installer and reached from
+  outside after a restart (its first try found the installer's health check failing under Windows PowerShell 5.1,
+  fixed); a real FreePBX 17.0.33 backup imported whole (it found the upload and unpacking limits too small for a
+  real backup, fixed: backups are now read as a stream); SNMP walked and traps received by net-snmp; recordings
+  archived to a real S3 bucket and a trunk password read from AWS Secrets Manager; transcripts and summaries
+  from a real model through OpenRouter.
 - **IAX2** checked against a real Asterisk 23: registration, calls both ways with sound, busy; **GSM** decoded
   sample for sample as ffmpeg does, and **G.726** streams exchanged with ffmpeg.
+
+### Feature maturity
+
+How far each part has been proven, plainly. **Field-tested**: run against real systems over a real network
+(Amazon EC2, the internet, real providers' services). **Checked against a reference**: tested against an
+independent implementation or the standard's own data. **Software-tested**: BitVoice's own tests and browser
+tests only, not yet with real equipment or accounts. **Lab**: public-safety parts, not certified.
+
+| Area | Maturity | What it rests on |
+|---|---|---|
+| SIP trunks: registration, calls in and out, caller ID, busy, keys (RFC 4733) | Field-tested | Asterisk as the carrier across the internet on EC2; MOS 4.4. No commercial carrier account tried yet |
+| Desk phones over SIP | Field-tested | Asterisk as a desk phone across the internet. Real Yealink, Poly or Grandstream handsets not tried yet |
+| Browser phone (WebRTC) | Field-tested | from outside to EC2; Chromium browser tests with sound both ways |
+| Two servers, one PostgreSQL, failover | Field-tested | kill -9 and planned stop on EC2: the call carries on, the provider line moves |
+| One-command install | Field-tested | Ubuntu 24.04 (x86, Arm), Debian 12, Amazon Linux 2023, Windows Server 2022, macOS; back after a reboot |
+| Capacity | Field-tested | 200 calls at once, no loss, on c7g.large, c7i.large, t4g.small, an M4 and the Lightsail nano |
+| FreePBX migration (Import) | Field-tested | a real FreePBX 17.0.33 backup (70 MB) imported whole; others from FreePBX's own formats |
+| AI transcripts, summaries, receptionist | Field-tested | a real model through OpenRouter |
+| Archive to S3, secrets from AWS Secrets Manager | Field-tested | real AWS, our own SigV4 |
+| SNMP monitoring and traps | Field-tested | net-snmp's snmpwalk and snmptrapd |
+| Let's Encrypt | Field-tested | issues and renews the public demo's certificate |
+| IAX2 trunks | Checked against a reference | Asterisk 23 |
+| H.323 trunks | Checked against a reference | call set-up both ways with Asterisk's chan_ooh323; its own sound is broken in Asterisk 22 (it fails calling itself), so sound over H.323 is not yet checked |
+| SIP over WebSocket | Checked against a reference | JsSIP and SIP.js |
+| Codecs: GSM, G.726, iLBC, MP3 hold music | Checked against a reference | ffmpeg, the RFC 3951 reference program and minimp3, sample for sample |
+| Codecs: G.711, G.722, Opus, G.729, AMR, Speex | Software-tested | own round-trip tests; Opus and G.729 through their pinned Go libraries; Opus calls with the Android app |
+| ISDN PRI and BRI, T1/E1 | Checked against a reference | libpri (Asterisk's), both sides. No real card or line tried |
+| MFC-R2, E&M | Checked against a reference | OpenR2; MF tones by our own tests. No real card or line tried |
+| SS7 (ISUP, MTP, link sets of several links with changeover) | Checked against a reference | libss7 (Asterisk's chan_dahdi library), ITU and ANSI. No real carrier link tried |
+| Fax (T.30, T.38) | Software-tested | own tests between BitVoice ends; no fax provider or gateway tried |
+| Provisioning: Yealink, Poly, Grandstream, Snom, Fanvil, Cisco, Mitel, Sangoma, Algo, CyberData | Software-tested | the vendors' documented formats; not on real handsets |
+| Skinny (SCCP) phones, MGCP gateways | Software-tested | own tests; no Cisco phone or gateway tried |
+| Microsoft Teams Direct Routing | Software-tested | own tests; no Teams tenant tried |
+| Hotel (FIAS) | Software-tested | own tests; not against Opera |
+| Texting, WhatsApp, Messenger, web chat | Software-tested | stand-ins for each provider's API |
+| CRM caller cards, Azure Blob, Azure Key Vault | Software-tested | stand-ins |
+| iPhone and Android apps | Software-tested | iOS Simulator and Android emulator against a real BitVoice; push wake-up and the phone's own call screen need real devices |
+| 911 profile, radio console, NG911 Core Services, caller video | Lab | NENA's schemas and sample data, Wireshark, spandsp, OpenSSL, ExifTool, ffmpeg, a NIST P25 capture; never on a live ESInet, P25 system or PSAP CAD, and not certified |
+| P25 Phase 2 half-rate voice (AMBE+2) | Not offered | patented until 2028 |
+| Ed448 signatures (NENA) | Not offered | not in Go's standard library, and BitVoice writes no cryptography of its own; Ed25519 is used |
+| SS7 signal transfer (STP), SCCP/TCAP | Not offered | a PBX is an end point; number portability and toll-free lookups are the carrier's |
+| MFC-R2 China variant | Not offered | OpenR2's own China variant disagrees with itself, so there is nothing sound to test against |
+| ALI over PAM or E2 | Not offered | through a gateway; BitVoice speaks the request-and-text ALI links |
 
 ### Capacity
 
