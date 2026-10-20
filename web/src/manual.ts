@@ -115,7 +115,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 
 | Area | Maturity | What it rests on |
 |---|---|---|
-| SIP trunks: registration, calls in and out, caller ID, busy, keys (RFC 4733) | Field-tested | Asterisk as the carrier across the internet on EC2; MOS 4.4. Kamailio 5.7 (registration with digest sign-in over TLS, calls both ways, keys) and FreeSWITCH 1.11 (TLS and SRTP, calls both ways, G.722 to G.711) as the far end; MOS 4.39. No commercial carrier account tried yet |
+| SIP trunks: registration, calls in and out, caller ID, busy, keys (RFC 4733) | Field-tested | a commercial carrier, SIP.US (demo account, from EC2): registration and calls out to the public phone network over UDP and over TLS with the carrier's certificate checked; MOS 4.39, no loss. Calls in wait for the account's verification. Asterisk as the carrier across the internet on EC2; MOS 4.4. Kamailio 5.7 (registration with digest sign-in over TLS, calls both ways, keys) and FreeSWITCH 1.11 (TLS and SRTP, calls both ways, G.722 to G.711) as the far end; MOS 4.39 |
 | Desk phones over SIP | Field-tested | Asterisk as a desk phone across the internet. Real Yealink, Poly or Grandstream handsets not tried yet |
 | Browser phone (WebRTC) | Field-tested | from outside to EC2; Chromium browser tests with sound both ways |
 | Two servers, one PostgreSQL, failover | Field-tested | kill -9 and planned stop on EC2: the call carries on, the provider line moves |
