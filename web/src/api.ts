@@ -194,7 +194,7 @@ export interface I3Event { logEventType: string; timestamp: string; agencyAgentI
 export interface Trunk {
   id: string; name: string; enabled: boolean; host: string; port: number; transport: 'udp' | 'tcp' | 'tls'; protocol?: '' | 'iax2' | 'h323' | 'dahdi'
   username: string; authUser: string; password: string; register: boolean; fromDomain: string
-  callerId: string; maxChannels: number; allowFrom: string[]; secureMedia: boolean; richCallData?: boolean; teams?: boolean; sbcName?: string; codecs: string[]
+  callerId: string; maxChannels: number; allowFrom: string[]; secureMedia: boolean; requireSecureMedia?: boolean; richCallData?: boolean; teams?: boolean; sbcName?: string; codecs: string[]
   shared?: '' | 'one'; esinet?: boolean
   rates?: Rate[] | null; inboundPerMinute?: number
   shaken?: Shaken
@@ -317,11 +317,14 @@ export interface Stats {
   uptimeSeconds: number; calls: number; registrations: number; extensions: number; online: number
   trunks: number; trunksUp: number; banned: number; sipPort: number
 }
+/** One side of a call as BitVoice heard it; secure when its sound was encrypted, unencrypted when encryption was asked for and not given. */
+export interface LegQuality { ext?: string; trunk?: string; codec: string; packets: number; lost: number; jitterMs: number; mos: number; secure?: boolean; unencrypted?: boolean }
+export interface CallSide { ext?: string; trunk?: string; name: string }
 export interface CDR {
   id: string; start: string; answer?: string; end: string; direction: string; from: string; fromName: string
   to: string; toName: string; answeredBy: string; trunk: string; disposition: string; cause: string
   duration: number; billsec: number; hangupBy: string; mos: number; recording?: string; why?: string[]
-  paused?: { from: number; to: number }[]; held?: boolean; attest?: string; signed?: string; verified?: string; screened?: string; ext?: string; department?: string; cost?: number; rate?: string; charged?: string
+  paused?: { from: number; to: number }[]; held?: boolean; quality?: LegQuality[]; noSound?: CallSide[]; attest?: string; signed?: string; verified?: string; screened?: string; ext?: string; department?: string; cost?: number; rate?: string; charged?: string
 }
 export interface Check { id: string; status: 'ok' | 'warn' | 'fail'; title: string; detail: string; fix?: string }
 export interface Revision { rev: number; at: string; actor: string; summary: string }
@@ -372,7 +375,7 @@ export interface SimBranch { when: string; taken: boolean; step: SimStep }
 export interface SimStep { kind: string; target?: string; name: string; says: string; status: 'ok' | 'warn' | 'fail'; branches?: SimBranch[] }
 export interface SimResult { direction: string; at: string; start: SimStep; outcome: string }
 export type SimInput = { from: string; to: string; trunk: string; at: string; assumePhones: boolean; toggles?: Record<string, boolean> }
-export interface QualityPlace { kind: 'site' | 'provider'; name: string; calls: number; mos: number; poor: number; lossPct: number; jitterMs: number
+export interface QualityPlace { kind: 'site' | 'provider'; name: string; calls: number; mos: number; poor: number; lossPct: number; jitterMs: number; noSound?: number
   hours: { calls: number; lossPct: number; poor: number }[]; status: 'ok' | 'warn' | 'fail' | 'idle'; diagnosis: string; advice?: string; reasons?: string[] }
 export interface QualityReport { days: number; calls: number; places: QualityPlace[]; overall: string }
 export interface TranscriptLine { second: number; side: 'caller' | 'callee'; text: string }

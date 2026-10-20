@@ -56,7 +56,9 @@ type Leg struct {
 	confirm   bool // follow-me to an outside number: press 1 before the call is put through
 
 	// SRTP: whether to offer it to this party, our master key and suite, and the party's key.
-	wantSRTP  bool
+	wantSRTP bool
+	// needSRTP: this party must encrypt (a trunk with Require encryption); an answer without SRTP ends it.
+	needSRTP  bool
 	localKey  []byte
 	suite     string
 	remoteKey []byte
@@ -554,11 +556,17 @@ func (l *Leg) info() LegInfo {
 	l.mu.Lock()
 	li.OnHold, li.Ringing = l.onHold, l.ringing && !l.answered
 	li.Video, li.Fax = l.video != nil && videoMedia(l.remoteSDP) != nil, l.onFax
+	if rs := l.remoteSDP; rs != nil && rs.Audio() != nil {
+		d := rs.Direction(rs.Audio())
+		li.silentByChoice = d == "recvonly" || d == "inactive"
+	}
+	want := l.wantSRTP
 	ep := l.ep
 	l.mu.Unlock()
 	if ep != nil {
 		li.Media = ep.Stats()
 		li.Secure = ep.Secure()
+		li.Unencrypted = want && !li.Secure && li.Media.Packets > 0
 	}
 	return li
 }

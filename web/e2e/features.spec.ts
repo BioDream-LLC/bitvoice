@@ -956,3 +956,63 @@ test('import a FreePBX backup', async ({ page }) => {
   await page.goto('/#/trunks')
   await expect(page.getByRole('cell', { name: 'Carrier', exact: true })).toBeVisible()
 })
+
+// Requiring encryption on a trunk: offered only once Encrypt media is on, kept when saved, and cleared
+// when Encrypt media is turned off again.
+test('a trunk can require encryption', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/#/trunks')
+  await page.getByRole('button', { name: 'Add trunk' }).click()
+  await page.getByLabel('Name', { exact: true }).fill('Encrypted line')
+  await page.getByLabel('Provider server').fill('127.0.0.1')
+  await page.getByRole('switch', { name: 'Register' }).click() // calls by address: no account needed
+  await expect(page.getByRole('switch', { name: 'Require encryption' })).toHaveCount(0)
+  await page.getByRole('switch', { name: 'Encrypt media' }).click()
+  await page.getByRole('switch', { name: 'Require encryption' }).click()
+  await expect(page.getByText(/refuse calls the provider will not encrypt/)).toBeVisible()
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('Encrypted line').first()).toBeVisible()
+  const get = () => page.evaluate(async () => (await (await fetch('./api/trunks')).json()).items.find((x: { name: string }) => x.name === 'Encrypted line'))
+  let t = await get()
+  expect(t.secureMedia).toBe(true)
+  expect(t.requireSecureMedia).toBe(true)
+  // Turning Encrypt media off takes Require encryption with it.
+  await page.getByText('Encrypted line').first().click()
+  await expect(page.getByRole('switch', { name: 'Require encryption' })).toBeChecked()
+  await page.getByRole('switch', { name: 'Encrypt media' }).click()
+  await expect(page.getByRole('switch', { name: 'Require encryption' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect.poll(async () => (await get()).secureMedia).toBe(false)
+  t = await get()
+  expect(t.requireSecureMedia ?? false).toBe(false)
+  await page.evaluate(async (id) => { await fetch('./api/trunks/' + id, { method: 'DELETE', headers: { 'X-BitVoice': '1' } }) }, t.id)
+})
+
+// Call history and Call quality show a call whose provider sent no sound, and whether sound was
+// encrypted. The records are the server's own shape, served to the page (no provider to call here).
+test('call history marks silent and unencrypted calls', async ({ page }) => {
+  const at = new Date().toISOString()
+  const base = { start: at, answer: at, end: at, direction: 'outbound', from: '100', fromName: 'Desk', toName: '', answeredBy: '', trunk: 'SIP.US',
+    disposition: 'answered', cause: '', duration: 20, billsec: 20, hangupBy: 'caller' }
+  const items = [
+    { ...base, id: 'c1', to: '12283009312', mos: 4.4, quality: [{ ext: '100', codec: 'PCMU', packets: 1000, lost: 0, jitterMs: 1, mos: 4.4 }], noSound: [{ trunk: 't1', name: 'SIP.US' }] },
+    { ...base, id: 'c2', to: '12283009313', mos: 4.4, quality: [{ ext: '100', codec: 'PCMU', packets: 1000, lost: 0, jitterMs: 1, mos: 4.4 }, { trunk: 't1', codec: 'PCMU', packets: 1000, lost: 0, jitterMs: 1, mos: 4.4, unencrypted: true }] },
+    { ...base, id: 'c3', to: '12283009314', mos: 4.4, quality: [{ ext: '100', codec: 'PCMU', packets: 1000, lost: 0, jitterMs: 1, mos: 4.4, secure: true }, { trunk: 't1', codec: 'PCMU', packets: 1000, lost: 0, jitterMs: 1, mos: 4.4, secure: true }] },
+  ]
+  // served before signing in, so no page caches the real (empty) list first
+  await page.route(/\/api\/cdr(\?|$)/, (r) => r.fulfill({ json: { items, total: items.length } }))
+  await signIn(page)
+  await page.goto('/#/history')
+  const row = (n: string) => page.getByRole('row').filter({ hasText: n })
+  await expect(row('12283009312').getByText('No sound from SIP.US')).toBeVisible()
+  await expect(row('12283009313').getByText('Not encrypted: SIP.US')).toBeVisible()
+  await expect(row('12283009313').getByText('No sound from')).toHaveCount(0)
+  await expect(row('12283009314').getByText('Encrypted', { exact: true })).toBeVisible()
+
+  await page.route(/\/api\/quality(\?|$)/, (r) => r.fulfill({ json: { days: 7, calls: 3, overall: 'Some answered calls had no sound at all from one side: see the places marked below.',
+    places: [{ kind: 'provider', name: 'SIP.US', calls: 0, mos: 0, poor: 0, lossPct: 0, jitterMs: 0, noSound: 3, hours: Array.from({ length: 24 }, () => ({ calls: 0, lossPct: 0, poor: 0 })),
+      status: 'fail', diagnosis: '3 answered calls had no sound at all from SIP.US.', advice: 'ask SIP.US for its media address ranges' }] } }))
+  await page.goto('/#/quality')
+  await expect(page.getByText('3 with no sound')).toBeVisible()
+  await expect(page.getByText('3 answered calls had no sound at all from SIP.US.')).toBeVisible()
+})

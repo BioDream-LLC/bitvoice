@@ -121,6 +121,17 @@ type CDR struct {
 	Charged string `json:"charged,omitempty"`
 	// Text is a 911 call's text conversation: TTY, real-time text or text-to-911.
 	Text []TextLine `json:"text,omitempty"`
+	// NoSound lists the sides of an answered call that sent no sound at all, the whole call long: almost
+	// always a firewall or NAT keeping their media out (a provider's media often comes from other
+	// addresses than its SIP servers).
+	NoSound []Side `json:"noSound,omitempty"`
+}
+
+// Side names one party of a call: an extension, or a provider's line (a trunk).
+type Side struct {
+	Ext   string `json:"ext,omitempty"`
+	Trunk string `json:"trunk,omitempty"` // the trunk ID
+	Name  string `json:"name"`            // in words: "100 Desk 100", or the trunk's name
 }
 
 // TextLine is one turn of a 911 call's text conversation.
@@ -144,6 +155,10 @@ type LegQuality struct {
 	Lost     uint64  `json:"lost"`
 	JitterMS float64 `json:"jitterMs"`
 	MOS      float64 `json:"mos"`
+	// Secure is true when this side's sound was encrypted (SRTP). Unencrypted is true when this system
+	// asked for encryption (Encrypt media) and the side answered without it.
+	Secure      bool `json:"secure,omitempty"`
+	Unencrypted bool `json:"unencrypted,omitempty"`
 }
 
 // Span is a stretch of a call, in seconds from its answer.

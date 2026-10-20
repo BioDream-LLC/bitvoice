@@ -1044,6 +1044,9 @@ type Trunk struct {
 	AllowFrom []string `json:"allowFrom"`
 	// SecureMedia offers SRTP on calls out through this trunk.
 	SecureMedia bool `json:"secureMedia"`
+	// RequireSecureMedia refuses calls this trunk will not encrypt: a call out whose answer has no SRTP is
+	// hung up, and a call in offered without SRTP is refused (488). Needs SecureMedia.
+	RequireSecureMedia bool `json:"requireSecureMedia,omitempty"`
 	// Teams makes this trunk Microsoft Teams Direct Routing, with BitVoice as the SBC: TLS to
 	// Microsoft's three SIP proxies in turn, SRTP, and Contact and From carrying SBCName.
 	Teams bool `json:"teams"`
@@ -2620,6 +2623,9 @@ func (c *Config) Validate() error {
 			p.add(f+".name", "enter a name")
 		}
 		t.Host, t.Port = splitTrunkHost(t.Host, t.Port)
+		if t.RequireSecureMedia && !t.SecureMedia {
+			p.add(f+".requireSecureMedia", "turn on Encrypt media first: only then can encryption be required")
+		}
 		t.Protocol = strings.ToLower(strings.TrimSpace(t.Protocol))
 		if t.Protocol == "sip" {
 			t.Protocol = ""

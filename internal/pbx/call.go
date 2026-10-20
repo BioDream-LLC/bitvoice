@@ -324,7 +324,7 @@ func (c *Call) noteFailure(code int) {
 			return 5
 		case x == 404 || x == 484 || x == 604:
 			return 4
-		case x == 403 || x == 603:
+		case x == 403 || x == 603 || x == 488: // 488: no media in common, or no encryption where it is required
 			return 3
 		case x >= 500:
 			return 2
@@ -442,6 +442,7 @@ func (c *Call) startFork(t target, stageNo int) bool {
 	}
 	if t.trunk != nil {
 		leg.wantSRTP = t.trunk.SecureMedia
+		leg.needSRTP = t.trunk.SecureMedia && t.trunk.RequireSecureMedia
 	} else if t.binding != nil && t.binding.node != "" {
 		leg.wantSRTP = peer.Transport == "TLS" // encrypted between servers whenever the keys travel privately
 	} else if x := cfg.FindExtension(t.ext); x != nil {
@@ -698,7 +699,7 @@ func (c *Call) forkProgress(l *Leg, r *sip.Message) {
 	a := c.caller
 	var send *sip.Message
 	if len(r.Body) > 0 && c.early == nil && c.offer != nil {
-		if s, err := sdp.Parse(r.Body); err == nil && s.Audio() != nil {
+		if s, err := sdp.Parse(r.Body); err == nil && s.Audio() != nil && !l.refusesPlain(s) {
 			l.setRemoteSDP(s)
 			l.answeredCrypto(s)
 			c.early = l
@@ -814,6 +815,15 @@ func (c *Call) forkAnswered(l *Leg, tx *sip.ClientTx, r *sip.Message) {
 		c.mu.Unlock()
 		l.bye()
 		l.close()
+		c.forkFailed(l, 488)
+		return
+	}
+	if l.refusesPlain(answer) {
+		c.mu.Unlock()
+		l.bye()
+		l.close()
+		c.e.Log.Warn("hung up a call the provider answered without encryption", "trunk", l.TrunkID, "number", l.Number)
+		c.note(c.e.trunkName(l.TrunkID) + " answered without encryption (SRTP), which the trunk requires, so the call was hung up.")
 		c.forkFailed(l, 488)
 		return
 	}
@@ -1355,7 +1365,11 @@ func (c *Call) writeRecord(info CallInfo, recording string) {
 			continue // nothing was heard from this side (ringing, or BitVoice answered itself)
 		}
 		r.Quality = append(r.Quality, store.LegQuality{Ext: l.Ext, Trunk: l.Trunk, Codec: l.Codec, Packets: l.Media.Packets,
-			Lost: l.Media.Lost, JitterMS: l.Media.JitterMS, MOS: l.Media.MOS})
+			Lost: l.Media.Lost, JitterMS: l.Media.JitterMS, MOS: l.Media.MOS, Secure: l.Secure, Unencrypted: l.Unencrypted})
+	}
+	r.NoSound = c.e.silentSides(info, c, end)
+	for _, s := range r.NoSound {
+		c.e.Log.Warn("an answered call had no sound from one side", "call", c.ID, "side", s.Name)
 	}
 	if c.direction == "cluster" {
 		return // the server that has the caller writes the call's record

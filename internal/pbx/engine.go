@@ -37,8 +37,11 @@ type Recorder interface {
 
 // Engine runs the phone system.
 type Engine struct {
-	loadToken atomic.Value // string: see SetLoadToken
-	linkToken atomic.Value // string: see SetLinkToken
+	// noSoundAfter is how long an answered call must last before a side that sent nothing is called
+	// silent in its record (sound can take a moment to start). Zero means 5 seconds.
+	noSoundAfter time.Duration
+	loadToken    atomic.Value // string: see SetLoadToken
+	linkToken    atomic.Value // string: see SetLinkToken
 	// Mobile, when set, wakes the BitVoice apps of extensions it has devices for.
 	Mobile Mobile
 	// SetEmergencyMode, set by the API server, switches emergency mode from a phone (the feature code).
@@ -601,6 +604,10 @@ type LegInfo struct {
 	// Transport is how signalling reaches the party (UDP, TCP, TLS); Secure is true when media is SRTP.
 	Transport string `json:"transport"`
 	Secure    bool   `json:"secure"`
+	// Unencrypted is true when BitVoice asked this party for encryption and it answered without.
+	Unencrypted bool `json:"unencrypted,omitempty"`
+	// silentByChoice: the party said it sends no sound (recvonly or inactive, as a paging speaker does).
+	silentByChoice bool
 	// Ext or Trunk says which side this is (for quality by site and by provider).
 	Ext   string `json:"ext,omitempty"`
 	Trunk string `json:"trunk,omitempty"`

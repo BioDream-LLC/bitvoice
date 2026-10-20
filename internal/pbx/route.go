@@ -712,6 +712,11 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 		p.trunk = trunk.Name
 		inTrunk = trunk.ID
 		c.esinet = trunk.ESInet || c.cama != ""
+		if trunk.SecureMedia && trunk.RequireSecureMedia && plainOffer(offer) {
+			e.Log.Warn("refused a call the provider sent without encryption", "trunk", trunk.Name, "from", c.from)
+			p = plan{reject: 488, reason: "Encryption Required", direction: "inbound", trunk: trunk.Name,
+				why: []string{trunk.Name + " sent the call without encryption (SRTP), which the trunk requires, so it was refused."}}
+		}
 	} else if link := e.linkCall(cfg, m, ip); link != nil {
 		// A caller from a call link: no extension, no password; the gateway vouched for the link.
 		name := guestName(m.Get("X-BitVoice-Link-Name"))

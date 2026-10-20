@@ -1,10 +1,10 @@
 import { Reasons } from './Judges'
 import { CDRCsvFiles } from './Outputs'
 import { createColumnHelper } from '@tanstack/react-table'
-import { ArrowRight, BookOpen, Disc, Download, Gauge, Lock, Stethoscope, Waypoints } from 'lucide-react'
+import { ArrowRight, BookOpen, Disc, Download, Gauge, Lock, LockOpen, ShieldCheck, Stethoscope, VolumeX, Waypoints } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useCdrQuery, useHealthQuery, useTraceQuery, type CDR, type TraceEntry } from './api'
+import { useCdrQuery, useHealthQuery, useTraceQuery, type CDR, type LegQuality, type TraceEntry } from './api'
 import { Chart } from './Chart'
 import { TranscriptButton, TranscriptSearch } from './Transcripts'
 import { Table, useIsAdmin } from './Editor'
@@ -53,7 +53,7 @@ export function History() {
         </span>
       )
     } }),
-    col.accessor('mos', { header: 'Quality', cell: (c) => c.getValue() ? <Badge status={mosStatus(c.getValue())}><Gauge size={11} aria-hidden />{c.getValue().toFixed(1)}</Badge> : null }),
+    col.accessor('mos', { header: 'Quality', cell: (c) => <CallQuality r={c.row.original} /> }),
   ]
   const csv = () => {
     const head = 'start,direction,from,fromName,to,answeredBy,disposition,talkSeconds,trunk,cause\n'
@@ -194,4 +194,38 @@ function colourSip(text: string) {
     }
     return <div key={i} className="text-violet-300">{line || '\u00a0'}</div>
   })
+}
+
+/** A side of a call in words: the extension's number, or the provider's line the call used. */
+function sideName(r: CDR, q: { ext?: string; trunk?: string }) {
+  return q.ext ? `extension ${q.ext}` : r.trunk || 'the provider'
+}
+
+/** The Quality column: the score, sides that sent no sound at all, and whether the sound was encrypted. */
+export function CallQuality({ r }: { r: CDR }) {
+  const sides: LegQuality[] = r.quality ?? []
+  const plain = sides.filter((q) => q.unencrypted)
+  const secure = sides.filter((q) => q.secure)
+  return (
+    <span className="flex flex-col items-start gap-1">
+      {r.mos > 0 && <Badge status={mosStatus(r.mos)}><Gauge size={11} aria-hidden />{r.mos.toFixed(1)}</Badge>}
+      {(r.noSound ?? []).map((s) => (
+        <span key={(s.ext ?? '') + (s.trunk ?? '')} className="inline-flex items-center gap-1 rounded-full border border-rose-400/40 bg-rose-500/15 px-2 py-0.5 text-xs font-semibold text-rose-200"
+          title="The call connected but no sound ever arrived from this side. A firewall or NAT router that lets SIP through and blocks the media is nearly always why; Call quality has the advice.">
+          <VolumeX size={11} aria-hidden /> No sound from {s.name}
+        </span>
+      ))}
+      {plain.length > 0 && (
+        <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/40 bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-200"
+          title="Encryption (SRTP) was asked for and this side answered without it. For a provider, turn on Require encryption on its trunk to refuse such calls instead.">
+          <LockOpen size={11} aria-hidden /> Not encrypted: {plain.map((q) => sideName(r, q)).join(', ')}
+        </span>
+      )}
+      {secure.length > 0 && plain.length === 0 && (
+        <span className="inline-flex items-center gap-1 text-xs text-emerald-300" title={`Sound encrypted (SRTP) with ${secure.map((q) => sideName(r, q)).join(' and ')}`}>
+          <ShieldCheck size={12} aria-hidden /> Encrypted{secure.length < sides.length ? ` (${secure.map((q) => sideName(r, q)).join(', ')})` : ''}
+        </span>
+      )}
+    </span>
+  )
 }

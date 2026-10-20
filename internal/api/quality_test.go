@@ -79,3 +79,35 @@ func TestQualityBothHalvesLossy(t *testing.T) {
 		}
 	}
 }
+
+// A provider whose sound never arrived is called out first, with firewall advice; the extensions
+// on the same calls, which did send sound, are not blamed.
+func TestQualityNoSound(t *testing.T) {
+	cfg := config.Default()
+	cfg.System.Timezone = "UTC"
+	cfg.Extensions = []config.Extension{{Number: "100", Name: "A"}}
+	cfg.Trunks = []config.Trunk{{ID: "t1", Name: "SIP.US"}}
+	at := time.Date(2026, 10, 20, 15, 0, 0, 0, time.UTC)
+	rs := []store.CDR{
+		{Start: at, Quality: []store.LegQuality{{Ext: "100", Packets: 1000, MOS: 4.4}}, NoSound: []store.Side{{Trunk: "t1", Name: "SIP.US"}}},
+		{Start: at, Quality: []store.LegQuality{{Ext: "100", Packets: 1000, MOS: 4.4}}, NoSound: []store.Side{{Trunk: "t1", Name: "SIP.US"}}},
+		{Start: at, NoSound: []store.Side{{Trunk: "t1", Name: "SIP.US"}}}, // nothing measured on either side
+	}
+	rep := qualityReport(cfg, rs, 7)
+	if rep.Calls != 3 || !strings.Contains(rep.Overall, "no sound at all") {
+		t.Fatalf("report %+v", rep)
+	}
+	for _, p := range rep.Places {
+		switch p.Name {
+		case "SIP.US":
+			if p.Status != "fail" || p.NoSound != 3 || p.Diagnosis != "3 answered calls had no sound at all from SIP.US." ||
+				!strings.Contains(p.Advice, "media address ranges") || p.Reasons[0] != p.Diagnosis {
+				t.Fatalf("provider %+v", p)
+			}
+		case "Extensions with no site":
+			if p.NoSound != 0 || p.Status == "fail" {
+				t.Fatalf("extensions blamed: %+v", p)
+			}
+		}
+	}
+}

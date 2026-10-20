@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"crypto/rand"
 	"errors"
+	"time"
 
 	"github.com/biodream-llc/bitvoice/internal/sdp"
 	"github.com/biodream-llc/bitvoice/internal/srtp"
+	"github.com/biodream-llc/bitvoice/internal/store"
 )
 
 // Secure media (SRTP with SDES keys, RFC 4568). Each leg has its own keys: BitVoice decrypts what one
@@ -85,6 +87,29 @@ func (l *Leg) secure(desc, offer *sdp.Session) error {
 	return nil
 }
 
+// refusesPlain reports whether an answer must be refused: this party has to encrypt (Require
+// encryption) and the answer has no SRTP BitVoice can use.
+func (l *Leg) refusesPlain(ans *sdp.Session) bool {
+	if !l.needSRTP {
+		return false
+	}
+	a := ans.Audio()
+	if a == nil || !a.Secure() {
+		return true
+	}
+	_, ok := supportedCrypto(a)
+	return !ok
+}
+
+// plainOffer reports whether an offer (or a call with none) would leave the sound unencrypted.
+func plainOffer(offer *sdp.Session) bool {
+	if offer == nil {
+		return true
+	}
+	a := offer.Audio()
+	return a != nil && !a.Secure() // text-only (MSRP) calls have no sound to encrypt
+}
+
 // answered applies the keys in an answer to BitVoice's offer.
 func (l *Leg) answeredCrypto(ans *sdp.Session) {
 	l.videoRemote(ans, true)
@@ -123,4 +148,42 @@ func (l *Leg) setKeys(remote []byte, suite string, local []byte) {
 	}
 	l.remoteKey, l.suite = remote, suite
 	l.ep.SetSRTP(in, out)
+}
+
+// trunkName is a trunk's name for messages, or "The provider" when it is no longer configured.
+func (e *Engine) trunkName(id string) string {
+	if t := e.Config().FindTrunk(id); t != nil {
+		return t.Name
+	}
+	return "The provider"
+}
+
+// silentSides lists the parties of an answered call that sent no sound the whole call long. A firewall
+// or NAT that lets SIP through and keeps the media out is nearly always why; it is easy to miss, because
+// the call itself connects. Parties that said they would send nothing (a paging speaker, a call on hold),
+// faxes over T.38, text-only calls and calls too short to judge are left out.
+func (e *Engine) silentSides(info CallInfo, c *Call, end time.Time) []store.Side {
+	c.mu.Lock()
+	answer, textOnly, paging := c.answer, c.textOnly, c.paging != nil
+	c.mu.Unlock()
+	after := e.noSoundAfter
+	if after == 0 {
+		after = 5 * time.Second
+	}
+	if answer.IsZero() || textOnly || paging || end.Sub(answer) < after {
+		return nil
+	}
+	cfg := e.Config()
+	var out []store.Side
+	for _, l := range info.Legs {
+		if l.Media.Packets > 0 || l.Ringing || l.OnHold || l.Fax || l.silentByChoice || l.Ext == "" && l.Trunk == "" {
+			continue
+		}
+		s := store.Side{Ext: l.Ext, Trunk: l.Trunk, Name: l.Party}
+		if t := cfg.FindTrunk(l.Trunk); t != nil {
+			s.Name = t.Name
+		}
+		out = append(out, s)
+	}
+	return out
 }

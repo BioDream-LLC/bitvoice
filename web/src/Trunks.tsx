@@ -173,7 +173,14 @@ function Editor({ t: initial, status, onClose }: { t: Trunk; status?: TrunkStatu
             </select>
           </Field>
         )}
-        <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={t.secureMedia} onChange={(v) => set('secureMedia', v)} label="Encrypt media" /> Encrypt media (SRTP), if your provider supports it</label>
+        <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={t.secureMedia} onChange={(v) => setT((t0) => ({ ...t0, secureMedia: v, requireSecureMedia: v ? t0.requireSecureMedia : false }))} label="Encrypt media" /> Encrypt media (SRTP), if your provider supports it</label>
+        {t.secureMedia && (
+          <div className="ml-12 space-y-1">
+            <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={!!t.requireSecureMedia} onChange={(v) => set('requireSecureMedia', v)} label="Require encryption" />
+              <span>Require encryption <span className="text-xs text-slate-500">(refuse calls the provider will not encrypt; without it, such calls go on unencrypted and Call history marks them)</span></span></label>
+            {p('requireSecureMedia') && <p className="field-error text-sm text-rose-300">{p('requireSecureMedia')}</p>}
+          </div>
+        )}
         {(safety || t.esinet) && <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={!!t.esinet} onChange={(v) => set('esinet', v)} label="ESInet" /> <span>From the ESInet <span className="text-xs text-slate-500">(911 profile: calls on this trunk are 911 calls, shown with their location on <a className="text-sky-300 underline" href="#/psap">911 calls</a>)</span></span></label>}
         <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={!!t.richCallData} onChange={(v) => set('richCallData', v)} label="Send branded caller ID" /> <span>Send branded caller ID <span className="text-xs text-slate-500">(the logo and reason set on <a className="text-sky-300 underline" href="#/reputation">Caller ID reputation</a>, for providers that pass rich call data on)</span></span></label>
         <ShakenFields t={t} setT={setT} p={p} />

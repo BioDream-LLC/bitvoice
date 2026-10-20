@@ -419,9 +419,12 @@ With two or more trunks on an outbound route, BitVoice judges every 15 seconds w
 | Caller ID | the number shown on calls out; an extension's own caller ID wins |
 | Also accept calls from | the provider's other addresses or networks that send calls in |
 | Calls at once | the limit your plan allows; calls beyond it go to the next trunk in the route |
-| Encrypt media | SRTP, for providers that support it |
+| Encrypt media | SRTP, for providers that support it. A provider that answers without it still gets the call, unencrypted, and Call history marks the call **Not encrypted** |
+| Require encryption | (with Encrypt media) refuse what the provider will not encrypt: a call out it answers without SRTP is hung up, and a call in it sends without SRTP is refused; Call history says why |
 | Codecs | leave it on *same as Settings*, or choose what this provider supports, best first |
 | Rates | what calls cost by number prefix, for [Costs](#costs) |
+
+> Calls connect but nobody hears the provider? Its sound (RTP) often comes from other addresses than its SIP servers, and a firewall or cloud security group open only to the SIP servers keeps it out. Call history marks such a call **No sound from** the provider, and Call quality says what to open. Ask the provider for its media address ranges and allow UDP to the media ports (Settings) from them.
 
 > A trunk that accepts calls by address alone should list only the provider's own addresses. Networks wider than a /16 are refused: they would let anyone on the internet pass as your provider.
 
@@ -1203,7 +1206,9 @@ Give extensions a **Department** (in the extension). On Costs, add a budget for 
 
 Each place shows its calls, its average score (MOS, out of 5: above 4 is good, under 3.6 sounds poor), the share of sound packets that never arrived, and jitter (uneven delay). Below that, BitVoice says what is wrong in plain words, for example "Packet loss on Head office's network: 3.2% of the sound never arrived, mostly between 14:00 and 16:00", with what to check. The bar chart shows the sound lost by hour of the day.
 
-The diagnosis compares the two halves of the same calls: the sound from the site's phones and the sound from the provider the same calls went through. When the other half arrived clean, the loss is on this place's side, and it says so; when both halves lost sound, the place is not to blame alone and it points at what the calls share, this system's own internet link. If every place loses sound at once, the cause is likewise what they share. **How this was worked out** lists the reasons, step by step (the call-quality rulebook, see [Security](#security), "How BitVoice decides"). Places with fewer than three calls are not judged. Per-call quality is also in [Call history](#/history) (the Quality column) and, while calls are live, on [Live calls](#/calls).`,
+The diagnosis compares the two halves of the same calls: the sound from the site's phones and the sound from the provider the same calls went through. When the other half arrived clean, the loss is on this place's side, and it says so; when both halves lost sound, the place is not to blame alone and it points at what the calls share, this system's own internet link. If every place loses sound at once, the cause is likewise what they share. **How this was worked out** lists the reasons, step by step (the call-quality rulebook, see [Security](#security), "How BitVoice decides"). Places with fewer than three calls are not judged. Per-call quality is also in [Call history](#/history) (the Quality column) and, while calls are live, on [Live calls](#/calls).
+
+A call that connected but got **no sound at all** from one side is counted apart, under **with no sound**, and put first: it is not poor sound but sound that never arrived, nearly always a firewall or NAT router letting SIP through and keeping the media out. The place's advice says what to check (for a provider, its media address ranges).`,
   },
   {
     id: 'callbacks', title: 'Callbacks', route: '/callbacks', keys: 'call back ring back request receptionist',
@@ -1856,6 +1861,11 @@ When a call ends, it moves to [Call history](#history).`,
 
 ## How it was routed
 Under each call's result, **How it was routed** lists, in plain words and in order, what decided where the call went: the incoming route that took it, whether a schedule was open or closed and the time, a toggle's side, what a routing script chose (or that its fallback took the call), the keys pressed in a menu, who was away, who had no phone connected, who did not answer, the outbound route and trunks used (and a trunk the health judge moved behind the others), the toll-fraud guard's judgement, and, for a recorded call whose parties are under different consent rules, which rule applied.
+
+## Quality, sound and encryption
+The **Quality** column shows each answered call's score (MOS, out of 5) and two marks when they apply:
+- **No sound from** a side: the call connected but nothing ever arrived from that phone or provider (calls shorter than 5 seconds, faxes, held calls and paging are left out). See [Call quality](#quality) for what to check.
+- **Not encrypted**: BitVoice asked for encryption (SRTP) and that side answered without it. **Encrypted** means the sound was encrypted with every side that sent any. To refuse unencrypted calls from a provider instead, switch on **Require encryption** on its trunk.
 
 ## Transcripts and search
 With AI on and **Transcribe recorded calls** switched on (Settings, AI), every recorded call is written out, with a short summary and its action items: what someone agreed or was asked to do. Each side of the call is written out separately from the recording, so the transcript shows who said what, and when. The transcript button next to a recording opens it; administrators can also transcribe a single call, or transcribe one again.

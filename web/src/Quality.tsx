@@ -75,7 +75,7 @@ function PlaceCard({ p }: { p: QualityPlace }) {
         <Badge status={p.status}>{statusWord[p.status]}</Badge>
       </div>
       <dl className="grid grid-cols-4 gap-2 text-center text-xs">
-        <div><dt className="text-slate-500">Calls</dt><dd className="font-mono text-base text-slate-100">{p.calls}</dd></div>
+        <div><dt className="text-slate-500">Calls</dt><dd className="font-mono text-base text-slate-100">{p.calls}{(p.noSound ?? 0) > 0 && <span className="block text-xs text-rose-300">{p.noSound} with no sound</span>}</dd></div>
         <div><dt className="text-slate-500">Score</dt><dd className={`font-mono text-base ${p.mos >= 4 ? 'text-emerald-300' : p.mos >= 3.6 ? 'text-amber-300' : 'text-rose-300'}`}>{p.mos.toFixed(1)}</dd></div>
         <div><dt className="text-slate-500">Lost</dt><dd className={`font-mono text-base ${lossColour}`}>{p.lossPct.toFixed(1)}%</dd></div>
         <div><dt className="text-slate-500">Jitter</dt><dd className={`font-mono text-base ${jitColour}`}>{p.jitterMs.toFixed(0)} ms</dd></div>

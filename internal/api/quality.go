@@ -28,6 +28,8 @@ type QualityPlace struct {
 		LossPct float64 `json:"lossPct"`
 		Poor    int     `json:"poor"`
 	} `json:"hours"` // by hour of the day, in the system's time zone
+	// NoSound counts answered calls in which no sound at all came from here.
+	NoSound   int    `json:"noSound,omitempty"`
 	Status    string `json:"status"`    // ok, warn, fail, idle (too few calls)
 	Diagnosis string `json:"diagnosis"` // in plain words
 	Advice    string `json:"advice,omitempty"`
@@ -75,34 +77,46 @@ func qualityReport(cfg config.Config, rs []store.CDR, days int) QualityReport {
 		places[k] = a
 		return a
 	}
+	placeOf := func(ext, trunk string) *acc {
+		switch {
+		case ext != "":
+			name := "Extensions with no site"
+			if x := cfg.FindExtension(ext); x != nil && x.Site != "" {
+				name = x.Site
+				for _, s := range cfg.Sites {
+					if s.ID == x.Site {
+						name = s.Name
+					}
+				}
+			}
+			return get("site", name)
+		case trunk != "":
+			name := trunk
+			if t := cfg.FindTrunk(trunk); t != nil {
+				name = t.Name
+			}
+			return get("provider", name)
+		}
+		return nil
+	}
 	for _, r := range rs {
+		for _, s := range r.NoSound {
+			if a := placeOf(s.Ext, s.Trunk); a != nil {
+				a.place.NoSound++
+			}
+		}
 		if len(r.Quality) == 0 {
+			if len(r.NoSound) > 0 {
+				rep.Calls++
+			}
 			continue
 		}
 		rep.Calls++
 		h := r.Start.In(loc).Hour()
 		legAcc := make([]*acc, len(r.Quality))
 		for i, q := range r.Quality {
-			var a *acc
-			switch {
-			case q.Ext != "":
-				name := "Extensions with no site"
-				if x := cfg.FindExtension(q.Ext); x != nil && x.Site != "" {
-					name = x.Site
-					for _, s := range cfg.Sites {
-						if s.ID == x.Site {
-							name = s.Name
-						}
-					}
-				}
-				a = get("site", name)
-			case q.Trunk != "":
-				name := q.Trunk
-				if t := cfg.FindTrunk(q.Trunk); t != nil {
-					name = t.Name
-				}
-				a = get("provider", name)
-			default:
+			a := placeOf(q.Ext, q.Trunk)
+			if a == nil {
 				continue
 			}
 			legAcc[i] = a
@@ -151,8 +165,9 @@ func qualityReport(cfg config.Config, rs []store.CDR, days int) QualityReport {
 	lossy := 0
 	for _, a := range places {
 		p := a.place
-		n := float64(p.Calls)
-		p.MOS, p.JitterMS = round1(a.mos/n), round1(a.jit/n)
+		if n := float64(p.Calls); n > 0 {
+			p.MOS, p.JitterMS = round1(a.mos/n), round1(a.jit/n)
+		}
 		if a.packets > 0 {
 			p.LossPct = round1(100 * float64(a.lost) / float64(a.packets))
 		}
@@ -190,6 +205,8 @@ func qualityReport(cfg config.Config, rs []store.CDR, days int) QualityReport {
 	switch {
 	case rep.Calls == 0:
 		rep.Overall = "No calls with sound to judge in this time."
+	case anyNoSound(rep.Places):
+		rep.Overall = "Some answered calls had no sound at all from one side: see the places marked below."
 	case lossy > 1 && lossy == countWithCalls(rep.Places, 3):
 		rep.Overall = "Every place loses sound at once, which points to what they share: the internet link, or the provider."
 	case lossy > 0 || anyStatus(rep.Places, "warn", "fail"):
@@ -228,6 +245,21 @@ func diagnose(p *QualityPlace, a *acc, everywhere bool) {
 	}
 	v := reason.Quality.Decide(facts)
 	p.Reasons = v.Reasons
+	if p.NoSound > 0 {
+		// No sound at all is not poor sound: the media never arrived. Said first, whatever else is true.
+		p.Status = "fail"
+		calls := "1 answered call"
+		if p.NoSound > 1 {
+			calls = strconv.Itoa(p.NoSound) + " answered calls"
+		}
+		p.Diagnosis = calls + " had no sound at all from " + p.Name + "."
+		p.Advice = "The call connected but its sound never arrived: almost always a firewall or NAT router that lets SIP through and blocks the media. Check that the phones' router does not rewrite SIP (SIP ALG off) and that the media ports (Settings, UDP) are open."
+		if p.Kind == "provider" {
+			p.Advice = "The call connected but " + p.Name + "'s sound never arrived: almost always this system's firewall (or the cloud's security group) letting SIP in and keeping the media out. A provider's media often comes from other addresses than its SIP servers: ask " + p.Name + " for its media address ranges and allow UDP to the media ports (Settings) from them."
+		}
+		p.Reasons = append([]string{p.Diagnosis}, p.Reasons...)
+		return
+	}
 	switch v.Action {
 	case "idle":
 		p.Status, p.Diagnosis = "idle", "Too few calls to judge."
@@ -340,4 +372,13 @@ func (s *Server) qualityRoutes() {
 		cfg, _ := s.Store.Config()
 		writeJSON(w, 200, qualityReport(cfg, rs, days))
 	})
+}
+
+func anyNoSound(ps []QualityPlace) bool {
+	for _, p := range ps {
+		if p.NoSound > 0 {
+			return true
+		}
+	}
+	return false
 }
