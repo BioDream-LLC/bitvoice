@@ -115,7 +115,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 
 | Area | Maturity | What it rests on |
 |---|---|---|
-| SIP trunks: registration, calls in and out, caller ID, busy, keys (RFC 4733) | Field-tested | Asterisk as the carrier across the internet on EC2; MOS 4.4. No commercial carrier account tried yet |
+| SIP trunks: registration, calls in and out, caller ID, busy, keys (RFC 4733) | Field-tested | Asterisk as the carrier across the internet on EC2; MOS 4.4. Kamailio 5.7 (registration with digest sign-in over TLS, calls both ways, keys) and FreeSWITCH 1.11 (TLS and SRTP, calls both ways, G.722 to G.711) as the far end; MOS 4.39. No commercial carrier account tried yet |
 | Desk phones over SIP | Field-tested | Asterisk as a desk phone across the internet. Real Yealink, Poly or Grandstream handsets not tried yet |
 | Browser phone (WebRTC) | Field-tested | from outside to EC2; Chromium browser tests with sound both ways |
 | Two servers, one PostgreSQL, failover | Field-tested | kill -9 and planned stop on EC2: the call carries on, the provider line moves |
@@ -135,7 +135,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | ISDN PRI and BRI, T1/E1 | Checked against a reference | libpri (Asterisk's), both sides; and on EC2 through the real DAHDI 3.4 kernel driver (two spans wired together in the kernel, Asterisk 20's chan_dahdi as the phone company): calls both ways with numbers and names, all 23 channels at once, MOS 4.39. No physical card or line yet |
 | MFC-R2, E&M | Checked against a reference | OpenR2; MF tones by our own tests. No real card or line tried |
 | SS7 (ISUP, MTP, link sets of several links with changeover) | Checked against a reference | libss7 (Asterisk's chan_dahdi library), ITU and ANSI. No real carrier link tried |
-| Fax (T.30, T.38) | Software-tested | own tests between BitVoice ends; no fax provider or gateway tried |
+| Fax (T.30, T.38) | Checked against a reference | spandsp (through Asterisk 20) on EC2: BitVoice receiving and sending faxes itself over T.38 (2 pages, 14,400 bit/s, error correction) and passing faxes between two other machines over T.38 and over G.711; no fax provider or gateway tried |
 | Provisioning: Yealink, Poly, Grandstream, Snom, Fanvil, Cisco, Mitel, Sangoma, Algo, CyberData | Software-tested | the vendors' documented formats; not on real handsets |
 | Skinny (SCCP) phones, MGCP gateways | Software-tested | own tests; no Cisco phone or gateway tried |
 | Microsoft Teams Direct Routing | Software-tested | own tests; no Teams tenant tried |
@@ -2155,7 +2155,7 @@ Not here yet: P25 Phase 2 (TDMA) voice in its own half-rate vocoder. A Phase 2 s
 
 **Receiving faxes without a fax machine.** On **Faxes**, add a fax number (300, say), with the email addresses each fax goes to. Then in [Call routing](#/routes) send a phone number's calls to it. BitVoice answers as a fax machine, switches the call to T.38 and takes the fax; each fax becomes a PDF, kept on Faxes (**View**, **PDF**) and emailed. A fax that breaks off part way keeps the pages that arrived and says so. This needs a provider that supports T.38 (most do); a fax sent as sound cannot be received this way.
 
-**Sending a fax.** On **Faxes**, **Send a fax**: choose the fax number it goes from, type the number to send to, write a note if you like (it becomes the first page) and add documents. Text files and pictures (PNG, JPEG, GIF) work everywhere. PDF needs poppler on the server (\`apt install poppler-utils\`, \`apk add poppler-utils\`, \`brew install poppler\`); Word, Excel, OpenDocument and RTF need LibreOffice as well. The page says which the server can do. Every page gets a header line, as fax machines print it: the time, the fax number's name, its identity and the page count. Pages are US letter in North America and A4 elsewhere, from the country in Settings.
+**Sending a fax.** On **Faxes**, **Send a fax**: choose the fax number it goes from, type the number to send to, write a note if you like (it becomes the first page) and add documents. Text files and pictures (PNG, JPEG, GIF) work everywhere. PDF needs poppler on the server (\`apt install poppler-utils\`, \`apk add poppler-utils\`, \`brew install poppler\`); Word, Excel, OpenDocument and RTF need LibreOffice as well. The page says which the server can do. Every page gets a header line, as fax machines print it: the time, the fax number's name, its identity and the page count. The call goes out from the identity's digits (\`+1 212 555 0300\` calls from +12125550300), or from the fax number itself when the identity is not a number. Pages are US letter in North America and A4 elsewhere, from the country in Settings.
 
 BitVoice calls the number over your outbound routes, as an extension would, and sends at the fastest rate the line carries (14,400 bit/s, slower if the line is poor). Faxes from one fax number go one at a time. A busy number, or one that does not answer, is tried again five minutes later, three times in all. Sent faxes are listed with the received ones: **Sent**, **Waiting to send**, **Failed** (with **Try again**), or **Part sent** when the line broke after some pages.
 

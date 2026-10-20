@@ -128,6 +128,17 @@ func (l *Leg) toT38(wait time.Duration) (*media.Endpoint, error) {
 // ErrFaxNoAnswer is a fax that nobody answered.
 var ErrFaxNoAnswer = errors.New("the number did not answer")
 
+// faxCallerID is the number a fax box calls from: its station identity as a number (a station is
+// written for people, "+1 212 555 0300", and spaces are not allowed in a SIP address, so a carrier
+// drops a call carrying them), or the box's own number when the station is not a number at all.
+func faxCallerID(box *config.FaxBox) string {
+	n := cleanNumber(box.Station)
+	if n == "" || strings.Trim(n, "+0123456789") != "" || strings.LastIndex(n, "+") > 0 {
+		return box.Number
+	}
+	return n
+}
+
 // SendFax calls number from a fax number and sends the pages as BitVoice's own fax machine, over
 // the outbound routes, as an extension's call would go. It returns when the fax is done.
 func (e *Engine) SendFax(from, number string, pages []fax.Bitmap) (fax.SendResult, error) {
@@ -151,10 +162,11 @@ func (e *Engine) SendFax(from, number string, pages []fax.Bitmap) (fax.SendResul
 		}
 		return fax.SendResult{}, errors.New(plainRefusal(number, reason))
 	}
-	cid := box.Station
-	if cid == "" {
-		cid = box.Number
+	station := box.Station
+	if station == "" {
+		station = box.Number
 	}
+	cid := faxCallerID(box)
 	h := &Call{e: e, ID: config.NewID(), start: time.Now(), from: cid, fromName: box.Name,
 		answered: make(chan struct{}), cancelled: make(chan struct{}), results: make(chan forkResult, 64),
 		xfer: make(chan *Leg, 1), direction: "outbound", to: number, trunk: p.trunk}
@@ -186,7 +198,7 @@ func (e *Engine) SendFax(from, number string, pages []fax.Bitmap) (fax.SendResul
 		return fax.SendResult{}, err
 	}
 	link := fax.NewLink(ep.SendRaw)
-	tx := fax.NewSender(cid, pages, link.Send)
+	tx := fax.NewSender(station, pages, link.Send)
 	ep.OnRaw(func(d []byte) { link.Receive(d, tx.Handle) })
 	tx.Start()
 	ended := make(chan struct{})

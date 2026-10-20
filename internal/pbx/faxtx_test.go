@@ -50,3 +50,18 @@ func TestFaxBetweenServers(t *testing.T) {
 		waitFor(t, "calls left up", func() bool { return len(tx.Calls())+len(rx.Calls()) == 0 })
 	}
 }
+
+// A fax box's station is written for people; the number it calls from must be a valid SIP user.
+func TestFaxCallerID(t *testing.T) {
+	for _, c := range []struct{ station, want string }{
+		{"+1 212 555 0300", "+12125550300"},
+		{"(212) 555-0300", "2125550300"},
+		{"", "300"},
+		{"Acme Dental", "300"},
+		{"212+555", "300"},
+	} {
+		if got := faxCallerID(&config.FaxBox{Number: "300", Station: c.station}); got != c.want {
+			t.Errorf("station %q: caller ID %q, want %q", c.station, got, c.want)
+		}
+	}
+}

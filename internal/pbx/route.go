@@ -607,7 +607,7 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 		if x := cfg.FindExtension(cp.callerExt); x != nil {
 			c.callerExt = x.Number // its caller ID goes out on the trunk
 		}
-	} else if trunk := e.trunkFor(cfg, in.From.Addr); trunk != nil && !e.reg.registeredFrom(in.From.Addr) {
+	} else if trunk := e.trunkFor(cfg, in.From); trunk != nil && !e.reg.registeredFrom(in.From.Addr) {
 		if isIAX(trunk) && (e.iax() == nil || m.Get(IAXTokenHeader) != e.iax().Token()) {
 			tx.Respond(sip.NewResponse(m, 403, "Not The IAX2 Gateway"))
 			return
@@ -965,8 +965,12 @@ func (e *Engine) emergency(cfg *config.Config, ext *config.Extension, number str
 
 // trunkFor identifies a trunk by where a request came from: the provider's address and SIP port, or any
 // address listed in Allow from. Matching the port as well as the address means a phone that happens to share
-// the provider's address (the same NAT, or a test bench) is never taken for the provider.
-func (e *Engine) trunkFor(cfg *config.Config, src netip.AddrPort) *config.Trunk {
+// the provider's address (the same NAT, or a test bench) is never taken for the provider. Over TCP or TLS
+// the port is not checked for a trunk on that transport: a provider sends calls on a connection it opens
+// itself, from a port of its system's choosing (callers still pass over phones registered from there).
+func (e *Engine) trunkFor(cfg *config.Config, from sip.Peer) *config.Trunk {
+	src := from.Addr
+	stream := from.Transport == "TCP" || from.Transport == "TLS"
 	ip := src.Addr()
 	if ip.IsLoopback() && e.iax() != nil {
 		// The IAX2 and H.323 gateways: each such trunk is a loopback port of its own.
@@ -990,8 +994,9 @@ func (e *Engine) trunkFor(cfg *config.Config, src netip.AddrPort) *config.Trunk 
 			if port == 0 {
 				port = 5060
 			}
+			anyPort := stream && strings.EqualFold(t.Transport, from.Transport)
 			for _, a := range st.addrs {
-				if a == ip && int(src.Port()) == port {
+				if a == ip && (int(src.Port()) == port || anyPort) {
 					tc := t
 					return &tc
 				}

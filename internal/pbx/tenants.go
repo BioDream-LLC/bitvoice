@@ -172,7 +172,7 @@ func (e *Engine) hasPending(m *sip.Message) bool {
 // source and an incoming route its number, 1 for the trunk alone, 0 when it is not from a trunk here.
 func (e *Engine) claimScore(in *sip.Incoming) int {
 	cfg := e.Config()
-	t := e.trunkFor(cfg, in.From.Addr)
+	t := e.trunkFor(cfg, in.From)
 	if t == nil {
 		return 0
 	}
