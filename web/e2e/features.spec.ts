@@ -977,7 +977,7 @@ test('a trunk can require encryption', async ({ page }) => {
   expect(t.secureMedia).toBe(true)
   expect(t.requireSecureMedia).toBe(true)
   // Turning Encrypt media off takes Require encryption with it.
-  await page.getByText('Encrypted line').first().click()
+  await page.goto('/#/trunks?open=' + t.id)
   await expect(page.getByRole('switch', { name: 'Require encryption' })).toBeChecked()
   await page.getByRole('switch', { name: 'Encrypt media' }).click()
   await expect(page.getByRole('switch', { name: 'Require encryption' })).toHaveCount(0)
