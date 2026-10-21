@@ -2038,7 +2038,7 @@ When a rebid changes the location, the **location check** says which to show fir
 
 **When a call-taker answers**, CAD gets, each on its own so a CAD that is down never holds up the call:
 - **the ALI spill**: the text block CAD systems read (callback number, class of service, address, position and uncertainty, provider), sent over TCP;
-- **the EIDO**, the incident document of NENA-STA-024, by HTTPS POST (with a bearer token if set). **EIDO** on a call shows it.
+- **the EIDO**, the incident document of NENA-STA-024, by HTTPS POST (with a bearer token if set). **EIDO** on a call shows it. The address must be \`https\`, or plain \`http\` only to a CAD on this same computer (\`http://127.0.0.1:…\`): an EIDO carries the caller's location and the token, so it never crosses a network unencrypted, a private one included. The same holds for **Send radio events to CAD at**. Set **Agency ID** too: EIDOs and the i3 log name the agency by it, and [Health](#/health) warns while it is empty.
 
 **A 911 call is never refused.** A voice call from the ESInet (or a CAMA trunk) whose incoming route would turn it away, because the route hangs up, rings a group with nobody in it or does not exist, or that nobody answers, rings **every call-taker** instead: every enabled extension, and any phone that connects while it rings, until someone answers or the caller hangs up. A text call waits on this screen the same way. The call's **How it was routed** says what happened, and [Health](#/health) warns about such a route so it can be put right. Only test calls (\`urn:service:test.sos\`) and calls that are not 911 calls keep their route's refusal.
 

@@ -810,3 +810,27 @@ test('health warns about a 911 route that would refuse calls', async ({ page }) 
   await expect(page.getByText(/so these ring every call-taker instead/).first()).toBeVisible()
   await page.evaluate(async (id) => { await fetch('./api/inbound-routes/' + id, { method: 'DELETE', headers: { 'X-BitVoice': '1' } }) }, made)
 })
+
+// EIDOs and radio events go by https, or plain http only within this computer; a PSAP sending them
+// without an agency ID is flagged in Health.
+test('911: CAD addresses must be encrypted off this computer; a missing agency ID is flagged', async ({ page }) => {
+  await signIn(page)
+  const r = await page.evaluate(async () => {
+    const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
+    const s = await (await fetch('./api/settings')).json()
+    const put = (psap: object) => fetch('./api/settings', { method: 'PUT', headers: H, body: JSON.stringify({ ...s, system: { ...s.system, psap: { ...s.system.psap, ...psap } } }) })
+    const off = await put({ eidoUrl: 'http://192.168.1.50:9450/eido', agencyId: '' })
+    const offBody = await off.text()
+    const local = await put({ eidoUrl: 'http://127.0.0.1:9450/eido', agencyId: '' })
+    return { off: off.status, offBody, local: local.status, psap: s.system.psap }
+  })
+  expect(r.off).toBe(422)
+  expect(r.offBody).toContain('http only to CAD on this computer')
+  expect(r.local).toBe(200)
+  await page.goto('./#/health')
+  await expect(page.getByText('This PSAP has no agency ID')).toBeVisible()
+  await page.evaluate(async (psap) => {
+    const s = await (await fetch('./api/settings')).json()
+    await fetch('./api/settings', { method: 'PUT', headers: { 'X-BitVoice': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ ...s, system: { ...s.system, psap } }) })
+  }, r.psap)
+})

@@ -297,3 +297,28 @@ func TestTranscribeService(t *testing.T) {
 		}
 	}
 }
+
+// What carries 911 callers' details or a secret to CAD goes by https, or plain http only within this
+// computer.
+func TestCADAddressesSecure(t *testing.T) {
+	for _, tc := range []struct {
+		u  string
+		ok bool
+	}{
+		{"https://cad.example.gov/eido", true},
+		{"http://127.0.0.1:9450/eido", true},
+		{"http://localhost:9450/eido", true},
+		{"http://[::1]:9450/eido", true},
+		{"http://192.168.1.50:9450/eido", false},
+		{"http://cad.example.gov/eido", false},
+		{"ftp://cad.example.gov/eido", false},
+	} {
+		c := Default()
+		c.System.PSAP.EIDOURL = tc.u
+		c.System.Radio.CADURL = tc.u
+		err := c.Validate()
+		if bad := err != nil && strings.Contains(err.Error(), "eidoUrl") && strings.Contains(err.Error(), "cadUrl"); bad == tc.ok {
+			t.Errorf("%s: %v", tc.u, err)
+		}
+	}
+}

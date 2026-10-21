@@ -375,7 +375,7 @@ function RadioSetup() {
         <legend className="px-1 text-sm font-semibold text-violet-300">Recording and CAD</legend>
         <Toggle checked={draft.record} onChange={(c) => setDraft((d) => ({ ...d, record: c }))} label="Record every transmission (heard and sent) in the radio log" />
         <div className="grid gap-3 md:grid-cols-2">
-          <Field label="Send radio events to CAD at" htmlFor="rcad" error={p('cadUrl')} hint="Who is talking where, emergencies and each transmission, POSTed as JSON. Empty sends nothing.">
+          <Field label="Send radio events to CAD at" htmlFor="rcad" error={p('cadUrl')} hint="Who is talking where, emergencies and each transmission, POSTed as JSON (https, or http only to CAD on this computer). Empty sends nothing.">
             <input id="rcad" className="input font-mono" value={draft.cadUrl} placeholder="https://cad.example.gov/radio" onChange={(e) => setDraft((d) => ({ ...d, cadUrl: e.target.value.trim() }))} />
           </Field>
           <Field label="CAD's shared secret" htmlFor="rcads" hint="Sent as a bearer token. Leave empty to keep the current one.">

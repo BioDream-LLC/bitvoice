@@ -165,7 +165,7 @@ function PSAPSetup() {
       <h3 className="text-sm font-semibold text-violet-300">CAD</h3>
       <div className="grid gap-3 md:grid-cols-3">
         <Field label="ALI spill to" htmlFor="psl" error={p('aliAddress')} hint="CAD's address and port (the ALI text goes there over TCP when a call is answered), or a serial port: serial:/dev/ttyS0?baud=9600."><input id="psl" className="input font-mono" value={draft.aliAddress} placeholder="10.0.0.20:4000" onChange={(e) => set({ aliAddress: e.target.value.trim() })} /></Field>
-        <Field label="EIDO to" htmlFor="psu" error={p('eidoUrl')} hint="CAD's address for EIDOs (NENA-STA-024), sent by HTTPS POST."><input id="psu" className="input font-mono" value={draft.eidoUrl} placeholder="https://cad.example.gov/eido" onChange={(e) => set({ eidoUrl: e.target.value.trim() })} /></Field>
+        <Field label="EIDO to" htmlFor="psu" error={p('eidoUrl')} hint="CAD's address for EIDOs (NENA-STA-024), sent by HTTPS POST. Plain http only to CAD on this computer (http://127.0.0.1:…)."><input id="psu" className="input font-mono" value={draft.eidoUrl} placeholder="https://cad.example.gov/eido" onChange={(e) => set({ eidoUrl: e.target.value.trim() })} /></Field>
         <Field label="EIDO token" htmlFor="pst2" hint="Sent as a bearer token, if CAD asks for one. Blank keeps the saved one."><input id="pst2" type="password" autoComplete="off" className="input font-mono" value={draft.eidoToken} onChange={(e) => set({ eidoToken: e.target.value })} /></Field>
       </div>
       <h3 className="text-sm font-semibold text-violet-300">Caller video and photos</h3>

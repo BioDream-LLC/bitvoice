@@ -2097,8 +2097,8 @@ func (c *Config) Validate() error {
 			}
 		}
 		sipPort := c.System.SIPPort
-		if r.CADURL = strings.TrimSpace(r.CADURL); r.CADURL != "" && !strings.HasPrefix(r.CADURL, "https://") && !strings.HasPrefix(r.CADURL, "http://") {
-			p.add("system.radio.cadUrl", "CAD's https address that takes the radio events")
+		if r.CADURL = strings.TrimSpace(r.CADURL); r.CADURL != "" && !secureOrLocal(r.CADURL) {
+			p.add("system.radio.cadUrl", "use CAD's https address, or http only to CAD on this computer (127.0.0.1): radio events and the secret must not cross the network unencrypted")
 		}
 		r.Console = strings.TrimSpace(r.Console)
 		if r.Console != "" && !regexp.MustCompile(`^[0-9*#]{2,8}$`).MatchString(r.Console) {
@@ -2414,8 +2414,8 @@ func (c *Config) Validate() error {
 				p.add("system.psap.aliLink.timeoutS", "1 to 30 seconds (4 when 0)")
 			}
 		}
-		if ps.EIDOURL != "" && !strings.HasPrefix(ps.EIDOURL, "https://") && !strings.HasPrefix(ps.EIDOURL, "http://") {
-			p.add("system.psap.eidoUrl", "enter the https address CAD takes EIDOs at")
+		if ps.EIDOURL != "" && !secureOrLocal(ps.EIDOURL) {
+			p.add("system.psap.eidoUrl", "use CAD's https address, or http only to CAD on this computer (127.0.0.1): EIDOs carry callers' locations and the token")
 		}
 		if ps.AnswerTarget < 0 || ps.AnswerTarget > 120 {
 			p.add("system.psap.answerTarget", "seconds, 1 to 120")
@@ -3971,3 +3971,25 @@ func buildingURL(s string) bool {
 var SpeechModels = []string{"tiny", "base", "small", "medium", "large-v3-turbo"}
 
 const DefaultSpeechModel = "base"
+
+// secureOrLocal reports whether an address is https, or plain http only to this computer (loopback):
+// for what carries 911 callers' details or a secret, which must never cross a network unencrypted,
+// a private one included.
+func secureOrLocal(s string) bool {
+	u, err := url.Parse(s)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	switch u.Scheme {
+	case "https":
+		return true
+	case "http":
+		h := u.Hostname()
+		if h == "localhost" {
+			return true
+		}
+		a, err := netip.ParseAddr(h)
+		return err == nil && a.IsLoopback()
+	}
+	return false
+}

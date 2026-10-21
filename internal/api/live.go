@@ -448,6 +448,9 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request, u store.User) {
 	if pv := cfg.System.Provisioning; pv.Enabled && len(cfg.Devices) == 0 {
 		add("provision", "warn", "Automatic phone set-up is on but no phones are listed", "Add each phone's MAC address on the Phones page.", "/phones")
 	}
+	if ps := cfg.System.PSAP; ps.AgencyID == "" && (ps.EIDOURL != "" || ps.ALIAddress != "") {
+		add("agency-id", "warn", "This PSAP has no agency ID", "EIDOs and the i3 log go to CAD without naming the agency that took the call. Set Agency ID in the 911 settings (a domain, like psap.county.example.gov).", "/psap")
+	}
 	for _, w := range emergencyRouteWarnings(cfg) {
 		add("emergency-route", "warn", w[0], w[1], "/routes")
 	}
