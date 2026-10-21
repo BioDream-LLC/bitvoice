@@ -413,7 +413,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request, u store.Use
 				}
 			}
 		}
-		if in.System.AI.Key == "" {
+		// An empty key keeps the saved one, while a model still uses it: with no model and no audio
+		// model nothing does, so saving them empty removes the key too (the only way to take it out).
+		if in.System.AI.Key == "" && (in.System.AI.Model != "" || in.System.AI.AudioModel != "") {
 			in.System.AI.Key = c.System.AI.Key
 		}
 		if in.System.AI.TranscribeKey == "" && in.System.AI.TranscribeURL == c.System.AI.TranscribeURL {

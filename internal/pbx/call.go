@@ -102,6 +102,8 @@ type Call struct {
 	answeredBy, disposition, cause, hangupBy     string
 	localAnswer                                  bool
 	transferring                                 bool
+	transferor                                   *Leg      // who asked for the transfer under way: their hanging up only releases them
+	transferBack                                 time.Time // a 911 transfer failed and went back to transferor: their hanging up until then still rings every call-taker
 	// xfer is set on the helper call that rings the new party of a blind transfer: whoever answers is
 	// handed over on it (nil when nobody does) instead of being connected to a caller.
 	xfer     chan *Leg
@@ -1228,8 +1230,32 @@ func (c *Call) legEnded(l *Leg, cause string) {
 	}
 	transferring := c.transferring
 	isCaller := l == c.caller
+	transferor := c.transferor == l && l != nil
+	// c.transferor is set while a transfer is under way (transferBack zero), and for a moment after a
+	// 911 transfer failed and came back to them (transferBack set).
+	back := transferor && !c.transferBack.IsZero()
+	if back && time.Now().After(c.transferBack) {
+		transferor, back = false, false // long after: hanging up ends the call as usual
+	}
+	stayed := c.caller
+	if l == c.caller {
+		stayed = c.callee
+	}
 	c.mu.Unlock()
+	if back {
+		// The phone hung up just after its 911 transfer failed (the REFER's answer and its BYE crossed):
+		// the caller is not dropped but rings every call-taker.
+		l.close()
+		go c.transferFailed(l, stayed, true)
+		return
+	}
 	if transferring && !isCaller && l != c.callee {
+		return
+	}
+	if transferor {
+		// Hanging up after asking for a transfer (most desk phones do, at once) releases only them:
+		// the transfer goes on for the party who stays.
+		l.close()
 		return
 	}
 	by := "callee"
@@ -1513,6 +1539,9 @@ func (c *Call) refer(l *Leg, tx *sip.ServerTx, m *sip.Message) {
 		c.attendedTransfer(l, stay, rep)
 		return
 	}
+	c.mu.Lock()
+	c.transferor, c.transferBack = l, time.Time{}
+	c.mu.Unlock()
 	go c.blindTransfer(l, stay, cleanNumber(referTo.URI.User))
 }
 
@@ -1558,11 +1587,28 @@ func (c *Call) blindTransfer(transferor, stay *Leg, number string) {
 		return
 	}
 	p := c.e.routeCall(cfg, caller, number, false)
+	// An answered 911 call from the ESInet or a CAMA trunk is never dropped by a transfer that fails:
+	// it goes back to the call-taker while they are still on, or else rings every call-taker. It is
+	// never handed to voicemail or another no-answer destination, and an extension with no phone
+	// connected is not rung at all.
+	emergency := c.needsEveryTaker(p)
+	if emergency && !hasTargets(p) {
+		what := "which has no phone connected"
+		if p.local != "" {
+			what += " (it would have gone to " + p.local + ")"
+		}
+		c.note("The 911 call was transferred to " + firstNonEmptyStr(p.toName, number) + ", " + what + ".")
+		p = plan{}
+	}
 	if p.reject != 0 || p.local != "" || len(p.stages) == 0 {
 		notifyReferIf(transferor, "404 Not Found", true)
+		c.transferFailed(transferor, stay, emergency)
 		return
 	}
 	notifyReferIf(transferor, "100 Trying", false)
+	if emergency {
+		p.noAnswer = nil
+	}
 
 	// The party who stays hears ringback while the new party is rung.
 	c.mu.Lock()
@@ -1588,17 +1634,89 @@ func (c *Call) blindTransfer(transferor, stay *Leg, number string) {
 	c.mu.Unlock()
 	if leg == nil {
 		notifyReferIf(transferor, "480 Temporarily Unavailable", true)
-		c.mu.Lock()
-		c.transferring = false
-		up := !transferor.ended
-		c.mu.Unlock()
-		if up {
-			connect(stay, transferor)
-		} else {
-			c.hangup("transfer failed", "system")
+		if emergency {
+			c.note("Nobody answered the transfer to " + firstNonEmptyStr(p.toName, number) + ".")
 		}
+		c.transferFailed(transferor, stay, emergency)
 		return
 	}
+	c.transferJoined(transferor, stay, leg)
+}
+
+// transferFailed puts a call back after a transfer that did not connect: with the party who asked for
+// it while they are still on; otherwise an emergency call rings every call-taker until one answers
+// (or the caller hangs up), and any other call ends.
+func (c *Call) transferFailed(transferor, stay *Leg, emergency bool) {
+	c.mu.Lock()
+	c.transferring = false
+	if c.transferor == transferor {
+		c.transferor = nil
+	}
+	up := !transferor.ended && !c.ended
+	gone := c.ended || stay.ended
+	c.mu.Unlock()
+	switch {
+	case gone:
+	case up:
+		if emergency {
+			c.mu.Lock()
+			c.transferor, c.transferBack = transferor, time.Now().Add(5*time.Second)
+			c.mu.Unlock()
+		}
+		connect(stay, transferor)
+	case emergency:
+		c.note("The call-taker had already hung up. An emergency call is never dropped, so every call-taker was rung.")
+		next := c.e.everyTaker(c.e.Config())
+		if next.reject != 0 {
+			c.note(next.why...)
+			c.hangup("transfer failed", "system")
+			return
+		}
+		c.mu.Lock()
+		c.transferring = true
+		pt := 0
+		if strings.EqualFold(stay.codecName(), "PCMA") {
+			pt = 8
+		}
+		c.player = media.NewPlayer(stay.ep, pt)
+		c.player.Play(media.Ringback(c.e.Config().System.Country))
+		c.mu.Unlock()
+		leg := c.dialForTransfer(stay, next)
+		c.mu.Lock()
+		if c.player != nil {
+			c.player.Stop()
+			c.player = nil
+		}
+		c.transferring = false
+		c.mu.Unlock()
+		if leg == nil {
+			c.hangup("transfer failed", "system")
+			return
+		}
+		c.transferJoined(transferor, stay, leg)
+	default:
+		c.hangup("transfer failed", "system")
+	}
+}
+
+// hasTargets reports whether a plan rings any phone at all.
+func hasTargets(p plan) bool {
+	for _, st := range p.stages {
+		if len(st.targets) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// transferJoined connects the party who stayed with the one a transfer reached, and releases the
+// party who asked for it.
+func (c *Call) transferJoined(transferor, stay, leg *Leg) {
+	c.mu.Lock()
+	if c.transferor == transferor {
+		c.transferor = nil
+	}
+	c.mu.Unlock()
 	notifyReferIf(transferor, "200 OK", true)
 	c.mu.Lock()
 	if stay == c.caller {
