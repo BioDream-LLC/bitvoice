@@ -31,7 +31,7 @@ func TestTokenOnBehalfOf(t *testing.T) {
 		}
 		return u
 	}
-	if u := who(cad, "Dana Ruiz"); u.Name != "Dana Ruiz (bitdispatcher CAD)" || u.Username != "token:bitdispatcher CAD/Dana Ruiz" {
+	if u := who(cad, "Dana Ruiz"); u.Name != "Dana Ruiz via bitdispatcher CAD" || u.Username != "token:bitdispatcher CAD/Dana Ruiz" {
 		t.Fatalf("on behalf: %+v", u)
 	}
 	if u := who(cad, ""); u.Name != "bitdispatcher CAD" {
@@ -40,7 +40,7 @@ func TestTokenOnBehalfOf(t *testing.T) {
 	if u := who(plain, "Dana Ruiz"); u.Name != "Terraform" || strings.Contains(u.Username, "Dana") {
 		t.Fatalf("an ordinary token passed for a person: %+v", u)
 	}
-	if u := who(cad, "  Dana\r\nX-Evil: 1 / "+strings.Repeat("a", 200)); strings.ContainsAny(u.Name, "\r\n/") || len([]rune(strings.TrimSuffix(u.Name, " (bitdispatcher CAD)"))) > 80 {
+	if u := who(cad, "  Dana\r\nX-Evil: 1 / "+strings.Repeat("a", 200)); strings.ContainsAny(u.Name, "\r\n/") || len([]rune(strings.TrimSuffix(u.Name, " via bitdispatcher CAD"))) > 80 {
 		t.Fatalf("name not cleaned: %q", u.Name)
 	}
 }
@@ -53,14 +53,18 @@ func TestAnswerReportTakers(t *testing.T) {
 	start := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
 	cdrs := []store.CDR{
 		{Start: start, Emergency: true, Answer: start.Add(5 * time.Second), AnsweredExt: "100", Taken: start.Add(5 * time.Second), TakenBy: "100", TakenName: "Call taker 1"},
-		{Start: start, Emergency: true, Answer: start, Taken: start.Add(67 * time.Second), TakenBy: "token:bitdispatcher CAD/Dana Ruiz", TakenName: "Dana Ruiz (bitdispatcher CAD)"},
+		{Start: start, Emergency: true, Answer: start, Taken: start.Add(67 * time.Second), TakenBy: "token:bitdispatcher CAD/Dana Ruiz", TakenName: "Dana Ruiz via bitdispatcher CAD"},
+		// taken before call records said by whom
+		{Start: start, Emergency: true, Answer: start, Taken: start.Add(68 * time.Second)},
+		// never taken by a person: abandoned, not a call-taker's
+		{Start: start, Emergency: true, Answer: start},
 	}
 	r := answerReport(cfg, cdrs, start, start.Add(time.Hour))
 	names := map[string]string{}
 	for _, tk := range r.ByTaker {
 		names[tk.Name] = tk.Ext
 	}
-	if len(r.ByTaker) != 2 || names["Call taker 1"] != "100" || names["Dana Ruiz (bitdispatcher CAD)"] != "" {
+	if len(r.ByTaker) != 3 || names["Call taker 1"] != "100" || names["Dana Ruiz via bitdispatcher CAD"] != "" || names[unrecordedTaker] != "" || r.Abandoned != 1 {
 		t.Fatalf("takers %+v", r.ByTaker)
 	}
 }

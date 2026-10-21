@@ -412,9 +412,10 @@ func writeAnswerCSV(w http.ResponseWriter, cfg config.Config, cdrs []store.CDR, 
 			if ans.IsZero() && c.AnsweredExt != "" {
 				ans = c.Answer
 			}
-			_, ext, taker := takerOf(cfg, c)
-			row := []string{c.Start.In(loc).Format("2006-01-02 15:04:05"), csvSafe(c.From), "", "", csvSafe(firstNonEmpty(ext, taker)), "yes", ""}
+			row := []string{c.Start.In(loc).Format("2006-01-02 15:04:05"), csvSafe(c.From), "", "", "", "yes", ""}
 			if !ans.IsZero() {
+				_, ext, taker := takerOf(cfg, c)
+				row[4] = csvSafe(firstNonEmpty(ext, taker))
 				row[2], row[3], row[5] = ans.In(loc).Format("2006-01-02 15:04:05"), strconv.FormatFloat(ans.Sub(c.Start).Seconds(), 'f', 1, 64), "no"
 			}
 			if len(c.Text) > 0 {
@@ -577,7 +578,13 @@ func takerOf(cfg config.Config, c store.CDR) (who, ext, name string) {
 		return who, x.Number, x.Name
 	}
 	if c.TakenBy == "" {
+		if c.AnsweredExt == "" {
+			return unrecordedTaker, "", unrecordedTaker // a text call taken before records said who took it
+		}
 		return who, c.AnsweredExt, ""
 	}
 	return who, "", firstNonEmpty(c.TakenName, strings.TrimPrefix(c.TakenBy, "token:"))
 }
+
+// unrecordedTaker names the call-taker of a call taken before call records said who took it.
+const unrecordedTaker = "Not recorded"

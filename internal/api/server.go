@@ -276,7 +276,7 @@ func (s *Server) user(r *http.Request) (store.User, bool) {
 		if person := onBehalfOf(r.Header.Get(OnBehalfHeader)); person != "" && t.OnBehalf {
 			// A trusted CAD says which of its people is acting: records name the person, and the token.
 			u.Username += "/" + person
-			u.Name = person + " (" + t.Name + ")"
+			u.Name = person + " via " + t.Name
 		}
 		return u, true
 	}
