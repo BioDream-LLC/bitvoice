@@ -54,7 +54,7 @@ func (c *Call) liveTranscript() {
 	if !a.Enabled || !a.LiveTranscripts {
 		return
 	}
-	client := &ai.Client{BaseURL: a.BaseURL, Key: a.Key, Model: a.Model, AudioModel: a.AudioModel, Allow: c.e.AIAllow}
+	client := &ai.Client{BaseURL: a.BaseURL, Key: a.Key, Model: a.Model, AudioModel: a.AudioModel, TranscribeURL: a.TranscribeURL, TranscribeKey: a.TranscribeKey, TranscribeModel: a.TranscribeModel, Allow: c.e.AIAllow}
 	rate := media.Rate
 	caller := &liveSide{side: "caller", name: "Caller"}
 	taker := &liveSide{side: "taker"}

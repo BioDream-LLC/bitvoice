@@ -115,7 +115,7 @@ func (c *Call) runReceptionist(id string) {
 		return
 	}
 	a := cfg.System.AI
-	client := &ai.Client{BaseURL: a.BaseURL, Key: a.Key, Model: a.Model, AudioModel: a.AudioModel, Allow: c.e.AIAllow}
+	client := &ai.Client{BaseURL: a.BaseURL, Key: a.Key, Model: a.Model, AudioModel: a.AudioModel, TranscribeURL: a.TranscribeURL, TranscribeKey: a.TranscribeKey, TranscribeModel: a.TranscribeModel, Allow: c.e.AIAllow}
 	var history []string
 	toPerson := func(why string) {
 		c.e.Log.Info("receptionist hands the call to a person", "call", c.ID, "why", why)

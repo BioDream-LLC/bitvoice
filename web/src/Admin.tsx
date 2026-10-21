@@ -388,18 +388,33 @@ export function Settings() {
           {sys.ai.enabled && (
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Service address" htmlFor="aib" error={p('system.ai.baseUrl')} hint="Empty uses OpenRouter."><input id="aib" className="input font-mono" placeholder="https://openrouter.ai/api/v1" value={sys.ai.baseUrl} onChange={(e) => setSys({ ai: { ...sys.ai, baseUrl: e.target.value.trim() } })} /></Field>
-              <Field label="Model" htmlFor="aim" error={p('system.ai.model')} hint="For text: summaries, receptionists, asking. Without a speech-to-text model it must also accept audio."><input id="aim" className="input font-mono" placeholder="google/gemini-2.5-flash" value={sys.ai.model} onChange={(e) => setSys({ ai: { ...sys.ai, model: e.target.value.trim() } })} /></Field>
+              <Field label="Model" htmlFor="aim" error={p('system.ai.model')} hint="For text: summaries, receptionists, asking. Without a speech-to-text model or service it must also accept audio. May be empty with a speech-to-text service: transcripts only."><input id="aim" className="input font-mono" placeholder="google/gemini-2.5-flash" value={sys.ai.model} onChange={(e) => setSys({ ai: { ...sys.ai, model: e.target.value.trim() } })} /></Field>
               <Field label="API key" htmlFor="aik" hint="Leave empty to keep the current one."><input id="aik" className="input font-mono" type="password" autoComplete="off" value={sys.ai.key} onChange={(e) => setSys({ ai: { ...sys.ai, key: e.target.value } })} /></Field>
-              <Field label="Speech-to-text model" htmlFor="ai-am" error={p('system.ai.audioModel')} hint="A model that takes audio, for transcripts and receptionists, such as google/gemini-2.5-flash. Empty: the model above.">
-                <input id="ai-am" className="input font-mono" value={sys.ai.audioModel ?? ''} onChange={(e) => setSys({ ai: { ...sys.ai, audioModel: e.target.value.trim() } })} />
+              <Field label="Speech-to-text model" htmlFor="ai-am" error={p('system.ai.audioModel')} hint={sys.ai.transcribeUrl ? 'Not used: the speech-to-text service below writes speech down.' : 'A model that takes audio, for transcripts and receptionists, such as google/gemini-2.5-flash. Empty: the model above.'}>
+                <input id="ai-am" className="input font-mono" disabled={!!sys.ai.transcribeUrl} value={sys.ai.audioModel ?? ''} onChange={(e) => setSys({ ai: { ...sys.ai, audioModel: e.target.value.trim() } })} />
               </Field>
+              <div className="space-y-3 rounded-lg border border-slate-800 p-4 sm:col-span-2">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-200"><AudioLines size={15} className="text-emerald-300" aria-hidden /> Speech-to-text service <span className="text-xs font-normal text-emerald-300">no language model, can stay in the building</span></h3>
+                <p className="text-xs text-slate-400">A speech recogniser such as whisper.cpp's <span className="font-mono">whisper-server</span>, run on this computer or one on your network, writes down what callers and staff say: their audio never leaves the building and nothing is paid per call. An OpenAI-compatible <span className="font-mono">…/audio/transcriptions</span> works too. With one set, the model above may be left empty: transcripts are written, and summaries and receptionists (which need a language model) are left out.</p>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <Field label="Address" htmlFor="ai-tu" error={p('system.ai.transcribeUrl')} hint="Empty: the model writes speech down.">
+                    <input id="ai-tu" className="input font-mono" placeholder="http://127.0.0.1:8178/inference" value={sys.ai.transcribeUrl ?? ''} onChange={(e) => setSys({ ai: { ...sys.ai, transcribeUrl: e.target.value.trim() } })} />
+                  </Field>
+                  <Field label="Its model" htmlFor="ai-tm" hint="Only for services that ask, such as whisper-1. whisper-server ignores it.">
+                    <input id="ai-tm" className="input font-mono" disabled={!sys.ai.transcribeUrl} value={sys.ai.transcribeModel ?? ''} onChange={(e) => setSys({ ai: { ...sys.ai, transcribeModel: e.target.value.trim() } })} />
+                  </Field>
+                  <Field label="Its key" htmlFor="ai-tk" hint="Only for services that ask. Leave empty to keep the current one.">
+                    <input id="ai-tk" className="input font-mono" type="password" autoComplete="off" disabled={!sys.ai.transcribeUrl} value={sys.ai.transcribeKey ?? ''} onChange={(e) => setSys({ ai: { ...sys.ai, transcribeKey: e.target.value } })} />
+                  </Field>
+                </div>
+              </div>
               <label className="flex items-center gap-3 self-end pb-2 text-sm text-slate-300"><Toggle checked={sys.ai.voicemail} onChange={(v) => setSys({ ai: { ...sys.ai, voicemail: v } })} label="Transcribe voicemail" /> Transcribe and summarise voicemail</label>
               <div className="sm:col-span-2">
                 <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={!!sys.ai.calls} onChange={(v) => setSys({ ai: { ...sys.ai, calls: v } })} label="Transcribe recorded calls" /> Transcribe recorded calls, with a summary and action items</label>
                 <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={!!sys.ai.insights} onChange={(v) => setSys({ ai: { ...sys.ai, insights: v } })} label="Call insight" />
                   <span>Note how each transcribed call went <span className="text-xs text-slate-500">(the caller's mood at the start and end, and moments a supervisor may want to hear, each with what was said; never a score)</span></span></label>
                 {(sys.publicSafety || sys.ai.liveTranscripts) && <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={!!sys.ai.liveTranscripts} onChange={(v) => setSys({ ai: { ...sys.ai, liveTranscripts: v } })} label="Write out 911 calls live" />
-                  <span>Write out 911 calls live <span className="text-xs text-slate-500">(each side as it is spoken, on the 911 screen and to CAD as call.transcript events; the calls' audio goes to the AI service while they last, recorded or not)</span></span></label>}
+                  <span>Write out 911 calls live <span className="text-xs text-slate-500">(each side as it is spoken, on the 911 screen and to CAD as call.transcript events; the calls' audio goes to the speech-to-text service, or the AI service, while they last, recorded or not)</span></span></label>}
                 <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={!!sys.ai.briefings} onChange={(v) => setSys({ ai: { ...sys.ai, briefings: v } })} label="Transfer briefings" />
                   <span>Brief whoever a call is transferred to <span className="text-xs text-slate-500">(a two-sentence summary of the call so far, on their browser phone and desk phone screen; the call's audio goes to the AI service)</span></span></label>
                 <p className="mt-1 pl-14 text-xs text-slate-500">Only calls that are recorded (Settings, Call recording, or an extension's own setting); each side is written out separately, so the transcript knows who said what. Calls can then be searched by what was said in <a className="text-sky-300 hover:underline" href="#/history">Call history</a>.</p>

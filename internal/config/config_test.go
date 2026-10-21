@@ -270,3 +270,26 @@ func TestConsentForParties(t *testing.T) {
 		t.Fatalf("%s", a)
 	}
 }
+
+// A speech-to-text service may stand in for the model; it must be https, or plain http only within
+// the building (this computer or a private network address).
+func TestTranscribeService(t *testing.T) {
+	for _, tc := range []struct {
+		ai AI
+		ok bool
+	}{
+		{AI{Enabled: true}, false},
+		{AI{Enabled: true, TranscribeURL: "http://127.0.0.1:8178/inference"}, true},
+		{AI{Enabled: true, TranscribeURL: "http://192.168.1.50:8178/inference"}, true},
+		{AI{Enabled: true, TranscribeURL: "http://localhost:8178/inference"}, true},
+		{AI{Enabled: true, TranscribeURL: "https://api.openai.com/v1/audio/transcriptions", TranscribeModel: "whisper-1"}, true},
+		{AI{Enabled: true, TranscribeURL: "http://whisper.example.com/inference"}, false},
+		{AI{Enabled: true, TranscribeURL: "http://8.8.8.8/inference"}, false},
+	} {
+		c := Default()
+		c.System.AI = tc.ai
+		if err := c.Validate(); (err == nil) != tc.ok {
+			t.Errorf("%+v: %v", tc.ai, err)
+		}
+	}
+}

@@ -1771,6 +1771,17 @@ Choose a receptionist as where calls go: a route, a menu option or an extension'
 ## Models
 **Model** does the text work: summaries, the receptionist's replies and asking in plain words. Turning speech into text needs a model that takes audio; set it as **Speech-to-text model** (for example google/gemini-2.5-flash on OpenRouter) to use a text-only model for the rest, such as meta-llama/llama-3.3-70b-instruct.
 
+## Speech to text in the building
+A **speech-to-text service** writes speech down without any language model: a speech recogniser hears the audio and writes what was said, nothing more. Run **whisper.cpp**'s server (MIT licence; on macOS \`brew install whisper.cpp\`, on Linux build it from github.com/ggml-org/whisper.cpp) on this computer or another one on your network, with a model file from its download page (\`ggml-base-q5_1.bin\`, 57 MB, understands about 100 languages; \`small\` or \`medium\` are more accurate and slower):
+
+\`\`\`
+whisper-server -m ggml-base-q5_1.bin --host 127.0.0.1 --port 8178 -l auto
+\`\`\`
+
+Then put \`http://127.0.0.1:8178/inference\` under **Speech-to-text service, Address** in the AI settings. Every transcript (voicemail, recorded calls, live 911 calls, receptionists hearing callers) then goes to it, and callers' audio never leaves the building; nothing is paid per call. \`-l auto\` lets it hear any language; \`-l en\` is a little faster for English only. Plain \`http\` is accepted only to this computer or a private network address; anything else must be \`https\`. An OpenAI-compatible \`…/audio/transcriptions\` service works the same way (with **Its model**, such as whisper-1, and **Its key**).
+
+With a speech-to-text service the **Model** may be left empty: transcripts are written, and what needs a language model (summaries, action items, voicemail triage, call insight, receptionists' replies, asking in plain words) is left out. Notes a recogniser makes about what it heard, such as \`[BLANK_AUDIO]\` or \`(silence)\`, are dropped, so a quiet stretch never reads as though something was said.
+
 ## Voicemail triage
 With **Transcribe and summarise voicemail** on, each message is also marked urgent, normal or low priority, with its kind (sales, support, billing...). Urgent messages raise an alert on every administrator's screen.
 
@@ -2033,7 +2044,7 @@ When a rebid changes the location, the **location check** says which to show fir
 
 **A caller who vanished.** When one side of a call stops sending sound for a minute (a phone that lost power or signal sends no hang-up) while the other side still sends, the call is ended with the reason *the caller's audio stopped* (or whose it was), in the call record and in the \`call.ended\` event CAD hears (\`cause\`, \`endedBy\`). A side on hold, faxing, or that said it sends nothing (a paging speaker) is never ended this way. Silence still sends packets, so a caller who cannot speak keeps the call up.
 
-**Live transcripts.** With **Write out 911 calls live** on (Settings, AI), each side of an answered 911 call is written out by the AI service as it is spoken, cut where the speaker pauses, and shown under the call as **Live transcript**. CAD gets each piece as a \`call.transcript\` event: \`{"call": id, "lines": [{"speaker": "Caller", "side": "caller", "text": "…", "second": 12.4}]}\`. The calls' audio goes to the AI service while they last, recorded or not. The recording's own transcript still comes when the call ends.
+**Live transcripts.** With **Write out 911 calls live** on (Settings, AI), each side of an answered 911 call is written out as it is spoken, by the speech-to-text service when one is set ([so the audio stays in the building](#ai)), else by the AI service, cut where the speaker pauses, and shown under the call as **Live transcript**. CAD gets each piece as a \`call.transcript\` event: \`{"call": id, "lines": [{"speaker": "Caller", "side": "caller", "text": "…", "second": 12.4}]}\`. The calls' audio goes to the AI service while they last, recorded or not. The recording's own transcript still comes when the call ends.
 
 **CAD dispatchers by name.** A CAD acting through one API token can name the dispatcher behind each request: make the token with **Names the person it acts for** (Administrators, API tokens) and send \`X-BitVoice-On-Behalf-Of: <the person's name>\`. The exposure log, text calls taken, calls ended and the audit log then name that person with the token (*Dana Ruiz via bitdispatcher CAD*). From any other token the header is ignored.
 

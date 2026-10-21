@@ -270,7 +270,7 @@ export interface SystemSettings {
     apns: { keyId: string; teamId: string; topic: string; key: string; sandbox: boolean } }
   provisioning: { enabled: boolean; username: string; password: string; transport: 'udp' | 'tcp' | 'tls'; httpsOnly?: boolean }
   email: { host: string; port: number; username: string; password: string; from: string }
-  ai: { enabled: boolean; baseUrl: string; key: string; model: string; voicemail: boolean; calls: boolean; briefings?: boolean; insights?: boolean; liveTranscripts?: boolean; audioModel: string; speechModel: string; voice: string }
+  ai: { enabled: boolean; baseUrl: string; key: string; model: string; voicemail: boolean; calls: boolean; briefings?: boolean; insights?: boolean; liveTranscripts?: boolean; transcribeUrl?: string; transcribeKey?: string; transcribeModel?: string; audioModel: string; speechModel: string; voice: string }
   crm: CRM
   metrics: Metrics
   costs: Costs

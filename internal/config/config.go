@@ -276,6 +276,15 @@ type AI struct {
 	// LiveTranscripts writes out answered 911 calls as they are spoken, each side apart, for the 911
 	// screen and CAD (call.transcript events). The calls' audio goes to the AI service while they last.
 	LiveTranscripts bool `json:"liveTranscripts,omitempty"`
+	// TranscribeURL, when set, writes speech down with a speech-to-text service instead of a model:
+	// whisper.cpp's whisper-server on this computer or the building's network
+	// (http://127.0.0.1:8178/inference), so callers' audio need not leave the building and nothing is
+	// paid per call, or an OpenAI-compatible …/audio/transcriptions. TranscribeKey and TranscribeModel
+	// are its key and model name, for services that want them. Model may then be empty: transcripts are
+	// written, summaries and everything else that needs a language model are left out.
+	TranscribeURL   string `json:"transcribeUrl,omitempty"`
+	TranscribeKey   string `json:"transcribeKey,omitempty"`
+	TranscribeModel string `json:"transcribeModel,omitempty"`
 	// SpeechModel and Voice turn text into speech for the receptionist (an OpenAI-compatible
 	// /audio/speech service at the same address), such as tts-1 and alloy.
 	SpeechModel string `json:"speechModel"`
@@ -2501,8 +2510,11 @@ func (c *Config) Validate() error {
 		extNumbers[e.Number] = true
 	}
 	if a := &c.System.AI; a.Enabled {
-		if strings.TrimSpace(a.Model) == "" {
-			p.add("system.ai.model", "choose a model")
+		if strings.TrimSpace(a.Model) == "" && a.TranscribeURL == "" {
+			p.add("system.ai.model", "choose a model, or a speech-to-text service below")
+		}
+		if a.TranscribeURL != "" && !buildingURL(a.TranscribeURL) {
+			p.add("system.ai.transcribeUrl", "use https, or http only to this computer or a private network address (http://127.0.0.1:8178/inference)")
 		}
 		if a.BaseURL != "" && !strings.HasPrefix(a.BaseURL, "https://") && !strings.HasPrefix(a.BaseURL, "http://127.0.0.1") && !strings.HasPrefix(a.BaseURL, "http://localhost") {
 			p.add("system.ai.baseUrl", "use https, or http only to a model on this computer")
@@ -3919,4 +3931,26 @@ func (c *Config) FindReportLayout(id string) *ReportLayout {
 		}
 	}
 	return nil
+}
+
+// buildingURL reports whether a service address is https, or plain http to this computer or a private
+// network address (RFC 1918, ULA, link-local): somewhere audio may go unencrypted without leaving the
+// building.
+func buildingURL(s string) bool {
+	u, err := url.Parse(s)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	switch u.Scheme {
+	case "https":
+		return true
+	case "http":
+		h := u.Hostname()
+		if h == "localhost" {
+			return true
+		}
+		a, err := netip.ParseAddr(h)
+		return err == nil && (a.IsLoopback() || a.IsPrivate() || a.IsLinkLocalUnicast())
+	}
+	return false
 }

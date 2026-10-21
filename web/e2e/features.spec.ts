@@ -1030,3 +1030,24 @@ test('an API token that names the person it acts for', async ({ page }) => {
   expect(t.onBehalf).toBe(true)
   await page.evaluate(async (id) => { await fetch('./api/tokens/' + id, { method: 'DELETE', headers: { 'X-BitVoice': '1' } }) }, t.id)
 })
+
+// A speech-to-text service (whisper.cpp) stands in for the model: saved with no model at all.
+test('AI settings: a speech-to-text service with no language model', async ({ page }) => {
+  await signIn(page)
+  const before = await page.evaluate(async () => (await (await fetch('./api/settings')).json()).system.ai)
+  await page.goto('/#/settings')
+  const ai = page.locator('section', { has: page.getByRole('heading', { name: 'AI (optional)' }) })
+  if (!(await ai.getByRole('switch', { name: 'Use AI' }).isChecked())) await ai.getByRole('switch', { name: 'Use AI' }).click()
+  await ai.getByLabel('Model', { exact: true }).fill('')
+  await ai.getByLabel('Address', { exact: true }).fill('http://whisper.example.com/inference')
+  await page.getByRole('button', { name: /^Save/ }).first().click()
+  await expect(ai.getByText(/use https, or http only to this computer or a private network address/)).toBeVisible()
+  await ai.getByLabel('Address', { exact: true }).fill('http://127.0.0.1:8178/inference')
+  await page.getByRole('button', { name: /^Save/ }).first().click()
+  await expect.poll(async () => page.evaluate(async () => (await (await fetch('./api/settings')).json()).system.ai.transcribeUrl)).toBe('http://127.0.0.1:8178/inference')
+  await expect(ai.getByLabel('Speech-to-text model')).toBeDisabled()
+  await page.evaluate(async (a) => {
+    const s = await (await fetch('./api/settings')).json()
+    await fetch('./api/settings', { method: 'PUT', headers: { 'X-BitVoice': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ ...s, system: { ...s.system, ai: { ...a, transcribeUrl: '' } } }) })
+  }, before)
+})

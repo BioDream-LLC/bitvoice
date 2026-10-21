@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -52,7 +53,9 @@ func (s *Server) transcribe(ctx context.Context, v store.Voicemail) {
 	text, err := c.Transcribe(ctx, wav)
 	summary := ""
 	if err == nil {
-		summary, err = c.Summarize(ctx, text)
+		if summary, err = c.Summarize(ctx, text); errors.Is(err, ai.ErrNoModel) {
+			err = nil // a speech-to-text service alone: the transcript, no summary
+		}
 	}
 	msg := ""
 	if err != nil {
@@ -60,7 +63,7 @@ func (s *Server) transcribe(ctx context.Context, v store.Voicemail) {
 		s.Log.Warn("voicemail transcript failed", "box", v.Box, "err", err)
 	}
 	var tri ai.Triage
-	if err == nil && text != "" {
+	if err == nil && text != "" && c.Model != "" {
 		if tri, err = c.TriageVoicemail(ctx, text); err != nil {
 			s.Log.Warn("voicemail triage failed", "box", v.Box, "err", err)
 			err = nil // the transcript and summary still stand
@@ -132,6 +135,9 @@ func (s *Server) transcribeCall(ctx context.Context, r store.CDR, force bool) {
 		return
 	}
 	notes, err := c.SummarizeCall(ctx, t.Text())
+	if errors.Is(err, ai.ErrNoModel) {
+		err = nil // a speech-to-text service alone: the transcript, no summary
+	}
 	if err != nil {
 		s.Log.Warn("call summary failed", "call", r.ID, "err", err) // the transcript still stands
 		t.Error = "the summary could not be made: " + err.Error()
@@ -140,7 +146,7 @@ func (s *Server) transcribeCall(ctx context.Context, r store.CDR, force bool) {
 		t.Error = strings.TrimSpace(t.Error + fmt.Sprintf(" %d of %d stretches of speech could not be transcribed.", failed, pieces))
 	}
 	t.Summary, t.ActionItems, t.Status, t.Done = notes.Summary, notes.ActionItems, "done", time.Now().UTC()
-	if a.Insights {
+	if a.Insights && c.Model != "" {
 		if in, err := c.CallInsight(ctx, t.TimedText()); err == nil {
 			t.Insight = &in
 		} else {

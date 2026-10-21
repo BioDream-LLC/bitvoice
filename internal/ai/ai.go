@@ -27,7 +27,14 @@ type Client struct {
 	// AudioModel, when set, is used instead of Model for turning speech into text (a model that takes
 	// audio, such as google/gemini-2.5-flash, while Model may be a text-only one).
 	AudioModel string
-	HTTP       *http.Client
+	// TranscribeURL, when set, turns speech into text instead of any model: a speech-to-text service
+	// such as whisper.cpp's whisper-server (http://127.0.0.1:8178/inference) on this computer or the
+	// building's network, or an OpenAI-compatible …/audio/transcriptions. TranscribeKey is its bearer
+	// key and TranscribeModel its model name (whisper-1), when it wants them.
+	TranscribeURL   string
+	TranscribeKey   string
+	TranscribeModel string
+	HTTP            *http.Client
 	// Allow, when set, is asked before every request; an error refuses it (a daily allowance used up).
 	Allow func() error
 }
@@ -49,6 +56,9 @@ type message struct {
 }
 
 func (c *Client) chat(ctx context.Context, msgs []message) (string, error) {
+	if strings.TrimSpace(c.Model) == "" {
+		return "", ErrNoModel
+	}
 	if c.Allow != nil {
 		if err := c.Allow(); err != nil {
 			return "", err
@@ -102,11 +112,22 @@ func (c *Client) chat(ctx context.Context, msgs []message) (string, error) {
 }
 
 // Transcribe returns what is said in a WAV recording, using a model that accepts audio.
+// With a speech-to-text service set (TranscribeURL) that service writes it down and no language
+// model is asked.
 func (c *Client) Transcribe(ctx context.Context, wav []byte) (string, error) {
-	return c.audio().chat(ctx, []message{{Role: "user", Content: []part{
+	if c.TranscribeURL != "" {
+		if c.Allow != nil {
+			if err := c.Allow(); err != nil {
+				return "", err
+			}
+		}
+		return c.transcribeService(ctx, wav)
+	}
+	text, err := c.audio().chat(ctx, []message{{Role: "user", Content: []part{
 		{Type: "text", Text: "Transcribe this recording word for word. Reply with the transcript only. If nothing is said, reply with an empty line."},
 		{Type: "input_audio", InputAudio: &inputAudio{Data: base64.StdEncoding.EncodeToString(wav), Format: "wav"}},
 	}}})
+	return speechOnly(text), err
 }
 
 // audio is the client to use for speech: the same service, with AudioModel when one is set.

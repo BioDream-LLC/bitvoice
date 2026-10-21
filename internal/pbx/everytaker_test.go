@@ -3,6 +3,8 @@ package pbx
 import (
 	"math"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"net/netip"
 	"strconv"
 	"strings"
@@ -213,9 +215,30 @@ func hangupAll(e *Engine) {
 // their pause and comes as a call.transcript event naming the side.
 func TestLiveTranscript911(t *testing.T) {
 	ai, _ := fakeAIWith(t, "", "My house is on fire.")
+	liveTranscript911(t, config.AI{Enabled: true, BaseURL: ai.URL, Model: "m", LiveTranscripts: true})
+}
+
+// The same with a speech-to-text service (whisper.cpp's whisper-server) and no language model at all.
+func TestLiveTranscript911Whisper(t *testing.T) {
+	whisper := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/inference" {
+			http.NotFound(w, r)
+			return
+		}
+		if _, _, err := r.FormFile("file"); err != nil {
+			http.Error(w, "no file", 400)
+			return
+		}
+		w.Write([]byte(`{"text":" My house is on fire.\n"}`))
+	}))
+	defer whisper.Close()
+	liveTranscript911(t, config.AI{Enabled: true, TranscribeURL: whisper.URL + "/inference", LiveTranscripts: true})
+}
+
+func liveTranscript911(t *testing.T, a config.AI) {
 	esinet := newCarrier(t)
 	cfg := esinetConfig(esinet.stack.Port(), config.InboundRoute{Name: "911", Trunk: "in", Destination: config.Destination{Type: "extension", Target: "100"}})
-	cfg.System.AI = config.AI{Enabled: true, BaseURL: ai.URL, Model: "m", LiveTranscripts: true}
+	cfg.System.AI = a
 	e, _ := startEngine(t, cfg)
 	p := registered(t, e, "100")[0]
 	events := e.Bus.Subscribe()

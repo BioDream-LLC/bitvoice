@@ -15,7 +15,7 @@ var errAILimit = errors.New("this organisation's AI requests for today are used 
 
 // aiClient is the AI client for the settings, with the tenant's daily allowance applied.
 func (s *Server) aiClient(a config.AI) *ai.Client {
-	return &ai.Client{BaseURL: a.BaseURL, Key: a.Key, Model: a.Model, AudioModel: a.AudioModel, Allow: s.AIAllow}
+	return &ai.Client{BaseURL: a.BaseURL, Key: a.Key, Model: a.Model, AudioModel: a.AudioModel, TranscribeURL: a.TranscribeURL, TranscribeKey: a.TranscribeKey, TranscribeModel: a.TranscribeModel, Allow: s.AIAllow}
 }
 
 // AIAllow counts an AI request against a hosted tenant's daily allowance, refusing it when used up.

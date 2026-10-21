@@ -416,6 +416,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request, u store.Use
 		if in.System.AI.Key == "" {
 			in.System.AI.Key = c.System.AI.Key
 		}
+		if in.System.AI.TranscribeKey == "" && in.System.AI.TranscribeURL == c.System.AI.TranscribeURL {
+			in.System.AI.TranscribeKey = c.System.AI.TranscribeKey
+		}
 		if in.System.Archive.S3.SecretKey == "" && in.System.Archive.S3.AccessKey == c.System.Archive.S3.AccessKey {
 			in.System.Archive.S3.SecretKey = c.System.Archive.S3.SecretKey
 		}

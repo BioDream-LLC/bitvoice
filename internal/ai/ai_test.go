@@ -48,7 +48,7 @@ func TestServiceError(t *testing.T) {
 		w.Write([]byte(`{"error":{"message":"No auth credentials found"}}`))
 	}))
 	defer srv.Close()
-	_, err := (&Client{BaseURL: srv.URL}).Summarize(context.Background(), "x")
+	_, err := (&Client{BaseURL: srv.URL, Model: "m"}).Summarize(context.Background(), "x")
 	if err == nil || !strings.Contains(err.Error(), "No auth credentials") {
 		t.Fatal(err)
 	}
