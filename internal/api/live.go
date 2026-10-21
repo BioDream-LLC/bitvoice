@@ -448,6 +448,16 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request, u store.User) {
 	if pv := cfg.System.Provisioning; pv.Enabled && len(cfg.Devices) == 0 {
 		add("provision", "warn", "Automatic phone set-up is on but no phones are listed", "Add each phone's MAC address on the Phones page.", "/phones")
 	}
+	for _, u := range config.UnsafeCADAddresses(cfg) {
+		fix := "/psap"
+		if u[0] == "radio events" {
+			fix = "/radio"
+		}
+		add("cad-unencrypted", "fail", "911 "+u[0]+" are not being sent to CAD", u[1]+" is plain http to another computer, so nothing is sent there: it would carry callers' details and CAD's secret unencrypted. Use CAD's https address, or run CAD on this computer (http://127.0.0.1:…).", fix)
+	}
+	if a := cfg.System.PSAP.ALIAddress; config.ALIOffComputer(a) {
+		add("ali-unencrypted", "warn", "The ALI spill crosses the network unencrypted", "Callers' numbers and locations go to "+a+" in plain TCP, as legacy CAD listeners take them. Keep that path off any shared network: a direct serial link (serial:/dev/…), or a VPN or private circuit to CAD.", "/psap")
+	}
 	if ps := cfg.System.PSAP; ps.AgencyID == "" && (ps.EIDOURL != "" || ps.ALIAddress != "") {
 		add("agency-id", "warn", "This PSAP has no agency ID", "EIDOs and the i3 log go to CAD without naming the agency that took the call. Set Agency ID in the 911 settings (a domain, like psap.county.example.gov).", "/psap")
 	}

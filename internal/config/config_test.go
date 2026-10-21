@@ -299,7 +299,8 @@ func TestTranscribeService(t *testing.T) {
 }
 
 // What carries 911 callers' details or a secret to CAD goes by https, or plain http only within this
-// computer.
+// computer: newly set, anything else is refused; one already in the configuration still loads (and
+// other changes save) but is listed as unsafe, so nothing is sent to it.
 func TestCADAddressesSecure(t *testing.T) {
 	for _, tc := range []struct {
 		u  string
@@ -311,14 +312,27 @@ func TestCADAddressesSecure(t *testing.T) {
 		{"http://[::1]:9450/eido", true},
 		{"http://192.168.1.50:9450/eido", false},
 		{"http://cad.example.gov/eido", false},
-		{"ftp://cad.example.gov/eido", false},
 	} {
 		c := Default()
-		c.System.PSAP.EIDOURL = tc.u
-		c.System.Radio.CADURL = tc.u
-		err := c.Validate()
+		c.System.PSAP.EIDOURL, c.System.Radio.CADURL = tc.u, tc.u
+		if err := c.Validate(); err != nil {
+			t.Fatalf("%s: %v", tc.u, err)
+		}
+		err := c.CheckChange(Default())
 		if bad := err != nil && strings.Contains(err.Error(), "eidoUrl") && strings.Contains(err.Error(), "cadUrl"); bad == tc.ok {
 			t.Errorf("%s: %v", tc.u, err)
+		}
+		if err := c.CheckChange(c); err != nil {
+			t.Errorf("%s already set: %v", tc.u, err)
+		}
+		if got := len(UnsafeCADAddresses(c)); got != map[bool]int{true: 0, false: 2}[tc.ok] {
+			t.Errorf("%s unsafe %d", tc.u, got)
+		}
+	}
+	for a, off := range map[string]bool{"": false, "127.0.0.1:5001": false, "localhost:5001": false, "[::1]:5001": false,
+		"serial:/dev/ttyUSB0?baud=9600": false, "192.168.1.50:5001": true, "cad.example.gov:5001": true} {
+		if ALIOffComputer(a) != off {
+			t.Errorf("ALI %q off computer: want %v", a, off)
 		}
 	}
 }

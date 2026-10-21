@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/biodream-llc/bitvoice/internal/config"
 	"net/http"
 	"strconv"
 	"time"
@@ -30,8 +31,8 @@ func (s *Server) RunRadioCAD(ctx context.Context) {
 			}
 			cfg := s.config()
 			url, secret := cfg.System.Radio.CADURL, cfg.System.Radio.CADSecret
-			if url == "" {
-				continue
+			if url == "" || !config.SecureOrLocal(url) {
+				continue // nothing, or plain http off this computer: never sent (Health says so)
 			}
 			body, _ := json.Marshal(map[string]any{"type": ev.Type, "agency": agencyID(cfg), "data": ev.Data})
 			tries := 1

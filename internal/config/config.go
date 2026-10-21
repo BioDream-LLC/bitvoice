@@ -2097,8 +2097,8 @@ func (c *Config) Validate() error {
 			}
 		}
 		sipPort := c.System.SIPPort
-		if r.CADURL = strings.TrimSpace(r.CADURL); r.CADURL != "" && !secureOrLocal(r.CADURL) {
-			p.add("system.radio.cadUrl", "use CAD's https address, or http only to CAD on this computer (127.0.0.1): radio events and the secret must not cross the network unencrypted")
+		if r.CADURL = strings.TrimSpace(r.CADURL); r.CADURL != "" && !strings.HasPrefix(r.CADURL, "https://") && !strings.HasPrefix(r.CADURL, "http://") {
+			p.add("system.radio.cadUrl", "CAD's https address that takes the radio events")
 		}
 		r.Console = strings.TrimSpace(r.Console)
 		if r.Console != "" && !regexp.MustCompile(`^[0-9*#]{2,8}$`).MatchString(r.Console) {
@@ -2414,8 +2414,8 @@ func (c *Config) Validate() error {
 				p.add("system.psap.aliLink.timeoutS", "1 to 30 seconds (4 when 0)")
 			}
 		}
-		if ps.EIDOURL != "" && !secureOrLocal(ps.EIDOURL) {
-			p.add("system.psap.eidoUrl", "use CAD's https address, or http only to CAD on this computer (127.0.0.1): EIDOs carry callers' locations and the token")
+		if ps.EIDOURL != "" && !strings.HasPrefix(ps.EIDOURL, "https://") && !strings.HasPrefix(ps.EIDOURL, "http://") {
+			p.add("system.psap.eidoUrl", "enter the https address CAD takes EIDOs at")
 		}
 		if ps.AnswerTarget < 0 || ps.AnswerTarget > 120 {
 			p.add("system.psap.answerTarget", "seconds, 1 to 120")
@@ -3972,10 +3972,58 @@ var SpeechModels = []string{"tiny", "base", "small", "medium", "large-v3-turbo"}
 
 const DefaultSpeechModel = "base"
 
-// secureOrLocal reports whether an address is https, or plain http only to this computer (loopback):
+// CheckChange refuses what may not be newly set, though a configuration already holding it still loads
+// and runs: an EIDO or radio-event address in plain http to another computer. Such an address saved
+// before this rule stays (BitVoice starts, and other changes save) but nothing is sent to it, and
+// Health says so (UnsafeCADAddresses); setting a new one is refused here.
+func (c *Config) CheckChange(prev Config) error {
+	var p Problems
+	if u := c.System.PSAP.EIDOURL; u != "" && !SecureOrLocal(u) && u != prev.System.PSAP.EIDOURL {
+		p.add("system.psap.eidoUrl", "use CAD's https address, or http only to CAD on this computer (127.0.0.1): EIDOs carry callers' locations and the token")
+	}
+	if u := c.System.Radio.CADURL; u != "" && !SecureOrLocal(u) && u != prev.System.Radio.CADURL {
+		p.add("system.radio.cadUrl", "use CAD's https address, or http only to CAD on this computer (127.0.0.1): radio events and the secret must not cross the network unencrypted")
+	}
+	if len(p) > 0 {
+		return p
+	}
+	return nil
+}
+
+// UnsafeCADAddresses names the addresses a configuration sends 911 data to in plain http off this
+// computer (saved before CheckChange refused them): nothing is sent to them.
+func UnsafeCADAddresses(c Config) [][2]string {
+	var out [][2]string
+	if u := c.System.PSAP.EIDOURL; u != "" && !SecureOrLocal(u) {
+		out = append(out, [2]string{"EIDOs", u})
+	}
+	if u := c.System.Radio.CADURL; u != "" && !SecureOrLocal(u) {
+		out = append(out, [2]string{"radio events", u})
+	}
+	return out
+}
+
+// ALIOffComputer reports whether the ALI spill goes over the network to another computer (plain TCP,
+// as legacy CAD listeners take it) rather than to this one or down a serial line.
+func ALIOffComputer(a string) bool {
+	if a == "" || strings.HasPrefix(a, "serial:") {
+		return false
+	}
+	h, _, err := net.SplitHostPort(a)
+	if err != nil {
+		return false
+	}
+	if h == "localhost" {
+		return false
+	}
+	ip, err := netip.ParseAddr(h)
+	return err != nil || !ip.IsLoopback()
+}
+
+// SecureOrLocal reports whether an address is https, or plain http only to this computer (loopback):
 // for what carries 911 callers' details or a secret, which must never cross a network unencrypted,
 // a private one included.
-func secureOrLocal(s string) bool {
+func SecureOrLocal(s string) bool {
 	u, err := url.Parse(s)
 	if err != nil || u.Host == "" {
 		return false

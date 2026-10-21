@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -125,6 +126,9 @@ func (s *Server) cadResult(what string, in i3.Incident, err error) {
 // sendALI writes the spill to CAD's listener.
 
 func postEIDO(url, token string, doc []byte) error {
+	if !config.SecureOrLocal(url) {
+		return errUnsafeCAD
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(doc))
@@ -588,3 +592,7 @@ func takerOf(cfg config.Config, c store.CDR) (who, ext, name string) {
 
 // unrecordedTaker names the call-taker of a call taken before call records said who took it.
 const unrecordedTaker = "Not recorded"
+
+// errUnsafeCAD is a send refused: the address is plain http to another computer (saved before that was
+// refused), and 911 data never crosses a network unencrypted. Health shows it in red.
+var errUnsafeCAD = errors.New("not sent: the address is plain http to another computer; use https, or http only to CAD on this computer")

@@ -819,9 +819,9 @@ test('911: CAD addresses must be encrypted off this computer; a missing agency I
     const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
     const s = await (await fetch('./api/settings')).json()
     const put = (psap: object) => fetch('./api/settings', { method: 'PUT', headers: H, body: JSON.stringify({ ...s, system: { ...s.system, psap: { ...s.system.psap, ...psap } } }) })
-    const off = await put({ eidoUrl: 'http://192.168.1.50:9450/eido', agencyId: '' })
+    const off = await put({ eidoUrl: 'http://192.168.1.50:9450/eido', agencyId: '', aliAddress: '' })
     const offBody = await off.text()
-    const local = await put({ eidoUrl: 'http://127.0.0.1:9450/eido', agencyId: '' })
+    const local = await put({ eidoUrl: 'http://127.0.0.1:9450/eido', agencyId: '', aliAddress: '192.168.1.50:5001' })
     return { off: off.status, offBody, local: local.status, psap: s.system.psap }
   })
   expect(r.off).toBe(422)
@@ -829,6 +829,7 @@ test('911: CAD addresses must be encrypted off this computer; a missing agency I
   expect(r.local).toBe(200)
   await page.goto('./#/health')
   await expect(page.getByText('This PSAP has no agency ID')).toBeVisible()
+  await expect(page.getByText('The ALI spill crosses the network unencrypted')).toBeVisible()
   await page.evaluate(async (psap) => {
     const s = await (await fetch('./api/settings')).json()
     await fetch('./api/settings', { method: 'PUT', headers: { 'X-BitVoice': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ ...s, system: { ...s.system, psap } }) })

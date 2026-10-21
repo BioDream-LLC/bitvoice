@@ -299,6 +299,10 @@ func (s *Store) Update(actor, summary string, expectRev int, change func(*config
 		s.mu.Unlock()
 		return config.Config{}, 0, err
 	}
+	if err := next.CheckChange(s.cfg); err != nil {
+		s.mu.Unlock()
+		return config.Config{}, 0, err
+	}
 	if s.limit != nil {
 		if p := s.limit(&next); len(p) > 0 {
 			s.mu.Unlock()

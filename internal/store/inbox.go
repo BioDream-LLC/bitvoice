@@ -129,6 +129,11 @@ func (s *Store) AddMsg(m InboxMsg) (InboxMsg, error) {
 	}
 	if m.At.IsZero() {
 		m.At = time.Now().UTC()
+		// Messages are listed by time to the millisecond: one written in the same millisecond as the
+		// one before it (a reply right after the question) goes a millisecond after it, never before.
+		if last := c.Updated.Truncate(time.Millisecond); !m.At.Truncate(time.Millisecond).After(last) {
+			m.At = last.Add(time.Millisecond)
+		}
 	}
 	b, _ := json.Marshal(m)
 	if _, err := s.db.Exec(s.ctx(), `INSERT INTO inbox_msgs (id, conv, at_ms, body) VALUES (?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`,

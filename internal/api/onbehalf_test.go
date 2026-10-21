@@ -1,6 +1,7 @@
 package api
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -96,5 +97,18 @@ func TestVideoTextProblem(t *testing.T) {
 	}
 	if p := videoTextProblem("+15405550100", "+17175550100"); p != "" {
 		t.Fatalf("can send: %q", p)
+	}
+}
+
+// Nothing is sent to an EIDO address in plain http off this computer; one on this computer is posted.
+func TestEIDONeverUnencryptedOffComputer(t *testing.T) {
+	if err := postEIDO("http://192.0.2.1:9450/eido", "tok", []byte("{}")); err != errUnsafeCAD {
+		t.Fatalf("got %v", err)
+	}
+	got := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { got = true }))
+	defer srv.Close()
+	if err := postEIDO(srv.URL+"/eido", "tok", []byte("{}")); err != nil || !got {
+		t.Fatalf("loopback: %v %v", err, got)
 	}
 }
