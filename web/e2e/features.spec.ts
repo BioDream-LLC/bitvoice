@@ -1016,3 +1016,17 @@ test('call history marks silent and unencrypted calls', async ({ page }) => {
   await expect(page.getByText('3 with no sound')).toBeVisible()
   await expect(page.getByText('3 answered calls had no sound at all from SIP.US.')).toBeVisible()
 })
+
+// A CAD's token can be made to name the person it acts for; the list says so.
+test('an API token that names the person it acts for', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/#/users')
+  await page.getByRole('button', { name: 'New token' }).click()
+  await page.getByLabel('Name', { exact: true }).fill('CAD link')
+  await page.getByRole('checkbox', { name: /Names the person it acts for/ }).check()
+  await page.getByRole('button', { name: 'Make it' }).click()
+  await expect(page.getByText('Names its people')).toBeVisible()
+  const t = await page.evaluate(async () => (await (await fetch('./api/tokens')).json()).items.find((x: { name: string }) => x.name === 'CAD link'))
+  expect(t.onBehalf).toBe(true)
+  await page.evaluate(async (id) => { await fetch('./api/tokens/' + id, { method: 'DELETE', headers: { 'X-BitVoice': '1' } }) }, t.id)
+})

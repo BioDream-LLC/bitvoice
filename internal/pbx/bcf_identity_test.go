@@ -50,9 +50,9 @@ func TestBCFVerifiesIdentity(t *testing.T) {
 			for range tx.Responses {
 			}
 		}()
-		r := sip.NewResponse(ring.Req, 486, "")
-		r.Set("To", ring.Req.Get("To")+";tag=busy")
-		ring.Respond(r)
+		// A 911 call is never refused, a busy call-taker's included: the stand-in ESInet gives up instead.
+		hangupAll(e)
+		waitNoCalls(t, e)
 		for i := range calls {
 			if calls[i].Emergency != nil {
 				return &calls[i]

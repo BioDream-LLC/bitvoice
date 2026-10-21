@@ -270,7 +270,7 @@ export interface SystemSettings {
     apns: { keyId: string; teamId: string; topic: string; key: string; sandbox: boolean } }
   provisioning: { enabled: boolean; username: string; password: string; transport: 'udp' | 'tcp' | 'tls'; httpsOnly?: boolean }
   email: { host: string; port: number; username: string; password: string; from: string }
-  ai: { enabled: boolean; baseUrl: string; key: string; model: string; voicemail: boolean; calls: boolean; briefings?: boolean; insights?: boolean; audioModel: string; speechModel: string; voice: string }
+  ai: { enabled: boolean; baseUrl: string; key: string; model: string; voicemail: boolean; calls: boolean; briefings?: boolean; insights?: boolean; liveTranscripts?: boolean; audioModel: string; speechModel: string; voice: string }
   crm: CRM
   metrics: Metrics
   costs: Costs
@@ -334,7 +334,7 @@ export interface User { username: string; name: string; role: Role; created: str
 export interface TraceEntry { at: string; dir: 'in' | 'out'; peer: string; callId: string; summary: string; message: string }
 export interface MobileDevice { id: string; extension: string; name: string; platform: 'ios' | 'android'; canWake: boolean; created: string; lastSeen?: string; lastPush?: string; pushError?: string }
 export interface Change { path: string; before: string; after: string }
-export interface ApiToken { id: string; name: string; role: 'admin' | 'viewer'; prefix: string; created: string; by: string; lastUsed?: string; expires?: string }
+export interface ApiToken { id: string; name: string; role: 'admin' | 'viewer'; prefix: string; created: string; by: string; lastUsed?: string; expires?: string; onBehalf?: boolean }
 export interface Hold { id: string; name: string; reason: string; numbers: string[]; since?: string; until?: string; created: string; by: string; released?: string; releasedBy?: string }
 export interface Callback { id: string; created: string; receptionist?: string; callId?: string; name: string; number: string; when: string; reason: string; status: 'open' | 'done' | 'cancelled'; by?: string; closed?: string; note?: string }
 export interface Budget { id: string; department: string; monthly: number; email: string }
@@ -768,7 +768,7 @@ export const api = createApi({
       unpairMobile: b.mutation<void, string>({ query: (id) => ({ url: `mobile/devices/${id}`, method: 'DELETE' }), invalidatesTags: ['Mobile'] }),
       emergencyMode: b.mutation<unknown, { on: boolean }>({ query: (body) => ({ url: 'emergency-mode', method: 'POST', body }), invalidatesTags: ['Settings', 'Audit'] }),
       tokens: b.query<List<ApiToken>, void>({ query: () => 'tokens', providesTags: ['Tokens'] }),
-      addToken: b.mutation<{ token: ApiToken; secret: string }, { name: string; role: string; days: number }>({ query: (body) => ({ url: 'tokens', method: 'POST', body }), invalidatesTags: ['Tokens', 'Audit'] }),
+      addToken: b.mutation<{ token: ApiToken; secret: string }, { name: string; role: string; days: number; onBehalf?: boolean }>({ query: (body) => ({ url: 'tokens', method: 'POST', body }), invalidatesTags: ['Tokens', 'Audit'] }),
       revokeToken: b.mutation<void, string>({ query: (id) => ({ url: `tokens/${id}`, method: 'DELETE' }), invalidatesTags: ['Tokens', 'Audit'] }),
       gitOps: b.query<{ last?: string; ok: boolean; error?: string; changes: Change[]; appliedRev?: number }, void>({ query: () => 'gitops', providesTags: ['GitOps'] }),
       syncGitOps: b.mutation<unknown, void>({ query: () => ({ url: 'gitops/sync', method: 'POST' }), invalidatesTags: ['GitOps', 'Settings', 'History'] }),

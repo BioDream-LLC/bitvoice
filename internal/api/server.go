@@ -20,6 +20,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"github.com/biodream-llc/bitvoice/internal/config"
 	"github.com/biodream-llc/bitvoice/internal/events"
@@ -271,7 +272,13 @@ func (s *Server) user(r *http.Request) (store.User, bool) {
 		if !ok {
 			return store.User{}, false
 		}
-		return store.User{Username: "token:" + t.Name, Name: t.Name, Role: t.Role}, true
+		u := store.User{Username: "token:" + t.Name, Name: t.Name, Role: t.Role}
+		if person := onBehalfOf(r.Header.Get(OnBehalfHeader)); person != "" && t.OnBehalf {
+			// A trusted CAD says which of its people is acting: records name the person, and the token.
+			u.Username += "/" + person
+			u.Name = person + " (" + t.Name + ")"
+		}
+		return u, true
 	}
 	c, err := r.Cookie(s.cookieName())
 	if err != nil {
@@ -432,4 +439,23 @@ func (s *Server) AuditSystem(actor, action, detail string) {
 	if s.Bus != nil {
 		s.Bus.Publish("audit.added", map[string]string{"action": action})
 	}
+}
+
+// OnBehalfHeader names the person a trusted program's token acts for (a dispatcher in a CAD). Only a
+// token made with "names the person it acts for" may send it; from any other it is ignored.
+const OnBehalfHeader = "X-BitVoice-On-Behalf-Of"
+
+// onBehalfOf cleans the person named in OnBehalfHeader: printable characters only, at most 80.
+func onBehalfOf(v string) string {
+	v = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || r == '/' {
+			return -1
+		}
+		return r
+	}, v)
+	v = strings.Join(strings.Fields(v), " ")
+	if r := []rune(v); len(r) > 80 {
+		v = string(r[:80])
+	}
+	return v
 }

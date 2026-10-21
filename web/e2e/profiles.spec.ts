@@ -793,3 +793,20 @@ test('caller video and photos on a 911 call', async ({ page, browser }) => {
     tcc.close()
   }
 })
+
+// A 911 route that hangs up calls is flagged in Health: BitVoice rings every call-taker instead.
+test('health warns about a 911 route that would refuse calls', async ({ page }) => {
+  await signIn(page)
+  const made = await page.evaluate(async () => {
+    const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
+    const have = (await (await fetch('./api/trunks')).json()).items.find((t: { name: string }) => t.name === 'ESInet')
+    const t = have ?? (await (await fetch('./api/trunks', { method: 'POST', headers: H, body: JSON.stringify({ name: 'ESInet', enabled: true, host: '127.0.0.1', port: 5099, transport: 'udp', codecs: [], esinet: true, register: false, allowFrom: ['127.0.0.1'] }) })).json()).item
+    const r = await (await fetch('./api/inbound-routes', { method: 'POST', headers: H, body: JSON.stringify({ name: 'Closed for 911', did: '7175550999', trunk: t.id, destination: { type: 'hangup', target: '' } }) })).json()
+    return r.item?.id as string
+  })
+  expect(made).toBeTruthy()
+  await page.goto('./#/health')
+  await expect(page.getByText('The incoming route Closed for 911 hangs up 911 calls from ESInet')).toBeVisible()
+  await expect(page.getByText(/so these ring every call-taker instead/).first()).toBeVisible()
+  await page.evaluate(async (id) => { await fetch('./api/inbound-routes/' + id, { method: 'DELETE', headers: { 'X-BitVoice': '1' } }) }, made)
+})

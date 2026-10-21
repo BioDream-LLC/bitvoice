@@ -345,14 +345,11 @@ func answerReport(cfg config.Config, cdrs []store.CDR, from, to time.Time) Answe
 		default:
 			r.Buckets[4]++
 		}
-		ext := c.AnsweredExt
-		t := takers[ext]
+		who, ext, name := takerOf(cfg, c)
+		t := takers[who]
 		if t == nil {
-			t = &TakerAnswers{Ext: ext}
-			if x := cfg.FindExtension(ext); x != nil {
-				t.Name = x.Name
-			}
-			takers[ext] = t
+			t = &TakerAnswers{Ext: ext, Name: name}
+			takers[who] = t
 		}
 		t.Average = (t.Average*float64(t.Calls) + secs) / float64(t.Calls+1)
 		t.Calls++
@@ -415,7 +412,8 @@ func writeAnswerCSV(w http.ResponseWriter, cfg config.Config, cdrs []store.CDR, 
 			if ans.IsZero() && c.AnsweredExt != "" {
 				ans = c.Answer
 			}
-			row := []string{c.Start.In(loc).Format("2006-01-02 15:04:05"), csvSafe(c.From), "", "", csvSafe(c.AnsweredExt), "yes", ""}
+			_, ext, taker := takerOf(cfg, c)
+			row := []string{c.Start.In(loc).Format("2006-01-02 15:04:05"), csvSafe(c.From), "", "", csvSafe(firstNonEmpty(ext, taker)), "yes", ""}
 			if !ans.IsZero() {
 				row[2], row[3], row[5] = ans.In(loc).Format("2006-01-02 15:04:05"), strconv.FormatFloat(ans.Sub(c.Start).Seconds(), 'f', 1, 64), "no"
 			}
@@ -565,4 +563,21 @@ func (s *Server) eidoUpdate(ev events.Event) {
 			s.cadResult("EIDO", in, err)
 		}()
 	}
+}
+
+// takerOf says who answered a 911 call for the answer-time report: a key to count them under, and the
+// extension and the name to show. The person who took it counts (a text call taken on the 911 screen
+// or by a CAD has no extension); then the extension that answered.
+func takerOf(cfg config.Config, c store.CDR) (who, ext, name string) {
+	who = c.TakenBy
+	if who == "" {
+		who = c.AnsweredExt
+	}
+	if x := cfg.FindExtension(who); x != nil {
+		return who, x.Number, x.Name
+	}
+	if c.TakenBy == "" {
+		return who, c.AnsweredExt, ""
+	}
+	return who, "", firstNonEmpty(c.TakenName, strings.TrimPrefix(c.TakenBy, "token:"))
 }

@@ -33,9 +33,6 @@ type lateRings struct {
 // wake asks the apps of ext to connect for this call's stage.
 func (c *Call) wake(ext, name string, stage int, ring time.Duration) {
 	e := c.e
-	if e.Mobile == nil {
-		return
-	}
 	e.late.mu.Lock()
 	if e.late.by == nil {
 		e.late.by = map[string][]lateRing{}
@@ -49,7 +46,9 @@ func (c *Call) wake(ext, name string, stage int, ring time.Duration) {
 	}
 	e.late.by[ext] = append(kept, lateRing{call: c, stage: stage, name: name, until: now.Add(ring)})
 	e.late.mu.Unlock()
-	go e.Mobile.Wake(ext, c.info())
+	if e.hasApps(ext) {
+		go e.Mobile.Wake(ext, c.info())
+	}
 }
 
 // registered rings a newly registered binding into every call waiting for its extension.

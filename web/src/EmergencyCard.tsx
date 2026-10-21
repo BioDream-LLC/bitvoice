@@ -1,10 +1,11 @@
 import { Reasons } from './Judges'
 import { AlertTriangle, Building2, Crosshair, ExternalLink, FileJson, Hand, Keyboard, MapPin, MessageSquareText, Phone, PhoneOff, RefreshCw, Send, Smartphone, User } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { errorOf, useEndTextCallMutation, useRebidMutation, useSendCallTextMutation, useTakeTextCallMutation, type Call, type Civic, type Location, type TextLine, type TextVia } from './api'
 import { CallVideoPanel } from './CallVideo'
 import { LazyMap as MapView } from './LazyMap'
+import { onServerEvent } from './store'
 import { Badge, relTime } from './ui'
 
 export function streetLine(c: Civic) {
@@ -101,6 +102,7 @@ export function EmergencyCard({ call }: { call: Call }) {
 
       <Conversation call={call} answered={answered} />
       <CallVideoPanel call={call} />
+      <LiveTranscript id={call.id} />
 
       <footer className="flex flex-wrap items-center gap-2">
         {em.textOnly && <TextControls id={call.id} taken={answered} />}
@@ -173,4 +175,27 @@ function TextControls({ id, taken }: { id: string; taken: boolean }) {
   return taken
     ? <button className="btn" disabled={ending} onClick={() => run(() => end(id).unwrap(), 'Conversation ended')}><PhoneOff size={14} className="text-rose-300" aria-hidden /> End conversation</button>
     : <button className="btn btn-primary" disabled={taking} onClick={() => run(() => take(id).unwrap(), 'Conversation taken')}><Hand size={14} aria-hidden /> Take this text</button>
+}
+
+interface LiveLine { speaker: string; side: 'caller' | 'taker'; text: string; second: number }
+
+/** What is being said on the call, as the AI service writes it out (Settings, AI, Write out 911 calls live). */
+function LiveTranscript({ id }: { id: string }) {
+  const [lines, setLines] = useState<LiveLine[]>([])
+  useEffect(() => onServerEvent((type, data) => {
+    const d = data as { call?: string; lines?: LiveLine[] } | null
+    if (type !== 'call.transcript' || d?.call !== id || !d.lines) return
+    setLines((ls) => [...ls, ...d.lines!].sort((a, b) => a.second - b.second).slice(-200))
+  }), [id])
+  if (lines.length === 0) return null
+  return (
+    <section aria-label="Live transcript" className="space-y-1 rounded-lg border border-slate-800 p-3">
+      <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-200"><MessageSquareText size={14} className="text-sky-300" aria-hidden /> Live transcript <span className="text-xs font-normal text-slate-500">written out by AI: check what matters with the caller</span></h3>
+      <ol className="max-h-56 space-y-1 overflow-y-auto text-sm">
+        {lines.map((l, i) => (
+          <li key={i}><span className={l.side === 'caller' ? 'font-semibold text-amber-300' : 'font-semibold text-sky-300'}>{l.speaker}:</span> <span className="text-slate-200">{l.text}</span></li>
+        ))}
+      </ol>
+    </section>
+  )
 }

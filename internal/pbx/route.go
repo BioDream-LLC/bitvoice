@@ -24,6 +24,8 @@ type plan struct {
 	local     string // calls BitVoice answers itself: echo, voicemail (leave one), messages (hear them)
 	box       string // the mailbox, for voicemail and messages
 	reject    int    // a SIP code to refuse with, when nothing can be rung
+	// endless: the emergency last resort, rung again and again until someone answers or the caller hangs up
+	endless   bool
 	reason    string
 	why       []string // how this plan was reached, in plain words
 	toName    string
@@ -628,6 +630,11 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 			// Emergency mode: every incoming call goes to one place, whatever the routes say.
 			route = &config.InboundRoute{Name: "Emergency mode", Destination: em.Destination}
 		}
+		emergencyTrunk := trunk.ESInet || (m.Get("X-BitVoice-CAMA") != "" && trunk.Protocol == "dahdi")
+		if route == nil && emergencyTrunk {
+			// An emergency call is never refused for want of a route: the last resort below takes it.
+			route = &config.InboundRoute{Name: "(none)", Destination: config.Destination{Type: "none"}}
+		}
 		if route == nil {
 			tx.Respond(sip.NewResponse(m, 404, "No Inbound Route"))
 			return
@@ -707,6 +714,15 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 			}
 		} else if c.testCall {
 			p = e.testCallPlan(cfg, c, c.srcIP+" "+m.Get("Contact"))
+		}
+		if emergencyTrunk && !c.testCall && route.Destination.Type != "esrp" && (offer == nil || offer.Audio() != nil) && (p.reject != 0 || p.local == "" && len(p.stages) == 0) {
+			// A voice 911 call its route would refuse (hang up, a ring group with nobody in it, no route):
+			// it rings every call-taker instead, as a text call waits on the 911 screen. An ESRP's own
+			// policy answer (Busy Everywhere, say) stands: the core's policy decides, not this fallback.
+			e.Log.Warn("an emergency call's route would have refused it; ringing every call-taker", "trunk", trunk.Name, "route", route.Name, "from", c.from)
+			c.note(p.why...)
+			c.note(refusedWhy(route.Name, p) + " An emergency call is never refused, so every call-taker was rung instead.")
+			p = e.everyTaker(cfg)
 		}
 		p.direction = "inbound"
 		p.trunk = trunk.Name

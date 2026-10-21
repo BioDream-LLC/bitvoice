@@ -58,7 +58,7 @@ func (s *Server) liveRoutes() {
 		writeJSON(w, 200, map[string]bool{"ok": true})
 	})
 	s.handle("DELETE /api/calls/{id}", true, func(w http.ResponseWriter, r *http.Request, u store.User) {
-		if !s.Engine.Hangup(r.PathValue("id"), u.Username) {
+		if !s.Engine.Hangup(r.PathValue("id"), firstNonEmpty(u.Name, u.Username)) {
 			writeError(w, 404, "no such call")
 			return
 		}
@@ -445,6 +445,9 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request, u store.User) {
 	if pv := cfg.System.Provisioning; pv.Enabled && len(cfg.Devices) == 0 {
 		add("provision", "warn", "Automatic phone set-up is on but no phones are listed", "Add each phone's MAC address on the Phones page.", "/phones")
 	}
+	for _, w := range emergencyRouteWarnings(cfg) {
+		add("emergency-route", "warn", w[0], w[1], "/routes")
+	}
 	if bans := s.Engine.Banned(); len(bans) > 0 {
 		add("bans", "warn", fmt.Sprintf("%d addresses blocked for failed sign-ins", len(bans)), "This is usually a scanner on the internet. If a phone of yours is blocked, check its password.", "/security")
 	}
@@ -526,4 +529,31 @@ func firstOr(s []string, def string) string {
 		return s[0]
 	}
 	return def
+}
+
+// emergencyRouteWarnings finds 911 calls whose route would refuse them: an ESInet trunk with no incoming
+// route, or a route on one that hangs up. BitVoice rings every call-taker for such a call instead (it
+// never refuses one), but the route should say where they go.
+func emergencyRouteWarnings(cfg config.Config) (out [][2]string) {
+	for _, tr := range cfg.Trunks {
+		if !tr.Enabled || !tr.ESInet {
+			continue
+		}
+		any := false
+		for _, r := range cfg.InboundRoutes {
+			if r.Trunk != "" && r.Trunk != tr.ID {
+				continue
+			}
+			any = true
+			if r.Destination.Type == "hangup" {
+				out = append(out, [2]string{"The incoming route " + r.Name + " hangs up 911 calls from " + tr.Name,
+					"BitVoice will not refuse an emergency call, so these ring every call-taker instead. Send the route to your call-takers' ring group or queue."})
+			}
+		}
+		if !any {
+			out = append(out, [2]string{"No incoming route for 911 calls from " + tr.Name,
+				"BitVoice will not refuse an emergency call, so these ring every call-taker. Add an incoming route that sends them to your call-takers' ring group or queue."})
+		}
+	}
+	return out
 }

@@ -25,6 +25,9 @@ func (c *Call) emergencyAnswered(taker *Leg) {
 	c.emergencyTold = true
 	if is && !done {
 		c.takenBy, c.takenName, c.takenAt = taker.Ext, taker.Name, time.Now()
+		if !c.textOnly {
+			go c.liveTranscript()
+		}
 	}
 	var raw []byte
 	if c.i3 != nil {

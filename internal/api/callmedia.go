@@ -261,13 +261,16 @@ func (s *Server) callMediaRoutes() {
 		cfg := s.config()
 		link := s.videoLinkURL(cfg, r, v.Token)
 		out := map[string]any{"url": link, "viewUrl": strings.Replace(link, "/v/"+v.Token, "/whep/"+v.ViewToken, 1), "sent": false}
-		if from := cfg.System.PSAP.VideoFrom; from != "" {
-			var to string
-			for _, c := range s.Engine.Calls() {
-				if c.ID == r.PathValue("id") {
-					to = c.From
-				}
+		from := cfg.System.PSAP.VideoFrom
+		var to string
+		for _, c := range s.Engine.Calls() {
+			if c.ID == r.PathValue("id") {
+				to = c.From
 			}
+		}
+		if problem := videoTextProblem(from, to); problem != "" {
+			out["problem"] = problem
+		} else {
 			body := "911: to show us what is happening, open this link. Your video goes only to 911. " + link
 			if _, err := s.sendText(r.Context(), from, to, body, u.Username); err != nil {
 				out["problem"] = "the text was not sent (" + err.Error() + "): read the link to the caller"
@@ -717,4 +720,16 @@ func (s *Server) tokenGuard(h http.HandlerFunc) http.HandlerFunc {
 		s.loginFailed(ip)
 		h(w, r) // answers "expired" or not found as before
 	}
+}
+
+// videoTextProblem says why a caller-video link cannot be texted (from: the 911 settings' texting number;
+// to: the caller's number), or "" when it can: the call-taker then reads the link out instead.
+func videoTextProblem(from, to string) string {
+	switch {
+	case from == "":
+		return "no texting number is set for video links (911 settings, Caller video): read the link to the caller"
+	case to == "" || to == "anonymous":
+		return "the caller sent no number to text the link to: read the link to the caller"
+	}
+	return ""
 }

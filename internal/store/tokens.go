@@ -24,6 +24,9 @@ type Token struct {
 	By       string    `json:"by"`
 	LastUsed time.Time `json:"lastUsed,omitzero"`
 	Expires  time.Time `json:"expires,omitzero"`
+	// OnBehalf: a trusted program (a CAD) that names the person it acts for in each request
+	// (X-BitVoice-On-Behalf-Of), so records such as the 911 exposure log name that person.
+	OnBehalf bool `json:"onBehalf,omitempty"`
 }
 
 func (s *Store) tokensPath() string { return filepath.Join(s.dir, "tokens.json") }
@@ -47,7 +50,7 @@ func (s *Store) Tokens() []Token {
 }
 
 // AddToken makes a token and returns it with its secret, which is never available again.
-func (s *Store) AddToken(name, role, by string, expires time.Time) (Token, string, error) {
+func (s *Store) AddToken(name, role, by string, expires time.Time, onBehalf bool) (Token, string, error) {
 	if role != "admin" && role != "viewer" {
 		return Token{}, "", errors.New("store: role must be admin or viewer")
 	}
@@ -60,7 +63,7 @@ func (s *Store) AddToken(name, role, by string, expires time.Time) (Token, strin
 	idb := make([]byte, 6)
 	_, _ = rand.Read(idb)
 	t := Token{ID: hex.EncodeToString(idb), Name: strings.TrimSpace(name), Role: role, Hash: hex.EncodeToString(sum[:]),
-		Prefix: secret[:9], Created: time.Now().UTC(), By: by, Expires: expires}
+		Prefix: secret[:9], Created: time.Now().UTC(), By: by, Expires: expires, OnBehalf: onBehalf}
 	s.tokMu.Lock()
 	defer s.tokMu.Unlock()
 	if err := s.writeDoc(s.tokensPath(), append(s.loadTokens(), t)); err != nil {

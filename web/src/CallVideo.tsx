@@ -31,7 +31,7 @@ export function CallVideoPanel({ call }: { call: Call }) {
         {v?.viewers?.length ? <span className="text-slate-500">watched by {v.viewers.join(', ')}</span> : null}
       </div>
       {!v && !link && <button className="btn mt-2" disabled={isLoading} onClick={send}><Send size={14} className="text-violet-300" aria-hidden /> Send the caller a video link</button>}
-      {(link || v) && <LinkLine url={link?.url} viewUrl={link?.viewUrl} sent={link?.sent} onResend={send} />}
+      {(link || v) && <LinkLine url={link?.url} viewUrl={link?.viewUrl} sent={link?.sent} problem={link?.problem} onResend={send} />}
       {v?.live && <LiveVideo callId={call.id} />}
       {items.length > 0 && <MediaList callId={call.id} items={items} held={!!media?.held} />}
     </section>
@@ -42,11 +42,11 @@ function copy(text: string, what: string) {
   navigator.clipboard?.writeText(text).then(() => toast.success(`${what} copied`), () => toast.error('Could not copy'))
 }
 
-function LinkLine({ url, viewUrl, sent, onResend }: { url?: string; viewUrl?: string; sent?: boolean; onResend: () => void }) {
+function LinkLine({ url, viewUrl, sent, problem, onResend }: { url?: string; viewUrl?: string; sent?: boolean; problem?: string; onResend: () => void }) {
   if (!url) return <p className="mt-2 text-sm text-slate-400">A video link was made for this call. <button className="btn-ghost px-1 text-violet-300 underline" onClick={onResend}>Show it</button></p>
   return (
     <div className="mt-2 space-y-1 text-sm">
-      <p className="text-slate-300">{sent ? 'Texted to the caller:' : 'Read this link to the caller (no texting number is set):'}</p>
+      <p className="text-slate-300">{sent ? 'Texted to the caller:' : `Read this link to the caller${problem ? ` (${problem.replace(/: read the link to the caller$/, '')})` : ''}:`}</p>
       <div className="flex flex-wrap items-center gap-2">
         <code className="break-all rounded bg-slate-950 px-2 py-1 text-xs text-amber-200" aria-label="The caller's link">{url}</code>
         <button className="btn py-0.5" onClick={() => copy(url, 'Link')}><Copy size={12} aria-hidden /> Copy</button>

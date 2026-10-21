@@ -152,6 +152,8 @@ func (s *Server) automationRoutes() {
 			Name string `json:"name"`
 			Role string `json:"role"`
 			Days int    `json:"days"`
+			// OnBehalf: the program names the person it acts for (X-BitVoice-On-Behalf-Of).
+			OnBehalf bool `json:"onBehalf"`
 		}
 		if err := readJSON(r, &in); err != nil {
 			writeErr(w, err)
@@ -175,12 +177,16 @@ func (s *Server) automationRoutes() {
 		if in.Days > 0 {
 			exp = time.Now().AddDate(0, 0, in.Days).UTC()
 		}
-		t, secret, err := s.Store.AddToken(in.Name, in.Role, u.Username, exp)
+		t, secret, err := s.Store.AddToken(in.Name, in.Role, u.Username, exp, in.OnBehalf)
 		if err != nil {
 			writeErr(w, err)
 			return
 		}
-		s.audit(r, u.Username, "token.add", t.Name+" ("+t.Role+")")
+		detail := t.Name + " (" + t.Role + ")"
+		if t.OnBehalf {
+			detail += ", names the person it acts for"
+		}
+		s.audit(r, u.Username, "token.add", detail)
 		writeJSON(w, 200, map[string]any{"token": t, "secret": secret})
 	})
 	s.handle("DELETE /api/tokens/{id}", true, func(w http.ResponseWriter, r *http.Request, u store.User) {

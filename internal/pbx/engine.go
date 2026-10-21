@@ -568,8 +568,12 @@ func (e *Engine) allCalls() []*Call {
 
 // CallInfo is a snapshot of a call for the interface.
 type CallInfo struct {
-	ID        string `json:"id"`
-	State     string `json:"state"` // ringing, answered, held
+	ID    string `json:"id"`
+	State string `json:"state"` // ringing, answered, held
+	// Cause and EndedBy, on call.ended: why the call ended ("the caller's audio stopped") and who
+	// ended it (caller, callee, system).
+	Cause     string `json:"cause,omitempty"`
+	EndedBy   string `json:"endedBy,omitempty"`
 	Direction string `json:"direction"`
 	From      string `json:"from"`
 	FromName  string `json:"fromName"`

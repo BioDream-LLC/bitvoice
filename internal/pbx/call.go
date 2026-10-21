@@ -276,6 +276,19 @@ func (c *Call) run(p plan) {
 			return
 		default:
 		}
+		if p.endless || (p.noAnswer == nil || depth > 3) && c.needsEveryTaker(p) {
+			if !p.endless {
+				c.note("Nobody answered " + firstNonEmptyStr(p.toName, "the call") + ". An emergency call is never left unanswered, so every call-taker was rung.")
+			}
+			next := c.e.everyTaker(cfg)
+			if next.reject != 0 {
+				c.note(next.why...)
+				c.reject(next.reject, next.reason)
+				return
+			}
+			p = next
+			continue
+		}
 		if p.noAnswer == nil || depth > 3 {
 			break
 		}
@@ -286,6 +299,10 @@ func (c *Call) run(p plan) {
 		c.mu.Unlock()
 		next := c.e.resolveFor(cfg, *p.noAnswer, depth, sc)
 		c.note(next.why...)
+		if next.reject != 0 && c.needsEveryTaker(next) {
+			c.note(refusedWhy("The no-answer destination", next) + " An emergency call is never refused, so every call-taker was rung instead.")
+			next = c.e.everyTaker(cfg)
+		}
 		if next.reject != 0 {
 			c.reject(next.reject, next.reason)
 			return
@@ -1298,6 +1315,9 @@ func (c *Call) cleanup() {
 	}
 	c.e.mu.Unlock()
 	c.writeRecord(info, c.saveRecording())
+	c.mu.Lock()
+	info.Cause, info.EndedBy = c.cause, c.hangupBy
+	c.mu.Unlock()
 	c.e.publish("call.ended", info)
 }
 
@@ -1326,6 +1346,7 @@ func (c *Call) writeRecord(info CallInfo, recording string) {
 	}
 	if !c.takenAt.IsZero() {
 		r.Taken = c.takenAt.UTC()
+		r.TakenBy, r.TakenName = c.takenBy, c.takenName
 	}
 	if c.screen != nil {
 		r.Attest, r.Verified, r.Screened = c.screen.Attest, c.screen.Verified, c.screened
@@ -1384,9 +1405,14 @@ func (c *Call) writeRecord(info CallInfo, recording string) {
 	}
 }
 
-// checkMedia hangs up a call whose media has stopped in both directions for a minute.
+// mediaDeadAfter is how long a side may send nothing before the call is taken for gone.
+var mediaDeadAfter = 60 * time.Second
+
+// checkMedia hangs up a call whose media has stopped in both directions for a minute, or whose one side
+// sent sound and then stopped for a minute while the other side still sends: a phone or a caller that
+// lost power or network never sends BYE, and the other side's sound alone would keep the call up for ever.
 func (c *Call) checkMedia() {
-	const deadAfter = 60 * time.Second
+	deadAfter := mediaDeadAfter
 	c.mu.Lock()
 	if c.ended || c.textOnly || (c.callee == nil && !c.localAnswer) || c.answer.IsZero() || time.Since(c.answer) < deadAfter {
 		c.mu.Unlock()
@@ -1396,10 +1422,18 @@ func (c *Call) checkMedia() {
 	if c.callee != nil {
 		legs = append(legs, c.callee)
 	}
+	emergency := c.esinet || c.direction == "emergency"
 	c.mu.Unlock()
+	alive := false
+	var stopped *Leg // a side that sent sound and then stopped
 	for _, l := range legs {
 		l.mu.Lock()
 		hold := l.onHold
+		quiet := false // said it sends nothing (recvonly or inactive, as a paging speaker does)
+		if rs := l.remoteSDP; rs != nil && rs.Audio() != nil {
+			d := rs.Direction(rs.Audio())
+			quiet = d == "recvonly" || d == "inactive"
+		}
 		l.mu.Unlock()
 		if hold {
 			return
@@ -1410,11 +1444,31 @@ func (c *Call) checkMedia() {
 				st = fs
 			}
 		}
-		if st.LastSeen != 0 && time.Since(time.UnixMilli(st.LastSeen)) < deadAfter {
-			return
+		switch {
+		case st.LastSeen != 0 && time.Since(time.UnixMilli(st.LastSeen)) < deadAfter:
+			alive = true
+		case st.LastSeen != 0 && !quiet && stopped == nil:
+			stopped = l
 		}
 	}
-	c.hangup("no media for 60 seconds", "system")
+	secs := strconv.Itoa(int(deadAfter / time.Second))
+	if !alive {
+		c.hangup("no media for "+secs+" seconds", "system")
+		return
+	}
+	if stopped == nil || len(legs) < 2 {
+		return
+	}
+	who := stopped.party() + "'s"
+	if stopped == c.caller {
+		who = "the caller's"
+	}
+	why := strings.ToUpper(who[:1]) + who[1:] + " audio stopped: no sound for " + secs + " seconds, and no hang-up came."
+	c.note(why)
+	if emergency {
+		c.e.Log.Warn("ended an emergency call whose caller's sound stopped", "call", c.ID, "side", stopped.party())
+	}
+	c.hangup(strings.TrimSuffix(who, "'s")+"'s audio stopped", "system")
 }
 
 // holdChanged plays the hold tone to the other party while one side holds.

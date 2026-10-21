@@ -103,6 +103,10 @@ type CDR struct {
 	// Taken is when a person (a call-taker) answered it, which for a 911 call is the answer that
 	// counts: a queue holding the caller has not answered them.
 	Taken time.Time `json:"taken,omitzero"`
+	// TakenBy and TakenName are who took it then: an extension, or for a text call taken on the 911
+	// screen or by a CAD, the person signed in (or named by a CAD's token).
+	TakenBy   string `json:"takenBy,omitempty"`
+	TakenName string `json:"takenName,omitempty"`
 	// Ext is the extension that placed an outgoing call; Department is its department then.
 	Ext        string `json:"ext,omitempty"`
 	Department string `json:"department,omitempty"`

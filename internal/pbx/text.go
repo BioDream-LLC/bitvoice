@@ -463,7 +463,7 @@ func (e *Engine) TakeTextCall(id, ext, name string) error {
 		return errors.New("no such call")
 	}
 	c.mu.Lock()
-	text, taken, ended := c.textOnly, c.takenBy, c.ended
+	text, taken, ended := c.textOnly, firstNonEmptyStr(c.takenName, c.takenBy), c.ended
 	c.mu.Unlock()
 	switch {
 	case ended:

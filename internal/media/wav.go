@@ -338,6 +338,15 @@ func (c *Capture) Samples() []int16 {
 	return append([]int16(nil), c.pcm...)
 }
 
+// Drain returns what has been captured since the last Drain, and empties the buffer (live listening).
+func (c *Capture) Drain() []int16 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	p := c.pcm
+	c.pcm, c.full = nil, false
+	return p
+}
+
 // Full reports whether the maximum length has been reached.
 func (c *Capture) Full() bool {
 	c.mu.Lock()

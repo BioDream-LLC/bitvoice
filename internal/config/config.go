@@ -273,6 +273,9 @@ type AI struct {
 	// AudioModel, when set, turns speech into text instead of Model (which may then be text-only, such
 	// as meta-llama/llama-3.3-70b-instruct, with google/gemini-2.5-flash for audio).
 	AudioModel string `json:"audioModel"`
+	// LiveTranscripts writes out answered 911 calls as they are spoken, each side apart, for the 911
+	// screen and CAD (call.transcript events). The calls' audio goes to the AI service while they last.
+	LiveTranscripts bool `json:"liveTranscripts,omitempty"`
 	// SpeechModel and Voice turn text into speech for the receptionist (an OpenAI-compatible
 	// /audio/speech service at the same address), such as tts-1 and alloy.
 	SpeechModel string `json:"speechModel"`

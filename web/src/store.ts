@@ -63,7 +63,7 @@ export function useLiveEvents(enabled: boolean) {
         store.dispatch(api.util.invalidateTags(['Calls', 'Registrations', 'TrunkStatus', 'Stats']))
       })
       es.addEventListener('resync', () => store.dispatch(api.util.resetApiState()))
-      for (const type of [...Object.keys(eventTags), 'emergency.call', 'voicemail.urgent', 'script.ran']) {
+      for (const type of [...Object.keys(eventTags), 'emergency.call', 'voicemail.urgent', 'script.ran', 'call.transcript']) {
         es.addEventListener(type, (ev) => {
           const tags = eventTags[type]
           if (tags) store.dispatch(api.util.invalidateTags(tags))

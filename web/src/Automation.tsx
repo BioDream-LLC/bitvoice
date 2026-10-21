@@ -12,7 +12,7 @@ export function Tokens() {
   const { data } = useTokensQuery()
   const [add, { isLoading }] = useAddTokenMutation()
   const [revoke] = useRevokeTokenMutation()
-  const [form, setForm] = useState<{ name: string; role: 'admin' | 'viewer'; days: number } | null>(null)
+  const [form, setForm] = useState<{ name: string; role: 'admin' | 'viewer'; days: number; onBehalf: boolean } | null>(null)
   const [made, setMade] = useState<string | null>(null)
   const [err, setErr] = useState<ApiErrorBody | null>(null)
   const create = async () => {
@@ -26,7 +26,7 @@ export function Tokens() {
     <section className="card mt-6 space-y-4 p-5" aria-labelledby="tok-h">
       <div className="flex items-center justify-between">
         <h2 id="tok-h" className="flex items-center gap-2 font-semibold text-slate-100"><KeyRound size={17} className="text-amber-300" aria-hidden /> API tokens</h2>
-        {!form && <button className="btn" onClick={() => { setForm({ name: '', role: 'admin', days: 365 }); setMade(null) }}><Plus size={14} aria-hidden /> New token</button>}
+        {!form && <button className="btn" onClick={() => { setForm({ name: '', role: 'admin', days: 365, onBehalf: false }); setMade(null) }}><Plus size={14} aria-hidden /> New token</button>}
       </div>
       <p className="text-sm text-slate-400">For Terraform, scripts and other programs: send <span className="font-mono text-sky-300">Authorization: Bearer bv_…</span>. The API is described at <a className="text-sky-300 underline" href="./api/openapi.json" target="_blank" rel="noreferrer">/api/openapi.json</a>.</p>
       {made && (
@@ -48,6 +48,10 @@ export function Tokens() {
             </select>
           </Field>
           <Field label="Expires in (days)" htmlFor="tkd" error={problemFor(err?.problems, 'days')} hint="0: never."><input id="tkd" type="number" min={0} className="input" value={form.days} onChange={(e) => { const v = Number(e.target.value); setForm((f) => f && { ...f, days: v }) }} /></Field>
+          <label className="flex items-center gap-2 text-sm text-slate-300 sm:col-span-4">
+            <input type="checkbox" checked={form.onBehalf} onChange={(e) => { const v = e.target.checked; setForm((f) => f && { ...f, onBehalf: v }) }} />
+            <span>Names the person it acts for <span className="text-xs text-slate-500">(for a CAD: each request may send <code>X-BitVoice-On-Behalf-Of</code> with the dispatcher's name, and records such as the 911 exposure log name that person)</span></span>
+          </label>
           <div className="flex items-end gap-2 pb-0.5"><button className="btn btn-primary" disabled={isLoading}>Make it</button><button type="button" className="btn" onClick={() => { setForm(null); setErr(null) }}>Cancel</button></div>
         </form>
       )}
@@ -60,6 +64,7 @@ export function Tokens() {
                 <span className="font-medium text-slate-100">{t.name}</span>
                 <span className="font-mono text-xs text-slate-500">{t.prefix}…</span>
                 <Badge status={t.role === 'admin' ? 'warn' : 'idle'}>{t.role === 'admin' ? 'Changes everything' : 'Read only'}</Badge>
+                {t.onBehalf && <Badge status="ok">Names its people</Badge>}
                 <span className={`text-xs ${expired ? 'text-rose-300' : 'text-slate-500'}`}>
                   {t.lastUsed ? `used ${relTime(t.lastUsed)}` : 'never used'} · {t.expires ? (expired ? 'expired' : `expires ${new Date(t.expires).toLocaleDateString()}`) : 'no expiry'}
                 </span>
