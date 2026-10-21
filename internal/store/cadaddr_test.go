@@ -32,9 +32,11 @@ func TestOldUnsafeCADAddressKept(t *testing.T) {
 		t.Fatalf("an https address was refused: %v", err)
 	}
 	s.Close()
-	if _, err := Open(dir); err != nil {
+	again, err := Open(dir)
+	if err != nil {
 		t.Fatalf("reopening: %v", err)
 	}
+	again.Close() // Windows cannot remove an open database file
 }
 
 // Messages written in the same millisecond keep the order they were written in.
