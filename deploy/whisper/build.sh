@@ -7,7 +7,7 @@
 #
 # TARGET is the download it is for: linux-amd64, linux-arm64, darwin-amd64, darwin-arm64, windows-amd64 or
 # windows-arm64, built on that system (darwin-amd64 also on an Apple silicon Mac). Linux programs are best
-# built on an old glibc (Debian 11) so they run on every current distribution. On x86-64 the program
+# built on an old glibc (AlmaLinux 8, glibc 2.28) so they run on every current distribution. On x86-64 the program
 # needs AVX2 and FMA (every server processor since about 2013); on Arm 64 it uses NEON; on Apple silicon
 # the GPU (Metal).
 set -eu

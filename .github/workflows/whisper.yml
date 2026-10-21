@@ -31,11 +31,12 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Build (Debian 11, so it runs on every current Linux)
+      - name: Build (AlmaLinux 8, glibc 2.28, so it runs on every current Linux)
         if: matrix.docker
         run: |
-          docker run --rm -v "$PWD:/w" -w /w debian:11 sh -c '
-            apt-get update -qq && apt-get install -y -qq --no-install-recommends build-essential cmake curl ca-certificates > /dev/null &&
+          docker run --rm -v "$PWD:/w" -w /w almalinux:8 sh -c '
+            dnf install -y -q gcc-toolset-13 gcc-toolset-13-libstdc++-devel cmake make curl > /dev/null &&
+            . /opt/rh/gcc-toolset-13/enable &&
             deploy/whisper/build.sh out/${{ matrix.target }} ${{ matrix.target }}'
           sudo chown -R "$(id -u)" out
       - name: Build
