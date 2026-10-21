@@ -139,6 +139,13 @@ func (l *Leg) bye() {
 	}
 }
 
+// isEnded reports whether this party has hung up or been released.
+func (l *Leg) isEnded() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.ended
+}
+
 func (l *Leg) close() {
 	l.mu.Lock()
 	l.ended = true

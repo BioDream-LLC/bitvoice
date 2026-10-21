@@ -1652,9 +1652,10 @@ func (c *Call) transferFailed(transferor, stay *Leg, emergency bool) {
 	if c.transferor == transferor {
 		c.transferor = nil
 	}
-	up := !transferor.ended && !c.ended
-	gone := c.ended || stay.ended
+	ended := c.ended
 	c.mu.Unlock()
+	up := !transferor.isEnded() && !ended
+	gone := ended || stay.isEnded()
 	switch {
 	case gone:
 	case up:
