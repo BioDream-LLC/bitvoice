@@ -285,6 +285,10 @@ func TestTranscribeService(t *testing.T) {
 		{AI{Enabled: true, TranscribeURL: "https://api.openai.com/v1/audio/transcriptions", TranscribeModel: "whisper-1"}, true},
 		{AI{Enabled: true, TranscribeURL: "http://whisper.example.com/inference"}, false},
 		{AI{Enabled: true, TranscribeURL: "http://8.8.8.8/inference"}, false},
+		{AI{Enabled: true, LocalSpeech: true}, true},
+		{AI{Enabled: true, LocalSpeech: true, LocalModel: "small"}, true},
+		{AI{Enabled: true, LocalSpeech: true, LocalModel: "huge"}, false},
+		{AI{Enabled: true, LocalSpeech: true, TranscribeURL: "http://127.0.0.1:8178/inference"}, false},
 	} {
 		c := Default()
 		c.System.AI = tc.ai

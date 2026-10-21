@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -215,7 +216,7 @@ func hangupAll(e *Engine) {
 // their pause and comes as a call.transcript event naming the side.
 func TestLiveTranscript911(t *testing.T) {
 	ai, _ := fakeAIWith(t, "", "My house is on fire.")
-	liveTranscript911(t, config.AI{Enabled: true, BaseURL: ai.URL, Model: "m", LiveTranscripts: true})
+	liveTranscript911(t, config.AI{Enabled: true, BaseURL: ai.URL, Model: "m", LiveTranscripts: true}, nil, "My house is on fire.")
 }
 
 // The same with a speech-to-text service (whisper.cpp's whisper-server) and no language model at all.
@@ -232,10 +233,30 @@ func TestLiveTranscript911Whisper(t *testing.T) {
 		w.Write([]byte(`{"text":" My house is on fire.\n"}`))
 	}))
 	defer whisper.Close()
-	liveTranscript911(t, config.AI{Enabled: true, TranscribeURL: whisper.URL + "/inference", LiveTranscripts: true})
+	liveTranscript911(t, config.AI{Enabled: true, TranscribeURL: whisper.URL + "/inference", LiveTranscripts: true}, nil, "My house is on fire.")
 }
 
-func liveTranscript911(t *testing.T, a config.AI) {
+// A 911 caller's real speech, written out live by a real whisper-server: BITVOICE_TEST_WHISPER (its
+// /inference address), BITVOICE_TEST_WHISPER_WAV (8 kHz mono speech) and BITVOICE_TEST_WHISPER_SAYS.
+func TestLiveTranscript911RealWhisper(t *testing.T) {
+	u, wavPath := os.Getenv("BITVOICE_TEST_WHISPER"), os.Getenv("BITVOICE_TEST_WHISPER_WAV")
+	if u == "" || wavPath == "" {
+		t.Skip("set BITVOICE_TEST_WHISPER and BITVOICE_TEST_WHISPER_WAV")
+	}
+	b, err := os.ReadFile(wavPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pcm, err := media.DecodeWAV(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	liveTranscript911(t, config.AI{Enabled: true, TranscribeURL: u, LiveTranscripts: true}, pcm, os.Getenv("BITVOICE_TEST_WHISPER_SAYS"))
+}
+
+// liveTranscript911 places an answered 911 call whose caller says speech (8 kHz; nil: a second of a
+// speech-like tone) and checks the caller's live transcript holds want.
+func liveTranscript911(t *testing.T, a config.AI, speech []int16, want string) {
 	esinet := newCarrier(t)
 	cfg := esinetConfig(esinet.stack.Port(), config.InboundRoute{Name: "911", Trunk: "in", Destination: config.Destination{Type: "extension", Target: "100"}})
 	cfg.System.AI = a
@@ -275,9 +296,19 @@ func liveTranscript911(t *testing.T, a config.AI) {
 		}
 		return b
 	}
+	speechFrames := 50
+	if speech != nil {
+		speechFrames = len(speech) / 160
+	}
 	go func() {
-		for i := uint16(1); i <= 200; i++ {
-			caller.WriteToUDPAddrPort(rtpPacket(i, frame(i <= 50)), to)
+		for i := 1; i <= speechFrames+150; i++ {
+			b := frame(i <= speechFrames && speech == nil)
+			if speech != nil && i <= speechFrames {
+				for k := range b {
+					b[k] = media.LinearToUlaw(speech[(i-1)*160+k])
+				}
+			}
+			caller.WriteToUDPAddrPort(rtpPacket(uint16(i), b), to)
 			time.Sleep(20 * time.Millisecond)
 		}
 	}()
@@ -290,9 +321,10 @@ func liveTranscript911(t *testing.T, a config.AI) {
 			}
 			m := ev.Data.(map[string]any)
 			lines := m["lines"].([]TranscriptLine)
-			if len(lines) != 1 || lines[0].Side != "caller" || lines[0].Speaker != "Caller" || lines[0].Text != "My house is on fire." {
+			if len(lines) != 1 || lines[0].Side != "caller" || lines[0].Speaker != "Caller" || !strings.Contains(strings.ToLower(lines[0].Text), strings.ToLower(want)) {
 				t.Fatalf("lines %+v", lines)
 			}
+			t.Logf("live transcript: %q", lines[0].Text)
 			hangupAll(e)
 			return
 		case <-deadline:

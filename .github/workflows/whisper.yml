@@ -1,0 +1,63 @@
+name: whisper-server
+
+# Builds whisper.cpp's whisper-server for each of BitVoice's downloads (deploy/whisper/build.sh, pinned and
+# checked source) and tries each one through BitVoice's own manager with the base model. A release is made
+# with these: download the artifacts into DIR/<os>-<arch>/ and run make release WHISPER=DIR.
+
+on:
+  workflow_dispatch:
+  push:
+    paths: ['deploy/whisper/**', 'internal/whisper/**', '.github/workflows/whisper.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: linux-amd64, os: ubuntu-latest, docker: true }
+          - { target: linux-arm64, os: ubuntu-24.04-arm, docker: true }
+          - { target: darwin-arm64, os: macos-latest }
+          - { target: darwin-amd64, os: macos-latest, rosetta: true }
+          - { target: windows-amd64, os: windows-latest }
+          - { target: windows-arm64, os: windows-11-arm }
+    runs-on: ${{ matrix.os }}
+    name: whisper-server ${{ matrix.target }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build (Debian 11, so it runs on every current Linux)
+        if: matrix.docker
+        run: |
+          docker run --rm -v "$PWD:/w" -w /w debian:11 sh -c '
+            apt-get update -qq && apt-get install -y -qq --no-install-recommends build-essential cmake curl ca-certificates > /dev/null &&
+            deploy/whisper/build.sh out/${{ matrix.target }} ${{ matrix.target }}'
+          sudo chown -R "$(id -u)" out
+      - name: Build
+        if: ${{ !matrix.docker }}
+        run: deploy/whisper/build.sh out/${{ matrix.target }} ${{ matrix.target }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Fetch the base model
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/ggml-base-q5_1.bin" https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin
+          echo "422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898  $RUNNER_TEMP/ggml-base-q5_1.bin" > "$RUNNER_TEMP/sum"
+          (sha256sum -c "$RUNNER_TEMP/sum" 2>/dev/null || shasum -a 256 -c "$RUNNER_TEMP/sum")
+      - name: Run it through BitVoice's manager
+        # An Intel Mac program runs here under Rosetta, which may lack AVX2 on older macOS.
+        continue-on-error: ${{ matrix.rosetta == true }}
+        run: |
+          exe=out/${{ matrix.target }}/whisper-server; [ -f "$exe.exe" ] && exe=$exe.exe
+          BITVOICE_TEST_WHISPER_SERVER="$PWD/$exe" BITVOICE_TEST_WHISPER_MODEL="$RUNNER_TEMP/ggml-base-q5_1.bin" \
+            go test -count=1 -v -run 'TestRealWhisperServer' ./internal/whisper
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: whisper-server-${{ matrix.target }}
+          path: out/${{ matrix.target }}
+          retention-days: 90

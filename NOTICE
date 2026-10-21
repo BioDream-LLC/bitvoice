@@ -38,3 +38,9 @@ BitVoice includes these third-party Go modules, each under its own licence:
 - golang.org/x/sync, golang.org/x/sys and golang.org/x/text (BSD-3-Clause)
 
 The web interface's licences are listed in web/package.json and the built bundle.
+
+BitVoice's downloads also carry whisper-server, a program built unchanged from whisper.cpp 1.9.5
+(github.com/ggml-org/whisper.cpp, MIT licence, Copyright (c) 2023-2026 The ggml authors; its licence is
+in whisper.cpp-LICENSE beside it), which BitVoice starts for speech to text on this server. It is a
+separate program: no part of it is in BitVoice's own code. The speech models it uses are OpenAI's
+Whisper models (MIT licence), fetched when chosen.

@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/biodream-llc/bitvoice/internal/ai"
 	"github.com/biodream-llc/bitvoice/internal/media"
 )
 
@@ -54,7 +53,7 @@ func (c *Call) liveTranscript() {
 	if !a.Enabled || !a.LiveTranscripts {
 		return
 	}
-	client := &ai.Client{BaseURL: a.BaseURL, Key: a.Key, Model: a.Model, AudioModel: a.AudioModel, TranscribeURL: a.TranscribeURL, TranscribeKey: a.TranscribeKey, TranscribeModel: a.TranscribeModel, Allow: c.e.AIAllow}
+	client := c.e.Speech.Client(a, c.e.AIAllow)
 	rate := media.Rate
 	caller := &liveSide{side: "caller", name: "Caller"}
 	taker := &liveSide{side: "taker"}

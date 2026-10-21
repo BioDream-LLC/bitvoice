@@ -270,7 +270,7 @@ export interface SystemSettings {
     apns: { keyId: string; teamId: string; topic: string; key: string; sandbox: boolean } }
   provisioning: { enabled: boolean; username: string; password: string; transport: 'udp' | 'tcp' | 'tls'; httpsOnly?: boolean }
   email: { host: string; port: number; username: string; password: string; from: string }
-  ai: { enabled: boolean; baseUrl: string; key: string; model: string; voicemail: boolean; calls: boolean; briefings?: boolean; insights?: boolean; liveTranscripts?: boolean; transcribeUrl?: string; transcribeKey?: string; transcribeModel?: string; audioModel: string; speechModel: string; voice: string }
+  ai: { enabled: boolean; baseUrl: string; key: string; model: string; voicemail: boolean; calls: boolean; briefings?: boolean; insights?: boolean; liveTranscripts?: boolean; transcribeUrl?: string; transcribeKey?: string; transcribeModel?: string; localSpeech?: boolean; localModel?: string; audioModel: string; speechModel: string; voice: string }
   crm: CRM
   metrics: Metrics
   costs: Costs
@@ -326,6 +326,13 @@ export interface CDR {
   duration: number; billsec: number; hangupBy: string; mos: number; recording?: string; why?: string[]
   paused?: { from: number; to: number }[]; held?: boolean; quality?: LegQuality[]; noSound?: CallSide[]; attest?: string; signed?: string; verified?: string; screened?: string; ext?: string; department?: string; cost?: number; rate?: string; charged?: string
 }
+/** Speech to text on this server (whisper-server run by BitVoice). */
+export interface SpeechStatus {
+  state: 'off' | 'no-program' | 'downloading' | 'starting' | 'running' | 'failed'
+  model?: string; program?: string; downloaded?: number; total?: number; error?: string; since: string; restarts?: number
+  models: { name: string; label: string; file: string; size: number }[]
+}
+
 export interface Check { id: string; status: 'ok' | 'warn' | 'fail'; title: string; detail: string; fix?: string }
 export interface Revision { rev: number; at: string; actor: string; summary: string }
 export interface Ban { ip: string; until: string; reason: string }
@@ -443,7 +450,7 @@ const baseQuery = fetchBaseQuery({
 })
 
 const tags = ['Me', 'Extensions', 'RingGroups', 'Trunks', 'Inbound', 'Outbound', 'Settings', 'Users', 'Calls',
-  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail', 'Tenants', 'System', 'Prompts', 'Music', 'Directories', 'DialIns', 'Inbox', 'AudioStreams', 'Campaigns', 'Dialer', 'DNC', 'Toggles', 'ToggleState', 'PINSets', 'Lookups', 'Hotel', 'WakeUps', 'Chat', 'Core', 'PlanCheck', 'Fraud'] as const
+  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail', 'Tenants', 'System', 'Prompts', 'Music', 'Directories', 'DialIns', 'Inbox', 'AudioStreams', 'Campaigns', 'Dialer', 'DNC', 'Toggles', 'ToggleState', 'PINSets', 'Lookups', 'Hotel', 'WakeUps', 'Chat', 'Core', 'PlanCheck', 'Fraud', 'Speech'] as const
 
 export const api = createApi({
   reducerPath: 'api',
@@ -751,6 +758,7 @@ export const api = createApi({
       cdr: b.query<List<CDR>, { search?: string; direction?: string }>({
         query: (p) => ({ url: 'cdr', params: { limit: 1000, ...p } }), providesTags: ['CDR'] }),
       health: b.query<List<Check>, void>({ query: () => 'health', providesTags: ['Health'] }),
+      speech: b.query<SpeechStatus, void>({ query: () => 'speech', providesTags: ['Speech'] }),
       history: b.query<List<Revision>, void>({ query: () => 'history', providesTags: ['History'] }),
       restore: b.mutation<void, number>({
         query: (rev) => ({ url: `history/${rev}/restore`, method: 'POST' }),
@@ -910,7 +918,7 @@ export const {
   useInboundRoutesQuery, useCreateInboundMutation, useUpdateInboundMutation, useDeleteInboundMutation,
   useOutboundRoutesQuery, useCreateOutboundMutation, useUpdateOutboundMutation, useDeleteOutboundMutation, useReorderOutboundMutation,
   useSettingsQuery, useSaveSettingsMutation, useUsersQuery, useSaveUserMutation, useDeleteUserMutation, useChangePasswordMutation,
-  useCallsQuery, useHangupMutation, useRegistrationsQuery, useStatsQuery, useCdrQuery, useHealthQuery, useHistoryQuery,
+  useCallsQuery, useHangupMutation, useRegistrationsQuery, useStatsQuery, useCdrQuery, useHealthQuery, useSpeechQuery, useHistoryQuery,
   useRestoreMutation, useImportConfigMutation, useBansQuery, useUnbanMutation, useAuditQuery, useTraceQuery, useSystemQuery, useOpenDoorMutation, useEmergencyModeMutation, useReceptionistsQuery, useCallbacksQuery, useCallerQuery, useSimulateMutation, useMetricsTestMutation, useAwayQuery, useReputationQuery, useCertificateQuery, useInstallCertificateMutation, useDatabaseQuery, useServersQuery, useServersDnsQuery, useSetServerMutation, useForgetServerMutation, useTestDatabaseMutation, useMoveDatabaseMutation, useSetAwayMutation, useCheckCalendarMutation, useMakeInsightMutation, useAddCoachingMutation, useDeleteCoachingMutation, useInsightQuery, useTimelineQuery, useAddNoteMutation, useDeleteNoteMutation, useConversationsQuery, useThreadQuery, useSendTextMutation, useMarkReadMutation, usePutNoticeMutation, useDeleteNoticeMutation, useHotDesksQuery, useHotDeskSignInMutation, useHotDeskSignOutMutation, useDirectoryQuery, useAddContactMutation, useSaveContactMutation, useDeleteContactMutation, useCostsQuery, usePriceMutation, useQualityQuery, useCrmTestMutation, useTranscriptQuery, useMakeTranscriptMutation, useSearchTranscriptsQuery, useAddCallbackMutation, useSetCallbackMutation, useDeleteCallbackMutation, useRingBackMutation, useCreateReceptionistMutation, useUpdateReceptionistMutation, useDeleteReceptionistMutation, useAskMutation, useApplyAskMutation, usePlanCheckQuery, useRevisionCheckQuery, useRulebooksQuery, useFraudDecisionsQuery, useCheckVaultMutation, useSitesQuery, useCreateSiteMutation, useUpdateSiteMutation, useDeleteSiteMutation, useRemoteAddressQuery, useCompatibilityQuery, useSetAgentMutation, useSuperviseMutation, useSetSupervisionMutation, useTokensQuery, useAddTokenMutation, useRevokeTokenMutation, useGitOpsQuery, useSyncGitOpsMutation, useMobileDevicesQuery, usePairMobileMutation, useUnpairMobileMutation, useHoldsQuery, useAddHoldMutation, useUpdateHoldMutation, useReleaseHoldMutation, usePauseRecordingMutation, useLoadTestQuery, useStartLoadTestMutation, useStopLoadTestMutation, useUpgradeQuery, useUploadUpgradeMutation, useApplyUpgradeMutation, useRollbackUpgradeMutation, useCancelUpgradeMutation,
   useScriptsQuery, useCreateScriptMutation, useUpdateScriptMutation, useDeleteScriptMutation, useTestScriptMutation,
   useMenusQuery, useCreateMenuMutation, useUpdateMenuMutation, useDeleteMenuMutation, useSavePromptMutation, useResetPromptMutation,

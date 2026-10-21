@@ -123,7 +123,7 @@ if [ "$ACTION" = uninstall ]; then
       rm -f /etc/systemd/system/bitvoice.service
       systemctl daemon-reload
     fi
-    rm -f /usr/local/bin/bitvoice /usr/local/bin/bitvoice-dahdi
+    rm -f /usr/local/bin/bitvoice /usr/local/bin/bitvoice-dahdi /usr/local/bin/whisper-server
     if [ "$PURGE" = 1 ]; then
       rm -rf /var/lib/bitvoice
       userdel bitvoice >/dev/null 2>&1 || true
@@ -175,9 +175,9 @@ say "  SHA-256 checked."
 tar -xzf "$work/$name.tar.gz" -C "$work"
 [ -x "$work/$name/bitvoice" ] || fail "the archive holds no bitvoice program"
 verify_signature "$work/$name/bitvoice" "$work/$name/bitvoice.sig"
-if [ -f "$work/$name/bitvoice-dahdi" ]; then
-  verify_signature "$work/$name/bitvoice-dahdi" "$work/$name/bitvoice-dahdi.sig"
-fi
+for extra in bitvoice-dahdi whisper-server; do
+  [ -f "$work/$name/$extra" ] && verify_signature "$work/$name/$extra" "$work/$name/$extra.sig"
+done
 
 wait_ready() { # url
   i=0
@@ -200,6 +200,8 @@ if [ "$os" = linux ]; then
   [ -f /usr/local/bin/bitvoice ] && upgrade=1
   install -m 0755 "$work/$name/bitvoice" /usr/local/bin/bitvoice.new && mv -f /usr/local/bin/bitvoice.new /usr/local/bin/bitvoice
   [ -f "$work/$name/bitvoice-dahdi" ] && install -m 0755 "$work/$name/bitvoice-dahdi" /usr/local/bin/bitvoice-dahdi
+  # whisper-server: speech to text on this server (Settings, AI), started by BitVoice when chosen.
+  [ -f "$work/$name/whisper-server" ] && install -m 0755 "$work/$name/whisper-server" /usr/local/bin/whisper-server
   say "  Program: /usr/local/bin/bitvoice"
   if [ "$SERVICE" = 0 ]; then
     say "Installed. Start it with: bitvoice -data /var/lib/bitvoice"
@@ -288,6 +290,11 @@ cp "$work/$name/bitvoice" "$dir/bitvoice.new" && chmod 0755 "$dir/bitvoice.new" 
 cp "$work/$name/bitvoice.sig" "$work/$name/LICENSE" "$work/$name/NOTICE" "$dir/" 2>/dev/null || true
 [ -f "$work/$name/bitvoice-manual.pdf" ] && cp "$work/$name/bitvoice-manual.pdf" "$dir/"
 xattr -d com.apple.quarantine "$dir/bitvoice" 2>/dev/null || true
+if [ -f "$work/$name/whisper-server" ]; then
+  cp "$work/$name/whisper-server" "$dir/whisper-server.new" && chmod 0755 "$dir/whisper-server.new" && mv -f "$dir/whisper-server.new" "$dir/whisper-server"
+  cp "$work/$name/whisper-server.sig" "$work/$name/whisper.cpp-LICENSE" "$dir/" 2>/dev/null || true
+  xattr -d com.apple.quarantine "$dir/whisper-server" 2>/dev/null || true
+fi
 say "  Program: $dir/bitvoice"
 if [ "$SERVICE" = 0 ]; then
   say "Installed. Start it with: \"$dir/bitvoice\""

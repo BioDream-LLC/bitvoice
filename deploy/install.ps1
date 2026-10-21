@@ -48,6 +48,8 @@ function Stop-BitVoice {
     Stop-ScheduledTask -TaskName $Task -ErrorAction SilentlyContinue
   }
   Get-Process bitvoice -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq (Join-Path $Dir 'bitvoice.exe') } | Stop-Process -Force
+  # whisper-server, which BitVoice starts for speech to text, holds its program open while it runs.
+  Get-Process whisper-server -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq (Join-Path $Dir 'whisper-server.exe') } | Stop-Process -Force
   Start-Sleep -Milliseconds 500
 }
 
@@ -104,12 +106,17 @@ try {
   $openssl = (Get-Command openssl -ErrorAction SilentlyContinue).Source
   if (-not $openssl) { $g = Join-Path $env:ProgramFiles 'Git\usr\bin\openssl.exe'; if (Test-Path $g) { $openssl = $g } }
   if ($openssl -and ((& $openssl version) -match '^OpenSSL ([3-9]|\d\d)\.')) {
-    $sig = "$exe.sig"
-    if (-not (Test-Path $sig)) { Fail 'bitvoice.exe has no signature beside it: this is not a BioDream release' }
     Set-Content -Path (Join-Path $work 'key.pem') -Encoding ascii -Value "-----BEGIN PUBLIC KEY-----`nMCowBQYDK2VwAyEA$Key`n-----END PUBLIC KEY-----"
-    [IO.File]::WriteAllBytes((Join-Path $work 'sig.bin'), [Convert]::FromBase64String((Get-Content $sig -Raw).Trim()))
-    & $openssl pkeyutl -verify -pubin -inkey (Join-Path $work 'key.pem') -rawin -in $exe -sigfile (Join-Path $work 'sig.bin') *> $null
-    if ($LASTEXITCODE -ne 0) { Fail "the signature of bitvoice.exe does not match ${KeyName}: not installed" }
+    # bitvoice.exe, and whisper-server.exe (speech to text on this server) when the download has it.
+    foreach ($p in @($exe, (Join-Path $work "$name\whisper-server.exe"))) {
+      if ($p -ne $exe -and -not (Test-Path $p)) { continue }
+      $pn = Split-Path $p -Leaf
+      $sig = "$p.sig"
+      if (-not (Test-Path $sig)) { Fail "$pn has no signature beside it: this is not a BioDream release" }
+      [IO.File]::WriteAllBytes((Join-Path $work 'sig.bin'), [Convert]::FromBase64String((Get-Content $sig -Raw).Trim()))
+      & $openssl pkeyutl -verify -pubin -inkey (Join-Path $work 'key.pem') -rawin -in $p -sigfile (Join-Path $work 'sig.bin') *> $null
+      if ($LASTEXITCODE -ne 0) { Fail "the signature of $pn does not match ${KeyName}: not installed" }
+    }
     Write-Host "  Signature checked: signed by $KeyName."
   } elseif ($env:BITVOICE_REQUIRE_SIGNATURE -eq '1') {
     Fail 'OpenSSL 3 is needed to check the release signature'

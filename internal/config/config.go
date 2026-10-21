@@ -285,6 +285,11 @@ type AI struct {
 	TranscribeURL   string `json:"transcribeUrl,omitempty"`
 	TranscribeKey   string `json:"transcribeKey,omitempty"`
 	TranscribeModel string `json:"transcribeModel,omitempty"`
+	// LocalSpeech writes speech down on this server: BitVoice runs whisper.cpp's whisper-server (it comes
+	// in BitVoice's downloads) on 127.0.0.1 and fetches LocalModel (one of SpeechModels, DefaultSpeechModel
+	// when empty) the first time. Nothing leaves the computer and Model may be empty.
+	LocalSpeech bool   `json:"localSpeech,omitempty"`
+	LocalModel  string `json:"localModel,omitempty"`
 	// SpeechModel and Voice turn text into speech for the receptionist (an OpenAI-compatible
 	// /audio/speech service at the same address), such as tts-1 and alloy.
 	SpeechModel string `json:"speechModel"`
@@ -2510,8 +2515,14 @@ func (c *Config) Validate() error {
 		extNumbers[e.Number] = true
 	}
 	if a := &c.System.AI; a.Enabled {
-		if strings.TrimSpace(a.Model) == "" && a.TranscribeURL == "" {
-			p.add("system.ai.model", "choose a model, or a speech-to-text service below")
+		if strings.TrimSpace(a.Model) == "" && a.TranscribeURL == "" && !a.LocalSpeech {
+			p.add("system.ai.model", "choose a model, or speech to text on this server or a service below")
+		}
+		if a.LocalSpeech && a.TranscribeURL != "" {
+			p.add("system.ai.transcribeUrl", "speech is written down on this server: clear the service's address, or turn that off")
+		}
+		if a.LocalModel != "" && !slices.Contains(SpeechModels, a.LocalModel) {
+			p.add("system.ai.localModel", "choose one of %s", strings.Join(SpeechModels, ", "))
 		}
 		if a.TranscribeURL != "" && !buildingURL(a.TranscribeURL) {
 			p.add("system.ai.transcribeUrl", "use https, or http only to this computer or a private network address (http://127.0.0.1:8178/inference)")
@@ -3954,3 +3965,9 @@ func buildingURL(s string) bool {
 	}
 	return false
 }
+
+// SpeechModels are the whisper models speech to text on this server can use, smallest first, and
+// DefaultSpeechModel the one used when none is chosen.
+var SpeechModels = []string{"tiny", "base", "small", "medium", "large-v3-turbo"}
+
+const DefaultSpeechModel = "base"

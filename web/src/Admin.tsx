@@ -1,3 +1,4 @@
+import { clsx } from 'clsx'
 import { FraudDecisions, FraudGuardSettings, Rulebooks, TrunkJudgingSettings } from './Judges'
 import { Link } from 'react-router-dom'
 import { DatabaseSettings } from './Database'
@@ -10,7 +11,7 @@ import { toast } from 'sonner'
 import {
   useAuditQuery, useBansQuery, useChangePasswordMutation, useDeleteUserMutation, useExtensionsQuery, useHistoryQuery,
   useImportConfigMutation, useMeQuery, useRestoreMutation, useSaveSettingsMutation, useSaveUserMutation, useSettingsQuery, useSystemQuery,
-  useUnbanMutation, useUsersQuery, type ApiErrorBody, type AuditEntry, type Role, type Settings as SettingsT, type User,
+  useSpeechQuery, useUnbanMutation, useUsersQuery, type ApiErrorBody, type AuditEntry, type Role, type Settings as SettingsT, type User,
 } from './api'
 import { CompatSettings } from './Compat'
 import { SSOSettings } from './SSO'
@@ -29,7 +30,7 @@ import { attempt, DeleteButton, Drawer, Table, useIsAdmin } from './Editor'
 import { createColumnHelper } from '@tanstack/react-table'
 import { TwoStep } from './TwoStep'
 import { useDraft } from './useDraft'
-import { StaleBanner, ListInput } from './ui'
+import { StaleBanner, ListInput, radioKeys } from './ui'
 import { ChangeList, RestoreButton, WhatChanged, type Change } from './Revisions'
 import { passwordProblem } from './Setup'
 import { countryCodes, countryName, emergencyFor } from './countries'
@@ -390,24 +391,10 @@ export function Settings() {
               <Field label="Service address" htmlFor="aib" error={p('system.ai.baseUrl')} hint="Empty uses OpenRouter."><input id="aib" className="input font-mono" placeholder="https://openrouter.ai/api/v1" value={sys.ai.baseUrl} onChange={(e) => setSys({ ai: { ...sys.ai, baseUrl: e.target.value.trim() } })} /></Field>
               <Field label="Model" htmlFor="aim" error={p('system.ai.model')} hint="For text: summaries, receptionists, asking. Without a speech-to-text model or service it must also accept audio. May be empty with a speech-to-text service: transcripts only."><input id="aim" className="input font-mono" placeholder="google/gemini-2.5-flash" value={sys.ai.model} onChange={(e) => setSys({ ai: { ...sys.ai, model: e.target.value.trim() } })} /></Field>
               <Field label="API key" htmlFor="aik" hint="Leave empty to keep the current one."><input id="aik" className="input font-mono" type="password" autoComplete="off" value={sys.ai.key} onChange={(e) => setSys({ ai: { ...sys.ai, key: e.target.value } })} /></Field>
-              <Field label="Speech-to-text model" htmlFor="ai-am" error={p('system.ai.audioModel')} hint={sys.ai.transcribeUrl ? 'Not used: the speech-to-text service below writes speech down.' : 'A model that takes audio, for transcripts and receptionists, such as google/gemini-2.5-flash. Empty: the model above.'}>
-                <input id="ai-am" className="input font-mono" disabled={!!sys.ai.transcribeUrl} value={sys.ai.audioModel ?? ''} onChange={(e) => setSys({ ai: { ...sys.ai, audioModel: e.target.value.trim() } })} />
+              <Field label="Speech-to-text model" htmlFor="ai-am" error={p('system.ai.audioModel')} hint={sys.ai.transcribeUrl || sys.ai.localSpeech ? 'Not used: speech is written down without a model (below).' : 'A model that takes audio, for transcripts and receptionists, such as google/gemini-2.5-flash. Empty: the model above.'}>
+                <input id="ai-am" className="input font-mono" disabled={!!sys.ai.transcribeUrl || !!sys.ai.localSpeech} value={sys.ai.audioModel ?? ''} onChange={(e) => setSys({ ai: { ...sys.ai, audioModel: e.target.value.trim() } })} />
               </Field>
-              <div className="space-y-3 rounded-lg border border-slate-800 p-4 sm:col-span-2">
-                <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-200"><AudioLines size={15} className="text-emerald-300" aria-hidden /> Speech-to-text service <span className="text-xs font-normal text-emerald-300">no language model, can stay in the building</span></h3>
-                <p className="text-xs text-slate-400">A speech recogniser such as whisper.cpp's <span className="font-mono">whisper-server</span>, run on this computer or one on your network, writes down what callers and staff say: their audio never leaves the building and nothing is paid per call. An OpenAI-compatible <span className="font-mono">…/audio/transcriptions</span> works too. With one set, the model above may be left empty: transcripts are written, and summaries and receptionists (which need a language model) are left out.</p>
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <Field label="Address" htmlFor="ai-tu" error={p('system.ai.transcribeUrl')} hint="Empty: the model writes speech down.">
-                    <input id="ai-tu" className="input font-mono" placeholder="http://127.0.0.1:8178/inference" value={sys.ai.transcribeUrl ?? ''} onChange={(e) => setSys({ ai: { ...sys.ai, transcribeUrl: e.target.value.trim() } })} />
-                  </Field>
-                  <Field label="Its model" htmlFor="ai-tm" hint="Only for services that ask, such as whisper-1. whisper-server ignores it.">
-                    <input id="ai-tm" className="input font-mono" disabled={!sys.ai.transcribeUrl} value={sys.ai.transcribeModel ?? ''} onChange={(e) => setSys({ ai: { ...sys.ai, transcribeModel: e.target.value.trim() } })} />
-                  </Field>
-                  <Field label="Its key" htmlFor="ai-tk" hint="Only for services that ask. Leave empty to keep the current one.">
-                    <input id="ai-tk" className="input font-mono" type="password" autoComplete="off" disabled={!sys.ai.transcribeUrl} value={sys.ai.transcribeKey ?? ''} onChange={(e) => setSys({ ai: { ...sys.ai, transcribeKey: e.target.value } })} />
-                  </Field>
-                </div>
-              </div>
+              <SpeechToText ai={sys.ai} set={(v) => setSys({ ai: { ...sys.ai, ...v } })} p={p} />
               <label className="flex items-center gap-3 self-end pb-2 text-sm text-slate-300"><Toggle checked={sys.ai.voicemail} onChange={(v) => setSys({ ai: { ...sys.ai, voicemail: v } })} label="Transcribe voicemail" /> Transcribe and summarise voicemail</label>
               <div className="sm:col-span-2">
                 <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={!!sys.ai.calls} onChange={(v) => setSys({ ai: { ...sys.ai, calls: v } })} label="Transcribe recorded calls" /> Transcribe recorded calls, with a summary and action items</label>
@@ -539,5 +526,68 @@ function EmailSettings({ email, onChange, error, admin }: {
         )}
       </div>
     </section>
+  )
+}
+
+type AISettings = SettingsT['system']['ai']
+
+/** Who writes speech down: the model, this server (whisper-server run by BitVoice) or a service at an address. */
+function SpeechToText({ ai, set, p }: { ai: AISettings; set: (v: Partial<AISettings>) => void; p: (path: string) => string | undefined }) {
+  const way = ai.localSpeech ? 'local' : ai.transcribeUrl !== undefined && ai.transcribeUrl !== '' ? 'service' : 'model'
+  const [service, setService] = useState(way === 'service')
+  const chosen = way === 'model' && service ? 'service' : way
+  const ways = ['model', 'local', 'service'] as const
+  const choose = (v: (typeof ways)[number]) => {
+    setService(v === 'service')
+    if (v === 'local') set({ localSpeech: true, transcribeUrl: '' })
+    else if (v === 'model') set({ localSpeech: false, transcribeUrl: '' })
+    else set({ localSpeech: false })
+  }
+  const { data: st } = useSpeechQuery(undefined, { skip: !ai.localSpeech, pollingInterval: ai.localSpeech ? 3000 : 0 })
+  const models = st?.models ?? []
+  return (
+    <div className="space-y-3 rounded-lg border border-slate-800 p-4 sm:col-span-2">
+      <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-200"><AudioLines size={15} className="text-emerald-300" aria-hidden /> Who writes speech down</h3>
+      <div className="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Who writes speech down">
+        {([['model', 'The model above', 'Audio goes to the AI service', 'text-violet-300'], ['local', 'This server', 'whisper, built in: nothing leaves this computer', 'text-emerald-300'], ['service', 'A speech-to-text service', 'whisper-server elsewhere in the building, or any …/audio/transcriptions', 'text-sky-300']] as const).map(([id, title, d, color], i) => (
+          <button type="button" key={id} role="radio" aria-checked={chosen === id} onClick={() => choose(id)} {...radioKeys(i, ways, chosen, choose)}
+            className={clsx('card p-3 text-left', chosen === id && 'ring-2 ring-emerald-400')}>
+            <div className={clsx('text-sm font-semibold', color)}>{title}</div>
+            <div className="text-xs text-slate-500">{d}</div>
+          </button>
+        ))}
+      </div>
+      {chosen === 'local' && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Whisper model" htmlFor="ai-lm" error={p('system.ai.localModel')} hint="Fetched once from the whisper.cpp project and checked; all understand about 100 languages.">
+            <select id="ai-lm" className="input" value={ai.localModel || 'base'} onChange={(e) => set({ localModel: e.target.value })}>
+              {(models.length ? models : [{ name: 'base', label: 'Base: fast, good on clear speech', size: 59707625 }]).map((m) => <option key={m.name} value={m.name}>{m.label} ({Math.round(m.size / 1e6)} MB)</option>)}
+            </select>
+          </Field>
+          <div className="self-end pb-2 text-sm" role="status" aria-live="polite">
+            {!st ? <span className="text-slate-500">Save to start it.</span>
+              : st.state === 'running' ? <span className="text-emerald-300">Running{st.model ? ` (${st.model})` : ''}: transcripts are written on this computer.</span>
+              : st.state === 'downloading' ? <span className="text-sky-300">Fetching the model: {Math.round((st.downloaded ?? 0) / 1e6)} of {Math.round((st.total ?? 0) / 1e6)} MB</span>
+              : st.state === 'starting' ? <span className="text-sky-300">Starting…</span>
+              : st.state === 'off' ? <span className="text-slate-500">Off until saved with AI on.</span>
+              : <span className="text-rose-300">{st.state === 'no-program' ? 'whisper-server is not installed: ' : 'Not working: '}{st.error}</span>}
+          </div>
+        </div>
+      )}
+      {chosen === 'service' && (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Field label="Address" htmlFor="ai-tu" error={p('system.ai.transcribeUrl')} hint="https, or http to this computer or a private address.">
+            <input id="ai-tu" className="input font-mono" placeholder="http://192.168.1.20:8178/inference" value={ai.transcribeUrl ?? ''} onChange={(e) => set({ transcribeUrl: e.target.value.trim() })} />
+          </Field>
+          <Field label="Its model" htmlFor="ai-tm" hint="Only for services that ask, such as whisper-1. whisper-server ignores it.">
+            <input id="ai-tm" className="input font-mono" value={ai.transcribeModel ?? ''} onChange={(e) => set({ transcribeModel: e.target.value.trim() })} />
+          </Field>
+          <Field label="Its key" htmlFor="ai-tk" hint="Only for services that ask. Leave empty to keep the current one.">
+            <input id="ai-tk" className="input font-mono" type="password" autoComplete="off" value={ai.transcribeKey ?? ''} onChange={(e) => set({ transcribeKey: e.target.value })} />
+          </Field>
+        </div>
+      )}
+      {chosen !== 'model' && <p className="text-xs text-slate-400">Without the model, the <span className="font-semibold">Model</span> above may be left empty: transcripts are written, and summaries, triage and receptionists' replies (which need a language model) are left out.</p>}
+    </div>
   )
 }

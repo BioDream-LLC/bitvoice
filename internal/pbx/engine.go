@@ -12,6 +12,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"github.com/biodream-llc/bitvoice/internal/i3"
+	"github.com/biodream-llc/bitvoice/internal/whisper"
 	"io"
 	"log/slog"
 	"net"
@@ -44,6 +45,9 @@ type Engine struct {
 	linkToken    atomic.Value // string: see SetLinkToken
 	// Mobile, when set, wakes the BitVoice apps of extensions it has devices for.
 	Mobile Mobile
+	// Speech runs speech to text on this server (whisper-server) when the AI settings ask for it; nil
+	// where it is not offered (a hosted tenant's engine, tests).
+	Speech *whisper.Manager
 	// SetEmergencyMode, set by the API server, switches emergency mode from a phone (the feature code).
 	SetEmergencyMode func(on bool, by string) error
 	late             lateRings

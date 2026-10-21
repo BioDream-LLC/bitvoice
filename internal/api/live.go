@@ -218,6 +218,9 @@ func (s *Server) liveRoutes() {
 			"publicSafety": cfg.System.PublicSafety || cfg.PublicSafetyInUse() != "", "publicSafetyInUse": cfg.PublicSafetyInUse()})
 	})
 	s.handle("GET /api/health", false, s.health)
+	s.handle("GET /api/speech", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		writeJSON(w, 200, s.Engine.Speech.Status())
+	})
 	s.handle("GET /api/sip-trace", true, func(w http.ResponseWriter, r *http.Request, u store.User) {
 		if s.Trace == nil {
 			writeJSON(w, 200, map[string]any{"items": []TraceEntry{}})
@@ -447,6 +450,18 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request, u store.User) {
 	}
 	for _, w := range emergencyRouteWarnings(cfg) {
 		add("emergency-route", "warn", w[0], w[1], "/routes")
+	}
+	if a := cfg.System.AI; a.Enabled && a.LocalSpeech {
+		switch st := s.Engine.Speech.Status(); st.State {
+		case "running":
+			add("speech", "ok", "Speech to text on this server is running", "Model "+st.Model+"; callers' audio stays on this computer.", "")
+		case "downloading":
+			add("speech", "info", "Speech to text on this server is fetching its model", fmt.Sprintf("%d of %d MB. Transcripts start when it is done.", st.Downloaded>>20, st.Total>>20), "/settings")
+		case "starting":
+			add("speech", "info", "Speech to text on this server is starting", "", "/settings")
+		default:
+			add("speech", "fail", "Speech to text on this server is not working", firstNonEmpty(st.Error, "It is not running.")+" Transcripts (live 911 calls included) are not being written.", "/settings")
+		}
 	}
 	if bans := s.Engine.Banned(); len(bans) > 0 {
 		add("bans", "warn", fmt.Sprintf("%d addresses blocked for failed sign-ins", len(bans)), "This is usually a scanner on the internet. If a phone of yours is blocked, check its password.", "/security")

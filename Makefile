@@ -53,6 +53,8 @@ manual:
 # SHA256SUMS. Archives name no person: files are owned by root, and zips keep no owner at all.
 #   make release VERSION=v0.1.3 SIGNING_KEY=path/to/release.key
 # DIST is where they go (dist by default); PLATFORMS may be narrowed, as the installer tests do.
+# WHISPER is a directory of whisper-server builds, WHISPER/<os>-<arch>/ as the whisper-server workflow
+# makes them (speech to text on this server); each goes into its download beside bitvoice, signed.
 DIST ?= dist
 # Archive entries owned by root, in GNU tar's words or BSD tar's (macOS).
 TAR_ROOT := $(shell tar --version 2>/dev/null | grep -q GNU && echo '--owner=root:0 --group=root:0' || echo '--uid 0 --gid 0 --uname root --gname root')
@@ -68,6 +70,10 @@ release:
 		$(DIST)/.bvsign -key "$(SIGNING_KEY)" $(DIST)/$$name/$$exe > /dev/null; \
 		if [ $$os = linux ]; then CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch $(GO) build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o $(DIST)/$$name/bitvoice-dahdi ./cmd/bitvoice-dahdi; \
 			$(DIST)/.bvsign -key "$(SIGNING_KEY)" $(DIST)/$$name/bitvoice-dahdi > /dev/null; fi; \
+		if [ -n "$(WHISPER)" ]; then w=$(WHISPER)/$$os-$$arch; wexe=whisper-server; [ $$os = windows ] && wexe=whisper-server.exe; \
+			test -f $$w/$$wexe || { echo "$$w/$$wexe is missing (see .github/workflows/whisper.yml)"; exit 1; }; \
+			cp $$w/$$wexe $(DIST)/$$name/ && chmod 0755 $(DIST)/$$name/$$wexe && cp $$w/whisper.cpp-LICENSE $(DIST)/$$name/; \
+			$(DIST)/.bvsign -key "$(SIGNING_KEY)" $(DIST)/$$name/$$wexe > /dev/null; fi; \
 		cp LICENSE NOTICE docs/manual/bitvoice-manual.pdf $(DIST)/$$name/; \
 		if [ $$os = windows ]; then (cd $(DIST) && TZ=UTC zip -qrX $$name.zip $$name); \
 		else COPYFILE_DISABLE=1 tar -C $(DIST) $(TAR_ROOT) -czf $(DIST)/$$name.tar.gz $$name; fi; \

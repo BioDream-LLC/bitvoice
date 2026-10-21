@@ -113,6 +113,9 @@ func (ty *Tenancy) open(t store.Tenant) error {
 	cfg.System.SIPPort, cfg.System.RTPMin, cfg.System.RTPMax = mcfg.System.SIPPort, mcfg.System.RTPMin, mcfg.System.RTPMax
 	bus := events.New()
 	eng := pbx.New(cfg, bus, st, log)
+	if ty.Root.Engine != nil {
+		eng.Speech = ty.Root.Engine.Speech // one whisper-server for the whole computer
+	}
 	tt := t
 	srv := &Server{Store: st, Engine: eng, Bus: bus, Log: log, Version: ty.Version, DataDir: dir, Tenant: &tt, Web: ty.Web,
 		SetupCode: ty.Root.SetupCode, Certs: ty.Root.Certs, ICEServers: ty.Root.ICEServers}

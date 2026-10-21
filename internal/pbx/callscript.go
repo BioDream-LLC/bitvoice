@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/biodream-llc/bitvoice/internal/ai"
 	"github.com/biodream-llc/bitvoice/internal/config"
 	"github.com/biodream-llc/bitvoice/internal/media"
 	"github.com/biodream-llc/bitvoice/internal/prompts"
@@ -166,7 +165,7 @@ func (h *callHost) Say(text string) (string, error) {
 	if !a.Enabled || a.SpeechModel == "" || strings.TrimSpace(text) == "" {
 		return h.playKeys(media.ToneSamples(media.ToneBeep))
 	}
-	client := &ai.Client{BaseURL: a.BaseURL, Key: a.Key, Model: a.Model, AudioModel: a.AudioModel, TranscribeURL: a.TranscribeURL, TranscribeKey: a.TranscribeKey, TranscribeModel: a.TranscribeModel, Allow: h.c.e.AIAllow}
+	client := h.c.e.Speech.Client(a, h.c.e.AIAllow)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	wav, err := client.Speak(ctx, a.SpeechModel, a.Voice, text)

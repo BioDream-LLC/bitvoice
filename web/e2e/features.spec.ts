@@ -1039,6 +1039,7 @@ test('AI settings: a speech-to-text service with no language model', async ({ pa
   const ai = page.locator('section', { has: page.getByRole('heading', { name: 'AI (optional)' }) })
   if (!(await ai.getByRole('switch', { name: 'Use AI' }).isChecked())) await ai.getByRole('switch', { name: 'Use AI' }).click()
   await ai.getByLabel('Model', { exact: true }).fill('')
+  await ai.getByRole('radio', { name: /A speech-to-text service/ }).click()
   await ai.getByLabel('Address', { exact: true }).fill('http://whisper.example.com/inference')
   await page.getByRole('button', { name: /^Save/ }).first().click()
   await expect(ai.getByText(/use https, or http only to this computer or a private network address/)).toBeVisible()
@@ -1049,5 +1050,27 @@ test('AI settings: a speech-to-text service with no language model', async ({ pa
   await page.evaluate(async (a) => {
     const s = await (await fetch('./api/settings')).json()
     await fetch('./api/settings', { method: 'PUT', headers: { 'X-BitVoice': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ ...s, system: { ...s.system, ai: { ...a, transcribeUrl: '' } } }) })
+  }, before)
+})
+
+// Speech to text on this server: chosen in the AI settings, saved with no language model, and its state
+// shown (in the test server whisper-server is not installed, so it says so and Health says why).
+test('AI settings: speech to text on this server', async ({ page }) => {
+  await signIn(page)
+  const before = await page.evaluate(async () => (await (await fetch('./api/settings')).json()).system.ai)
+  await page.goto('/#/settings')
+  const ai = page.locator('section', { has: page.getByRole('heading', { name: 'AI (optional)' }) })
+  if (!(await ai.getByRole('switch', { name: 'Use AI' }).isChecked())) await ai.getByRole('switch', { name: 'Use AI' }).click()
+  await ai.getByLabel('Model', { exact: true }).fill('')
+  await ai.getByRole('radio', { name: /This server/ }).click()
+  await ai.getByLabel('Whisper model').selectOption('tiny')
+  await page.getByRole('button', { name: /^Save/ }).first().click()
+  await expect.poll(async () => page.evaluate(async () => { const a = (await (await fetch('./api/settings')).json()).system.ai; return `${a.localSpeech} ${a.localModel}` })).toBe('true tiny')
+  await expect(ai.getByRole('status')).toContainText('whisper-server is not installed')
+  await page.goto('/#/health')
+  await expect(page.getByText('Speech to text on this server is not working')).toBeVisible()
+  await page.evaluate(async (a) => {
+    const s = await (await fetch('./api/settings')).json()
+    await fetch('./api/settings', { method: 'PUT', headers: { 'X-BitVoice': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ ...s, system: { ...s.system, ai: { ...a, localSpeech: false, localModel: '', transcribeUrl: '' } } }) })
   }, before)
 })

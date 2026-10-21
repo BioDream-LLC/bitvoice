@@ -21,6 +21,7 @@ export default defineConfig({
     url: `https://127.0.0.1:${port}/api/health/live`,
     ignoreHTTPSErrors: true,
     reuseExistingServer: false,
-    env: { BITVOICE_META_GRAPH: 'http://127.0.0.1:18399' },
+    // No whisper-server for the test server, even where one is installed: its state is shown, nothing is fetched.
+    env: { BITVOICE_META_GRAPH: 'http://127.0.0.1:18399', BITVOICE_WHISPER_SERVER: '/nonexistent/whisper-server' },
   },
 })

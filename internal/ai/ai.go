@@ -34,7 +34,10 @@ type Client struct {
 	TranscribeURL   string
 	TranscribeKey   string
 	TranscribeModel string
-	HTTP            *http.Client
+	// TranscribeErr, when set, is why speech cannot be written down now (speech to text on this server
+	// still starting, say): Transcribe returns it rather than asking anyone else.
+	TranscribeErr error
+	HTTP          *http.Client
 	// Allow, when set, is asked before every request; an error refuses it (a daily allowance used up).
 	Allow func() error
 }
@@ -115,6 +118,9 @@ func (c *Client) chat(ctx context.Context, msgs []message) (string, error) {
 // With a speech-to-text service set (TranscribeURL) that service writes it down and no language
 // model is asked.
 func (c *Client) Transcribe(ctx context.Context, wav []byte) (string, error) {
+	if c.TranscribeErr != nil {
+		return "", c.TranscribeErr
+	}
 	if c.TranscribeURL != "" {
 		if c.Allow != nil {
 			if err := c.Allow(); err != nil {

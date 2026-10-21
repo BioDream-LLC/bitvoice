@@ -47,6 +47,7 @@ import (
 	"github.com/biodream-llc/bitvoice/internal/upgrade"
 	"github.com/biodream-llc/bitvoice/internal/web"
 	"github.com/biodream-llc/bitvoice/internal/webphone"
+	"github.com/biodream-llc/bitvoice/internal/whisper"
 )
 
 // version is set at build time by the Makefile (-X main.version=...).
@@ -172,6 +173,15 @@ func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 	}
 	eng := pbx.New(cfg, bus, st, log)
 	eng.Trace = trace.Add
+	// Speech to text on this server: whisper-server, started and watched while the AI settings ask for it.
+	eng.Speech = whisper.New(filepath.Join(o.data, "whisper"), log)
+	eng.Speech.OnChange = func(s whisper.Status) { bus.Publish("speech.changed", s) }
+	applySpeech := func(c config.Config) {
+		eng.Speech.Apply(c.System.AI.Enabled && c.System.AI.LocalSpeech, c.System.AI.LocalModel)
+	}
+	applySpeech(cfg)
+	st.OnChange(applySpeech)
+	defer eng.Speech.Close()
 	sw := pbx.NewSwitch(eng) // one SIP port for the main system and every hosted tenant
 	addresses := lanAddresses()
 	cert, certErr := certs.Load(filepath.Join(o.data, "tls"), addresses)

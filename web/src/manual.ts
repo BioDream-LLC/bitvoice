@@ -123,6 +123,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | Capacity | Field-tested | 200 calls at once, no loss, on c7g.large, c7i.large, t4g.small, an M4 and the Lightsail nano |
 | FreePBX migration (Import) | Field-tested | a real FreePBX 17.0.33 backup (70 MB) imported whole; others from FreePBX's own formats |
 | AI transcripts, summaries, receptionist | Field-tested | a real model through OpenRouter |
+| Speech to text on this server (whisper) | Field-tested on macOS | whisper-server 1.9.5 run by BitVoice; downloads for every platform built and tried in CI |
 | Archive to S3, secrets from AWS Secrets Manager | Field-tested | real AWS, our own SigV4 |
 | SNMP monitoring and traps | Field-tested | net-snmp's snmpwalk and snmptrapd |
 | Let's Encrypt | Field-tested | issues and renews the public demo's certificate |
@@ -1772,15 +1773,14 @@ Choose a receptionist as where calls go: a route, a menu option or an extension'
 **Model** does the text work: summaries, the receptionist's replies and asking in plain words. Turning speech into text needs a model that takes audio; set it as **Speech-to-text model** (for example google/gemini-2.5-flash on OpenRouter) to use a text-only model for the rest, such as meta-llama/llama-3.3-70b-instruct.
 
 ## Speech to text in the building
-A **speech-to-text service** writes speech down without any language model: a speech recogniser hears the audio and writes what was said, nothing more. Run **whisper.cpp**'s server (MIT licence; on macOS \`brew install whisper.cpp\`, on Linux build it from github.com/ggml-org/whisper.cpp) on this computer or another one on your network, with a model file from its download page (\`ggml-base-q5_1.bin\`, 57 MB, understands about 100 languages; \`small\` or \`medium\` are more accurate and slower):
+Speech can be written down without any language model: a speech recogniser (whisper) hears the audio and writes what was said, nothing more. **Who writes speech down**, in the AI settings, has three choices:
+- **The model above**: the audio goes to the AI service, whose model must take audio.
+- **This server**: BitVoice runs whisper itself. Choose a **Whisper model** and save: BitVoice fetches it once from the whisper.cpp project (\`base\` is 60 MB; \`small\`, \`medium\` and \`large-v3-turbo\` are more accurate and slower; all understand about 100 languages), checks it against its published SHA-256, and starts whisper.cpp's \`whisper-server\` on 127.0.0.1 beside it, restarting it if it stops. Callers' audio never leaves the computer and nothing is paid per call. \`whisper-server\` (MIT licence) comes in BitVoice's downloads next to the program, and the installers put it beside BitVoice; BitVoice also finds one installed on its own (\`brew install whisper.cpp\`). The settings show where it stands (fetching the model, starting, running, or why it is not), and so does [Health](#/health). While it is not running, transcripts fail and say why: they are never sent anywhere else instead.
+- **A speech-to-text service**: whisper.cpp's \`whisper-server\` on another computer in the building (\`http://192.168.1.20:8178/inference\`), for one machine with a GPU serving several BitVoice servers, or any OpenAI-compatible \`…/audio/transcriptions\` (with **Its model**, such as whisper-1, and **Its key**). Plain \`http\` is accepted only to this computer or a private network address; anything else must be \`https\`. To run one: \`whisper-server -m ggml-base-q5_1.bin --host 0.0.0.0 --port 8178 -l auto\`.
 
-\`\`\`
-whisper-server -m ggml-base-q5_1.bin --host 127.0.0.1 --port 8178 -l auto
-\`\`\`
+Whichever writes it down, every transcript goes there: voicemail, recorded calls, live 911 calls and receptionists hearing callers. Without the model, the **Model** may be left empty: transcripts are written, and what needs a language model (summaries, action items, voicemail triage, call insight, receptionists' replies, asking in plain words) is left out. Notes a recogniser makes about what it heard, such as \`[BLANK_AUDIO]\` or \`(silence)\`, are dropped, so a quiet stretch never reads as though something was said.
 
-Then put \`http://127.0.0.1:8178/inference\` under **Speech-to-text service, Address** in the AI settings. Every transcript (voicemail, recorded calls, live 911 calls, receptionists hearing callers) then goes to it, and callers' audio never leaves the building; nothing is paid per call. \`-l auto\` lets it hear any language; \`-l en\` is a little faster for English only. Plain \`http\` is accepted only to this computer or a private network address; anything else must be \`https\`. An OpenAI-compatible \`…/audio/transcriptions\` service works the same way (with **Its model**, such as whisper-1, and **Its key**).
-
-With a speech-to-text service the **Model** may be left empty: transcripts are written, and what needs a language model (summaries, action items, voicemail triage, call insight, receptionists' replies, asking in plain words) is left out. Notes a recogniser makes about what it heard, such as \`[BLANK_AUDIO]\` or \`(silence)\`, are dropped, so a quiet stretch never reads as though something was said.
+Larger models need more processor: a server writing out many calls at once should start with \`base\`, or use one machine with a GPU as a speech-to-text service for the building. On Apple computers whisper uses the GPU.
 
 ## Voicemail triage
 With **Transcribe and summarise voicemail** on, each message is also marked urgent, normal or low priority, with its kind (sales, support, billing...). Urgent messages raise an alert on every administrator's screen.

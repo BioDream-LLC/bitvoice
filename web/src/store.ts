@@ -17,6 +17,7 @@ const eventTags: Record<string, Parameters<typeof api.util.invalidateTags>[0]> =
   'call.ended': ['Calls', 'Stats', 'CDR', 'QueueStatus', 'Reputation'],
   'registrations.changed': ['Registrations', 'Stats', 'Health', 'QueueStatus'],
   'trunks.changed': ['TrunkStatus', 'Stats', 'Health'],
+  'speech.changed': ['Speech', 'Health'],
   'security.banned': ['Bans', 'Health', 'Stats'],
   // Any configuration change (from another screen, another administrator or the API) refreshes every list.
   'config.applied': ['Stats', 'Health', 'TrunkStatus', 'Settings', 'History', 'Extensions', 'RingGroups', 'Trunks', 'Inbound',

@@ -124,6 +124,7 @@ Where something has only been tested against stand-ins rather than real equipmen
 <tbody>
 <tr><td colspan="2"><b>AI receptionists</b> that say they are automated, answer from facts you approved, take messages, book callbacks and always reach a person. A set-up that would loop a caller back to an assistant is refused</td></tr>
 <tr><td colspan="2"><b>Transcripts and summaries</b> of recorded calls and voicemails, and search across what was said</td></tr>
+<tr><td colspan="2"><b>Speech to text on the server itself</b>: BitVoice runs whisper (whisper.cpp, in the downloads) so transcripts, live 911 ones included, never leave the building; no language model or account needed</td></tr>
 <tr><td colspan="2"><b>Transfer briefings</b>: a two-sentence summary for whoever a call is transferred to, so callers never repeat themselves</td></tr>
 <tr><td colspan="2"><b>Ask in plain words</b> ("forward sales to my mobile after 5 pm"), shown as a proposed change you approve</td></tr>
 <tr><td colspan="2">Any OpenAI-compatible service, OpenRouter by default; for a 911 centre, its own government cloud counts as local</td></tr>
@@ -449,6 +450,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | Capacity | Field-tested | 200 calls at once, no loss, on c7g.large, c7i.large, t4g.small, an M4 and the Lightsail nano |
 | FreePBX migration (Import) | Field-tested | a real FreePBX 17.0.33 backup (70 MB) imported whole; others from FreePBX's own formats |
 | AI transcripts, summaries, receptionist | Field-tested | a real model through OpenRouter |
+| Speech to text on this server (whisper) | Field-tested on macOS | whisper-server 1.9.5 run by BitVoice; downloads for every platform built and tried in CI |
 | Archive to S3, secrets from AWS Secrets Manager | Field-tested | real AWS, our own SigV4 |
 | SNMP monitoring and traps | Field-tested | net-snmp's snmpwalk and snmptrapd |
 | Let's Encrypt | Field-tested | issues and renews the public demo's certificate |
