@@ -15,7 +15,8 @@ import (
 // speech service writes them out live, and, when the CAD's addresses are given, EIDOs and radio events
 // go to a CAD.
 
-// cadSettings are read from a KEY=VALUE file: EIDO_URL, EIDO_TOKEN, RADIO_URL, RADIO_SECRET.
+// cadSettings are read from a file of KEY=VALUE or key: value lines: EIDO_URL, EIDO_TOKEN, RADIO_URL,
+// RADIO_SECRET (any case).
 type cadSettings map[string]string
 
 func readCAD(path string) (cadSettings, error) {
@@ -33,10 +34,16 @@ func readCAD(path string) (cadSettings, error) {
 	defer f.Close()
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
-		k, v, ok := strings.Cut(strings.TrimSpace(sc.Text()), "=")
-		if ok && !strings.HasPrefix(k, "#") {
-			cad[strings.TrimSpace(k)] = strings.Trim(strings.TrimSpace(v), `"'`)
+		l := strings.TrimSpace(sc.Text())
+		if l == "" || strings.HasPrefix(l, "#") {
+			continue
 		}
+		i := strings.IndexAny(l, "=:")
+		if i < 0 {
+			continue
+		}
+		k := strings.ToUpper(strings.TrimSpace(l[:i]))
+		cad[k] = strings.Trim(strings.TrimSpace(l[i+1:]), `"'`)
 	}
 	return cad, sc.Err()
 }

@@ -1,11 +1,14 @@
 package pbx
 
 import (
+	"net/netip"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/biodream-llc/bitvoice/internal/config"
+	"github.com/biodream-llc/bitvoice/internal/loadgen"
 	"github.com/biodream-llc/bitvoice/internal/sip"
 	"github.com/biodream-llc/bitvoice/internal/store"
 )
@@ -93,4 +96,32 @@ func TestBlindTransferTransferorHangsUpAtOnce(t *testing.T) {
 		t.Fatal("100 and 102 are not talking")
 	}
 	hangupAll(e)
+}
+
+// A trunk on this computer that allows 127.0.0.1 (an ESInet stand-in, a lab) is that trunk only from
+// its own port: BitVoice's own parts speak SIP over loopback too (the call generator, the browser and
+// card gateways), and their calls must never arrive as the trunk's, on an ESInet trunk as 911 calls.
+func TestLoopbackTrunkDoesNotClaimOwnCalls(t *testing.T) {
+	esinet := newCarrier(t)
+	cfg := esinetConfig(esinet.stack.Port(), config.InboundRoute{Name: "911", Trunk: "in", Destination: config.Destination{Type: "extension", Target: "100"}})
+	e, rec := startEngine(t, cfg)
+	e.SetLoadToken("tok")
+	registered(t, e, "100")
+	pbx := netip.MustParseAddrPort("127.0.0.1:" + strconv.Itoa(e.SIPPort()))
+	run, err := loadgen.Start(loadgen.Plan{From: "101", FromSecret: testSecret, To: "102", AnswerAs: "102", AnswerSecret: testSecret,
+		Calls: 2, Rate: 10, Concurrent: 2, Hold: 300 * time.Millisecond, PBX: pbx, Token: "tok"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-run.Done()
+	if r := run.Snapshot(); r.Answered != 2 {
+		t.Fatalf("result %+v", r)
+	}
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	for _, c := range rec.cdrs {
+		if c.Emergency || c.To != "102" {
+			t.Fatalf("a call between extensions on this computer was taken as the ESInet's: %+v", c)
+		}
+	}
 }

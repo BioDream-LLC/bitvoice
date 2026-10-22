@@ -56,7 +56,7 @@ trap 'rm -rf "$build"' EXIT
 cp "$root/deploy/install.sh" "$here/setup.sh" "$build/"
 # The CAD this demo sends 911 calls to, if there is one: KEY=VALUE lines EIDO_URL, EIDO_TOKEN, RADIO_URL,
 # RADIO_SECRET (https addresses), kept outside the repository.
-cad=${CAD_ENV:-$keys/bitdispatcher-demo}
+cad=${CAD_ENV:-$keys/bitdispatcher-demo-push}
 [ -f "$cad" ] && cp "$cad" "$build/cad.env"
 
 ssh_opts="-i $key -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$keys/known_hosts -o ConnectTimeout=10"

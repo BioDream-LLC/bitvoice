@@ -609,7 +609,10 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 		if x := cfg.FindExtension(cp.callerExt); x != nil {
 			c.callerExt = x.Number // its caller ID goes out on the trunk
 		}
-	} else if trunk := e.trunkFor(cfg, in.From); trunk != nil && !e.reg.registeredFrom(in.From.Addr) {
+	} else if trunk := e.trunkFor(cfg, in.From); trunk != nil && !e.reg.registeredFrom(in.From.Addr) &&
+		// The built-in call generator calls as extensions from this computer: a trunk that allows
+		// 127.0.0.1 (an ESInet stand-in) must not take its calls (on an ESInet trunk, as 911 calls).
+		!e.isLoadTest(m, in.From.Addr.Addr()) {
 		if isIAX(trunk) && (e.iax() == nil || m.Get(IAXTokenHeader) != e.iax().Token()) {
 			tx.Respond(sip.NewResponse(m, 403, "Not The IAX2 Gateway"))
 			return

@@ -73,7 +73,7 @@ EIDO. A real server writes real speech down with whisper; the demo's nano server
 for it. Never run bitvoice-demo-911 beside a real PSAP: it talks only to 127.0.0.1.
 
 To send the demo's EIDOs and radio events to a CAD, put its https addresses and secrets in
-`~/keys/bitdispatcher-demo` (or CAD_ENV=file) before running provision.sh:
+`~/keys/bitdispatcher-demo-push` (or CAD_ENV=file; KEY=VALUE or key: value lines) before running provision.sh:
 
 ```sh
 EIDO_URL=https://cad.example/api/ng911/eido

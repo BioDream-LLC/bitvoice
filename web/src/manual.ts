@@ -418,7 +418,7 @@ With two or more trunks on an outbound route, BitVoice judges every 15 seconds w
 | Authentication username | only when the provider gives a separate one |
 | From domain | the domain in the caller's address, when the provider asks for one |
 | Caller ID | the number shown on calls out; an extension's own caller ID wins |
-| Also accept calls from | the provider's other addresses or networks that send calls in |
+| Also accept calls from | the provider's other addresses or networks that send calls in. Calls from this computer by phones registered here, and the built-in call generator's, are never taken as the trunk's, even when it allows 127.0.0.1 |
 | Calls at once | the limit your plan allows; calls beyond it go to the next trunk in the route |
 | Encrypt media | SRTP, for providers that support it. A provider that answers without it still gets the call, unencrypted, and Call history marks the call **Not encrypted** |
 | Require encryption | (with Encrypt media) refuse what the provider will not encrypt: a call out it answers without SRTP is hung up, and a call in it sends without SRTP is refused; Call history says why |

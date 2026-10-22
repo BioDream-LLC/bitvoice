@@ -225,11 +225,6 @@ func run(url, pwFile, domain, email, public string, calls int, ps *psapSeed) err
 			return err
 		}
 	}
-	if ps != nil {
-		if err := seedPSAP(c, ps.secret, ps.stt, ps.cad); err != nil {
-			return fmt.Errorf("911 side: %w", err)
-		}
-	}
 	// History for the reports: the generator rings the team and the queue, inside BitVoice only.
 	for _, lt := range []map[string]any{
 		{"from": "105", "to": "600", "answerAs": "101", "calls": calls / 2, "rate": 2, "concurrent": 4, "holdSeconds": 8},
@@ -248,6 +243,12 @@ func run(url, pwFile, domain, email, public string, calls int, ps *psapSeed) err
 			if c.do("GET", "/api/loadtest", nil, &st) == nil && (st.Run == nil || !st.Run.Running) {
 				break
 			}
+		}
+	}
+	// The 911 side last: the call generator's calls above are over before there is an ESInet trunk.
+	if ps != nil {
+		if err := seedPSAP(c, ps.secret, ps.stt, ps.cad); err != nil {
+			return fmt.Errorf("911 side: %w", err)
 		}
 	}
 	fmt.Println("demo ready: sign in as demo / try-bitvoice-demo; the browser phone is extension 150 / try-the-demo-phone")
