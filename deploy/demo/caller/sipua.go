@@ -407,7 +407,7 @@ func pidf(sc scenario) string {
 <presence xmlns="urn:ietf:params:xml:ns:pidf" xmlns:gml="http://www.opengis.net/gml" xmlns:gs="http://www.opengis.net/pidflo/1.0"` +
 		` xmlns:gp="urn:ietf:params:xml:ns:pidf:geopriv10" xmlns:ca="urn:ietf:params:xml:ns:pidf:geopriv10:civicAddr" entity="pres:` + sc.caller + `@esinet.demo">
  <tuple id="demo"><status><gp:geopriv><gp:location-info>
- <ca:civicAddress><ca:country>US</ca:country><ca:A1>` + sc.st + `</ca:A1><ca:A3>` + sc.city + `</ca:A3><ca:HNO>` + sc.hno + `</ca:HNO><ca:RD>` + sc.rd + `</ca:RD><ca:STS>` + sc.sts + `</ca:STS></ca:civicAddress>
+ <ca:civicAddress><ca:country>US</ca:country><ca:A1>` + sc.st + `</ca:A1><ca:A3>` + sc.city + `</ca:A3><ca:HNO>` + sc.hno + `</ca:HNO><ca:RD>` + sc.rd + `</ca:RD><ca:STS>` + sc.sts + `</ca:STS><ca:POD>` + sc.pod + `</ca:POD></ca:civicAddress>
  <gs:Circle srsName="urn:ogc:def:crs:EPSG::4326"><gml:pos>` + sc.lat + ` ` + sc.lon + `</gml:pos><gs:radius uom="urn:ogc:def:uom:EPSG::9001">30</gs:radius></gs:Circle>
  </gp:location-info><gp:usage-rules/><gp:method>GPS</gp:method></gp:geopriv></status><timestamp>` + time.Now().UTC().Format(time.RFC3339) + `</timestamp></tuple></presence>`
 }

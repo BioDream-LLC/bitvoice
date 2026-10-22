@@ -30,7 +30,7 @@ func TestTransmissionHeard(t *testing.T) {
 				loud++
 			}
 		}})
-	word := &p25.PTTWord{Unit: p25.Unit{WACN: demoWACN, System: demoSystem, ID: 1207}, Priority: 200}
+	word := &p25.PTTWord{Unit: p25.Unit{WACN: demoWACN, System: demoSystem, ID: 1101}, Priority: 200}
 	pkt := func(ty int) p25.PacketType {
 		return p25.PacketType{Type: ty, TSN: 2, Options: p25.ServiceOptions{Emergency: true, Priority: 4}}
 	}
@@ -45,7 +45,7 @@ func TestTransmissionHeard(t *testing.T) {
 	h := p25.HeaderWord{AlgID: p25.AlgClear, Group: demoGroup, VBB: 2}
 	rx.Receive(parse(&p25.Payload{S: true, Packet: pkt(p25.PTTProgress), PTT: word, Header: &h}))
 	enc := imbe.NewEncoder()
-	v := newTalk(1207)
+	v := newTalk(1101)
 	const n = 150
 	for i := range n {
 		f := p25.ClearVoiceFrame(i, enc.Encode(v.next()))
@@ -54,7 +54,7 @@ func TestTransmissionHeard(t *testing.T) {
 	if frames != n || loud < n*4/10 {
 		t.Fatalf("%d frames decoded, %d loud", frames, loud)
 	}
-	if talker == nil || talker.Unit.ID != 1207 || !talker.Emergency || talker.Alg != p25.AlgClear {
+	if talker == nil || talker.Unit.ID != 1101 || !talker.Emergency || talker.Alg != p25.AlgClear {
 		t.Fatalf("talker %+v", talker)
 	}
 }

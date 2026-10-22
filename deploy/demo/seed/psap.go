@@ -116,8 +116,9 @@ func seedPSAP(c *client, botSecret, sttURL string, cad cadSettings) error {
 		"p25": map[string]any{"wacn": "BEE07", "system": "1D5", "rfss": 2, "unit": 0x1001, "sipPort": 5194},
 		"channels": []map[string]any{{"id": "fire", "name": "County fire dispatch (demo)", "kind": "p25", "group": 0x0911,
 			"port": 41000, "home": "127.0.0.1:5192", "homeRfss": 1, "color": "red"}},
-		"aliases": []map[string]any{{"unit": 1207, "name": "Engine 7"}, {"unit": 1212, "name": "Ladder 12"},
-			{"unit": 1303, "name": "Medic 3"}, {"unit": 1310, "name": "Medic 10"}, {"unit": 1401, "name": "Battalion 1"},
+		// The names bitdispatcher's demo matches to its units E1, E2, L1, BC1 and A5.
+		"aliases": []map[string]any{{"unit": 1101, "name": "Engine 1"}, {"unit": 1102, "name": "Engine 2"},
+			{"unit": 1201, "name": "Ladder 1"}, {"unit": 1401, "name": "Battalion 1"}, {"unit": 1505, "name": "Ambulance 5"},
 			{"unit": 0x1001, "name": "Dispatch"}}}
 	if u := cad["RADIO_URL"]; u != "" {
 		radio["cadUrl"], radio["cadSecret"] = u, cad["RADIO_SECRET"]

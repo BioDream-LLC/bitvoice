@@ -40,12 +40,12 @@ type unit struct {
 	lat, lon float64 // where it starts
 }
 
-var units = []unit{
-	{1207, 40.2790, -76.8890}, // Engine 7
-	{1212, 40.2652, -76.8706}, // Ladder 12
-	{1303, 40.2601, -76.8835}, // Medic 3
-	{1310, 40.2735, -76.9005}, // Medic 10
-	{1401, 40.2560, -76.8441}, // Battalion 1
+var units = []unit{ // around Roanoke, Virginia, where the bitdispatcher demo's units are
+	{1101, 37.2792, -79.9440}, // Engine 1
+	{1102, 37.2902, -79.9521}, // Engine 2
+	{1201, 37.2700, -79.9370}, // Ladder 1
+	{1401, 37.2655, -79.9600}, // Battalion 1
+	{1505, 37.2560, -79.9520}, // Ambulance 5
 }
 
 type rfss struct {

@@ -11,7 +11,7 @@ import (
 // to count as someone talking (so a transmission is one recording, not many short ones).
 func TestTalkThroughIMBE(t *testing.T) {
 	enc, dec := imbe.NewEncoder(), imbe.New()
-	v := newTalk(1207)
+	v := newTalk(1101)
 	loud := 0
 	const frames = 150
 	for range frames {

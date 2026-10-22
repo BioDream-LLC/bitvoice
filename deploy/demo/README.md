@@ -62,7 +62,7 @@ extensions, is refused a change (403), and the browser phone's call to `810` con
 The demo also shows the public-safety lab (Settings > Public-safety profiles) working for a CAD.
 `bitvoice-demo-911` (deploy/demo/caller), a service on the same server, stands in for an NG911 core:
 every ten minutes it sends BitVoice an invented 911 call (urn:service:sos, SDP and a PIDF-LO location;
-five made-up incidents in turn, callback numbers 555-01xx). Extension 190, a call-taker phone the same
+five made-up incidents in turn in Roanoke, Virginia, where the bitdispatcher demo is; callback numbers 540-555-01xx). Extension 190, a call-taker phone the same
 program registers, answers it after eight seconds, unless someone answers ring group 690 first.
 
 Both sides play their lines as tones, one pitch per line, and the AI's speech service on the demo is a
@@ -74,7 +74,7 @@ for it. Never run bitvoice-demo-911 beside a real PSAP: it talks only to 127.0.0
 
 The same program is the demo's radio system: a stand-in P25 home RFSS (127.0.0.1:5192) for the
 console's talkgroup "County fire dispatch (demo)" (console number 880). Every few minutes one of five
-invented units (Engine 7, Ladder 12, Medic 3, Medic 10, Battalion 1) talks on it, as a radio's
+invented units (Engine 1, Engine 2, Ladder 1, Battalion 1, Ambulance 5) talks on it, as a radio's
 transmission arrives over the ISSI: IMBE voice (a voice-like sound, no words) with the unit in each
 PTT word; every eighth one has the emergency button pressed. After each, the units report positions
 (POST /api/radio/locations with a token kept like the CAD's, /etc/bitvoice-demo/radio-token). So the
