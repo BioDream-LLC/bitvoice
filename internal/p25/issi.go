@@ -612,6 +612,24 @@ func (g *Group) Speak(pcm []int16) {
 	g.send(&Payload{S: true, Packet: g.packet(PTTProgress), PTT: g.pttWord(), Voice: []IMBEBlock{f}})
 }
 
+// ClearVoiceFrame is the IMBE frame at position i of a transmission sent in the clear: its frame type
+// in superframe order, and in frames 12-17 the encryption sync word saying "clear" (a receiver that
+// read zeros there would take the voice for encrypted). For programs that play a radio's side, like
+// the demo's radio system.
+func ClearVoiceFrame(i int, info []byte) IMBEBlock {
+	idx := i % 18
+	sf := superframe[idx]
+	f := IMBEBlock{FT: sf.ft, Extra: make([]byte, sf.extra)}
+	f.SetInfo(info)
+	if idx >= 11 && idx <= 16 {
+		cw := esEncode(0, AlgClear, 0)
+		var s [4]byte
+		copy(s[:], cw[4*(idx-11):])
+		putES(f.Extra, s)
+	}
+	return f
+}
+
 // frameIndex is where a frame type falls in the superframe (0-17), or -1.
 func frameIndex(ft int) int {
 	for i, s := range superframe {

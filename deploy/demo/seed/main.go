@@ -69,9 +69,10 @@ func main() {
 	cadFile := flag.String("cad-env", "", "with -psap: the CAD's addresses and secrets (EIDO_URL, EIDO_TOKEN, RADIO_URL, RADIO_SECRET), if any")
 	prepare := flag.String("prepare-data", "", "only put -cad-token-file's token into this new data folder, before the server starts")
 	tokenFile := flag.String("cad-token-file", "", "with -prepare-data: the CAD's token (bv_ and 64 hex digits)")
+	radioTokenFile := flag.String("radio-token-file", "", "with -prepare-data: the demo radio system's token, for its units' positions")
 	flag.Parse()
 	if *prepare != "" {
-		if err := prepareToken(*prepare, *tokenFile); err != nil {
+		if err := prepareToken(*prepare, *tokenFile, *radioTokenFile); err != nil {
 			fmt.Fprintln(os.Stderr, "seed:", err)
 			os.Exit(1)
 		}

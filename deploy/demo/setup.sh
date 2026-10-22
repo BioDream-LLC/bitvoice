@@ -21,6 +21,7 @@ chmod 0600 /etc/bitvoice-demo/env
 umask 077
 [ -s /etc/bitvoice-demo/bot-secret ] || od -An -tx1 -N16 /dev/urandom | tr -d ' \n' > /etc/bitvoice-demo/bot-secret
 [ -s /etc/bitvoice-demo/cad-token ] || printf 'bv_%s' "$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')" > /etc/bitvoice-demo/cad-token
+[ -s /etc/bitvoice-demo/radio-token ] || printf 'bv_%s' "$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')" > /etc/bitvoice-demo/radio-token
 # The CAD's addresses and the secrets BitVoice sends it (EIDO_URL, EIDO_TOKEN, RADIO_URL, RADIO_SECRET).
 [ -f "$here/cad.env" ] && install -m 0600 "$here/cad.env" /etc/bitvoice-demo/cad.env
 umask 022
@@ -28,11 +29,12 @@ umask 022
 # The invented 911 calls (an ESInet stand-in, the call-taker's phone and the speech stand-in).
 cat > /etc/systemd/system/bitvoice-demo-911.service <<'UNIT'
 [Unit]
-Description=BitVoice demo: invented 911 calls
+Description=BitVoice demo: invented 911 calls and radio traffic
 After=bitvoice.service
 [Service]
 ExecStart=/usr/local/bin/bitvoice-demo-911
 LoadCredential=bot-secret:/etc/bitvoice-demo/bot-secret
+LoadCredential=radio-token:/etc/bitvoice-demo/radio-token
 DynamicUser=yes
 NoNewPrivileges=yes
 ProtectSystem=strict
@@ -58,7 +60,8 @@ rm -rf /var/lib/bitvoice/*
 [ -d "$keep/tls" ] && cp -a "$keep/tls" /var/lib/bitvoice/
 rm -rf "$keep"
 # The CAD's token outlives the rebuild: it goes into the new data before the server starts.
-/usr/local/bin/bitvoice-demo-seed -prepare-data /var/lib/bitvoice -cad-token-file /etc/bitvoice-demo/cad-token
+/usr/local/bin/bitvoice-demo-seed -prepare-data /var/lib/bitvoice -cad-token-file /etc/bitvoice-demo/cad-token \
+  -radio-token-file /etc/bitvoice-demo/radio-token
 chown -R bitvoice:bitvoice /var/lib/bitvoice
 systemctl start bitvoice
 /usr/local/bin/bitvoice-demo-seed -url https://127.0.0.1 -admin-password-file /root/bitvoice-demo-admin \

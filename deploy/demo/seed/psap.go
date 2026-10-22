@@ -50,18 +50,28 @@ func readCAD(path string) (cadSettings, error) {
 
 // prepareToken puts the CAD's token into a new, empty data folder before the server first starts, so
 // a nightly rebuild keeps the token the CAD was given.
-func prepareToken(dir, tokenFile string) error {
-	b, err := os.ReadFile(tokenFile)
-	if err != nil {
-		return err
-	}
+func prepareToken(dir, tokenFile, radioTokenFile string) error {
 	s, err := store.Open(dir)
 	if err != nil {
 		return err
 	}
 	defer s.Close()
-	_, err = s.AddTokenSecret("bitdispatcher CAD (demo)", "admin", "demo setup", time.Time{}, true, strings.TrimSpace(string(b)))
-	return err
+	for _, t := range []struct {
+		file, name string
+		onBehalf   bool
+	}{{tokenFile, "bitdispatcher CAD (demo)", true}, {radioTokenFile, "Demo radio system (positions)", false}} {
+		if t.file == "" {
+			continue
+		}
+		b, err := os.ReadFile(t.file)
+		if err != nil {
+			return err
+		}
+		if _, err := s.AddTokenSecret(t.name, "admin", "demo setup", time.Time{}, t.onBehalf, strings.TrimSpace(string(b))); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func seedPSAP(c *client, botSecret, sttURL string, cad cadSettings) error {
@@ -100,14 +110,19 @@ func seedPSAP(c *client, botSecret, sttURL string, cad cadSettings) error {
 		psap["eidoUrl"], psap["eidoToken"] = u, cad["EIDO_TOKEN"]
 	}
 	sys["psap"] = psap
+	// The radio console: one P25 talkgroup, whose home RFSS is the demo's stand-in radio system on this
+	// computer (bitvoice-demo-911), with names for its invented units; every transmission recorded.
+	radio := map[string]any{"console": "880", "record": true,
+		"p25": map[string]any{"wacn": "BEE07", "system": "1D5", "rfss": 2, "unit": 0x1001, "sipPort": 5194},
+		"channels": []map[string]any{{"id": "fire", "name": "County fire dispatch (demo)", "kind": "p25", "group": 0x0911,
+			"port": 41000, "home": "127.0.0.1:5192", "homeRfss": 1, "color": "red"}},
+		"aliases": []map[string]any{{"unit": 1207, "name": "Engine 7"}, {"unit": 1212, "name": "Ladder 12"},
+			{"unit": 1303, "name": "Medic 3"}, {"unit": 1310, "name": "Medic 10"}, {"unit": 1401, "name": "Battalion 1"},
+			{"unit": 0x1001, "name": "Dispatch"}}}
 	if u := cad["RADIO_URL"]; u != "" {
-		radio, _ := sys["radio"].(map[string]any)
-		if radio == nil {
-			radio = map[string]any{}
-		}
 		radio["cadUrl"], radio["cadSecret"] = u, cad["RADIO_SECRET"]
-		sys["radio"] = radio
 	}
+	sys["radio"] = radio
 	ai, _ := sys["ai"].(map[string]any)
 	if ai == nil {
 		ai = map[string]any{}

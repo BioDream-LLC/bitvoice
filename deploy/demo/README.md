@@ -72,6 +72,16 @@ routing trail, the location on the 911 screen and map, call.transcript events, t
 EIDO. A real server writes real speech down with whisper; the demo's nano server has no memory to spare
 for it. Never run bitvoice-demo-911 beside a real PSAP: it talks only to 127.0.0.1.
 
+The same program is the demo's radio system: a stand-in P25 home RFSS (127.0.0.1:5192) for the
+console's talkgroup "County fire dispatch (demo)" (console number 880). Every few minutes one of five
+invented units (Engine 7, Ladder 12, Medic 3, Medic 10, Battalion 1) talks on it, as a radio's
+transmission arrives over the ISSI: IMBE voice (a voice-like sound, no words) with the unit in each
+PTT word; every eighth one has the emergency button pressed. After each, the units report positions
+(POST /api/radio/locations with a token kept like the CAD's, /etc/bitvoice-demo/radio-token). So the
+console shows who is talking, transmissions are recorded, the map shows the units, and the CAD gets
+radio.unit, radio.transmission, radio.emergency and radio.location events. A dispatcher on 880 may
+talk on the channel too: the stand-in grants the floor when no unit is on the air.
+
 To send the demo's EIDOs and radio events to a CAD, put its https addresses and secrets in
 `~/keys/bitdispatcher-demo-push` (or CAD_ENV=file; KEY=VALUE or key: value lines) before running provision.sh:
 
