@@ -63,14 +63,46 @@ func main() {
 	email := flag.String("email", "", "who Let's Encrypt writes to about the certificate (with -domain)")
 	calls := flag.Int("calls", 120, "calls the generator makes for the reports")
 	public := flag.String("public-address", "", "the address browsers reach the server at (a cloud server's public IP, behind its NAT)")
+	psap := flag.Bool("psap", false, "set up the demo's 911 side (with bitvoice-demo-911 on this server)")
+	botFile := flag.String("bot-secret-file", "", "with -psap: the 911 demo call-taker extension's SIP password")
+	sttURL := flag.String("stt-url", "http://127.0.0.1:8179/inference", "with -psap: the stand-in speech service")
+	cadFile := flag.String("cad-env", "", "with -psap: the CAD's addresses and secrets (EIDO_URL, EIDO_TOKEN, RADIO_URL, RADIO_SECRET), if any")
+	prepare := flag.String("prepare-data", "", "only put -cad-token-file's token into this new data folder, before the server starts")
+	tokenFile := flag.String("cad-token-file", "", "with -prepare-data: the CAD's token (bv_ and 64 hex digits)")
 	flag.Parse()
-	if err := run(*url, *pwFile, *domain, *email, *public, *calls); err != nil {
+	if *prepare != "" {
+		if err := prepareToken(*prepare, *tokenFile); err != nil {
+			fmt.Fprintln(os.Stderr, "seed:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	var ps *psapSeed
+	if *psap {
+		b, err := os.ReadFile(*botFile)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "seed: -bot-secret-file:", err)
+			os.Exit(2)
+		}
+		cad, err := readCAD(*cadFile)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "seed: -cad-env:", err)
+			os.Exit(2)
+		}
+		ps = &psapSeed{secret: strings.TrimSpace(string(b)), stt: *sttURL, cad: cad}
+	}
+	if err := run(*url, *pwFile, *domain, *email, *public, *calls, ps); err != nil {
 		fmt.Fprintln(os.Stderr, "seed:", err)
 		os.Exit(1)
 	}
 }
 
-func run(url, pwFile, domain, email, public string, calls int) error {
+type psapSeed struct {
+	secret, stt string
+	cad         cadSettings
+}
+
+func run(url, pwFile, domain, email, public string, calls int, ps *psapSeed) error {
 	jar, _ := cookiejar.New(nil)
 	c := &client{base: strings.TrimRight(url, "/"), http: &http.Client{Jar: jar, Timeout: 30 * time.Second,
 		// The server's own certificate, on this computer: until Let's Encrypt gives it one.
@@ -191,6 +223,11 @@ func run(url, pwFile, domain, email, public string, calls int) error {
 		sys["acme"] = map[string]any{"enabled": true, "domains": []string{domain}, "email": email}
 		if err := c.do("PUT", "/api/settings", s, nil); err != nil {
 			return err
+		}
+	}
+	if ps != nil {
+		if err := seedPSAP(c, ps.secret, ps.stt, ps.cad); err != nil {
+			return fmt.Errorf("911 side: %w", err)
 		}
 	}
 	// History for the reports: the generator rings the team and the queue, inside BitVoice only.

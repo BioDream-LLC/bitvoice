@@ -56,3 +56,34 @@ the people, groups, queue, menu, schedule, call script and routes, 20 calls from
 browser phone signed in as 150 calling `810` (answered by the script, which hung up after its timeout).
 Deployed with `provision.sh` on 17 October 2026 (v0.1.6); upgraded to v0.1.7 on 18 October 2026 by running it again. Checked from outside: a visitor signs in, sees the
 extensions, is refused a change (403), and the browser phone's call to `810` connects over the internet.
+
+## The 911 side
+
+The demo also shows the public-safety lab (Settings > Public-safety profiles) working for a CAD.
+`bitvoice-demo-911` (deploy/demo/caller), a service on the same server, stands in for an NG911 core:
+every ten minutes it sends BitVoice an invented 911 call (urn:service:sos, SDP and a PIDF-LO location;
+five made-up incidents in turn, callback numbers 555-01xx). Extension 190, a call-taker phone the same
+program registers, answers it after eight seconds, unless someone answers ring group 690 first.
+
+Both sides play their lines as tones, one pitch per line, and the AI's speech service on the demo is a
+stand-in in the same program (http://127.0.0.1:8179/inference) that tells the pitch and answers with
+the line. So the live transcript is made up; everything around it is BitVoice's own: the ring, the
+routing trail, the location on the 911 screen and map, call.transcript events, the call record and the
+EIDO. A real server writes real speech down with whisper; the demo's nano server has no memory to spare
+for it. Never run bitvoice-demo-911 beside a real PSAP: it talks only to 127.0.0.1.
+
+To send the demo's EIDOs and radio events to a CAD, put its https addresses and secrets in
+`~/keys/bitdispatcher-demo` (or CAD_ENV=file) before running provision.sh:
+
+```sh
+EIDO_URL=https://cad.example/api/ng911/eido
+EIDO_TOKEN=...
+RADIO_URL=https://cad.example/api/radio/events
+RADIO_SECRET=...
+```
+
+The CAD calls BitVoice back with an administrator token that names the dispatcher it acts for
+(X-BitVoice-On-Behalf-Of). It is made once on the server (/etc/bitvoice-demo/cad-token), put into the
+data before each nightly rebuild so it keeps working, and copied by provision.sh to
+`~/keys/bitvoice-demo-cad`.
+

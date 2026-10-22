@@ -59,6 +59,20 @@ func (s *Store) AddToken(name, role, by string, expires time.Time, onBehalf bool
 		return Token{}, "", err
 	}
 	secret := "bv_" + hex.EncodeToString(b)
+	t, err := s.AddTokenSecret(name, role, by, expires, onBehalf, secret)
+	return t, secret, err
+}
+
+// AddTokenSecret adds a token whose secret was made elsewhere (bv_ and 64 hex digits, from a good random
+// source): a server that is rebuilt from nothing, like the public demo every night, keeps the token a
+// program outside it was given. Only its hash is kept.
+func (s *Store) AddTokenSecret(name, role, by string, expires time.Time, onBehalf bool, secret string) (Token, error) {
+	if role != "admin" && role != "viewer" {
+		return Token{}, errors.New("store: role must be admin or viewer")
+	}
+	if raw, ok := strings.CutPrefix(secret, "bv_"); !ok || len(raw) != 64 || strings.Trim(raw, "0123456789abcdef") != "" {
+		return Token{}, errors.New("store: a token secret is bv_ and 64 lower-case hex digits")
+	}
 	sum := sha256.Sum256([]byte(secret))
 	idb := make([]byte, 6)
 	_, _ = rand.Read(idb)
@@ -67,10 +81,10 @@ func (s *Store) AddToken(name, role, by string, expires time.Time, onBehalf bool
 	s.tokMu.Lock()
 	defer s.tokMu.Unlock()
 	if err := s.writeDoc(s.tokensPath(), append(s.loadTokens(), t)); err != nil {
-		return Token{}, "", err
+		return Token{}, err
 	}
 	t.Hash = ""
-	return t, secret, nil
+	return t, nil
 }
 
 // CheckToken returns the token a bearer secret belongs to, recording its use.

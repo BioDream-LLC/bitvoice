@@ -65,3 +65,24 @@ func TestInboxMessagesKeepOrder(t *testing.T) {
 		}
 	}
 }
+
+// A token whose secret was made outside (the demo's nightly rebuild keeps the CAD's token) works like
+// any other; a badly formed secret is refused.
+func TestAddTokenSecret(t *testing.T) {
+	s, err := OpenTest(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret := "bv_" + strings.Repeat("ab", 32)
+	if _, err := s.AddTokenSecret("CAD", "admin", "setup", time.Time{}, true, secret); err != nil {
+		t.Fatal(err)
+	}
+	if tok, ok := s.CheckToken(secret); !ok || !tok.OnBehalf || tok.Name != "CAD" {
+		t.Fatalf("token %+v %v", tok, ok)
+	}
+	for _, bad := range []string{"bv_short", "xx_" + strings.Repeat("ab", 32), "bv_" + strings.Repeat("AB", 32)} {
+		if _, err := s.AddTokenSecret("x", "admin", "setup", time.Time{}, false, bad); err == nil {
+			t.Fatalf("%q accepted", bad)
+		}
+	}
+}

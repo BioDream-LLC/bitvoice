@@ -52,10 +52,19 @@ fi
 build=$(mktemp -d)
 trap 'rm -rf "$build"' EXIT
 (cd "$root" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -buildid=" -o "$build/bitvoice-demo-seed" ./deploy/demo/seed)
+(cd "$root" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -buildid=" -o "$build/bitvoice-demo-911" ./deploy/demo/caller)
 cp "$root/deploy/install.sh" "$here/setup.sh" "$build/"
+# The CAD this demo sends 911 calls to, if there is one: KEY=VALUE lines EIDO_URL, EIDO_TOKEN, RADIO_URL,
+# RADIO_SECRET (https addresses), kept outside the repository.
+cad=${CAD_ENV:-$keys/bitdispatcher-demo}
+[ -f "$cad" ] && cp "$cad" "$build/cad.env"
 
 ssh_opts="-i $key -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$keys/known_hosts -o ConnectTimeout=10"
 until ssh $ssh_opts ubuntu@"$ip" true 2>/dev/null; do sleep 5; done
 ssh $ssh_opts ubuntu@"$ip" 'rm -rf /tmp/bitvoice-demo && mkdir -p /tmp/bitvoice-demo'
 scp -q $ssh_opts "$build"/* ubuntu@"$ip":/tmp/bitvoice-demo/
-ssh $ssh_opts ubuntu@"$ip" "sudo sh /tmp/bitvoice-demo/setup.sh '$VERSION' '$DOMAIN' '$EMAIL'"
+ssh $ssh_opts ubuntu@"$ip" "sudo sh /tmp/bitvoice-demo/setup.sh '$VERSION' '$DOMAIN' '$EMAIL'; rm -rf /tmp/bitvoice-demo"
+# The token the CAD calls this demo with (admin, names the dispatcher it acts for): kept here for
+# whoever sets up the CAD, never printed.
+(umask 077 && ssh $ssh_opts ubuntu@"$ip" 'sudo cat /etc/bitvoice-demo/cad-token' > "$keys/bitvoice-demo-cad")
+echo "the CAD's token for this demo is in $keys/bitvoice-demo-cad"
