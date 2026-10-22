@@ -89,6 +89,8 @@ WantedBy=timers.target
 UNIT
 systemctl daemon-reload
 systemctl enable --now bitvoice-demo-reset.timer >/dev/null
+# The old demo program stops first: an upgrade's rebuild must not take its old calls or radio units.
+systemctl stop bitvoice-demo-911.service 2>/dev/null || true
 /usr/local/sbin/bitvoice-demo-reset
 systemctl enable bitvoice-demo-911.service >/dev/null
 systemctl restart bitvoice-demo-911.service
