@@ -2,9 +2,11 @@ package pbx
 
 import (
 	"errors"
+	"fmt"
 	"net/netip"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -467,8 +469,11 @@ type RadioAck struct {
 }
 
 // AckEmergency acknowledges the emergency raised on a channel: it stops flashing on every
-// console, and who acknowledged it is kept.
-func (e *Engine) AckEmergency(channel, by string) (RadioAck, error) {
+// console, and who acknowledged it is kept. unit, when given, names the emergency meant (the full
+// unit ID as events carry it, like bee07.1d5.00044d, or the radio ID in decimal, like 1101): it is
+// refused when the channel's emergency is now another unit's, so an acknowledgement sent as a second
+// emergency replaced the first never silences the second.
+func (e *Engine) AckEmergency(channel, unit, by string) (RadioAck, error) {
 	r := e.radioSys()
 	r.mu.Lock()
 	ch := r.channels[channel]
@@ -480,6 +485,14 @@ func (e *Engine) AckEmergency(channel, by string) (RadioAck, error) {
 		r.mu.Unlock()
 		return RadioAck{}, errors.New("there is no emergency on " + ch.cfg.Name + " to acknowledge")
 	}
+	if unit != "" && !sameUnit(ch.emUnit, unit) {
+		held := ch.emUnit
+		if ch.emAlias != "" {
+			held += " (" + ch.emAlias + ")"
+		}
+		r.mu.Unlock()
+		return RadioAck{}, fmt.Errorf("%w: the emergency on %s is now %s's, not %s's", ErrOtherEmergency, ch.cfg.Name, held, unit)
+	}
 	a := RadioAck{Channel: channel, ChannelName: ch.cfg.Name, Unit: ch.emUnit, Alias: ch.emAlias, RaisedAt: ch.emAt, By: by, At: time.Now().UTC()}
 	ch.emUnit, ch.emAlias, ch.emAt = "", "", time.Time{}
 	ch.ackBy, ch.ackAt = by, a.At
@@ -488,6 +501,25 @@ func (e *Engine) AckEmergency(channel, by string) (RadioAck, error) {
 	e.publish("radio.emergency.ack", a)
 	e.publish("radio.updated", nil)
 	return a, nil
+}
+
+// ErrOtherEmergency: an acknowledgement named a unit, and the channel's emergency is another's.
+var ErrOtherEmergency = errors.New("not that emergency")
+
+// sameUnit reports whether want names the unit held: its full ID (any case), or its radio ID in
+// decimal (the last part of the full ID, which is hexadecimal).
+func sameUnit(held, want string) bool {
+	want = strings.TrimSpace(want)
+	if strings.EqualFold(held, want) {
+		return true
+	}
+	i := strings.LastIndexByte(held, '.')
+	id, err := strconv.ParseUint(held[i+1:], 16, 32)
+	if err != nil {
+		return false
+	}
+	n, err := strconv.ParseUint(want, 10, 32)
+	return err == nil && n == id
 }
 
 // SimulSelect keys (or unkeys) several channels at once for a dispatcher, so one transmission goes

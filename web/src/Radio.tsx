@@ -89,7 +89,8 @@ function Channels({ st, pos, admin }: { st: ConsoleState; pos?: Position; admin:
     if (!pos) return toast.info('Join the console first')
     simul({ call: pos.call, channels: picked, on }).unwrap().catch((e) => toast.error(errorOf(e).message))
   }
-  const doAck = (id: string) => ack(id).unwrap().then(() => toast.success('Emergency acknowledged')).catch((e) => toast.error(errorOf(e).message))
+  // The unit shown on the tile goes with it: if another unit's emergency replaced it meanwhile, BitVoice refuses.
+  const doAck = (id: string, unit?: string) => ack({ id, unit }).unwrap().then(() => toast.success('Emergency acknowledged')).catch((e) => toast.error(errorOf(e).message))
   const heard = (id: string) => !pos || !pos.monitor.length || pos.monitor.includes(id)
   const key = (channel: string, on: boolean) => {
     if (!pos) return toast.info('Join the console first')
@@ -155,7 +156,7 @@ function Channels({ st, pos, admin }: { st: ConsoleState; pos?: Position; admin:
                 <Siren size={14} className="animate-pulse text-rose-300" aria-hidden />
                 <span className="font-semibold text-rose-200">Emergency from {c.emergencyAlias || `unit ${c.emergencyUnit}`}</span>
                 {c.emergencyAt && <span className="text-xs text-rose-300/80">since {new Date(c.emergencyAt).toLocaleTimeString()}</span>}
-                {admin && <button className="btn ml-auto py-1" onClick={() => doAck(c.id)}><CheckCheck size={14} className="text-emerald-300" aria-hidden /> Acknowledge</button>}
+                {admin && <button className="btn ml-auto py-1" onClick={() => doAck(c.id, c.emergencyUnit)}><CheckCheck size={14} className="text-emerald-300" aria-hidden /> Acknowledge</button>}
               </div>
             )}
             {!c.emergencyUnit && c.ackBy && c.ackAt && <p className="text-xs text-slate-500">Emergency acknowledged by {c.ackBy} at {new Date(c.ackAt).toLocaleTimeString()}</p>}

@@ -1,6 +1,7 @@
 package pbx
 
 import (
+	"errors"
 	"net/netip"
 	"strconv"
 	"strings"
@@ -120,13 +121,22 @@ func TestRadioConsolePrivateCalls(t *testing.T) {
 	if c := tile(); c.EmergencyUnit == "" || c.EmergencyAlias != "Engine 5" || c.EmergencyAt.IsZero() {
 		t.Fatalf("emergency not raised: %+v", c)
 	}
-	if a, err := e.AckEmergency(id, "Pat"); err != nil || a.Alias != "Engine 5" || a.By != "Pat" {
+	// An acknowledgement naming another unit is refused, and the emergency stays raised.
+	for _, other := range []string{"301", "bee07.ad5.00012d"} {
+		if _, err := e.AckEmergency(id, other, "Pat"); !errors.Is(err, ErrOtherEmergency) {
+			t.Fatalf("ack for %s: %v", other, err)
+		}
+	}
+	if c := tile(); c.EmergencyUnit == "" {
+		t.Fatal("a refused acknowledgement cleared the emergency")
+	}
+	if a, err := e.AckEmergency(id, "300", "Pat"); err != nil || a.Alias != "Engine 5" || a.By != "Pat" {
 		t.Fatalf("ack %+v %v", a, err)
 	}
 	if c := tile(); c.EmergencyUnit != "" || c.AckBy != "Pat" || c.AckAt.IsZero() {
 		t.Fatalf("after the ack %+v", c)
 	}
-	if _, err := e.AckEmergency(id, "Pat"); err == nil {
+	if _, err := e.AckEmergency(id, "", "Pat"); err == nil {
 		t.Fatal("acknowledged twice")
 	}
 	// The radio talks; the dispatcher hears it. The call's first RTP (a heartbeat) says where to send.

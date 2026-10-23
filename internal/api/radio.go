@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/biodream-llc/bitvoice/internal/pbx"
 
@@ -85,7 +86,22 @@ func (s *Server) radioRoutes() {
 		w.WriteHeader(204)
 	})
 	s.handle("POST /api/radio/channels/{id}/ack", true, func(w http.ResponseWriter, r *http.Request, u store.User) {
-		a, err := s.Engine.AckEmergency(r.PathValue("id"), firstNonEmpty(u.Name, u.Username))
+		// The body is optional: {"unit": "bee07.1d5.00044d"} or {"unit": "1101"} acknowledges only that
+		// unit's emergency (409 when the channel's is now another's).
+		var in struct {
+			Unit json.RawMessage `json:"unit"`
+		}
+		if r.ContentLength != 0 {
+			if err := readJSON(r, &in); err != nil {
+				writeErr(w, err)
+				return
+			}
+		}
+		unit := strings.Trim(string(in.Unit), `"`)
+		if unit == "null" {
+			unit = ""
+		}
+		a, err := s.Engine.AckEmergency(r.PathValue("id"), unit, firstNonEmpty(u.Name, u.Username))
 		if err != nil {
 			writeError(w, 409, err.Error())
 			return
