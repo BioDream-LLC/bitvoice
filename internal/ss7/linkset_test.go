@@ -41,7 +41,8 @@ func TestLinkSetChangeover(t *testing.T) {
 	fast()
 	T2MTP3, T1MTP3, T4MTP3 = 300*time.Millisecond, 100*time.Millisecond, 300*time.Millisecond
 	oldWait, oldPeriod, oldT4N := SLTWait, SLTPeriod, T4N
-	SLTWait, SLTPeriod, T4N = 300*time.Millisecond, 500*time.Millisecond, 300*time.Millisecond // quick
+	// Quick, but a link test may wait a second: a slow runner must not fail links that are fine.
+	SLTWait, SLTPeriod, T4N = time.Second, 500*time.Millisecond, 300*time.Millisecond
 	defer func() { SLTWait, SLTPeriod, T4N = oldWait, oldPeriod, oldT4N }()
 	for _, ansi := range []bool{false, true} {
 		t.Run(map[bool]string{false: "itu", true: "ansi"}[ansi], func(t *testing.T) {
@@ -52,6 +53,8 @@ func TestLinkSetChangeover(t *testing.T) {
 			cics := []int{1, 2, 3, 4, 5, 6, 7, 8}
 			a := NewLinkSet(Config{MTPConfig: MTPConfig{ANSI: ansi, OPC: 100, APC: 200, NI: NINational}, CICs: cics})
 			b := NewLinkSet(Config{MTPConfig: MTPConfig{ANSI: ansi, OPC: 200, APC: 100, NI: NINational}, CICs: cics})
+			defer a.Close() // its timers stop with it, so none runs into the next test
+			defer b.Close()
 			in := make(chan *Call, 8)
 			b.Incoming = func(c *Call) { in <- c }
 			go a.AddLink(a0, 0)

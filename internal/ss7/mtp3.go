@@ -252,7 +252,7 @@ func (m *mtp3) sendAbout(sl *sigLink, data []byte) bool {
 
 func (m *mtp3) l2Up(sl *sigLink, up bool) {
 	m.mu.Lock()
-	sl.testOK = false
+	sl.testOK, sl.sltFails = false, 0 // each alignment gets its own link test, with Q.707's one retry
 	stopTimer(&sl.sltTimer)
 	if !up {
 		sl.left = sl.l2.takeLeftover()
@@ -286,6 +286,10 @@ func (m *mtp3) linkTest(sl *sigLink) {
 	stopTimer(&sl.sltTimer)
 	sl.sltTimer = time.AfterFunc(SLTWait, func() {
 		m.mu.Lock()
+		if m.closed {
+			m.mu.Unlock()
+			return
+		}
 		ok := sl.testOK
 		sl.sltFails++
 		fails := sl.sltFails
@@ -457,10 +461,9 @@ func (m *mtp3) resend(msu []byte) {
 
 func (m *mtp3) timedChangeover(sl *sigLink) {
 	m.mu.Lock()
-	waiting := sl.co == coWaiting
-	m.mu.Unlock()
-	if waiting {
-		time.AfterFunc(T1MTP3, func() { m.changedOver(sl, 0, false) })
+	defer m.mu.Unlock()
+	if sl.co == coWaiting && !m.closed {
+		sl.coTimer = time.AfterFunc(T1MTP3, func() { m.changedOver(sl, 0, false) })
 	}
 }
 
@@ -631,6 +634,10 @@ func (m *mtp3) close() {
 	m.mu.Lock()
 	m.closed = true
 	links := append([]*sigLink(nil), m.links...)
+	for _, l := range links { // no link test or changeover runs on after the close
+		stopTimer(&l.sltTimer)
+		stopTimer(&l.coTimer)
+	}
 	m.mu.Unlock()
 	for _, l := range links {
 		l.l2.close()
