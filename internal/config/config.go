@@ -19,6 +19,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/biodream-llc/bitvoice/internal/agi"
 )
 
 // Schema is the configuration format version.
@@ -1343,6 +1345,8 @@ func (c *Config) DestinationExists(d Destination) bool {
 		return c.FindFax(d.Target) != nil
 	case "ariapp":
 		return c.FindARIApp(d.Target) != nil
+	case "agi":
+		return c.FindAGI(d.Target) != nil
 	case "echo", "hangup":
 		return true
 	}
@@ -2851,6 +2855,10 @@ func (c *Config) Validate() error {
 			if c.FindARIApp(d.Target) == nil {
 				p.add(field, "no ARI application %s", d.Target)
 			}
+		case "agi":
+			if c.FindAGI(d.Target) == nil {
+				p.add(field, "no AGI script %s", d.Target)
+			}
 		case "echo", "hangup":
 		default:
 			p.add(field, "choose where calls go")
@@ -2880,6 +2888,50 @@ func (c *Config) Validate() error {
 		} else {
 			checkDest(f+".fallback", &a.Fallback)
 		}
+	}
+	agiNames := map[string]bool{}
+	for i := range c.System.Compat.AGI {
+		a := &c.System.Compat.AGI[i]
+		f := fmt.Sprintf("system.compat.agi[%d]", i)
+		a.Name, a.Address = strings.TrimSpace(a.Name), strings.TrimSpace(a.Address)
+		switch {
+		case !ariAppRe.MatchString(a.Name):
+			p.add(f+".name", "a name of letters, digits, - and _ (up to 40)")
+		case agiNames[a.Name]:
+			p.add(f+".name", "another AGI script has this name")
+		}
+		agiNames[a.Name] = true
+		if tg, err := agi.ParseTarget(a.Address); err != nil {
+			p.add(f+".address", "%s", err.Error())
+		} else if a.EAGI && tg.Program == "" {
+			p.add(f+".eagi", "EAGI passes the caller's audio to a program on this server; FastAGI has no way to carry it")
+		}
+		if len(a.Args) > 20 {
+			p.add(f+".args", "at most 20 arguments")
+		}
+		for j := range a.Args {
+			if strings.ContainsAny(a.Args[j], "\r\n") {
+				p.add(fmt.Sprintf("%s.args[%d]", f, j), "an argument is one line")
+			}
+		}
+		if a.MaxMinutes < 0 || a.MaxMinutes > 1440 {
+			p.add(f+".maxMinutes", "0 (an hour) to 1440 minutes")
+		}
+		if a.Number = strings.TrimSpace(a.Number); a.Number != "" {
+			if !numberRe.MatchString(a.Number) {
+				p.add(f+".number", "numbers are 2 to 8 digits, or empty")
+			} else {
+				claim(f+".number", a.Number, "AGI script "+a.Name)
+			}
+		}
+		if a.Fallback.Type == "agi" {
+			p.add(f+".fallback", "the fallback must not be an AGI script: it is where calls go when one cannot be reached")
+		} else {
+			checkDest(f+".fallback", &a.Fallback)
+		}
+	}
+	if c.System.Compat.AGIKeepDays < 0 || c.System.Compat.AGIKeepDays > 3650 {
+		p.add("system.compat.agiKeepDays", "0 (30 days) to 3650 days")
 	}
 	for i := range c.Extensions {
 		if d := c.Extensions[i].NoAnswer; d != nil {
@@ -3404,6 +3456,50 @@ type Compat struct {
 	// Apps are ARI applications (Asterisk's Stasis apps): a call sent to one is handed to the program
 	// connected to /ari/events?app=NAME, which runs it over ARI.
 	Apps []ARIApp `json:"apps,omitempty"`
+	// AGI are AGI scripts calls can be sent to (Asterisk's AGI() and EAGI()): FastAGI servers, or
+	// programs in the AGI programs folder (DATA/agi-bin).
+	AGI []AGIScript `json:"agi,omitempty"`
+	// AGIKeepDays is how long the recordings AGI scripts make are kept (default 30).
+	AGIKeepDays int `json:"agiKeepDays,omitempty"`
+}
+
+// AGIScript is an AGI script calls can be sent to. BitVoice answers the call, connects to the script
+// and carries out its commands; when the script ends (or cannot be reached), the call goes to the
+// number the script chose (SET EXTENSION, EXEC Goto), else to Fallback.
+type AGIScript struct {
+	Name string `json:"name"`
+	// Address is agi://host[:port]/script?args (FastAGI), hagi://domain/script (FastAGI servers from
+	// SRV records), or the file name of a program in DATA/agi-bin.
+	Address string `json:"address"`
+	// Args are the script's arguments (agi_arg_1 ...), as AGI(script,arg1,arg2) would pass.
+	Args []string `json:"args,omitempty"`
+	// EAGI gives a program the caller's audio on file descriptor 3 (Linux and macOS).
+	EAGI bool `json:"eagi,omitempty"`
+	// Number lets extensions dial the script (optional).
+	Number   string      `json:"number,omitempty"`
+	Fallback Destination `json:"fallback"`
+	// MaxMinutes ends a script that runs longer (default 60).
+	MaxMinutes int `json:"maxMinutes,omitempty"`
+}
+
+// FindAGI returns the AGI script of a name, or nil.
+func (c *Config) FindAGI(name string) *AGIScript {
+	for i := range c.System.Compat.AGI {
+		if c.System.Compat.AGI[i].Name == name {
+			return &c.System.Compat.AGI[i]
+		}
+	}
+	return nil
+}
+
+// FindAGINumber returns the AGI script with a dialable number, or nil.
+func (c *Config) FindAGINumber(number string) *AGIScript {
+	for i := range c.System.Compat.AGI {
+		if a := &c.System.Compat.AGI[i]; a.Number != "" && a.Number == number {
+			return a
+		}
+	}
+	return nil
 }
 
 // ARIApp is an ARI application calls can be sent to. When no program is connected for it, or the

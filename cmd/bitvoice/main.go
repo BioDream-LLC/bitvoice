@@ -29,6 +29,7 @@ import (
 	_ "time/tzdata" // time zones for opening hours, whatever the host has installed
 
 	"github.com/biodream-llc/bitvoice/internal/acme"
+	"github.com/biodream-llc/bitvoice/internal/agi"
 	"github.com/biodream-llc/bitvoice/internal/api"
 	"github.com/biodream-llc/bitvoice/internal/certs"
 	"github.com/biodream-llc/bitvoice/internal/cluster"
@@ -249,6 +250,15 @@ func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 	ari := &compat.ARI{PBX: eng, Bus: bus, Audit: srv.AuditSystem, Started: time.Now(), Recordings: filepath.Join(o.data, "ari-recordings")}
 	srv.ARI = ari
 	eng.Stasis = ari // calls sent to ARI applications
+	// AGI scripts: their sounds and recordings, Asterisk's database, and the programs folder.
+	agiBin := filepath.Join(o.data, "agi-bin")
+	if err := os.MkdirAll(agiBin, 0o750); err != nil {
+		return err
+	}
+	eng.AGI = &pbx.AGIHost{Library: &agi.Library{Dir: filepath.Join(o.data, "agi")},
+		DB: &agi.DB{Path: filepath.Join(o.data, "agi", "astdb.json")}, Programs: agiBin, Version: "BitVoice " + version}
+	srv.AGI = eng.AGI
+	go eng.PruneAGI(ctx.Done())
 	// The engine runs on the configuration with vault references resolved.
 	srv.WireEngine()
 	eng.HoldsAddress = srv.HoldsSharedAddress

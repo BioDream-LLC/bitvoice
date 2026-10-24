@@ -231,6 +231,7 @@ export function DestinationPicker({ label, value, onChange, exclude, required, n
   const { data: streams } = useAudioStreamsQuery()
   const { data: settings } = useSettingsQuery()
   const apps = settings?.system.compat.apps ?? []
+  const agis = settings?.system.compat.agi ?? []
   const key = value ? `${value.type}:${value.target}` : ''
   return (
     <Field label={label} htmlFor={id} error={error}>
@@ -277,6 +278,11 @@ export function DestinationPicker({ label, value, onChange, exclude, required, n
         {apps.length > 0 && !noSchedules && (
           <optgroup label="ARI applications">
             {apps.map((a) => <option key={a.name} value={`ariapp:${a.name}`}>{a.name} (ARI application{a.number ? `, ${a.number}` : ''})</option>)}
+          </optgroup>
+        )}
+        {agis.length > 0 && !noSchedules && (
+          <optgroup label="AGI scripts">
+            {agis.map((a) => <option key={a.name} value={`agi:${a.name}`}>{a.name} (AGI script{a.number ? `, ${a.number}` : ''})</option>)}
           </optgroup>
         )}
         {(receptionists?.items.length ?? 0) > 0 && !noSchedules && (
@@ -394,6 +400,7 @@ export function useDescribe() {
       case 'directory': return 'Dial-by-name directory'
       case 'dialin': return 'Dial-in'
       case 'ariapp': return `ARI application ${t}`
+      case 'agi': return `AGI script ${t}`
       case 'echo': return 'Echo test'
     }
     return 'Hang up'

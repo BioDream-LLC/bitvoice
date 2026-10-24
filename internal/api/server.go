@@ -57,6 +57,8 @@ type Server struct {
 	// ARI serves /ari (Asterisk compatibility); AMIAddr reports where AMI listens. Both optional.
 	ARI     http.Handler
 	AMIAddr func() string
+	// AGI is the AGI scripts' sound library, database and programs folder (set by main; optional).
+	AGI *pbx.AGIHost
 	// ICEServers are the STUN and TURN servers browser phones are given, with fresh credentials, for
 	// the host name they reached this server by (set by main; nil for none).
 	ICEServers func(host string) []ICEServer

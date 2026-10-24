@@ -107,6 +107,7 @@ function DestChip({ d }: { d: Destination }) {
   if (d.type === 'fax') return <span className="text-violet-300">fax {d.target}</span>
   if (d.type === 'esrp') return <span className="text-rose-300">ESRP (by location)</span>
   if (d.type === 'ariapp') return <span className="text-sky-300">ARI application {d.target}</span>
+  if (d.type === 'agi') return <span className="text-sky-300">AGI script {d.target}</span>
   return <span className="text-violet-300">{d.type === 'echo' ? 'the echo test' : 'nobody (hang up)'}</span>
 }
 

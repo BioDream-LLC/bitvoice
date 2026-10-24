@@ -1086,6 +1086,10 @@ func (c *Call) answerLocal(p plan) {
 		if c.answerHere(p.toName) {
 			go c.runStasis(p.box, nil)
 		}
+	case "agi":
+		if c.answerHere(p.toName) {
+			go c.runAGI(p.box)
+		}
 	case "receptionist":
 		if c.answerHere(p.toName) {
 			go c.runReceptionist(p.box)

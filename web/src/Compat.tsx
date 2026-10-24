@@ -1,5 +1,6 @@
 import { AppWindow, Cable, KeyRound, Plus, Trash2 } from 'lucide-react'
 import { useSystemQuery, type Settings } from './api'
+import { AGISettings } from './AGI'
 import { DestinationPicker } from './Extensions'
 import { Field, Toggle } from './ui'
 
@@ -27,7 +28,7 @@ export function CompatSettings({ value, onChange, error, admin }: {
       <h2 id="compat-h" className="flex items-center gap-2 font-semibold text-slate-100"><Cable size={17} className="text-orange-300" aria-hidden /> Asterisk compatibility</h2>
       <p className="text-sm text-slate-400">
         Wallboards, CRM click-to-dial and monitoring tools written for Asterisk can talk to BitVoice. They see calls as channels and can list, place, transfer and hang up calls.
-        Off unless you switch it on.
+        AMI and ARI are off unless you switch them on; AGI scripts run only on the calls you send to them.
       </p>
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-3">
@@ -74,6 +75,7 @@ export function CompatSettings({ value, onChange, error, admin }: {
           )}
         </div>
       )}
+      <AGISettings value={value} onChange={onChange} error={error} admin={admin} />
       {(value.ami || value.ari || users.length > 0) && (
         <div>
           <div className="mb-2 flex items-center justify-between">

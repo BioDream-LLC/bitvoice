@@ -722,3 +722,79 @@ test('a viewer uses the browser phone with the extension password', async ({ pag
   await v.getByRole('button', { name: 'Hang up' }).click()
   await ctx.close()
 })
+
+// An AGI script (Asterisk's AGI()): a FastAGI server in the test runner, added on Settings and tried
+// with Test; the browser phone dials it, the script beeps, writes a line to the log and hangs up.
+// A sound uploaded for AGI scripts shows in their library.
+test('an AGI script runs a call from the browser phone', async ({ page }) => {
+  const { createServer } = await import('node:net')
+  const heard: string[] = []
+  const agi = createServer((sock) => {
+    let buf = ''
+    let step = 0
+    const script = ['STREAM FILE beep ""', 'VERBOSE "e2e agi ran" 1', 'HANGUP']
+    sock.on('data', (d) => {
+      buf += d.toString()
+      for (;;) {
+        const i = buf.indexOf('\n')
+        if (i < 0) return
+        const line = buf.slice(0, i)
+        buf = buf.slice(i + 1)
+        if (step === 0) {
+          if (line.startsWith('agi_')) { heard.push(line); continue }
+          if (line === '') { if (heard.length === 0) { sock.end(); return } } // Test only connects
+        } else heard.push(line)
+        if (step < script.length) sock.write(script[step++] + '\n')
+        else sock.end()
+      }
+    })
+    sock.on('error', () => {})
+  })
+  await new Promise<void>((ok) => agi.listen(0, '127.0.0.1', ok))
+  const port = (agi.address() as { port: number }).port
+  try {
+    await signIn(page)
+    await page.goto('/#/settings')
+    await page.getByRole('button', { name: 'Add AGI script' }).click()
+    const row = page.getByRole('listitem').filter({ has: page.getByLabel('Script name') }).last()
+    await row.getByLabel('Script name').fill('e2eagi')
+    await row.getByLabel('Address').fill('lookup.php')
+    await expect(row.getByText('A program in the AGI programs folder, run for each call.')).toBeVisible()
+    await expect(row.getByRole('switch', { name: /^EAGI/ })).toBeVisible() // EAGI is for programs only
+    await row.getByLabel('Address').fill('nothing/../bad')
+    await page.getByRole('button', { name: 'Save' }).first().click()
+    await expect(row.getByText(/agi:\/\/host:port\/script/)).toBeVisible() // refused in place
+    await row.getByLabel('Address').fill(`agi://127.0.0.1:${port}/e2e?x=1`)
+    await expect(row.getByRole('switch', { name: /^EAGI/ })).toHaveCount(0)
+    await row.getByRole('button', { name: 'Test' }).click()
+    await expect(row.getByRole('status')).toContainText(`connected to 127.0.0.1:${port}`)
+    await row.getByLabel('Number to dial it').fill('853')
+    await row.getByLabel('Fallback').selectOption({ label: 'Echo test' })
+    await page.getByRole('button', { name: 'Save' }).first().click()
+    await expect(page.getByText('Settings saved')).toBeVisible()
+
+    // A sound for the scripts, uploaded into custom/.
+    const wav = Buffer.alloc(44 + 8000)
+    wav.write('RIFF', 0); wav.writeUInt32LE(36 + 8000, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16)
+    wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(16000, 28)
+    wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(8000, 40)
+    await page.getByLabel('Sound files for AGI scripts').setInputFiles({ name: 'welcome.wav', mimeType: 'audio/wav', buffer: wav })
+    await expect(page.getByRole('list', { name: 'AGI sounds' }).getByText('custom/welcome')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Browser phone' }).click()
+    await page.getByRole('button', { name: /^Sign in as/ }).click()
+    await expect(page.getByText(/^Extension/).first()).toBeVisible()
+    for (const k of ['8', '5', '3']) await page.getByRole('group', { name: 'Keypad' }).getByRole('button', { name: k, exact: true }).click()
+    await page.getByRole('button', { name: 'Call', exact: true }).click()
+    await expect(page.getByText('the other party hung up')).toBeVisible({ timeout: 15000 })
+    await page.keyboard.press('Escape')
+    const runs = page.getByRole('list', { name: 'Last AGI runs' })
+    await expect(runs.getByText('e2e agi ran')).toBeVisible()
+    await expect(runs.getByText('ended: the call ended')).toBeVisible()
+    expect(heard).toContain('agi_network_script: e2e?x=1')
+    expect(heard).toContain('agi_dnid: 853')
+    expect(heard.filter((l) => l.startsWith('200 '))).toEqual(['200 result=0 endpos=4000', '200 result=1', '200 result=1'])
+  } finally {
+    agi.close()
+  }
+})

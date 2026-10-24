@@ -95,6 +95,8 @@ type Engine struct {
 	Mail Mailbox
 	// Stasis is where calls sent to ARI applications go (set by the web server's ARI).
 	Stasis StasisHub
+	// AGI is where AGI scripts find their sounds, database and programs; nil: none run.
+	AGI *AGIHost
 	// Dialer keeps the outbound dialer's contacts; nil switches the dialer off.
 	Dialer DialerStore
 	// Music stores hold music tracks; nil plays the hold tone everywhere.

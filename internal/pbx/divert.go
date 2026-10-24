@@ -123,7 +123,7 @@ func checkForward(cfg *config.Config, x *config.Extension, n string) error {
 // dialsInside says whether a number reaches something in this phone system (not a trunk).
 func dialsInside(cfg *config.Config, n string) bool {
 	return cfg.FindExtension(n) != nil || cfg.FindRingGroup(n) != nil || cfg.FindQueue(n) != nil ||
-		cfg.FindMenuNumber(n) != nil || cfg.FindConference(n) != nil || cfg.FindDirectoryNumber(n) != nil || cfg.FindScriptNumber(n) != nil || cfg.FindARIAppNumber(n) != nil
+		cfg.FindMenuNumber(n) != nil || cfg.FindConference(n) != nil || cfg.FindDirectoryNumber(n) != nil || cfg.FindScriptNumber(n) != nil || cfg.FindARIAppNumber(n) != nil || cfg.FindAGINumber(n) != nil
 }
 
 // SetDND switches an extension's do not disturb on or off, as its feature codes do.

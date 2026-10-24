@@ -16,7 +16,7 @@ import { FlowEdit, NewRoute, type FlowBox } from './FlowEdit'
 // Colours match the rest of the interface: each kind of thing has one colour.
 const colours: Record<string, [string, string]> = {
   route: ['#fbbf24', 'Incoming'], extension: ['#7dd3fc', 'Extension'], ringgroup: ['#c4b5fd', 'Ring group'],
-  queue: ['#fdba74', 'Queue'], menu: ['#7dd3fc', 'Menu'], schedule: ['#fcd34d', 'Schedule'], toggle: ['#a5b4fc', 'Day/night toggle'], audiosocket: ['#f0abfc', 'Voice bot'], script: ['#f0abfc', 'Script'], ariapp: ['#7dd3fc', 'ARI application'], receptionist: ['#c4b5fd', 'AI receptionist'],
+  queue: ['#fdba74', 'Queue'], menu: ['#7dd3fc', 'Menu'], schedule: ['#fcd34d', 'Schedule'], toggle: ['#a5b4fc', 'Day/night toggle'], audiosocket: ['#f0abfc', 'Voice bot'], script: ['#f0abfc', 'Script'], ariapp: ['#7dd3fc', 'ARI application'], agi: ['#7dd3fc', 'AGI script'], receptionist: ['#c4b5fd', 'AI receptionist'],
   voicemail: ['#c4b5fd', 'Voicemail'], fax: ['#a78bfa', 'Fax'], esrp: ['#fb7185', 'ESRP'], echo: ['#94a3b8', 'Echo test'], hangup: ['#fda4af', 'Hang up'],
 }
 const pages: Record<string, string> = {
@@ -145,6 +145,12 @@ export function CallFlow() {
           const a = settings?.system.compat.apps?.find((x) => x.name === d.target)
           name = d.target
           next.push([a?.fallback, 'no program / let go'])
+          break
+        }
+        case 'agi': {
+          const a = settings?.system.compat.agi?.find((x) => x.name === d.target)
+          name = d.target
+          next.push([a?.fallback, 'ended / unreachable'])
           break
         }
         case 'voicemail': name = `of ${d.target}`; break

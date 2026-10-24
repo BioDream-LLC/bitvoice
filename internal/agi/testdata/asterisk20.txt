@@ -1,0 +1,79 @@
+# What Asterisk 20.6 (Ubuntu 24.04) answered to each AGI command over FastAGI, on a Local channel
+# with no caller pressing keys. Recorded by ~/.bvtest/agi/oracle (oracle.py); the usage text is left out.
+>> ANSWER
+<< 200 result=0
+>> CHANNEL STATUS
+<< 200 result=6
+>> STREAM FILE nothing-here ""
+<< 200 result=-1 endpos=0
+>> STREAM FILE beep ""
+<< 200 result=0 endpos=3520
+>> STREAM FILE beep "12"
+<< 200 result=0 endpos=3520
+>> WAIT FOR DIGIT 100
+<< 200 result=0
+>> GET DATA beep 100 2
+<< 200 result= (timeout)
+>> GET OPTION beep "12" 100
+<< 200 result=0 endpos=3520
+>> SAY DIGITS 12 ""
+<< 200 result=0
+>> SET VARIABLE COLOUR blue
+<< 200 result=1
+>> GET VARIABLE COLOUR
+<< 200 result=1 (blue)
+>> GET VARIABLE NOTHING_SET
+<< 200 result=0
+>> GET FULL VARIABLE "${COLOUR} sky"
+<< 200 result=1 (blue sky)
+>> DATABASE PUT bvtest k1 v1
+<< 200 result=1
+>> DATABASE GET bvtest k1
+<< 200 result=1 (v1)
+>> DATABASE GET bvtest k2
+<< 200 result=0
+>> DATABASE DEL bvtest k2
+<< 200 result=1
+>> DATABASE DELTREE bvtest
+<< 200 result=0
+>> DATABASE DELTREE bvtest
+<< 200 result=1
+>> NOT A COMMAND
+<< 510 Invalid or unknown command
+>> WAIT FOR DIGIT
+<< 520-Invalid command syntax.  Proper usage follows:
+<< (usage text)
+<< 520 End of proper usage.
+>> EXEC Set DONE=yes
+<< 200 result=0
+>> GET VARIABLE DONE
+<< 200 result=1 (yes)
+>> EXEC NoSuchApplication x
+<< 200 result=-2
+>> SET EXTENSION 600
+<< 200 result=0
+>> SET CONTEXT somewhere
+<< 200 result=0
+>> SET PRIORITY 1
+<< 200 result=0
+>> SET AUTOHANGUP 0
+<< 200 result=0
+>> VERBOSE "hello" 1
+<< 200 result=1
+>> NOOP
+<< 200 result=0
+>> RECEIVE CHAR 100
+<< 200 result=-1 (hangup)
+>> TDD MODE off
+<< 200 result=0
+>> SEND TEXT "hi"
+<< 200 result=0
+>> SET MUSIC off
+<< 200 result=0
+>> HANGUP
+<< 200 result=1
+>> STREAM FILE beep ""
+<< HANGUP
+<< 511 Command Not Permitted on a dead channel or intercept routine
+>> NOOP
+<< 200 result=0

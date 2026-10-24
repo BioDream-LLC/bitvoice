@@ -5,7 +5,7 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 export type Role = 'admin' | 'viewer' | 'extension'
 export interface Me { username: string; name: string; role: Role; setupComplete: boolean; mfa?: boolean }
 
-export interface Destination { type: 'extension' | 'ringgroup' | 'queue' | 'menu' | 'schedule' | 'toggle' | 'audiosocket' | 'script' | 'receptionist' | 'voicemail' | 'fax' | 'esrp' | 'conference' | 'directory' | 'dialin' | 'ariapp' | 'echo' | 'hangup'; target: string }
+export interface Destination { type: 'extension' | 'ringgroup' | 'queue' | 'menu' | 'schedule' | 'toggle' | 'audiosocket' | 'script' | 'receptionist' | 'voicemail' | 'fax' | 'esrp' | 'conference' | 'directory' | 'dialin' | 'ariapp' | 'agi' | 'echo' | 'hangup'; target: string }
 export interface Receptionist { id: string; name: string; greeting: string; knowledge: string; person: Destination; messageBox: string }
 
 export interface Extension {
@@ -275,7 +275,7 @@ export interface SystemSettings {
   metrics: Metrics
   costs: Costs
   sso: { enabled: boolean; label: string; issuer: string; clientId: string; clientSecret: string; redirectUrl: string; groupsClaim: string; adminGroups: string[]; viewerGroups: string[]; passwordSignIn: boolean }
-  compat: { ami: boolean; amiListen: string; ari: boolean; users: { username: string; secret: string; write: boolean }[]; apps?: { name: string; number?: string; fallback: Destination }[] }
+  compat: { ami: boolean; amiListen: string; ari: boolean; users: { username: string; secret: string; write: boolean }[]; apps?: { name: string; number?: string; fallback: Destination }[]; agi?: AGIScript[]; agiKeepDays?: number }
   archive: {
     target: '' | 's3' | 'azure'; recordings: boolean; voicemail: boolean
     s3: { region: string; bucket: string; prefix: string; accessKey: string; secretKey: string; endpoint: string }
@@ -429,6 +429,11 @@ export interface Tenant { id: string; name: string; domain: string; suspended: b
 export interface TenantView extends Tenant { running: boolean; extensions: number; phones: number; calls: number; storageBytes: number; url: string; sipUser: string; admins: number }
 export interface SetupStatus { complete: boolean; allowed: boolean; addresses: string[]; sipPort: number; version: string }
 
+/** An AGI script calls can be sent to: a FastAGI server or a program in the AGI programs folder. */
+export interface AGIScript { name: string; address: string; args?: string[]; eagi?: boolean; number?: string; fallback: Destination; maxMinutes?: number }
+export interface AGISound { name: string; recorded: boolean; seconds: number; bytes: number; modified: string }
+export interface AGIRun { script: string; at: string; from: string; to: string; commands: number; decision: string; error?: string; log?: string[]; millis: number }
+
 export interface Problem { field: string; message: string }
 export interface ApiErrorBody { message: string; problems?: Problem[] }
 
@@ -450,7 +455,7 @@ const baseQuery = fetchBaseQuery({
 })
 
 const tags = ['Me', 'Extensions', 'RingGroups', 'Trunks', 'Inbound', 'Outbound', 'Settings', 'Users', 'Calls',
-  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail', 'Tenants', 'System', 'Prompts', 'Music', 'Directories', 'DialIns', 'Inbox', 'AudioStreams', 'Campaigns', 'Dialer', 'DNC', 'Toggles', 'ToggleState', 'PINSets', 'Lookups', 'Hotel', 'WakeUps', 'Chat', 'Core', 'PlanCheck', 'Fraud', 'Speech'] as const
+  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail', 'Tenants', 'System', 'Prompts', 'Music', 'Directories', 'DialIns', 'Inbox', 'AudioStreams', 'Campaigns', 'Dialer', 'DNC', 'Toggles', 'ToggleState', 'PINSets', 'Lookups', 'Hotel', 'WakeUps', 'Chat', 'Core', 'PlanCheck', 'Fraud', 'Speech', 'AGI'] as const
 
 export const api = createApi({
   reducerPath: 'api',
@@ -865,6 +870,19 @@ export const api = createApi({
         query: ({ box, wav }) => ({ url: `voicemail/${box}/greeting`, method: 'PUT', body: wav, headers: { 'Content-Type': 'audio/wav' } }),
         invalidatesTags: ['Voicemail'] }),
       prompts: b.query<PromptsList, void>({ query: () => 'prompts', providesTags: ['Prompts', 'Settings'] }),
+      agiSounds: b.query<{ items: AGISound[] }, void>({ query: () => 'agi/sounds', providesTags: ['AGI'] }),
+      uploadAgiSound: b.mutation<void, { name: string; file: Blob; filename: string }>({
+        query: ({ name, file, filename }) => ({ url: `agi/sounds/${name.split('/').map(encodeURIComponent).join('/')}?filename=${encodeURIComponent(filename)}`, method: 'PUT', body: file, headers: { 'Content-Type': 'application/octet-stream' } }),
+        invalidatesTags: ['AGI'] }),
+      deleteAgiSound: b.mutation<void, { name: string; recorded: boolean }>({
+        query: ({ name, recorded }) => ({ url: `agi/sounds/${name.split('/').map(encodeURIComponent).join('/')}${recorded ? '?recorded=1' : ''}`, method: 'DELETE' }), invalidatesTags: ['AGI'] }),
+      agiPrograms: b.query<{ folder: string; eagi: boolean; items: { name: string; bytes: number; executable: boolean; modified: string }[] }, void>({ query: () => 'agi/programs', providesTags: ['AGI'] }),
+      agiDB: b.query<{ items: { family: string; key: string; value: string }[] }, void>({ query: () => 'agi/db', providesTags: ['AGI'] }),
+      putAgiDB: b.mutation<void, { family: string; key: string; value: string }>({
+        query: ({ family, key, value }) => ({ url: `agi/db/${encodeURIComponent(family)}/${key.split('/').map(encodeURIComponent).join('/')}`, method: 'PUT', body: { value } }), invalidatesTags: ['AGI'] }),
+      deleteAgiDB: b.mutation<void, { family: string; key: string }>({
+        query: ({ family, key }) => ({ url: `agi/db/${encodeURIComponent(family)}/${key.split('/').map(encodeURIComponent).join('/')}`, method: 'DELETE' }), invalidatesTags: ['AGI'] }),
+      testAgi: b.mutation<{ ok: boolean; message: string }, string>({ query: (address) => ({ url: 'agi/test', method: 'POST', body: { address } }) }),
       // music lists the tracks of the classes in the settings, so a saved class shows at once
       saveLangPrompt: b.mutation<{ seconds: number }, { lang: string; key: string; wav: Blob }>({
         query: ({ lang, key, wav }) => ({ url: `prompts/${lang}/${key}`, method: 'PUT', body: wav, headers: { 'Content-Type': 'audio/wav' } }),
@@ -945,6 +963,7 @@ export const {
   useLookupsQuery, useCreateLookupMutation, useUpdateLookupMutation, useDeleteLookupMutation, useTestLookupMutation,
   useHotelQuery, useCheckInMutation, useCheckOutMutation, useSetRoomStatusMutation, useWakeUpsQuery, useSetWakeUpMutation, useCancelWakeUpMutation,
   useSaveNameAudioMutation, useDeleteNameAudioMutation, useSnmpStatusQuery, useDeskStatusQuery, useCardsStatusQuery, useAcmeStatusQuery, useAcmeCheckMutation, useAcmeReachMutation, useMusicStreamsQuery, useTurnStatusQuery, useWebSocketStatusQuery, useCdrCsvQuery, useTestCdrOutputsMutation, useChatListQuery, useChatMessagesQuery, useSendChatMutation, useSetChatStatusMutation,
+  useAgiSoundsQuery, useUploadAgiSoundMutation, useDeleteAgiSoundMutation, useAgiProgramsQuery, useAgiDBQuery, usePutAgiDBMutation, useDeleteAgiDBMutation, useTestAgiMutation,
   usePromptsQuery, useSaveLangPromptMutation, useDeleteLangPromptMutation, useGeneratePromptsMutation, useMusicQuery, useAddMusicMutation, useDeleteMusicMutation,
 } = api
 

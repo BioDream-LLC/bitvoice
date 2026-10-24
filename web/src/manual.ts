@@ -129,6 +129,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | Let's Encrypt | Field-tested | issues and renews the public demo's certificate |
 | Machine images (AWS) and configuration as code | Field-tested | an EC2 image built by \`deploy/cloud/build-images.sh\` from Ubuntu 24.04: each server from it starts new; \`deploy/terraform\` with OpenTofu 1.13 (create, change, no drift, destroy). Azure images not tried |
 | IAX2 trunks | Checked against a reference | Asterisk 23 |
+| AGI and FastAGI (Asterisk Gateway Interface) | Checked against a reference | every command's answer compared with Asterisk 20.6's over FastAGI; a FastAGI server written with pyst2 running a call; EAGI audio to a program. Not tried with a production IVR |
 | H.323 trunks | Checked against a reference | H323Plus 1.28 (its simph323 playing and recording WAV files) on EC2: calls both ways with Fast Connect and G.711, each end hearing the other's tone, MOS 4.39; call set-up also with Asterisk's chan_ooh323 (whose own sound is broken in Asterisk 22) |
 | SIP over WebSocket | Checked against a reference | JsSIP and SIP.js |
 | Codecs: GSM, G.726, iLBC, MP3 hold music | Checked against a reference | ffmpeg, the RFC 3951 reference program and minimp3, sample for sample |
@@ -1575,7 +1576,7 @@ In [Settings](#/settings), **Single sign-on**:
 > Two-step sign-in is then the provider's job: switch it on there.`,
   },
   {
-    id: 'compat', title: 'Asterisk compatibility (AMI and ARI)', keys: 'ami ari asterisk manager rest crm wallboard click to dial originate stasis application playback record bridge confbridge queuepause parkedcalls mailboxcount filter userevent',
+    id: 'compat', title: 'Asterisk compatibility (AMI, ARI and AGI)', keys: 'ami ari agi eagi fastagi hagi asterisk gateway interface manager rest crm wallboard click to dial originate stasis application playback record bridge confbridge queuepause parkedcalls mailboxcount filter userevent astdb database phpagi pyst ivr',
     body: `Tools written for Asterisk can control BitVoice: CRMs, wallboards, click-to-dial buttons, call recorders' controllers. Switch it on in [Settings](#/settings), **Asterisk compatibility**. Tools see calls as channels named like \`PJSIP/100-...\`, as on Asterisk.
 
 ::figure compat
@@ -1626,6 +1627,39 @@ Your program connects to \`/ari/events?app=NAME\` (a WebSocket, with the login i
 | \`GET /ari/applications\` | the applications, whether a program is connected, and their channels |
 
 Keys pressed arrive as **ChannelDtmfReceived**; a caller hanging up as **StasisEnd**. When no program is connected the call goes to the fallback; when the program's last connection closes, its calls go there too after five seconds (time to reconnect). For call logic without a program of your own, use [Scripts](#scripts) that run the whole call; to hand the audio to a program, [Voice bots](#voicebots).
+
+## AGI scripts
+An AGI script (Asterisk's \`AGI()\` and \`EAGI()\`) runs a call command by command, so IVRs and integrations written for Asterisk (phpagi, pyst2, Asterisk-Java, any FastAGI server) keep working. Add it under **AGI scripts** in Settings, Asterisk compatibility:
+| Field | What it is |
+|---|---|
+| **Script name** | how destinations name it |
+| **Address** | a FastAGI server, \`agi://host:4573/script?x=1\` (port 4573 when none is given), \`hagi://domain/script\` for the servers in the domain's \`_agi._tcp\` SRV records, tried in priority order, or the file name of a program in the **AGI programs** folder |
+| **Arguments** | passed as \`agi_arg_1\`, \`agi_arg_2\` … |
+| **Number to dial it** | optional: extensions dial it as any number |
+| **Fallback** | where the call goes when the script ends without choosing a number, or cannot be reached |
+| **Longest run** | a script running longer is stopped (default an hour) |
+| **EAGI** | for a program: the caller's audio (8 kHz, signed 16-bit, little-endian) on file descriptor 3. Linux and macOS |
+
+**Test** connects to the server (or checks the program is there and executable) without sending a call. Then send calls to it like any destination.
+
+BitVoice answers the call, sends the \`agi_\` variables (\`agi_network_script\`, \`agi_callerid\`, \`agi_dnid\`, \`agi_extension\`, \`agi_language\` …) and carries out the commands, answering as Asterisk 20 does (the test suite compares every answer with a recording of Asterisk's):
+| Commands | Notes |
+|---|---|
+| ANSWER, HANGUP, CHANNEL STATUS, NOOP, VERBOSE | HANGUP with a channel name only ends the script's own call |
+| STREAM FILE, CONTROL STREAM FILE, GET OPTION, GET DATA, WAIT FOR DIGIT | escape keys, sample offsets and endpos as on Asterisk; fast-forward, rewind and pause in CONTROL STREAM FILE |
+| SAY DIGITS, SAY NUMBER, SAY ALPHA, SAY PHONETIC, SAY DATE, SAY TIME, SAY DATETIME | with a speech service in Settings, AI they are spoken; without, the digits are said from Sounds |
+| RECORD FILE | \`s=N\` silence, a beep, escape keys; the file lands in the sound library |
+| SET VARIABLE, GET VARIABLE, GET FULL VARIABLE | \`CALLERID(num)\`, \`CALLERID(name)\`, \`EXTEN\`, \`UNIQUEID\`, \`CHANNEL\` … and \`\${NAME}\` expressions |
+| DATABASE GET, PUT, DEL, DELTREE | Asterisk's database (AstDB), kept by BitVoice and shown under **AGI database** |
+| SET CALLERID, SET EXTENSION, SET CONTEXT, SET PRIORITY, SET AUTOHANGUP, SET MUSIC | SET EXTENSION is where the call goes when the script ends |
+| SPEECH CREATE … SPEECH RECOGNIZE | uses the speech to text of Settings, AI: the result is what the caller said, as \`text0\`, for the script to compare; grammars are accepted and not used |
+| EXEC | Answer, Hangup, Playback, Background, Read, Set, MSet, SayDigits, SayNumber, SayAlpha, Wait, Dial (rings each number in turn; \`DIALSTATUS\`), Goto, VoiceMail, Queue, MusicOnHold, Record, NoOp, Verbose, Log. Others answer -2, as Asterisk does for a missing application |
+
+BitVoice has no dialplan: where a script would go on in Asterisk's dialplan (\`SET EXTENSION\`, \`EXEC Goto\`), the call goes to that number here (an extension, ring group, queue, menu, or an outside number through the outbound routes) when the script ends. Scripts never call emergency numbers. When the caller hangs up, a FastAGI script gets \`HANGUP\` and a program SIGHUP; only commands allowed on a dead channel then run (511 for the others), and the connection is closed 30 seconds later if the script goes on. Each run shows under **Last runs** with its VERBOSE lines, and goes to the event stream as \`agi.ran\`.
+
+**Sounds for AGI scripts.** Scripts play sounds by the names they use on Asterisk: upload them under **Sounds for AGI scripts** with a folder (\`custom/welcome\`; \`es/custom/welcome\` for callers in Spanish). WAV, MP3 and Asterisk's \`.gsm\`, \`.ulaw\`, \`.alaw\`, \`.sln\` and \`.sln16\` are taken; a path like \`/var/lib/asterisk/sounds/en/custom/welcome.gsm\` finds \`custom/welcome\`. Asterisk's \`digits/0\`–\`digits/9\`, \`beep\`, \`silence/N\` and a few others (\`vm-goodbye\`, \`invalid\`, \`please-hold\`) play BitVoice's own prompts and tones. What scripts record is kept in the same library, marked **recorded by a script**, for the days you choose (30 by default). The library holds up to 1 GB.
+
+**Programs.** A program runs on this server with BitVoice's rights, so it is never uploaded through the web: copy it into the **AGI programs** folder shown on the screen (\`DATA/agi-bin\`) and make it executable. It gets only \`PATH\` and \`AST_AGI_DIR\` from the environment, runs in that folder, and what it writes to standard error goes to the server log. FastAGI sends commands in plain TCP: keep the server on this computer or a private network.
 
 ## Logins
 Each login has a **Username** and **Secret**. Logins are **read only** unless marked **Can change calls**. Keep AMI on this computer unless the tool runs elsewhere: AMI is plain, unencrypted TCP.`,

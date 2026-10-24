@@ -197,7 +197,7 @@ Where something has only been tested against stand-ins rather than real equipmen
 <tbody>
 <tr><td colspan="2">Import from <b>FreePBX</b> (a whole Backup &amp; Restore backup, SIP passwords, trunks, routes, groups and queues included) and <b>Asterisk</b> (pjsip.conf, sip.conf), <b>3CX</b>, <b>Cisco Unified CM</b>, <b>Avaya IP Office and Communication Manager</b> and <b>Mitel MiVoice Business</b></td></tr>
 <tr><td colspan="2">Every import shows exactly what would change first, and becomes a revision you can undo</td></tr>
-<tr><td colspan="2"><b>Asterisk AMI and ARI</b> compatibility, so tools written for Asterisk keep working: ARI applications (Stasis) with playback, recordings, keys, mixing bridges and continue; AMI with queue agents, ConfBridge, parked calls, mailboxes, filters and user events</td></tr>
+<tr><td colspan="2"><b>Asterisk AMI, ARI and AGI</b> compatibility, so tools and IVRs written for Asterisk keep working: AGI and FastAGI scripts (agi://, hagi:// with SRV, EAGI programs) with the full command set, AstDB and Asterisk sound names; ARI applications (Stasis) with playback, recordings, keys, mixing bridges and continue; AMI with queue agents, ConfBridge, parked calls, mailboxes, filters and user events</td></tr>
 </tbody></table>
 
 <table width="100%">
@@ -456,6 +456,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | Let's Encrypt | Field-tested | issues and renews the public demo's certificate |
 | Machine images (AWS) and configuration as code | Field-tested | an EC2 image built by `deploy/cloud/build-images.sh` from Ubuntu 24.04: each server from it starts new; `deploy/terraform` with OpenTofu 1.13 (create, change, no drift, destroy). Azure images not tried |
 | IAX2 trunks | Checked against a reference | Asterisk 23 |
+| AGI and FastAGI (Asterisk Gateway Interface) | Checked against a reference | every command's answer compared with Asterisk 20.6's over FastAGI; a FastAGI server written with pyst2 running a call; EAGI audio to a program. Not tried with a production IVR |
 | H.323 trunks | Checked against a reference | H323Plus 1.28 (its simph323 playing and recording WAV files) on EC2: calls both ways with Fast Connect and G.711, each end hearing the other's tone, MOS 4.39; call set-up also with Asterisk's chan_ooh323 (whose own sound is broken in Asterisk 22) |
 | SIP over WebSocket | Checked against a reference | JsSIP and SIP.js |
 | Codecs: GSM, G.726, iLBC, MP3 hold music | Checked against a reference | ffmpeg, the RFC 3951 reference program and minimp3, sample for sample |

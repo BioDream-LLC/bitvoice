@@ -130,6 +130,8 @@ func (s *sim) fromExtension(x *config.Extension, to string, res *SimResult) *Sim
 		d = &config.Destination{Type: "script", Target: cfg.FindScriptNumber(to).ID}
 	case cfg.FindARIAppNumber(to) != nil:
 		d = &config.Destination{Type: "ariapp", Target: cfg.FindARIAppNumber(to).Name}
+	case cfg.FindAGINumber(to) != nil:
+		d = &config.Destination{Type: "agi", Target: cfg.FindAGINumber(to).Name}
 	case cfg.FindQueue(to) != nil:
 		d = &config.Destination{Type: "queue", Target: to}
 	case cfg.FindRingGroup(to) != nil:
@@ -488,6 +490,15 @@ func (s *sim) walk(d config.Destination, depth int, path []string, direction, fr
 			Says: "BitVoice answers and hands the call to the program connected for ARI application " + app.Name + ", which runs it. When no program is connected, or it lets go of the call, the call goes to the fallback."}
 		st.Branches = append(st.Branches, SimBranch{When: "Fallback", Taken: false, Step: next(app.Fallback)})
 		return st
+	case "agi":
+		a := cfg.FindAGI(d.Target)
+		if a == nil {
+			return missing("AGI script")
+		}
+		st := &SimStep{Kind: "agi", Target: a.Name, Name: "AGI script " + a.Name, Status: "ok",
+			Says: "BitVoice answers and runs the AGI script at " + a.Address + ". When it ends, the call goes to the number the script chose, else to the fallback; it goes to the fallback too when the script cannot be reached."}
+		st.Branches = append(st.Branches, SimBranch{When: "Fallback", Taken: false, Step: next(a.Fallback)})
+		return st
 	case "voicemail":
 		x := cfg.FindExtension(d.Target)
 		if x == nil || !x.Voicemail.Enabled {
@@ -623,6 +634,8 @@ func destinationName(c *config.Config, d config.Destination) string {
 		}
 	case "ariapp":
 		return "ARI application " + d.Target
+	case "agi":
+		return "AGI script " + d.Target
 	case "conference":
 		if r := c.FindConference(d.Target); r != nil {
 			return "conference room " + r.Name
