@@ -1,0 +1,115 @@
+[
+{"name": "house fire, someone inside", "lines": [
+ {"side": "callee", "text": "911, what's the address of your emergency?"},
+ {"side": "caller", "text": "There's smoke coming out of the house next door, 16 Elm Court."},
+ {"side": "callee", "text": "Is anybody still inside?"},
+ {"side": "caller", "text": "I think the old lady who lives there is still in there."},
+ {"side": "callee", "text": "Can you see flames?"},
+ {"side": "caller", "text": "Yes, flames in the upstairs window."}],
+ "facts": [
+ {"kind": "location", "value": "16 elm court"},
+ {"kind": "incident", "value": "fire"},
+ {"kind": "hazard", "value": "smoke"},
+ {"kind": "hazard", "value": "fire"},
+ {"kind": "relation", "value": "neighbour"}]},
+
+{"name": "overdose, friend", "lines": [
+ {"side": "callee", "text": "911, where is your emergency?"},
+ {"side": "caller", "text": "Apartment 3B, 940 Salem Turnpike. My friend took too many pills."},
+ {"side": "callee", "text": "Is she awake?"},
+ {"side": "caller", "text": "No, she won't wake up."},
+ {"side": "callee", "text": "Is she breathing?"},
+ {"side": "caller", "text": "Yes, but it's really slow."}],
+ "facts": [
+ {"kind": "location", "value": "940 salem turnpike"},
+ {"kind": "incident", "value": "overdose"},
+ {"kind": "relation", "value": "friend"},
+ {"kind": "condition", "value": "unconscious"},
+ {"kind": "condition", "value": "breathing"},
+ {"kind": "injured", "value": "1"}]},
+
+{"name": "fall, denies head injury", "lines": [
+ {"side": "callee", "text": "911, what is the address?"},
+ {"side": "caller", "text": "55 Riverside Drive, my mother fell down the stairs."},
+ {"side": "callee", "text": "Did she hit her head?"},
+ {"side": "caller", "text": "No, she didn't hit her head, she hurt her hip."},
+ {"side": "callee", "text": "Is she bleeding?"},
+ {"side": "caller", "text": "No."}],
+ "facts": [
+ {"kind": "location", "value": "55 riverside drive"},
+ {"kind": "incident", "value": "fall"},
+ {"kind": "relation", "value": "family"},
+ {"kind": "injured", "value": "1"},
+ {"kind": "condition", "value": "hip injury"}]},
+
+{"name": "crash, three cars, two hurt", "lines": [
+ {"side": "callee", "text": "911, what's the location of the emergency?"},
+ {"side": "caller", "text": "Interstate 81 northbound at exit 140, a wreck with three cars."},
+ {"side": "callee", "text": "Are people hurt?"},
+ {"side": "caller", "text": "Two people are hurt, one is trapped in a red truck."},
+ {"side": "callee", "text": "Is there any fire or fuel leaking?"},
+ {"side": "caller", "text": "There's gas leaking on the road."}],
+ "facts": [
+ {"kind": "location", "value": "interstate 81 northbound at exit 140"},
+ {"kind": "incident", "value": "crash"},
+ {"kind": "injured", "value": "2"},
+ {"kind": "condition", "value": "trapped"},
+ {"kind": "vehicle", "value": "red truck"},
+ {"kind": "hazard", "value": "fuel"}]},
+
+{"name": "domestic, caller corrects count", "lines": [
+ {"side": "callee", "text": "911, what's the address?"},
+ {"side": "caller", "text": "702 Hillcrest Road, my boyfriend is threatening me."},
+ {"side": "callee", "text": "Does he have any weapons?"},
+ {"side": "caller", "text": "He doesn't have a gun, but there are knives in the kitchen."},
+ {"side": "callee", "text": "Are you hurt?"},
+ {"side": "caller", "text": "He pushed me but I'm okay."},
+ {"side": "callee", "text": "Can you give me a number in case we get cut off?"},
+ {"side": "caller", "text": "540-555-0177, no wait, 0171."}],
+ "facts": [
+ {"kind": "location", "value": "702 hillcrest road"},
+ {"kind": "incident", "value": "domestic"},
+ {"kind": "relation", "value": "self"},
+ {"kind": "injured", "value": "none"},
+ {"kind": "callback", "value": "5405550171"}]},
+
+{"name": "chemical spill at work", "lines": [
+ {"side": "callee", "text": "911, what's your emergency?"},
+ {"side": "caller", "text": "We've got a chemical spill at the warehouse, 3300 Shenandoah Avenue."},
+ {"side": "callee", "text": "Is anyone exposed?"},
+ {"side": "caller", "text": "One worker says his eyes are burning."},
+ {"side": "callee", "text": "What's the chemical?"},
+ {"side": "caller", "text": "Ammonia, I think."}],
+ "facts": [
+ {"kind": "location", "value": "3300 shenandoah avenue"},
+ {"kind": "incident", "value": "hazmat"},
+ {"kind": "hazard", "value": "chemical"},
+ {"kind": "injured", "value": "1"},
+ {"kind": "condition", "value": "eye injury"}]},
+
+{"name": "child not breathing, parent", "lines": [
+ {"side": "callee", "text": "911, what's the address?"},
+ {"side": "caller", "text": "12 Birch Street! My baby isn't breathing!"},
+ {"side": "callee", "text": "How old is the baby?"},
+ {"side": "caller", "text": "She's eight months."},
+ {"side": "callee", "text": "Is she choking on something?"},
+ {"side": "caller", "text": "I don't know, she was eating."}],
+ "facts": [
+ {"kind": "location", "value": "12 birch street"},
+ {"kind": "incident", "value": "medical"},
+ {"kind": "relation", "value": "family"},
+ {"kind": "condition", "value": "not breathing"},
+ {"kind": "injured", "value": "1"}]},
+
+{"name": "suspicious person, no emergency", "lines": [
+ {"side": "callee", "text": "911, what is the address of your emergency?"},
+ {"side": "caller", "text": "I'm on Grove Avenue by the park, there's a man looking into car windows."},
+ {"side": "callee", "text": "Is he armed?"},
+ {"side": "caller", "text": "Not that I can see."},
+ {"side": "callee", "text": "What's he wearing?"},
+ {"side": "caller", "text": "A grey hoodie, he got into a silver Honda."}],
+ "facts": [
+ {"kind": "location", "value": "grove avenue by the park"},
+ {"kind": "incident", "value": "suspicious person"},
+ {"kind": "vehicle", "value": "silver honda"}]}
+]

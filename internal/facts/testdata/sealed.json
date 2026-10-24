@@ -1,0 +1,116 @@
+[
+{"name": "bike and car", "lines": [
+ {"side": "callee", "text": "911, where are you?"},
+ {"side": "caller", "text": "Corner of Main Street and 5th Avenue, a car just hit a guy on a bike."},
+ {"side": "callee", "text": "Is he conscious?"},
+ {"side": "caller", "text": "He's moaning, his leg looks broken."},
+ {"side": "callee", "text": "Did the car stay?"},
+ {"side": "caller", "text": "No, it drove off, a green minivan."}],
+ "facts": [
+ {"kind": "location", "value": "main street and 5th avenue"},
+ {"kind": "incident", "value": "crash"},
+ {"kind": "injured", "value": "1"},
+ {"kind": "condition", "value": "conscious"},
+ {"kind": "condition", "value": "broken leg"},
+ {"kind": "vehicle", "value": "green minivan"}]},
+
+{"name": "stroke signs, husband", "lines": [
+ {"side": "callee", "text": "911, what's the address of your emergency?"},
+ {"side": "caller", "text": "This is 610 Laurel Street, my husband's face is drooping and he can't talk right."},
+ {"side": "callee", "text": "When did it start?"},
+ {"side": "caller", "text": "About twenty minutes ago."},
+ {"side": "callee", "text": "Is he awake?"},
+ {"side": "caller", "text": "Yes, he's awake."}],
+ "facts": [
+ {"kind": "location", "value": "610 laurel street"},
+ {"kind": "incident", "value": "medical"},
+ {"kind": "relation", "value": "family"},
+ {"kind": "condition", "value": "stroke signs"},
+ {"kind": "condition", "value": "conscious"},
+ {"kind": "injured", "value": "1"}]},
+
+{"name": "shots heard, nobody seen hurt", "lines": [
+ {"side": "callee", "text": "911, what's the location?"},
+ {"side": "caller", "text": "I just heard gunshots near 900 Orange Avenue."},
+ {"side": "callee", "text": "Did you see anyone hurt?"},
+ {"side": "caller", "text": "I didn't see anybody hurt."},
+ {"side": "callee", "text": "Did you see a vehicle?"},
+ {"side": "caller", "text": "A dark SUV sped away."}],
+ "facts": [
+ {"kind": "location", "value": "900 orange avenue"},
+ {"kind": "incident", "value": "shots fired"},
+ {"kind": "hazard", "value": "gun"},
+ {"kind": "vehicle", "value": "dark suv"}]},
+
+{"name": "kitchen grease fire out, burn", "lines": [
+ {"side": "callee", "text": "911, what's the address?"},
+ {"side": "caller", "text": "71 Cedar Lane, I had a grease fire but I put it out."},
+ {"side": "callee", "text": "Is anyone hurt?"},
+ {"side": "caller", "text": "I burned my hand."},
+ {"side": "callee", "text": "Is there still smoke?"},
+ {"side": "caller", "text": "A little smoke, not much."}],
+ "facts": [
+ {"kind": "location", "value": "71 cedar lane"},
+ {"kind": "incident", "value": "fire"},
+ {"kind": "relation", "value": "self"},
+ {"kind": "injured", "value": "1"},
+ {"kind": "condition", "value": "burn"},
+ {"kind": "hazard", "value": "smoke"}]},
+
+{"name": "drowning at the lake, bystander", "lines": [
+ {"side": "callee", "text": "911, where is your emergency?"},
+ {"side": "caller", "text": "At Smith Mountain Lake, the boat ramp on Route 122, a kid went under the water."},
+ {"side": "callee", "text": "Is the child out of the water?"},
+ {"side": "caller", "text": "They pulled him out, he's not breathing."},
+ {"side": "callee", "text": "Is anyone doing CPR?"},
+ {"side": "caller", "text": "Yes, a woman is doing CPR."}],
+ "facts": [
+ {"kind": "location", "value": "smith mountain lake, the boat ramp on route 122"},
+ {"kind": "incident", "value": "drowning"},
+ {"kind": "condition", "value": "not breathing"},
+ {"kind": "injured", "value": "1"}]},
+
+{"name": "carbon monoxide alarm", "lines": [
+ {"side": "callee", "text": "911, what's the address of the emergency?"},
+ {"side": "caller", "text": "2045 Peters Creek Road, our carbon monoxide alarm is going off."},
+ {"side": "callee", "text": "Does anyone have a headache or feel dizzy?"},
+ {"side": "caller", "text": "My son says he's dizzy."},
+ {"side": "callee", "text": "Get everyone outside now."},
+ {"side": "caller", "text": "Okay, we're going out."}],
+ "facts": [
+ {"kind": "location", "value": "2045 peters creek road"},
+ {"kind": "incident", "value": "carbon monoxide"},
+ {"kind": "hazard", "value": "carbon monoxide"},
+ {"kind": "relation", "value": "family"},
+ {"kind": "condition", "value": "dizzy", "reported": true},
+ {"kind": "injured", "value": "1"}]},
+
+{"name": "theft, caller denies seeing a weapon", "lines": [
+ {"side": "callee", "text": "911, what's going on?"},
+ {"side": "caller", "text": "Someone stole my purse in the parking lot at 4802 Valley View Boulevard."},
+ {"side": "callee", "text": "Did they have a weapon?"},
+ {"side": "caller", "text": "No, no weapon, he just grabbed it and ran."},
+ {"side": "callee", "text": "Are you hurt?"},
+ {"side": "caller", "text": "No, I'm not hurt."}],
+ "facts": [
+ {"kind": "location", "value": "4802 valley view boulevard"},
+ {"kind": "incident", "value": "theft"},
+ {"kind": "relation", "value": "self"},
+ {"kind": "injured", "value": "none"}]},
+
+{"name": "seizure, coworker", "lines": [
+ {"side": "callee", "text": "911, what is the address?"},
+ {"side": "caller", "text": "The office at 1 Market Square, a coworker is having a seizure."},
+ {"side": "callee", "text": "Is he still shaking?"},
+ {"side": "caller", "text": "It stopped, he's breathing but not answering."},
+ {"side": "callee", "text": "What's your callback number?"},
+ {"side": "caller", "text": "540-555-0123."}],
+ "facts": [
+ {"kind": "location", "value": "1 market square"},
+ {"kind": "incident", "value": "seizure"},
+ {"kind": "relation", "value": "coworker"},
+ {"kind": "condition", "value": "breathing"},
+ {"kind": "condition", "value": "unconscious"},
+ {"kind": "injured", "value": "1"},
+ {"kind": "callback", "value": "5405550123"}]}
+]

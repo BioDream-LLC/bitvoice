@@ -1,0 +1,122 @@
+[
+{"name": "kitchen fire", "lines": [
+ {"side": "callee", "text": "911, what is the address of your emergency?"},
+ {"side": "caller", "text": "It's 418 Maple Avenue, there's a fire in my kitchen."},
+ {"side": "callee", "text": "Is everyone out of the house?"},
+ {"side": "caller", "text": "Yes, me and my two kids are outside."},
+ {"side": "callee", "text": "Is anyone hurt?"},
+ {"side": "caller", "text": "No, nobody's hurt."},
+ {"side": "callee", "text": "What's a good number to call you back?"},
+ {"side": "caller", "text": "540-555-0142."}],
+ "facts": [
+ {"kind": "incident", "value": "fire"},
+ {"kind": "location", "value": "418 maple avenue"},
+ {"kind": "hazard", "value": "fire"},
+ {"kind": "injured", "value": "none"},
+ {"kind": "callback", "value": "5405550142"}]},
+
+{"name": "crash with injury", "lines": [
+ {"side": "callee", "text": "911, what's the address of the emergency?"},
+ {"side": "caller", "text": "There's been a crash at Brambleton Avenue and Grandin Road."},
+ {"side": "callee", "text": "How many vehicles?"},
+ {"side": "caller", "text": "Two cars, a blue sedan and a white van."},
+ {"side": "callee", "text": "Is anybody injured?"},
+ {"side": "caller", "text": "The driver of the sedan is bleeding from his head."},
+ {"side": "callee", "text": "Is he awake?"},
+ {"side": "caller", "text": "Yes, he's awake and talking."}],
+ "facts": [
+ {"kind": "incident", "value": "crash"},
+ {"kind": "location", "value": "brambleton avenue and grandin road"},
+ {"kind": "vehicle", "value": "blue sedan"},
+ {"kind": "vehicle", "value": "white van"},
+ {"kind": "injured", "value": "1"},
+ {"kind": "condition", "value": "bleeding"},
+ {"kind": "condition", "value": "conscious"}]},
+
+{"name": "not breathing, neighbour reports", "lines": [
+ {"side": "callee", "text": "911, where is your emergency?"},
+ {"side": "caller", "text": "I'm at 27 Oak Street, my neighbour says her husband collapsed."},
+ {"side": "callee", "text": "Is he breathing?"},
+ {"side": "caller", "text": "She says he's not breathing."},
+ {"side": "callee", "text": "How old is he?"},
+ {"side": "caller", "text": "About seventy."}],
+ "facts": [
+ {"kind": "incident", "value": "medical"},
+ {"kind": "location", "value": "27 oak street"},
+ {"kind": "relation", "value": "neighbour"},
+ {"kind": "condition", "value": "not breathing", "reported": true},
+ {"kind": "injured", "value": "1"}]},
+
+{"name": "address corrected", "lines": [
+ {"side": "callee", "text": "911, what's the address?"},
+ {"side": "caller", "text": "24 Pine Lane. No, sorry, 42, 42 Pine Lane."},
+ {"side": "callee", "text": "What's happening there?"},
+ {"side": "caller", "text": "Someone broke into my garage, I can see him inside."},
+ {"side": "callee", "text": "Does he have a weapon?"},
+ {"side": "caller", "text": "I think he has a knife."}],
+ "facts": [
+ {"kind": "location", "value": "42 pine lane"},
+ {"kind": "incident", "value": "burglary"},
+ {"kind": "hazard", "value": "knife"}]},
+
+{"name": "gas smell, no injuries", "lines": [
+ {"side": "callee", "text": "911, what is the address of your emergency?"},
+ {"side": "caller", "text": "1200 Jefferson Street, the whole building smells of gas."},
+ {"side": "callee", "text": "Is anyone feeling sick or hurt?"},
+ {"side": "caller", "text": "No."},
+ {"side": "callee", "text": "Are you out of the building?"},
+ {"side": "caller", "text": "Yes, we're across the street."}],
+ "facts": [
+ {"kind": "incident", "value": "gas leak"},
+ {"kind": "location", "value": "1200 jefferson street"},
+ {"kind": "hazard", "value": "gas"},
+ {"kind": "injured", "value": "none"}]},
+
+{"name": "assault with gun", "lines": [
+ {"side": "callee", "text": "911, what's the location?"},
+ {"side": "caller", "text": "Outside the bar at 315 Campbell Avenue."},
+ {"side": "callee", "text": "What happened?"},
+ {"side": "caller", "text": "A man hit another man and now he's waving a gun."},
+ {"side": "callee", "text": "Is anyone hurt?"},
+ {"side": "caller", "text": "One guy is on the ground, he's unconscious."},
+ {"side": "callee", "text": "Can you describe the man with the gun?"},
+ {"side": "caller", "text": "He left in a black pickup truck."}],
+ "facts": [
+ {"kind": "location", "value": "315 campbell avenue"},
+ {"kind": "incident", "value": "assault"},
+ {"kind": "hazard", "value": "gun"},
+ {"kind": "injured", "value": "1"},
+ {"kind": "condition", "value": "unconscious"},
+ {"kind": "vehicle", "value": "black pickup truck"}]},
+
+{"name": "chest pain, caller is the patient", "lines": [
+ {"side": "callee", "text": "911, what's your address?"},
+ {"side": "caller", "text": "88 Willow Drive."},
+ {"side": "callee", "text": "Tell me what's going on."},
+ {"side": "caller", "text": "I'm having chest pain, it started an hour ago."},
+ {"side": "callee", "text": "Are you having trouble breathing?"},
+ {"side": "caller", "text": "No, I can breathe okay."},
+ {"side": "callee", "text": "What number are you calling from?"},
+ {"side": "caller", "text": "My cell is 540 555 0199."}],
+ "facts": [
+ {"kind": "location", "value": "88 willow drive"},
+ {"kind": "incident", "value": "medical"},
+ {"kind": "relation", "value": "self"},
+ {"kind": "condition", "value": "chest pain"},
+ {"kind": "condition", "value": "breathing"},
+ {"kind": "injured", "value": "1"},
+ {"kind": "callback", "value": "5405550199"}]},
+
+{"name": "smoke from a car, nobody inside", "lines": [
+ {"side": "callee", "text": "911, where are you?"},
+ {"side": "caller", "text": "On Route 220 near mile marker 12, a car is smoking on the shoulder."},
+ {"side": "callee", "text": "Is anyone in the car?"},
+ {"side": "caller", "text": "No, nobody's in it, the driver is standing next to it."},
+ {"side": "callee", "text": "Is the driver hurt?"},
+ {"side": "caller", "text": "He's fine, he's not hurt."}],
+ "facts": [
+ {"kind": "location", "value": "route 220 near mile marker 12"},
+ {"kind": "incident", "value": "vehicle fire"},
+ {"kind": "hazard", "value": "smoke"},
+ {"kind": "injured", "value": "none"}]}
+]
