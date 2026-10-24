@@ -44,7 +44,7 @@ func (p *Plan) host() string { return p.PBX.Addr().String() }
 // Limits keep a run from swamping a production system by mistake.
 const (
 	MaxCalls      = 10000
-	MaxConcurrent = 200
+	MaxConcurrent = 2000 // the media port range (10000 to 20000 by default) holds about 2,500 relayed calls
 	MaxRate       = 50
 	MaxHold       = time.Hour
 )

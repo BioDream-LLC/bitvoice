@@ -120,7 +120,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | Browser phone (WebRTC) | Field-tested | from outside to EC2; Chromium browser tests with sound both ways |
 | Two servers, one PostgreSQL, failover | Field-tested | kill -9 and planned stop on EC2: the call carries on, the provider line moves |
 | One-command install | Field-tested | Ubuntu 24.04 (x86, Arm), Debian 12, Amazon Linux 2023, Windows Server 2022, macOS; back after a reboot |
-| Capacity | Field-tested | 200 calls at once, no loss, on c7g.large, c7i.large, t4g.small, an M4 and the Lightsail nano |
+| Capacity | Field-tested | 2,000 calls at once, no loss, MOS 4.41, on a 16-vCPU c7i.4xlarge (about 10 vCPUs busy); 200 at once on c7g.large, c7i.large, t4g.small, an M4 and the Lightsail nano |
 | FreePBX migration (Import) | Field-tested | a real FreePBX 17.0.33 backup (70 MB) imported whole; others from FreePBX's own formats |
 | AI transcripts, summaries, receptionist | Field-tested | a real model through OpenRouter |
 | Speech to text on this server (whisper) | Field-tested on macOS | whisper-server 1.9.5 run by BitVoice; downloads for every platform built and tried in CI |
@@ -1835,7 +1835,7 @@ Every release from v0.1.3 carries BioDream's release key. Such a build installs 
 | Calls come from | the caller number the calls show |
 | Answer as | an extension the generator answers for itself; or nobody, when the number answers by itself (a menu, the echo test) |
 | Calls | how many in all |
-| At once | the most in progress together |
+| At once | the most in progress together, up to 2,000. Each relayed call takes media ports from **Media from** and **Media to** (Settings): the default 10000-20000 holds about 1,800, so widen it for more |
 | New per second | how fast they start |
 | Each lasts (s) | how long each talks |
 

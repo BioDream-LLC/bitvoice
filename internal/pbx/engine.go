@@ -364,6 +364,9 @@ func (e *Engine) Apply(cfg config.Config) {
 	e.cfg.Store(&cfg)
 	e.bans.apply(cfg.Security)
 	applyG723(cfg)
+	if e.pool != nil {
+		e.pool.SetRange(cfg.System.RTPMin, cfg.System.RTPMax) // a new media range applies at once
+	}
 	if e.stack != nil {
 		e.stack.Host = e.PublicAddress(cfg)
 	}

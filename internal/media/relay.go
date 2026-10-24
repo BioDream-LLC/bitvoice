@@ -34,6 +34,13 @@ var ErrExhausted = errors.New("media: RTP port range exhausted")
 // Allocate opens an RTP and RTCP socket pair.
 func (p *Pool) Allocate() (*Endpoint, error) { return p.AllocateOn("") }
 
+// SetRange changes the ports the pool hands out from now on; endpoints already out keep theirs.
+func (p *Pool) SetRange(lo, hi int) {
+	p.mu.Lock()
+	p.Min, p.Max = lo, hi
+	p.mu.Unlock()
+}
+
 // AllocateOn is Allocate bound to one address (a shared address), or the pool's own when host is "".
 func (p *Pool) AllocateOn(host string) (*Endpoint, error) {
 	if host == "" {

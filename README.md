@@ -447,7 +447,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | Browser phone (WebRTC) | Field-tested | from outside to EC2; Chromium browser tests with sound both ways |
 | Two servers, one PostgreSQL, failover | Field-tested | kill -9 and planned stop on EC2: the call carries on, the provider line moves |
 | One-command install | Field-tested | Ubuntu 24.04 (x86, Arm), Debian 12, Amazon Linux 2023, Windows Server 2022, macOS; back after a reboot |
-| Capacity | Field-tested | 200 calls at once, no loss, on c7g.large, c7i.large, t4g.small, an M4 and the Lightsail nano |
+| Capacity | Field-tested | 2,000 calls at once, no loss, MOS 4.41, on a 16-vCPU c7i.4xlarge (about 10 vCPUs busy); 200 at once on c7g.large, c7i.large, t4g.small, an M4 and the Lightsail nano |
 | FreePBX migration (Import) | Field-tested | a real FreePBX 17.0.33 backup (70 MB) imported whole; others from FreePBX's own formats |
 | AI transcripts, summaries, receptionist | Field-tested | a real model through OpenRouter |
 | Speech to text on this server (whisper) | Field-tested on macOS | whisper-server 1.9.5 run by BitVoice; downloads for every platform built and tried in CI |
@@ -521,7 +521,23 @@ On Amazon EC2 with Ubuntu 24.04, v0.1.7 installed with the one-command installer
 | t4g.small (Graviton2, Arm, 2 vCPUs, 2 GB, burstable) | 45% CPU, 44 MB | 104%, 60 MB | 147%, 90 MB, 8.5 ms set-up |
 
 Every run: all calls answered, 0% audio loss, MOS 4.41.
-200 is the generator's own ceiling, not BitVoice's. Your numbers depend on the codec, conversion,
+
+On a big machine, Amazon EC2 c7i.4xlarge (Intel, 16 vCPUs, 32 GB), Ubuntu 24.04, the build of 2026-10-24,
+media ports widened to 10000-32000 in Settings (the default range, 10000-20000, holds about 1,800 relayed
+calls):
+
+| Calls at once | Answered | Set-up time (p95) | Audio loss | MOS | CPU (with every call up, of one vCPU) | Memory |
+|---|---|---|---|---|---|---|
+| 200 | 200 of 200 | 2.1 ms | 0% | 4.41 | 112% | 88 MB |
+| 500 | 500 of 500 | 3.0 ms | 0% | 4.41 | 267% | 172 MB |
+| 1,000 | 1,000 of 1,000 | 4.9 ms | 0% | 4.41 | 543% | 320 MB |
+| 1,400 | 1,400 of 1,400 | 6.9 ms | 0% | 4.41 | 732% | 353 MB |
+| 1,700 | 1,700 of 1,700 | 8.7 ms | 0% | 4.41 | 903% | 396 MB |
+| 2,000 | 2,000 of 2,000 | 10.6 ms | 0.00001% | 4.41 | 1,038% | 380 MB |
+
+2,000 calls at once used about 10 of the 16 vCPUs, with the generator's own callers and answerers in the
+same process. 2,000 is the generator's ceiling, not BitVoice's. The run found that a changed media port
+range only applied after a restart; it now applies at once. Your numbers depend on the codec, conversion,
 recording and the network: run the generator on your own server before you go live.
 
 The **iPhone app** is tested in the iOS Simulator against a real BitVoice: paired by link, rung by a call,
