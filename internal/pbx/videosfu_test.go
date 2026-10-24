@@ -193,3 +193,14 @@ func TestSFULayerRanking(t *testing.T) {
 		t.Fatalf("high after a layer stopped: %d", h)
 	}
 }
+
+func TestREMB(t *testing.T) {
+	b := remb(2_500_000, []uint32{0x11, 0x22})
+	if len(b) != 28 || b[0] != 0x8f || b[1] != 206 || string(b[12:16]) != "REMB" || b[16] != 2 {
+		t.Fatalf("%x", b)
+	}
+	exp, mant := int(b[17]>>2), uint64(b[17]&3)<<16|uint64(binary.BigEndian.Uint16(b[18:]))
+	if got := mant << exp; got > 2_500_000 || got < 2_490_000 {
+		t.Fatalf("rate %d", got)
+	}
+}

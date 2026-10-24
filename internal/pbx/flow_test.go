@@ -87,13 +87,14 @@ func TestPINSetOnOutboundRoute(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("PIN prompt answered %d", code)
 	}
-	a.gotRTP(time.Second)
+	// Each try waits for a sound (the prompt, or the refusal before the next): late keys still make
+	// a wrong PIN and a try with none times out as wrong, so three tries end the call either way.
 	var seq uint16 = 1
 	for range 3 {
+		prompted(t, a)
 		d.press(&seq, "1111#")
-		time.Sleep(1500 * time.Millisecond)
 	}
-	a.waitBye(t, 8*time.Second)
+	a.waitBye(t, 20*time.Second)
 	select {
 	case n := <-c.answered:
 		t.Fatalf("a wrong PIN still called %s", n)

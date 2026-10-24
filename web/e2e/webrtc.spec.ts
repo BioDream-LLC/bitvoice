@@ -966,8 +966,9 @@ test("a video room with everyone's video (SFU, simulcast)", async ({ page, brows
   await expect(page.getByText('each in its own picture, in the size they show it')).toBeVisible()
   await page.getByLabel('Video codec').selectOption('VP8')
   await page.getByRole('button', { name: 'Save' }).click()
-  await expect(page.getByRole('button', { name: /Camera circle/ }).getByText("everyone's video")).toBeVisible()
-  await page.getByRole('link', { name: 'Open the video room' }).click()
+  const card = page.getByRole('button', { name: new RegExp(`^${number} Camera circle`) })
+  await expect(card.getByText("everyone's video")).toBeVisible()
+  await page.locator(`a[href="#/video-room/${number}"]`).click()
   await expect(page.getByRole('heading', { name: new RegExp(`Video room ${number}`) })).toBeVisible()
 
   const others = []

@@ -52,7 +52,10 @@ func (s *Server) receive(channel, contact, name, extID, text string, at time.Tim
 	if len(text) > maxChatText {
 		text = text[:maxChatText]
 	}
-	if _, err := s.Store.AddMsg(store.InboxMsg{Conv: c.ID, In: true, Text: text, ExtID: extID, At: at.UTC()}); err != nil {
+	if !at.IsZero() {
+		at = at.UTC()
+	}
+	if _, err := s.Store.AddMsg(store.InboxMsg{Conv: c.ID, In: true, Text: text, ExtID: extID, At: at}); err != nil {
 		return c, err
 	}
 	c, _ = s.Store.Conv(c.ID)
@@ -549,7 +552,9 @@ func (s *Server) webChatRoutes() {
 			writeErr(w, err)
 			return
 		}
-		if _, err := s.receive("webchat", c.Contact, c.Name, "", in.Text, time.Now()); err != nil {
+		// No time given: the store stamps it, after anything already in the conversation, so the
+		// visitor's message never lists after a reply written in the same millisecond.
+		if _, err := s.receive("webchat", c.Contact, c.Name, "", in.Text, time.Time{}); err != nil {
 			writeErr(w, err)
 			return
 		}
@@ -610,7 +615,7 @@ func (s *Server) webChatRoutes() {
 			writeError(w, 400, "write a message (up to 4000 characters)")
 			return
 		}
-		if _, err := s.receive("webchat", c.Contact, "", "", in.Text, time.Now()); err != nil {
+		if _, err := s.receive("webchat", c.Contact, "", "", in.Text, time.Time{}); err != nil {
 			writeErr(w, err)
 			return
 		}

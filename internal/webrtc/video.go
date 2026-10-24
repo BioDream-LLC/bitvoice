@@ -227,6 +227,9 @@ func (s *Session) describeVideo(host, dir string, vc VideoCodec, offer *sdp.Sess
 		w("a=rtcp-fb:%d nack pli", vc.PT)
 		w("a=rtcp-fb:%d ccm fir", vc.PT)
 		if sc := s.simulcast; len(sc.RIDs) > 0 {
+			// The receiver tells the browser how much it may send (REMB): without it Chrome keeps
+			// its start rate and sends only its small layers.
+			w("a=rtcp-fb:%d goog-remb", vc.PT)
 			w("a=extmap:%d urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id", sc.RIDExt)
 			if sc.RepairedExt != 0 {
 				w("a=extmap:%d urn:ietf:params:rtp-hdrext:sdes:repaired-rtp-stream-id", sc.RepairedExt)

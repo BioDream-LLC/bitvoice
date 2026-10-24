@@ -361,16 +361,18 @@ func TestConferenceRoom(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("room answered %d", code)
 	}
-	time.Sleep(400 * time.Millisecond)
+	// Each try waits for a sound from the room (the prompt, or the refusal before the next one); any
+	// keys heard late still make a wrong PIN, and a try with none times out as wrong, so the room
+	// hangs up after three whatever the timing.
 	var s2 uint16 = 1
 	for range 3 {
+		prompted(t, ps[2])
 		d.press(&s2, "9999#")
-		time.Sleep(900 * time.Millisecond)
 	}
-	waitFor(t, "a wrong PIN was let in", func() bool {
-		rs := e.Conferences()
-		return len(rs) == 1 && len(rs[0].Members) == 2
-	})
+	ps[2].waitBye(t, 20*time.Second)
+	if rs := e.Conferences(); len(rs) != 1 || len(rs[0].Members) != 2 {
+		t.Fatalf("a wrong PIN was let in: %+v", rs)
+	}
 	// Muted from the web interface: nobody hears 100 any more.
 	var a string
 	for _, m := range e.Conferences()[0].Members {

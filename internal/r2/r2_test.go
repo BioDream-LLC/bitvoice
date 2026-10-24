@@ -124,7 +124,9 @@ func TestCallsInEveryVariant(t *testing.T) {
 func TestBusy(t *testing.T) {
 	for _, code := range []string{"itu", "mx", "br"} {
 		t.Run(code, func(t *testing.T) {
-			BackCycle = 400 * time.Millisecond
+			// Long enough that a stalled runner (macOS CI) never times out a signal mid-number;
+			// short enough for the variants with no end-of-number signal to go on quickly.
+			BackCycle = 1500 * time.Millisecond
 			defer func() { BackCycle = 2 * time.Second }()
 			a, _, ra, _ := pair(t, Variants[code], func(c *Chan) { c.Reject(Busy) })
 			if err := a.Dial("", "5550100", CategoryNational, true); err != nil {

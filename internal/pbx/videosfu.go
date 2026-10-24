@@ -42,6 +42,7 @@ type sfuPub struct {
 	sc       webrtc.Simulcast
 	since    time.Time
 	last     atomic.Int64 // unix ms of the last packet
+	left     atomic.Bool  // the camera has left the room
 	stop     func()
 
 	mu      sync.Mutex
@@ -169,6 +170,9 @@ func (e *Engine) SFUPublish(number, name string, offer []byte, host string, ice 
 	e.sfu.room(number).pubs[p.id] = p
 	e.sfu.mu.Unlock()
 	go e.sfuWatch(number, p)
+	if len(p.sc.RIDs) > 0 {
+		go p.sendREMB()
+	}
 	e.Log.Info("video room: a camera joined", "room", number, "codec", vc.Name, "layers", len(p.sc.RIDs))
 	e.sfuChanged(number)
 	return withBandwidth(ans.Bytes(), max(e.VideoKbps(), 1500)), p.id, nil
@@ -585,6 +589,57 @@ func (p *sfuPub) askKeyframe(ssrc uint32) {
 	p.ep.SendMuxRTCP(pli)
 }
 
+// rembKbps is the rate BitVoice tells a simulcast camera it may send, all layers together.
+const rembKbps = 2500
+
+// sendREMB tells a simulcast camera, every second while it is in the room, that it may send
+// rembKbps (RTCP REMB, draft-alvestrand-rmcat-remb), so its browser sends all its sizes.
+func (p *sfuPub) sendREMB() {
+	select {
+	case <-p.sess.Connected():
+	case <-time.After(20 * time.Second):
+		return
+	}
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+	for range t.C {
+		if p.left.Load() {
+			return
+		}
+		p.mu.Lock()
+		ssrcs := make([]uint32, 0, len(p.layers))
+		for _, s := range p.layers {
+			ssrcs = append(ssrcs, s)
+		}
+		p.mu.Unlock()
+		if len(ssrcs) == 0 {
+			continue
+		}
+		p.ep.SendMuxRTCP(remb(rembKbps*1000, ssrcs))
+	}
+}
+
+// remb builds an RTCP REMB packet for a rate in bits per second.
+func remb(bps uint64, ssrcs []uint32) []byte {
+	exp := 0
+	for bps >= 1<<18 {
+		bps >>= 1
+		exp++
+	}
+	b := make([]byte, 20+4*len(ssrcs))
+	b[0], b[1] = 0x8f, 206 // version 2, FMT 15 (application layer feedback), PSFB
+	binary.BigEndian.PutUint16(b[2:], uint16(len(b)/4-1))
+	binary.BigEndian.PutUint32(b[4:], 1) // our SSRC; media SSRC is 0
+	copy(b[12:], "REMB")
+	b[16] = byte(len(ssrcs))
+	b[17] = byte(exp<<2) | byte(bps>>16)
+	binary.BigEndian.PutUint16(b[18:], uint16(bps))
+	for i, s := range ssrcs {
+		binary.BigEndian.PutUint32(b[20+4*i:], s)
+	}
+	return b
+}
+
 // SFUSubscribe takes a viewer's offer for one camera of a room (video only). layer is "high" or
 // "low" (simulcast cameras; others send what they send).
 func (e *Engine) SFUSubscribe(number, pubID, layer string, offer []byte, host string, ice webrtc.ICEOptions) (answer []byte, id string, err error) {
@@ -698,6 +753,7 @@ func (e *Engine) SFULeave(number, id string) bool {
 		x.ep.Close()
 	}
 	if p != nil {
+		p.left.Store(true)
 		p.stop()
 		p.sess.Close()
 		p.ep.Close()

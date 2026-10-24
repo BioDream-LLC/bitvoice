@@ -131,7 +131,13 @@ func (s *Store) AddMsg(m InboxMsg) (InboxMsg, error) {
 		m.At = time.Now().UTC()
 		// Messages are listed by time to the millisecond: one written in the same millisecond as the
 		// one before it (a reply right after the question) goes a millisecond after it, never before.
-		if last := c.Updated.Truncate(time.Millisecond); !m.At.Truncate(time.Millisecond).After(last) {
+		// The conversation's last message is the floor (its Updated may be older, written by a copy
+		// of the conversation read before that message).
+		last := c.Updated
+		if ms, err := s.lastMsgAt(c.ID); err == nil && ms.After(last) {
+			last = ms
+		}
+		if last = last.Truncate(time.Millisecond); !m.At.Truncate(time.Millisecond).After(last) {
 			m.At = last.Add(time.Millisecond)
 		}
 	}
@@ -153,6 +159,23 @@ func (s *Store) AddMsg(m InboxMsg) (InboxMsg, error) {
 		}
 	}
 	return m, s.PutConv(c)
+}
+
+// lastMsgAt is the time of a conversation's newest message (zero when it has none).
+func (s *Store) lastMsgAt(conv string) (time.Time, error) {
+	rows, err := s.db.Query(s.ctx(), `SELECT at_ms FROM inbox_msgs WHERE conv = ? ORDER BY at_ms DESC LIMIT 1`, conv)
+	if err != nil {
+		return time.Time{}, err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return time.Time{}, rows.Err()
+	}
+	var ms int64
+	if err := rows.Scan(&ms); err != nil {
+		return time.Time{}, err
+	}
+	return time.UnixMilli(ms).UTC(), nil
 }
 
 // SetMsg updates a stored message (its sending status).

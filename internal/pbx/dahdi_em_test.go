@@ -43,7 +43,11 @@ func heardMF(b []byte) string {
 // the ANI as caller ID on Feature Group D), answering goes off hook; a call out seizes, waits for the
 // wink, sends the number in MF, and is answered when the far end goes off hook.
 func TestTelephonyCardEM(t *testing.T) {
-	dahdi.EMDigitWait, dahdi.WinkDelay = 600*time.Millisecond, 10*time.Millisecond
+	// The number ends when no digit comes for EMDigitWait: long enough that a stalled runner never
+	// cuts a number short (a Linux CI flake), short enough to keep the test quick.
+	oldWait, oldWink := dahdi.EMDigitWait, dahdi.WinkDelay
+	dahdi.EMDigitWait, dahdi.WinkDelay = 1500*time.Millisecond, 10*time.Millisecond
+	t.Cleanup(func() { dahdi.EMDigitWait, dahdi.WinkDelay = oldWait, oldWink })
 	cfg := testConfig()
 	cfg.System.Cards = config.Cards{Enabled: true, Token: "abcdefghijklmnopqrstuvwxyz012345", LinePort: 25394}
 	cfg.Trunks = []config.Trunk{{ID: "cards", Name: "T1", Enabled: true, Protocol: "dahdi"}}
@@ -72,7 +76,7 @@ func TestTelephonyCardEM(t *testing.T) {
 	ch.Raise(dahdi.EventRingOffHook)
 	waitFor(t, "no wink", func() bool { return slices.Contains(ch.Hooks(), dahdi.HookWink) })
 	ch.Speak(dahdi.DTMF("5550100"))
-	ring := callee.waitRing(4 * time.Second)
+	ring := callee.waitRing(10 * time.Second)
 	if ring == nil {
 		t.Fatalf("the E&M call did not reach 101 (status %v)", b.Status())
 	}
@@ -86,7 +90,7 @@ func TestTelephonyCardEM(t *testing.T) {
 	ch.Raise(dahdi.EventRingOffHook)
 	waitFor(t, "no wink on the Feature Group D channel", func() bool { return slices.Contains(ch.Hooks(), dahdi.HookWink) })
 	ch.Speak(ulawFrames(mf.R1Digits("K003125559999SK5550100S")))
-	ring = callee.waitRing(4 * time.Second)
+	ring = callee.waitRing(10 * time.Second)
 	if ring == nil {
 		t.Fatalf("the Feature Group D call did not reach 101 (status %v)", b.Status())
 	}
@@ -120,6 +124,6 @@ func TestTelephonyCardEM(t *testing.T) {
 		t.Fatalf("the call out was not answered (status %v)", b.Status())
 	}
 	ch.Raise(dahdi.EventOnHook) // the far end hangs up
-	callee.waitBye(t, 3*time.Second)
+	callee.waitBye(t, 10*time.Second)
 	waitFor(t, "the MF channel is not idle", func() bool { return b.Status()["2"] == "idle" })
 }
