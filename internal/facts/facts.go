@@ -232,13 +232,24 @@ var incidents = []struct {
 	{"vehicle fire", func(l string) bool {
 		return has(l, "car is smoking", "car is on fire", "car on fire", "truck is on fire", "vehicle fire", "car fire")
 	}},
-	{"gas leak", func(l string) bool { return has(l, "smell of gas", "smells of gas", "smell gas", "gas leak") }},
+	{"gas leak", func(l string) bool {
+		return has(l, "smell of gas", "smells of gas", "smell gas") || gasLeak.MatchString(l)
+	}},
+	{"hazmat", func(l string) bool { return has(l, "chemical spill", "hazardous", "chemical leak", "spill at") }},
 	{"fire", func(l string) bool { return has(l, "fire", "flames", "on fire") }},
 	{"crash", func(l string) bool {
 		return has(l, "crash", "wreck", "collision", "accident") || (has(l, " hit ") && has(l, "car", "truck", "van", "vehicle"))
 	}},
+	{"domestic", func(l string) bool {
+		return partner.MatchString(l) && has(l, "threatening", "hit me", "hitting me", "pushed me", "hurting me", "beating me")
+	}},
 	{"burglary", func(l string) bool { return has(l, "broke into", "break-in", "breaking into", "broken into") }},
-	{"assault", func(l string) bool { return has(l, "hit another", "punched", "attacked", "beating", "stabbed", "fight") }},
+	{"assault", func(l string) bool {
+		return has(l, "hit another", "punched", "attacked", "beating", "stabbed", "fight")
+	}},
+	{"overdose", func(l string) bool { return has(l, "overdose", "too many pills", "took too many", "od'd") }},
+	{"fall", func(l string) bool { return has(l, " fell ", "fallen", "fell down") }},
+	{"suspicious person", func(l string) bool { return has(l, "suspicious", "looking into car", "casing", "prowler") }},
 	{"medical", func(l string) bool {
 		return has(l, "collapsed", "chest pain", "not breathing", "isn't breathing", "unconscious", "heart attack", "passed out")
 	}},
@@ -257,6 +268,11 @@ func incident(ss []sentence, add func(sentence, string, string)) {
 	}
 }
 
+var (
+	gasLeak = regexp.MustCompile(`\bgas leak\b`)
+	partner = regexp.MustCompile(`\bmy (boyfriend|girlfriend|husband|wife|partner|ex)\b`)
+)
+
 // conditions: what a patient's state is, as the caller says it.
 var conditions = []struct {
 	value string
@@ -268,6 +284,9 @@ var conditions = []struct {
 	{"conscious", regexp.MustCompile(`\b(awake|conscious|talking to me)\b`)},
 	{"bleeding", regexp.MustCompile(`\bbleeding\b`)},
 	{"chest pain", regexp.MustCompile(`\bchest pain|pain in (my|his|her) chest\b`)},
+	{"trapped", regexp.MustCompile(`\b(trapped|pinned|stuck in)\b`)},
+	{"hip injury", regexp.MustCompile(`\b(hurt|injured|broke) (his|her|my) hip\b`)},
+	{"eye injury", regexp.MustCompile(`\beyes? (are|is) burning\b|\b(hurt|injured) (his|her|my) eyes?\b`)},
 }
 
 // people finds conditions, and from them and the caller's denials, how many are hurt.
@@ -395,8 +414,10 @@ var hazardWords = []struct {
 	{"fire", regexp.MustCompile(`\b(fire|flames)\b`)},
 	{"smoke", regexp.MustCompile(`\b(smoke|smoking|smoky)\b`)},
 	{"gas", regexp.MustCompile(`\b(smells? of gas|smell gas|gas leak)\b`)},
-	{"knife", regexp.MustCompile(`\b(knife|knives)\b`)},
-	{"gun", regexp.MustCompile(`\b(gun|pistol|rifle|shotgun|firearm)\b`)},
+	{"knife", regexp.MustCompile(`\b(has|have|had|holding|waving|with|pulled|grabbed) (a |the |his |her )?(knife|knives)\b`)},
+	{"gun", regexp.MustCompile(`\b(has|have|had|holding|waving|with|pulled|pointing) (a |the |his |her )?(gun|pistol|rifle|shotgun|firearm)\b`)},
+	{"chemical", regexp.MustCompile(`\b(chemical|ammonia|chlorine|acid)\b`)},
+	{"fuel", regexp.MustCompile(`\b(fuel|gasoline|gas leaking|leaking gas|diesel)\b`)},
 }
 
 func hazards(ss []sentence, add func(sentence, string, string)) {
@@ -437,7 +458,7 @@ var relations = []struct {
 	{"family", regexp.MustCompile(`\bmy (mother|mom|mum|father|dad|husband|wife|son|daughter|baby|child|brother|sister|grandmother|grandfather|grandma|grandpa)\b`)},
 	{"friend", regexp.MustCompile(`\bmy (friend|roommate)\b`)},
 	{"coworker", regexp.MustCompile(`\b(a|my) (coworker|co-worker|colleague)\b`)},
-	{"self", regexp.MustCompile(`^i'm having\b|^i (burned|cut|fell|was hit)\b|\bi'm hurt\b`)},
+	{"self", regexp.MustCompile(`^i'm having\b|^i (burned|cut|fell|was hit)\b|\bi'm hurt\b|\b(threatening|pushed) me\b`)},
 }
 
 // relation: who the caller is to the person in need, the first said.
