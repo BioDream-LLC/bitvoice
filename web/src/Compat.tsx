@@ -1,6 +1,7 @@
 import { AppWindow, Cable, KeyRound, Plus, Trash2 } from 'lucide-react'
 import { useSystemQuery, type Settings } from './api'
 import { AGISettings } from './AGI'
+import { ARIState } from './ARIState'
 import { DestinationPicker } from './Extensions'
 import { Field, Toggle } from './ui'
 
@@ -75,6 +76,7 @@ export function CompatSettings({ value, onChange, error, admin }: {
           )}
         </div>
       )}
+      {value.ari && admin && <ARIState />}
       <AGISettings value={value} onChange={onChange} error={error} admin={admin} />
       {(value.ami || value.ari || users.length > 0) && (
         <div>

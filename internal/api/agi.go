@@ -28,6 +28,13 @@ func (s *Server) agiRoutes() {
 		}
 		return true
 	}
+	s.handle("GET /api/ari/state", true, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		if s.ARIState == nil {
+			writeError(w, http.StatusServiceUnavailable, "ARI is not available on this server")
+			return
+		}
+		writeJSON(w, 200, s.ARIState())
+	})
 	s.handle("GET /api/agi/sounds", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
 		if !ready(w) {
 			return

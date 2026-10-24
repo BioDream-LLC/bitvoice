@@ -69,6 +69,7 @@ type playback struct {
 	app       string
 	stop      chan struct{}
 	once      *sync.Once
+	control   chan string // pause, unpause, restart, reverse, forward (nil for a bridge's playback)
 }
 
 type liveRec struct {
@@ -113,6 +114,9 @@ func stamp() string { return time.Now().Format("2006-01-02T15:04:05.000-0700") }
 
 // emit sends an event to every connection of an application.
 func (a *ARI) emit(app string, msg map[string]any) {
+	if t, _ := msg["type"].(string); a.filtered(app, t) {
+		return
+	}
 	msg["application"], msg["timestamp"], msg["asterisk_id"] = app, stamp(), "bitvoice"
 	b, _ := json.Marshal(msg)
 	s := a.st()
@@ -345,7 +349,7 @@ func (a *ARI) play(w http.ResponseWriter, r *http.Request, c *appChan, id string
 	}
 	s := a.st()
 	pb := &playback{ID: id, MediaURI: uris[0], MediaURIs: uris, TargetURI: "channel:" + c.ch.ID(), Language: "en", State: "queued",
-		app: c.app, stop: make(chan struct{}), once: &sync.Once{}}
+		app: c.app, stop: make(chan struct{}), once: &sync.Once{}, control: make(chan string)}
 	s.mu.Lock()
 	if _, dup := s.playbacks[id]; dup {
 		s.mu.Unlock()
@@ -378,18 +382,25 @@ func (a *ARI) play(w http.ResponseWriter, r *http.Request, c *appChan, id string
 		default:
 		}
 		set("playing")
-		for _, u := range uris {
+		for i, u := range uris {
+			if i > 0 {
+				s.mu.Lock()
+				pb.MediaURI = u
+				cp := *pb
+				s.mu.Unlock()
+				a.emit(pb.app, map[string]any{"type": "PlaybackContinuing", "playback": cp})
+			}
 			pcm, err := a.sound(c.ch, u)
 			if err != nil {
 				set("failed")
 				return
 			}
-			stopped, ended, err := c.ch.Play(pcm, pb.stop)
-			if err != nil {
+			res := a.playControlled(c, pb, pcm, set)
+			if res == "failed" {
 				set("failed")
 				return
 			}
-			if stopped || ended {
+			if res != "" {
 				break
 			}
 		}
@@ -609,6 +620,18 @@ func (a *ARI) appChannelRoute(w http.ResponseWriter, r *http.Request, u *config.
 		}
 		c.ch.SetVar(name, q.Get("value"))
 		w.WriteHeader(http.StatusNoContent)
+	case op == "redirect" && r.Method == http.MethodPost:
+		ext := Extension(q.Get("endpoint"))
+		if ext == "" || a.PBX.Config().FindExtension(ext) == nil {
+			ariError(w, http.StatusBadRequest, "endpoint is an extension here (PJSIP/101)")
+			return true
+		}
+		if err := c.ch.Continue(&config.Destination{Type: "extension", Target: ext}); err != nil {
+			ariError(w, http.StatusConflict, err.Error())
+			return true
+		}
+		a.audit(u, "ari.redirect", c.ch.ID()+" to "+ext)
+		w.WriteHeader(http.StatusNoContent)
 	case op == "continue" && r.Method == http.MethodPost:
 		// The dialplan's place is a destination here: the extension parameter as a number BitVoice
 		// knows (an extension, ring group or queue), else the application's fallback.
@@ -693,6 +716,14 @@ func (a *ARI) bridgeRoute(w http.ResponseWriter, r *http.Request, u *config.Comp
 		out := b.json()
 		s.mu.Unlock()
 		ariJSON(w, out)
+	case op == "" && r.Method == http.MethodPost: // updates an existing bridge: its name
+		s.mu.Lock()
+		if n := q.Get("name"); n != "" {
+			b.name = n
+		}
+		out := b.json()
+		s.mu.Unlock()
+		ariJSON(w, out)
 	case op == "" && r.Method == http.MethodDelete:
 		s.mu.Lock()
 		chans := append([]string{}, b.chans...)
@@ -706,6 +737,7 @@ func (a *ARI) bridgeRoute(w http.ResponseWriter, r *http.Request, u *config.Comp
 		delete(s.bridges, b.id)
 		out := b.json()
 		s.mu.Unlock()
+		a.stopBridgeMusic(b.id)
 		b.br.Close()
 		a.emitAll(map[string]any{"type": "BridgeDestroyed", "bridge": out})
 		a.audit(u, "ari.bridge.destroy", b.id)
@@ -982,10 +1014,11 @@ func (a *ARI) otherRoutes(w http.ResponseWriter, r *http.Request, u *config.Comp
 			return map[string]any{"name": name, "channel_ids": chans, "bridge_ids": bridges, "endpoint_ids": []string{}, "device_names": []string{},
 				"connected": len(s.conns[name]) > 0}
 		}
+		_ = app
 		if len(parts) == 1 && r.Method == http.MethodGet {
 			out := []map[string]any{}
 			for _, x := range cfg.System.Compat.Apps {
-				out = append(out, app(x.Name))
+				out = append(out, a.appJSON(x.Name))
 			}
 			ariJSON(w, out)
 			return true
@@ -995,7 +1028,7 @@ func (a *ARI) otherRoutes(w http.ResponseWriter, r *http.Request, u *config.Comp
 				ariError(w, http.StatusNotFound, "Application not found")
 				return true
 			}
-			ariJSON(w, app(parts[1]))
+			ariJSON(w, a.appJSON(parts[1]))
 			return true
 		}
 	}
@@ -1009,4 +1042,73 @@ func contains(l []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// playControlled plays pcm to a channel, obeying the playback's controls: pause and unpause, restart,
+// and reverse or forward by three seconds. It returns "" when the sound played to its end, "stopped"
+// when the playback was stopped or the call ended, or "failed".
+func (a *ARI) playControlled(c *appChan, pb *playback, pcm []int16, set func(string)) string {
+	const skip = 3 * media.Rate
+	pos := 0
+	for pos < len(pcm) {
+		stop := make(chan struct{})
+		done := make(chan struct{})
+		var stopped, ended bool
+		var err error
+		started := time.Now()
+		go func(from int) {
+			stopped, ended, err = c.ch.Play(pcm[from:], stop)
+			close(done)
+		}(pos)
+		select {
+		case <-done:
+			if err != nil {
+				return "failed"
+			}
+			if stopped || ended {
+				return "stopped"
+			}
+			return ""
+		case <-pb.stop:
+			close(stop)
+			<-done
+			return "stopped"
+		case op := <-pb.control:
+			close(stop)
+			<-done
+			if ended {
+				return "stopped"
+			}
+			pos = min(pos+int(time.Since(started).Seconds()*media.Rate), len(pcm))
+			switch op {
+			case "restart":
+				pos = 0
+			case "reverse":
+				pos = max(pos-skip, 0)
+			case "forward":
+				pos = min(pos+skip, len(pcm))
+			case "pause":
+				set("paused")
+			wait:
+				for {
+					select {
+					case op2 := <-pb.control:
+						switch op2 {
+						case "unpause":
+							break wait
+						case "restart":
+							pos = 0
+							break wait
+						}
+					case <-pb.stop:
+						return "stopped"
+					case <-c.ch.Gone():
+						return "stopped"
+					}
+				}
+				set("playing")
+			}
+		}
+	}
+	return ""
 }

@@ -798,3 +798,64 @@ test('an AGI script runs a call from the browser phone', async ({ page }) => {
     agi.close()
   }
 })
+
+// The rest of the ARI from a program in the page: a call from the browser phone enters an application,
+// which mutes it, holds and unholds it (ChannelHold, ChannelUnhold), sets a custom device state and a
+// mailbox, sends a user event to itself and hangs up; Settings shows what the program keeps.
+test('an ARI program uses hold, device states, mailboxes and user events', async ({ page }) => {
+  await signIn(page)
+  await page.evaluate(async () => {
+    const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
+    const s = await (await fetch('./api/settings')).json()
+    s.system.compat.ari = true
+    s.system.compat.users = [...(s.system.compat.users ?? []).filter((u: { username: string }) => u.username !== 'moreapp'),
+      { username: 'moreapp', secret: 'a long more app secret', write: true }]
+    s.system.compat.apps = [...(s.system.compat.apps ?? []).filter((a: { name: string }) => a.name !== 'e2emore'),
+      { name: 'e2emore', number: '854', fallback: { type: 'echo', target: '' } }]
+    const r = await fetch('./api/settings', { method: 'PUT', headers: H, body: JSON.stringify(s) })
+    if (!r.ok) throw new Error(await r.text())
+  })
+  await page.evaluate(() => {
+    const w = window as unknown as { more: string[] }
+    w.more = []
+    const key = 'api_key=moreapp:' + encodeURIComponent('a long more app secret')
+    const ari = (method: string, path: string, body?: unknown) => fetch(`./ari/${path}${path.includes('?') ? '&' : '?'}${key}`,
+      { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined })
+    const ws = new WebSocket(location.origin.replace('https', 'wss') + '/ari/events?app=e2emore&' + key)
+    ws.onmessage = async (m) => {
+      const ev = JSON.parse(m.data)
+      if (!['StasisStart', 'ChannelHold', 'ChannelUnhold', 'DeviceStateChanged', 'ChannelUserevent', 'StasisEnd'].includes(ev.type)) return
+      w.more.push(ev.type)
+      const ch = ev.channel?.id
+      if (ev.type === 'StasisStart') {
+        await ari('POST', 'applications/e2emore/subscription?eventSource=deviceState:Custom:e2elamp')
+        await ari('POST', `channels/${ch}/mute?direction=in`)
+        await ari('POST', `channels/${ch}/hold`)
+        await new Promise((ok) => setTimeout(ok, 500))
+        await ari('DELETE', `channels/${ch}/hold`)
+        await ari('PUT', 'deviceStates/Custom:e2elamp?deviceState=BUSY')
+        await ari('PUT', 'mailboxes/frontdoor@external?newMessages=3&oldMessages=1')
+        await ari('POST', 'asterisk/variable?variable=E2E_GLOBAL&value=set')
+        await ari('POST', `events/user/e2edone?application=e2emore&source=channel:${ch}`, { variables: { ok: 'yes' } })
+      }
+      if (ev.type === 'ChannelUserevent') await ari('DELETE', `channels/${ev.channel.id}`)
+    }
+    return new Promise((ok) => { ws.onopen = ok })
+  })
+  await page.getByRole('button', { name: 'Browser phone' }).click()
+  await page.getByRole('button', { name: /^Sign in as/ }).click()
+  await expect(page.getByText(/^Extension/).first()).toBeVisible()
+  for (const k of ['8', '5', '4']) await page.getByRole('group', { name: 'Keypad' }).getByRole('button', { name: k, exact: true }).click()
+  await page.getByRole('button', { name: 'Call', exact: true }).click()
+  await expect(page.getByText('the other party hung up')).toBeVisible({ timeout: 15000 })
+  await expect.poll(() => page.evaluate(() => (window as unknown as { more: string[] }).more.join(' ')))
+    .toBe('StasisStart ChannelHold ChannelUnhold DeviceStateChanged ChannelUserevent StasisEnd')
+  await page.keyboard.press('Escape')
+  await page.goto('/#/settings')
+  await expect(page.getByRole('region', { name: 'Custom device states' }).getByText('Custom:e2elamp')).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Custom device states' }).getByText('BUSY')).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Mailboxes kept by programs' }).getByText('frontdoor@external')).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Global variables and bridges' }).getByText('E2E_GLOBAL')).toBeVisible()
+  await expect(page.getByRole('region', { name: 'ARI applications now' }).getByText('deviceState:Custom:e2elamp').or(
+    page.getByRole('region', { name: 'ARI applications now' }).getByText(/subscribed to Custom:e2elamp/))).toBeVisible()
+})

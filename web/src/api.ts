@@ -882,6 +882,8 @@ export const api = createApi({
         query: ({ family, key, value }) => ({ url: `agi/db/${encodeURIComponent(family)}/${key.split('/').map(encodeURIComponent).join('/')}`, method: 'PUT', body: { value } }), invalidatesTags: ['AGI'] }),
       deleteAgiDB: b.mutation<void, { family: string; key: string }>({
         query: ({ family, key }) => ({ url: `agi/db/${encodeURIComponent(family)}/${key.split('/').map(encodeURIComponent).join('/')}`, method: 'DELETE' }), invalidatesTags: ['AGI'] }),
+      ariState: b.query<{ applications: { name: string; connected: boolean; channel_ids: string[]; bridge_ids: string[]; endpoint_ids: string[]; device_names: string[]; events_disallowed: { type: string }[]; events_allowed: { type: string }[] }[];
+        devices: { name: string; state: string }[]; mailboxes: { name: string; new_messages: number; old_messages: number }[]; globals: Record<string, string>; bridges: { id: string; name: string; channels: string[] }[] }, void>({ query: () => 'ari/state', providesTags: ['AGI'] }),
       testAgi: b.mutation<{ ok: boolean; message: string }, string>({ query: (address) => ({ url: 'agi/test', method: 'POST', body: { address } }) }),
       // music lists the tracks of the classes in the settings, so a saved class shows at once
       saveLangPrompt: b.mutation<{ seconds: number }, { lang: string; key: string; wav: Blob }>({
@@ -963,7 +965,7 @@ export const {
   useLookupsQuery, useCreateLookupMutation, useUpdateLookupMutation, useDeleteLookupMutation, useTestLookupMutation,
   useHotelQuery, useCheckInMutation, useCheckOutMutation, useSetRoomStatusMutation, useWakeUpsQuery, useSetWakeUpMutation, useCancelWakeUpMutation,
   useSaveNameAudioMutation, useDeleteNameAudioMutation, useSnmpStatusQuery, useDeskStatusQuery, useCardsStatusQuery, useAcmeStatusQuery, useAcmeCheckMutation, useAcmeReachMutation, useMusicStreamsQuery, useTurnStatusQuery, useWebSocketStatusQuery, useCdrCsvQuery, useTestCdrOutputsMutation, useChatListQuery, useChatMessagesQuery, useSendChatMutation, useSetChatStatusMutation,
-  useAgiSoundsQuery, useUploadAgiSoundMutation, useDeleteAgiSoundMutation, useAgiProgramsQuery, useAgiDBQuery, usePutAgiDBMutation, useDeleteAgiDBMutation, useTestAgiMutation,
+  useAgiSoundsQuery, useUploadAgiSoundMutation, useDeleteAgiSoundMutation, useAgiProgramsQuery, useAgiDBQuery, usePutAgiDBMutation, useDeleteAgiDBMutation, useTestAgiMutation, useAriStateQuery,
   usePromptsQuery, useSaveLangPromptMutation, useDeleteLangPromptMutation, useGeneratePromptsMutation, useMusicQuery, useAddMusicMutation, useDeleteMusicMutation,
 } = api
 

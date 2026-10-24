@@ -90,3 +90,19 @@ func holdClassOf(cfg *config.Config, ext string) string {
 	}
 	return holdClass(cfg)
 }
+
+// HoldMusicPCM returns a stretch of the system's hold music (8 kHz) for something that loops it
+// itself, such as an ARI bridge on hold: the class's next track, else the hold tone for ten seconds.
+func (e *Engine) HoldMusicPCM() []int16 {
+	cfg := e.Config()
+	if src := e.musicSource(cfg, holdClass(cfg)); src != nil {
+		if pcm := src(); len(pcm) > 0 {
+			return pcm
+		}
+	}
+	var out []int16
+	for len(out) < 10*media.Rate {
+		out = append(out, media.ToneSamples(media.ToneHold)...)
+	}
+	return out
+}

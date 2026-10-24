@@ -256,7 +256,32 @@ type Capture struct {
 	evSeen  bool
 	stopped bool
 	dec     Decoders
-	lastLen int // samples in the last packet, to fill a lost one with silence
+	lastLen int  // samples in the last packet, to fill a lost one with silence
+	muted   bool // what arrives is kept as silence (keys still count)
+	paused  bool // what arrives is not kept at all (keys still count)
+}
+
+// AddPCM adds 8 kHz samples someone else decoded (a bridge's mix, a tap on a call).
+func (c *Capture) AddPCM(pcm []int16) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.stopped {
+		c.add(pcm)
+	}
+}
+
+// Mute keeps what arrives from now on as silence of the same length, or as sound again.
+func (c *Capture) Mute(on bool) {
+	c.mu.Lock()
+	c.muted = on
+	c.mu.Unlock()
+}
+
+// Pause stops keeping what arrives (it is left out, not kept as silence), or starts again.
+func (c *Capture) Pause(on bool) {
+	c.mu.Lock()
+	c.paused = on
+	c.mu.Unlock()
 }
 
 // NewCapture records up to maxSeconds of audio.
@@ -320,6 +345,12 @@ func (c *Capture) Packet(pkt []byte) {
 }
 
 func (c *Capture) add(s []int16) {
+	if c.paused {
+		return
+	}
+	if c.muted {
+		s = make([]int16, len(s))
+	}
 	room := c.max - len(c.pcm)
 	if room <= 0 {
 		c.full = true

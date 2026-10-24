@@ -114,6 +114,8 @@ type Endpoint struct {
 	lastArr  time.Time
 	jitter   float64
 	closed   atomic.Bool
+	txPkts   atomic.Uint64 // RTP packets sent to the far end
+	txBytes  atomic.Uint64
 	wg       sync.WaitGroup
 	started  bool
 	onPacket func()
@@ -743,7 +745,15 @@ func (e *Endpoint) send(pkt []byte) {
 		}
 		pkt = sp
 	}
-	_, _ = e.rtp.WriteToUDPAddrPort(pkt, to)
+	if _, err := e.rtp.WriteToUDPAddrPort(pkt, to); err == nil {
+		e.txPkts.Add(1)
+		e.txBytes.Add(uint64(max(len(pkt)-12, 0)))
+	}
+}
+
+// SentStats counts the RTP packets and payload bytes sent to the far end.
+func (e *Endpoint) SentStats() Stats {
+	return Stats{Packets: e.txPkts.Load(), Bytes: e.txBytes.Load()}
 }
 
 // SetRaw makes the endpoint relay datagrams as they are, without RTP rules: T.38 fax (UDPTL).

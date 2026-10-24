@@ -249,6 +249,7 @@ func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 	srv.AMIAddr = ami.Addr
 	ari := &compat.ARI{PBX: eng, Bus: bus, Audit: srv.AuditSystem, Started: time.Now(), Recordings: filepath.Join(o.data, "ari-recordings")}
 	srv.ARI = ari
+	srv.ARIState = func() any { return ari.State() }
 	eng.Stasis = ari // calls sent to ARI applications
 	// AGI scripts: their sounds and recordings, Asterisk's database, and the programs folder.
 	agiBin := filepath.Join(o.data, "agi-bin")

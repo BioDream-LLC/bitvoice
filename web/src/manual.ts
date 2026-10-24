@@ -129,6 +129,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | Let's Encrypt | Field-tested | issues and renews the public demo's certificate |
 | Machine images (AWS) and configuration as code | Field-tested | an EC2 image built by \`deploy/cloud/build-images.sh\` from Ubuntu 24.04: each server from it starts new; \`deploy/terraform\` with OpenTofu 1.13 (create, change, no drift, destroy). Azure images not tried |
 | IAX2 trunks | Checked against a reference | Asterisk 23 |
+| ARI (Asterisk REST Interface) | Checked against a reference | every operation of Asterisk's published ARI called and its answer checked against the model's required fields; ari-client 2.2.0, Asterisk's JavaScript library, reading \`/ari/api-docs\` and running an application |
 | AGI and FastAGI (Asterisk Gateway Interface) | Checked against a reference | every command's answer compared with Asterisk 20.6's over FastAGI; a FastAGI server written with pyst2 running a call; EAGI audio to a program. Not tried with a production IVR |
 | H.323 trunks | Checked against a reference | H323Plus 1.28 (its simph323 playing and recording WAV files) on EC2: calls both ways with Fast Connect and G.711, each end hearing the other's tone, MOS 4.39; call set-up also with Asterisk's chan_ooh323 (whose own sound is broken in Asterisk 22) |
 | SIP over WebSocket | Checked against a reference | JsSIP and SIP.js |
@@ -1625,6 +1626,25 @@ Your program connects to \`/ari/events?app=NAME\` (a WebSocket, with the login i
 | \`DELETE /ari/channels/{id}\` | hangs up |
 | \`POST /ari/channels?endpoint=PJSIP/101&app=NAME\` | rings 101; answered, it enters the application |
 | \`GET /ari/applications\` | the applications, whether a program is connected, and their channels |
+| \`POST /ari/channels/{id}/mute?direction=in\`, \`DELETE .../mute\` | mutes what the caller says (in), what they hear (out) or both |
+| \`POST\`/\`DELETE /ari/channels/{id}/hold\`, \`.../moh\`, \`POST .../silence\` | hold music to the caller (**ChannelHold**, **ChannelUnhold**), or silence |
+| \`GET\`/\`POST /ari/channels/{id}/variables\` | several variables at once (**ChannelVarset**) |
+| \`POST /ari/channels/{id}/move?app=other\` | hands the channel to another application (**StasisEnd**, then **StasisStart** there; **ApplicationMoveFailed** when no program runs it) |
+| \`POST /ari/channels/{id}/snoop?spy=in&app=NAME\` | a snoop channel in an application that hears what the caller says, to record it (\`POST /ari/channels/{snoop}/record\`) |
+| \`POST /ari/channels/create?endpoint=PJSIP/101&app=NAME\`, then \`POST .../dial\` | a channel that waits until it is dialled; **Dial** events tell how the ringing goes, and it enters the application when answered |
+| \`GET /ari/channels/{id}/rtp_statistics\` | packets and bytes sent and received, loss and jitter |
+| \`POST /ari/playbacks/{id}/control?operation=pause\` | pause, unpause, restart, reverse and forward (three seconds) |
+| \`POST /ari/bridges/{id}/moh\`, \`.../record\`, \`.../variable\`, \`.../play/{playbackId}\` | hold music to a bridge, recording its mix, its variables |
+| \`POST /ari/recordings/stored/{name}/copy\`, \`POST\`/\`DELETE /ari/recordings/live/{name}/pause\`, \`.../mute\` | copies a recording; pauses or mutes a live one |
+| \`POST /ari/applications/{app}/subscription?eventSource=deviceState:Custom:lamp\`, \`PUT .../eventFilter\` | subscriptions (channel:, bridge:, endpoint:PJSIP/100, deviceState:) and event filters (\`{"disallowed": [{"type": "ChannelVarset"}]}\`) |
+| \`GET /ari/deviceStates\`, \`PUT /ari/deviceStates/Custom:lamp?deviceState=INUSE\` | phones' states (\`PJSIP/100\`: NOT_INUSE, INUSE, RINGING, UNAVAILABLE) and custom ones programs keep (**DeviceStateChanged**); phones' state also arrives as **EndpointStateChange** |
+| \`GET /ari/mailboxes\`, \`PUT /ari/mailboxes/{name}?newMessages=1&oldMessages=0\` | extensions' voicemail counts (\`100@default\`), and mailboxes a program keeps itself |
+| \`GET /ari/sounds\` | the prompts of Sounds, in the languages they are recorded in, and the sounds uploaded for AGI scripts |
+| \`PUT /ari/endpoints/sendMessage?to=pjsip:100&body=Hi\` | a text on extension 100's phones |
+| \`POST /ari/events/user/{name}?application=NAME\` | a user event to an application (**ChannelUserevent**) |
+| \`GET /ari/asterisk/ping\`, \`GET\`/\`POST /ari/asterisk/variable\`, \`GET /ari/asterisk/modules\` | ping, global variables, and BitVoice's parts named as the modules they stand for |
+
+BitVoice answers every operation of Asterisk's published ARI (its test suite calls each one and checks what comes back has the fields Asterisk's description requires). A few have nothing to do here and answer 501 with the reason: loadable modules (BitVoice is one program), Sorcery's dynamic configuration (BitVoice is set up in its web interface), log channels, bridges' video sources (ARI bridges carry sound), sending REFER to phones, and claiming broadcast calls. A snoop hears only the caller (spy=in), and whisper is not offered: bridge a channel with theirs to talk to them. Channel events for every call (**ChannelCreated**, **ChannelStateChange**, **ChannelDestroyed**) go to every program, as with Asterisk's \`subscribeAll=true\`. ARI libraries that read the interface from the server (ari-client and others) find it at \`/ari/api-docs/resources.json\`. **What programs keep now**, under ARI applications in Settings, shows the applications, custom device states, mailboxes, global variables and bridges programs have set.
 
 Keys pressed arrive as **ChannelDtmfReceived**; a caller hanging up as **StasisEnd**. When no program is connected the call goes to the fallback; when the program's last connection closes, its calls go there too after five seconds (time to reconnect). For call logic without a program of your own, use [Scripts](#scripts) that run the whole call; to hand the audio to a program, [Voice bots](#voicebots).
 

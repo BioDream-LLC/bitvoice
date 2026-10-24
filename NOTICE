@@ -35,6 +35,11 @@ BitVoice includes these third-party Go modules, each under its own licence:
 - internal/p25: the ISSI/CSSI payload layouts follow the P25 ISSI tester (DIETS) of the National
   Institute of Standards and Technology, a work of the US government not subject to copyright;
   internal/p25/testdata/issi.pcap is a capture that comes with it
+- internal/compat/aridocs.json and internal/compat/testdata/ari-spec.txt: the names and types of the
+  Asterisk REST Interface's operations, parameters and models (no descriptions), so that ARI client
+  libraries written for Asterisk work with BitVoice; Asterisk is a trademark of Sangoma Technologies
+- internal/agi/testdata/asterisk20.txt: the answers Asterisk 20.6 gave to AGI commands, recorded to
+  test BitVoice's against them
 - golang.org/x/sync, golang.org/x/sys and golang.org/x/text (BSD-3-Clause)
 
 The web interface's licences are listed in web/package.json and the built bundle.

@@ -32,10 +32,14 @@ type ARI struct {
 	Grace  time.Duration
 	stOnce sync.Once
 	stasis *stasis
+
+	moreOnce sync.Once
+	moreSt   *moreState
 }
 
 type ariChannel struct {
 	ID           string         `json:"id"`
+	ProtocolID   string         `json:"protocol_id"`
 	Name         string         `json:"name"`
 	State        string         `json:"state"`
 	Caller       ariCallerID    `json:"caller"`
@@ -61,7 +65,7 @@ type ariDialplan struct {
 }
 
 func toARI(ch Channel) ariChannel {
-	return ariChannel{ID: ch.ID, Name: ch.Name, State: StateName(ch.State),
+	return ariChannel{ID: ch.ID, ProtocolID: ch.Call, Name: ch.Name, State: StateName(ch.State),
 		Caller:       ariCallerID{ch.CallerName, ch.CallerNum},
 		Connected:    ariCallerID{ch.ConnectedName, ch.ConnectedNum},
 		Dialplan:     ariDialplan{Context: "from-internal", Exten: ch.Exten, Priority: 1, AppName: "Dial"},
@@ -117,12 +121,15 @@ func (a *ARI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	p := a.PBX
 	switch {
+	case len(parts) == 2 && parts[0] == "api-docs" && r.Method == http.MethodGet:
+		a.apiDocs(w, r, parts[1])
+	case a.moreRoutes(w, r, u, path, parts):
 	case path == "asterisk/info":
 		ariJSON(w, map[string]any{
 			"system": map[string]any{"version": "20.0.0-bitvoice", "entity_id": "bitvoice"},
 			"status": map[string]any{"startup_time": a.Started.Format(time.RFC3339), "last_reload_time": a.Started.Format(time.RFC3339)},
-			"build":  map[string]any{"os": "BitVoice"},
-			"config": map[string]any{"name": p.Config().System.Name, "default_language": "en"},
+			"build":  buildInfo(),
+			"config": map[string]any{"name": p.Config().System.Name, "default_language": "en", "setid": map[string]string{"user": "", "group": ""}},
 		})
 	case path == "channels" && r.Method == http.MethodGet:
 		out := []ariChannel{}
@@ -258,7 +265,8 @@ func (a *ARI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		for _, c := range p.Calls() {
 			if c.State == "answered" || c.State == "held" {
 				out = append(out, map[string]any{"id": c.ID, "technology": "simple_bridge", "bridge_type": "mixing",
-					"bridge_class": "basic", "channels": []string{c.ID + "-1", c.ID + "-2"}})
+					"bridge_class": "basic", "creator": "BitVoice", "name": "", "creationtime": c.Start.Format("2006-01-02T15:04:05.000-0700"),
+					"channels": []string{c.ID + "-1", c.ID + "-2"}})
 			}
 		}
 		ariJSON(w, append(out, a.ariBridges()...))
@@ -321,16 +329,24 @@ func (a *ARI) events(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case ev := <-sub.C:
+			if ev.Type == "registrations.changed" {
+				a.endpointsChanged()
+				continue
+			}
 			c, ok := ev.Data.(pbx.CallInfo)
 			if !ok {
 				continue
 			}
+			a.endpointsChanged()
 			for _, ch := range tr.Update(c, ev.Type == "call.ended") {
 				typ := map[string]string{"new": "ChannelCreated", "state": "ChannelStateChange", "gone": "ChannelDestroyed"}[ch.Kind]
 				msg := map[string]any{"type": typ, "timestamp": ev.At.Format("2006-01-02T15:04:05.000-0700"),
 					"application": app, "asterisk_id": "bitvoice", "channel": toARI(ch.Ch)}
 				if ch.Kind == "gone" {
 					msg["cause"], msg["cause_txt"] = 16, "Normal Clearing"
+				}
+				if app != "" && a.filtered(app, typ) {
+					continue
 				}
 				b, _ := json.Marshal(msg)
 				if ws.WriteText(b) != nil {

@@ -1,0 +1,196 @@
+# Asterisk's ARI as its published REST API description lists it (rest-api/api-docs/*.json, master),
+# reduced to facts: every operation with the model it answers, and each model's required fields.
+op GET /applications List[Application]
+op GET /applications/{applicationName} Application
+op POST /applications/{applicationName}/subscription Application
+op DELETE /applications/{applicationName}/subscription Application
+op PUT /applications/{applicationName}/eventFilter Application
+op GET /asterisk/config/dynamic/{configClass}/{objectType}/{id} List[ConfigTuple]
+op PUT /asterisk/config/dynamic/{configClass}/{objectType}/{id} List[ConfigTuple]
+op DELETE /asterisk/config/dynamic/{configClass}/{objectType}/{id} void
+op GET /asterisk/info AsteriskInfo
+op GET /asterisk/ping AsteriskPing
+op GET /asterisk/modules List[Module]
+op GET /asterisk/modules/{moduleName} Module
+op POST /asterisk/modules/{moduleName} void
+op DELETE /asterisk/modules/{moduleName} void
+op PUT /asterisk/modules/{moduleName} void
+op GET /asterisk/logging List[LogChannel]
+op POST /asterisk/logging/{logChannelName} void
+op DELETE /asterisk/logging/{logChannelName} void
+op PUT /asterisk/logging/{logChannelName}/rotate void
+op GET /asterisk/variable Variable
+op POST /asterisk/variable void
+op GET /bridges List[Bridge]
+op POST /bridges Bridge
+op POST /bridges/{bridgeId} Bridge
+op GET /bridges/{bridgeId} Bridge
+op DELETE /bridges/{bridgeId} void
+op GET /bridges/{bridgeId}/variable Variable
+op POST /bridges/{bridgeId}/variable void
+op GET /bridges/{bridgeId}/variables Variables
+op POST /bridges/{bridgeId}/variables void
+op POST /bridges/{bridgeId}/addChannel void
+op POST /bridges/{bridgeId}/removeChannel void
+op POST /bridges/{bridgeId}/videoSource/{channelId} void
+op DELETE /bridges/{bridgeId}/videoSource void
+op POST /bridges/{bridgeId}/moh void
+op DELETE /bridges/{bridgeId}/moh void
+op POST /bridges/{bridgeId}/play Playback
+op POST /bridges/{bridgeId}/play/{playbackId} Playback
+op POST /bridges/{bridgeId}/record LiveRecording
+op GET /channels List[Channel]
+op POST /channels Channel
+op POST /channels/create Channel
+op GET /channels/{channelId} Channel
+op POST /channels/{channelId} Channel
+op DELETE /channels/{channelId} void
+op POST /channels/{channelId}/continue void
+op POST /channels/{channelId}/move void
+op POST /channels/{channelId}/redirect void
+op POST /channels/{channelId}/answer void
+op POST /channels/{channelId}/ring void
+op DELETE /channels/{channelId}/ring void
+op POST /channels/{channelId}/progress void
+op POST /channels/{channelId}/dtmf void
+op POST /channels/{channelId}/mute void
+op DELETE /channels/{channelId}/mute void
+op POST /channels/{channelId}/hold void
+op DELETE /channels/{channelId}/hold void
+op POST /channels/{channelId}/moh void
+op DELETE /channels/{channelId}/moh void
+op POST /channels/{channelId}/silence void
+op DELETE /channels/{channelId}/silence void
+op POST /channels/{channelId}/play Playback
+op POST /channels/{channelId}/play/{playbackId} Playback
+op POST /channels/{channelId}/record LiveRecording
+op GET /channels/{channelId}/variable Variable
+op POST /channels/{channelId}/variable void
+op GET /channels/{channelId}/variables Variables
+op POST /channels/{channelId}/variables void
+op POST /channels/{channelId}/snoop Channel
+op POST /channels/{channelId}/snoop/{snoopId} Channel
+op POST /channels/{channelId}/dial void
+op GET /channels/{channelId}/rtp_statistics RTPstat
+op POST /channels/externalMedia Channel
+op POST /channels/{channelId}/transfer_progress void
+op GET /deviceStates List[DeviceState]
+op GET /deviceStates/{deviceName} DeviceState
+op PUT /deviceStates/{deviceName} void
+op DELETE /deviceStates/{deviceName} void
+op GET /endpoints List[Endpoint]
+op PUT /endpoints/sendMessage void
+op POST /endpoints/refer void
+op GET /endpoints/{tech} List[Endpoint]
+op GET /endpoints/{tech}/{resource} Endpoint
+op PUT /endpoints/{tech}/{resource}/sendMessage void
+op POST /endpoints/{tech}/{resource}/refer void
+op GET /events Message
+op POST /events/user/{eventName} void
+op POST /events/claim void
+op GET /mailboxes List[Mailbox]
+op GET /mailboxes/{mailboxName} Mailbox
+op PUT /mailboxes/{mailboxName} void
+op DELETE /mailboxes/{mailboxName} void
+op GET /playbacks/{playbackId} Playback
+op DELETE /playbacks/{playbackId} void
+op POST /playbacks/{playbackId}/control void
+op GET /recordings/stored List[StoredRecording]
+op GET /recordings/stored/{recordingName} StoredRecording
+op DELETE /recordings/stored/{recordingName} void
+op GET /recordings/stored/{recordingName}/file binary
+op POST /recordings/stored/{recordingName}/copy StoredRecording
+op GET /recordings/live/{recordingName} LiveRecording
+op DELETE /recordings/live/{recordingName} void
+op POST /recordings/live/{recordingName}/stop void
+op POST /recordings/live/{recordingName}/pause void
+op DELETE /recordings/live/{recordingName}/pause void
+op POST /recordings/live/{recordingName}/mute void
+op DELETE /recordings/live/{recordingName}/mute void
+op GET /sounds List[Sound]
+op GET /sounds/{soundId} Sound
+model AdditionalParam parameter_name parameter_value
+model Application name channel_ids bridge_ids endpoint_ids device_names events_allowed events_disallowed
+model ApplicationMoveFailed channel destination args
+model ApplicationRegistered 
+model ApplicationReplaced 
+model ApplicationUnregistered 
+model AsteriskInfo 
+model AsteriskPing asterisk_id ping timestamp
+model Bridge id technology bridge_type bridge_class creator name channels creationtime
+model BridgeAttendedTransfer transferer_first_leg transferer_second_leg result is_external destination_type
+model BridgeBlindTransfer channel exten context result is_external
+model BridgeCreated bridge
+model BridgeDestroyed bridge
+model BridgeMerged bridge bridge_from
+model BridgeVideoSourceChanged bridge
+model BuildInfo os kernel options machine date user
+model CallBroadcast channel
+model CallClaimed channel winner_app
+model CallerID name number
+model Channel id protocol_id name state caller connected accountcode dialplan creationtime language
+model ChannelCallerId caller_presentation caller_presentation_txt channel
+model ChannelConnectedLine channel
+model ChannelCreated channel
+model ChannelDestroyed cause cause_txt channel
+model ChannelDialplan channel dialplan_app dialplan_app_data
+model ChannelDtmfReceived digit duration_ms channel
+model ChannelEnteredBridge bridge
+model ChannelHangupRequest channel
+model ChannelHold channel
+model ChannelLeftBridge bridge channel
+model ChannelStateChange channel
+model ChannelTalkingFinished channel duration
+model ChannelTalkingStarted channel
+model ChannelToneDetected channel
+model ChannelTransfer refer_to referred_by
+model ChannelUnhold channel
+model ChannelUserevent eventname userevent
+model ChannelVarset variable value
+model ConfigInfo name default_language setid
+model ConfigTuple attribute value
+model ContactInfo uri contact_status aor
+model ContactStatusChange endpoint contact_info
+model DeviceState name state
+model DeviceStateChanged device_state
+model Dial peer dialstatus
+model Dialed 
+model DialplanCEP context exten priority app_name app_data
+model Endpoint technology resource channel_ids
+model EndpointStateChange endpoint
+model Event application timestamp
+model FormatLangPair language format
+model LiveRecording name format target_uri state
+model LogChannel channel type status configuration
+model Mailbox name old_messages new_messages
+model Message type
+model MissingParams params
+model Module name description use_count status support_level
+model Peer peer_status
+model PeerStatusChange endpoint peer
+model Playback id media_uri target_uri state
+model PlaybackContinuing playback
+model PlaybackFinished playback
+model PlaybackStarted playback
+model RESTHeader name value
+model RESTQueryStringParameter name value
+model RESTRequest type transaction_id request_id method uri
+model RESTResponse transaction_id request_id status_code reason_phrase uri
+model RTPstat txcount rxcount txploss rxploss local_ssrc remote_ssrc txoctetcount rxoctetcount channel_uniqueid
+model RecordingFailed recording
+model RecordingFinished recording
+model RecordingStarted recording
+model ReferTo requested_destination
+model ReferredBy source_channel
+model RequiredDestination 
+model SetId user group
+model Sound id formats
+model StasisEnd channel
+model StasisStart args channel
+model StatusInfo startup_time last_reload_time
+model StoredRecording name format
+model SystemInfo version entity_id
+model TextMessage from to body
+model TextMessageReceived message
+model Variable value
+model Variables variables
