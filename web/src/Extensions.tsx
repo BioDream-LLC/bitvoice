@@ -60,7 +60,7 @@ export function Extensions() {
     col.accessor('number', { header: 'Extension', cell: (c) => <Chip kind="extension">{c.getValue()}</Chip> }),
     col.accessor('name', { header: 'Name', cell: (c) => {
       const k = deviceKinds.find((d) => d.id === (c.row.original.kind ?? ''))
-      return <span className="inline-flex flex-wrap items-center gap-2 font-medium text-slate-100">{c.getValue()}{k && k.id && <span className={`inline-flex items-center gap-1 text-xs ${k.color}`}><k.icon size={12} aria-hidden />{k.label}</span>}<AwayBadge ext={c.row.original.number} /></span>
+      return <span className="inline-flex flex-wrap items-center gap-2 font-medium text-slate-100">{c.getValue()}{k && k.id && <span className={`inline-flex items-center gap-1 text-xs ${k.color}`}><k.icon size={12} aria-hidden />{k.label}</span>}{c.row.original.ldap && <span className="text-xs text-emerald-300" title={`From the company directory: ${c.row.original.ldap}`}>From the directory</span>}<AwayBadge ext={c.row.original.number} /></span>
     } }),
     col.accessor('online', {
       header: 'Phone', cell: (c) => !c.row.original.enabled ? <Badge status="idle">Switched off</Badge>
@@ -116,6 +116,11 @@ function ExtensionEditor({ ext, onClose }: { ext: Extension; onClose: () => void
         if (!await attempt(() => remove(ext.id).unwrap(), `Extension ${ext.number} removed`, { problemsInToast: true })) onClose()
       }} />}>
       <fieldset disabled={!admin} className="space-y-5">
+        {x.ldap && (
+          <p role="note" className="rounded-lg border border-emerald-900 bg-emerald-950/30 p-3 text-sm text-emerald-200">
+            Made from the company directory (<span className="font-mono">{x.ldap}</span>): its number, name and email come from there, and the next sync puts back any change made here to them. Everything else is yours to set.
+          </p>
+        )}
         <div className="grid grid-cols-[8rem_1fr] gap-4">
           <Field label="Number" htmlFor="xn" error={p('number')}>
             <input id="xn" className="input font-mono text-sky-300" value={x.number} aria-invalid={!!p('number')} onChange={(e) => set('number', e.target.value.replace(/\D/g, ''))} />

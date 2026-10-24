@@ -36,7 +36,7 @@ export function Login() {
           </>
         )}
         {password && <>
-        <Field label="Username" htmlFor="u">
+        <Field label="Username" htmlFor="u" hint={opts?.directory ? 'Your company directory name and password work here too.' : undefined}>
           <input id="u" className="input" autoComplete="username" autoFocus value={username} onChange={(e) => setUsername(e.target.value)} />
         </Field>
         <Field label="Password" htmlFor="p">

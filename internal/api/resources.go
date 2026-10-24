@@ -343,6 +343,7 @@ func (s *Server) routes() {
 	s.voicemailRoutes()
 	s.soundRoutes()
 	s.agiRoutes()
+	s.ldapRoutes()
 	s.hotelRoutes()
 	s.chatRoutes()
 	s.snmpRoutes()
@@ -457,6 +458,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request, u store.Use
 		}
 		if in.System.SSO.ClientSecret == "" && in.System.SSO.ClientID == c.System.SSO.ClientID {
 			in.System.SSO.ClientSecret = c.System.SSO.ClientSecret
+		}
+		if in.System.LDAP.BindPassword == "" && in.System.LDAP.BindDN == c.System.LDAP.BindDN {
+			in.System.LDAP.BindPassword = c.System.LDAP.BindPassword
 		}
 		for i, nu := range in.System.Compat.Users {
 			for _, old := range c.System.Compat.Users {

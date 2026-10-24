@@ -102,5 +102,6 @@ func (s *Server) RunBackground(ctx context.Context, main bool) {
 	go s.RunCDROutputs(ctx)
 	if main {
 		go s.RunSNMP(ctx)
+		go s.RunLDAP(ctx)
 	}
 }

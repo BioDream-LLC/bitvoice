@@ -71,8 +71,9 @@ func (s *Server) authOptions(w http.ResponseWriter, r *http.Request) {
 	cfg, _ := s.Store.Config()
 	sso := cfg.System.SSO
 	writeJSON(w, 200, map[string]any{
-		"password": !sso.Enabled || sso.PasswordSignIn || clientIP(r).IsLoopback(),
-		"sso":      map[string]any{"enabled": sso.Enabled, "label": sso.Label},
+		"password":  !sso.Enabled || sso.PasswordSignIn || clientIP(r).IsLoopback(),
+		"sso":       map[string]any{"enabled": sso.Enabled, "label": sso.Label},
+		"directory": cfg.System.LDAP.Enabled && cfg.System.LDAP.SignIn,
 	})
 }
 

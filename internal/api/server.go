@@ -31,13 +31,15 @@ import (
 
 // Server serves the API and the embedded web interface.
 type Server struct {
-	tiles  tileFile // the map tiles file, opened when first used
-	hotel  hotelLink
-	snmp   snmpState
-	cards  cardsState
-	cdrOut cdrOut
-	Store  *store.Store
-	Engine *pbx.Engine
+	ldapOnce sync.Once
+	ldap     *ldapState
+	tiles    tileFile // the map tiles file, opened when first used
+	hotel    hotelLink
+	snmp     snmpState
+	cards    cardsState
+	cdrOut   cdrOut
+	Store    *store.Store
+	Engine   *pbx.Engine
 
 	faxOnce        sync.Once
 	faxOut         *faxOutbox

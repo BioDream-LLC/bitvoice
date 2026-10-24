@@ -15,6 +15,7 @@ import {
 } from './api'
 import { CompatSettings } from './Compat'
 import { SSOSettings } from './SSO'
+import { LDAPSettingsCard } from './LDAP'
 import { MobileSettings } from './Mobile'
 import { EmergencySettings } from './EmergencyMode'
 import { CRMSettings } from './Crm'
@@ -381,6 +382,7 @@ export function Settings() {
         <CertificateSettings />
         <MetricsSettings value={sys.metrics} onChange={(v) => setS((s0) => ({ ...s0, system: { ...s0.system, metrics: { ...s0.system.metrics, ...v } } }))} error={p} />
         <SSOSettings value={sys.sso} onChange={(v) => setS((s0) => ({ ...s0, system: { ...s0.system, sso: { ...s0.system.sso, ...v } } }))} error={p} />
+        <LDAPSettingsCard value={sys.ldap} onChange={(v) => setS((s0) => ({ ...s0, system: { ...s0.system, ldap: { ...s0.system.ldap, ...v } } }))} error={p} admin={admin} />
         <CompatSettings value={sys.compat} onChange={(v) => setS((s0) => ({ ...s0, system: { ...s0.system, compat: { ...s0.system.compat, ...v } } }))} error={p} admin={admin} />
         <section className="card space-y-4 p-5 lg:col-span-2">
           <h2 className="flex items-center gap-2 font-semibold text-slate-100"><Sparkles size={17} className="text-violet-300" aria-hidden /> AI (optional)</h2>

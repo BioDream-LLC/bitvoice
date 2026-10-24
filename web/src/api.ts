@@ -18,6 +18,8 @@ export interface Extension {
   door: { code: string; url: string; method: string; username: string; password: string }
   followMe?: FollowMe; pickupGroup?: string; noIntercom?: boolean; speedDials?: SpeedDial[] | null
   language?: string; holdMusic?: string; guestRoom?: boolean
+  /** The directory person this extension was made from (Settings, Company directory). */
+  ldap?: string
 }
 export interface FollowMe { enabled: boolean; numbers: string[] | null; strategy: 'sequential' | 'together' | ''; ringSeconds: number; confirm: boolean }
 export interface SpeedDial { code: string; number: string; name: string }
@@ -274,6 +276,7 @@ export interface SystemSettings {
   crm: CRM
   metrics: Metrics
   costs: Costs
+  ldap: LDAPSettings
   sso: { enabled: boolean; label: string; issuer: string; clientId: string; clientSecret: string; redirectUrl: string; groupsClaim: string; adminGroups: string[]; viewerGroups: string[]; passwordSignIn: boolean }
   compat: { ami: boolean; amiListen: string; ari: boolean; users: { username: string; secret: string; write: boolean }[]; apps?: { name: string; number?: string; fallback: Destination }[]; agi?: AGIScript[]; agiKeepDays?: number }
   archive: {
@@ -429,6 +432,15 @@ export interface Tenant { id: string; name: string; domain: string; suspended: b
 export interface TenantView extends Tenant { running: boolean; extensions: number; phones: number; calls: number; storageBytes: number; url: string; sipUser: string; admins: number }
 export interface SetupStatus { complete: boolean; allowed: boolean; addresses: string[]; sipPort: number; version: string }
 
+/** The company directory (LDAP, Active Directory): extensions, ring groups and sign-in from it. */
+export interface LDAPSettings {
+  enabled: boolean; kind: 'ad' | 'ldap'; url: string; startTls: boolean; caCert?: string; bindDn: string; bindPassword: string; baseDn: string
+  userFilter: string; loginAttr: string; nameAttr: string; emailAttr: string; numberAttr: string; numberDigits?: number
+  syncExtensions: boolean; disableMissing: boolean; ringGroups?: { group: string; ringGroup: string }[]; syncMinutes: number
+  signIn: boolean; adminGroups?: string[]; viewerGroups?: string[]
+}
+export interface LDAPReport { at: string; people: number; withNumber: number; created: string[]; updated: string[]; disabled: string[]; enabled: string[]; ringGroups: string[]; problems: string[]; error?: string; changed: boolean }
+
 /** An AGI script calls can be sent to: a FastAGI server or a program in the AGI programs folder. */
 export interface AGIScript { name: string; address: string; args?: string[]; eagi?: boolean; number?: string; fallback: Destination; maxMinutes?: number }
 export interface AGISound { name: string; recorded: boolean; seconds: number; bytes: number; modified: string }
@@ -463,7 +475,7 @@ export const api = createApi({
   tagTypes: tags,
   endpoints: (b) => ({
       me: b.query<Me, void>({ query: () => 'auth/me', providesTags: ['Me'] }),
-      authOptions: b.query<{ password: boolean; sso: { enabled: boolean; label: string } }, void>({ query: () => 'auth/options' }),
+      authOptions: b.query<{ password: boolean; sso: { enabled: boolean; label: string }; directory?: boolean }, void>({ query: () => 'auth/options' }),
       login: b.mutation<Me, { username: string; password: string; code?: string }>({
         query: (body) => ({ url: 'auth/login', method: 'POST', body }), invalidatesTags: ['Me'] }),
       logout: b.mutation<void, void>({ query: () => ({ url: 'auth/logout', method: 'POST' }), invalidatesTags: ['Me'] }),
@@ -884,6 +896,10 @@ export const api = createApi({
         query: ({ family, key }) => ({ url: `agi/db/${encodeURIComponent(family)}/${key.split('/').map(encodeURIComponent).join('/')}`, method: 'DELETE' }), invalidatesTags: ['AGI'] }),
       ariState: b.query<{ applications: { name: string; connected: boolean; channel_ids: string[]; bridge_ids: string[]; endpoint_ids: string[]; device_names: string[]; events_disallowed: { type: string }[]; events_allowed: { type: string }[] }[];
         devices: { name: string; state: string }[]; mailboxes: { name: string; new_messages: number; old_messages: number }[]; globals: Record<string, string>; bridges: { id: string; name: string; channels: string[] }[] }, void>({ query: () => 'ari/state', providesTags: ['AGI'] }),
+      ldapStatus: b.query<{ last: LDAPReport | null }, void>({ query: () => 'ldap/status', providesTags: ['Settings'] }),
+      syncLdap: b.mutation<LDAPReport, void>({ query: () => ({ url: 'ldap/sync', method: 'POST' }), invalidatesTags: ['Settings', 'Extensions', 'RingGroups'] }),
+      testLdap: b.mutation<{ ok: boolean; message?: string; secure?: boolean; people?: number; withNumber?: number; sample?: { login: string; name: string; number?: string; raw?: string; email?: string }[]; millis?: number }, LDAPSettings>({
+        query: (body) => ({ url: 'ldap/test', method: 'POST', body }) }),
       testAgi: b.mutation<{ ok: boolean; message: string }, string>({ query: (address) => ({ url: 'agi/test', method: 'POST', body: { address } }) }),
       // music lists the tracks of the classes in the settings, so a saved class shows at once
       saveLangPrompt: b.mutation<{ seconds: number }, { lang: string; key: string; wav: Blob }>({
@@ -965,7 +981,7 @@ export const {
   useLookupsQuery, useCreateLookupMutation, useUpdateLookupMutation, useDeleteLookupMutation, useTestLookupMutation,
   useHotelQuery, useCheckInMutation, useCheckOutMutation, useSetRoomStatusMutation, useWakeUpsQuery, useSetWakeUpMutation, useCancelWakeUpMutation,
   useSaveNameAudioMutation, useDeleteNameAudioMutation, useSnmpStatusQuery, useDeskStatusQuery, useCardsStatusQuery, useAcmeStatusQuery, useAcmeCheckMutation, useAcmeReachMutation, useMusicStreamsQuery, useTurnStatusQuery, useWebSocketStatusQuery, useCdrCsvQuery, useTestCdrOutputsMutation, useChatListQuery, useChatMessagesQuery, useSendChatMutation, useSetChatStatusMutation,
-  useAgiSoundsQuery, useUploadAgiSoundMutation, useDeleteAgiSoundMutation, useAgiProgramsQuery, useAgiDBQuery, usePutAgiDBMutation, useDeleteAgiDBMutation, useTestAgiMutation, useAriStateQuery,
+  useAgiSoundsQuery, useUploadAgiSoundMutation, useDeleteAgiSoundMutation, useAgiProgramsQuery, useAgiDBQuery, usePutAgiDBMutation, useDeleteAgiDBMutation, useTestAgiMutation, useAriStateQuery, useLdapStatusQuery, useSyncLdapMutation, useTestLdapMutation,
   usePromptsQuery, useSaveLangPromptMutation, useDeleteLangPromptMutation, useGeneratePromptsMutation, useMusicQuery, useAddMusicMutation, useDeleteMusicMutation,
 } = api
 

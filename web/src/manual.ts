@@ -15,7 +15,7 @@ export const parts: { title: string; intro: string; ids: string[] }[] = [
   { title: 'Customers and insight', intro: 'Knowing who called and how it went: the live calls and history, the customer timeline, CRMs, recordings and consent, quality, costs and caller ID reputation.',
     ids: ['calls', 'history', 'timeline', 'crm', 'insight', 'recording', 'consent', 'quality', 'costs', 'reputation', 'spam'] },
   { title: 'Running BitVoice', intro: 'Keeping it safe and running: administrators and sign-in, security, changes and updates, several servers, hosted organisations, codecs, Teams, importing, automation and the tools for finding faults.',
-    ids: ['users', 'sso', 'security', 'changes', 'updates', 'servers', 'database', 'tenants', 'codecs', 'teams', 'import', 'automation', 'compat', 'archive', 'holds', 'metrics', 'loadtest', 'trace'] },
+    ids: ['users', 'sso', 'ldap', 'security', 'changes', 'updates', 'servers', 'database', 'tenants', 'codecs', 'teams', 'import', 'automation', 'compat', 'archive', 'holds', 'metrics', 'loadtest', 'trace'] },
   { title: 'Public safety: the lab track', intro: 'The 911 answering-point profile, the radio dispatch console and NG911 Core Services. They are a lab and design-partner track: built and tested against recorded captures, sample data and stand-ins, but not certified for live 911 or radio dispatch and not yet tried with a live ESInet, P25 system or CAD. They are off the menu until switched on in Settings. Emergency calls from your own phones (Getting started) are not part of this track: they are part of every phone system.',
     ids: ['psap', 'radio', 'core'] },
 ]
@@ -129,7 +129,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | Let's Encrypt | Field-tested | issues and renews the public demo's certificate |
 | Machine images (AWS) and configuration as code | Field-tested | an EC2 image built by \`deploy/cloud/build-images.sh\` from Ubuntu 24.04: each server from it starts new; \`deploy/terraform\` with OpenTofu 1.13 (create, change, no drift, destroy). Azure images not tried |
 | IAX2 trunks | Checked against a reference | Asterisk 23 |
-| ARI (Asterisk REST Interface) | Checked against a reference | every operation of Asterisk's published ARI called and its answer checked against the model's required fields; ari-client 2.2.0, Asterisk's JavaScript library, reading \`/ari/api-docs\` and running an application |
+| Company directory (LDAP, Active Directory) | Checked against a reference | OpenLDAP 2.4 (StartTLS and LDAPS, 1,203 people read through paging past its 1,000 limit, groups, sign-in) and Samba 4's Active Directory (LDAPS, paging past 1,000, disabled accounts left out, nested groups for ring groups and roles). Not tried against Microsoft's own Windows Server domain controller |\n| ARI (Asterisk REST Interface) | Checked against a reference | every operation of Asterisk's published ARI called and its answer checked against the model's required fields; ari-client 2.2.0, Asterisk's JavaScript library, reading \`/ari/api-docs\` and running an application |
 | AGI and FastAGI (Asterisk Gateway Interface) | Checked against a reference | every command's answer compared with Asterisk 20.6's over FastAGI; a FastAGI server written with pyst2 running a call; EAGI audio to a program. Not tried with a production IVR |
 | H.323 trunks | Checked against a reference | H323Plus 1.28 (its simph323 playing and recording WAV files) on EC2: calls both ways with Fast Connect and G.711, each end hearing the other's tone, MOS 4.39; call set-up also with Asterisk's chan_ooh323 (whose own sound is broken in Asterisk 22) |
 | SIP over WebSocket | Checked against a reference | JsSIP and SIP.js |
@@ -1575,6 +1575,33 @@ In [Settings](#/settings), **Single sign-on**:
 - With **Also allow passwords** off, passwords work only on this computer, so a provider outage never locks you out.
 
 > Two-step sign-in is then the provider's job: switch it on there.`,
+  },
+  {
+    id: 'ldap', title: 'Company directory (Active Directory and LDAP)', keys: 'ldap ldaps active directory ad openldap samba sync users groups extensions ring groups sign in bind starttls samaccountname memberof',
+    body: `BitVoice can read your company directory, Active Directory or another LDAP server (OpenLDAP, Samba, 389 Directory Server, FreeIPA): people with a phone number become extensions, directory groups fill ring groups, and people sign in to the web interface with their directory password. BitVoice only reads the directory; it never writes to it.
+
+## Connecting
+In [Settings](#/settings), **Company directory**:
+1. Choose **Active Directory** or **OpenLDAP or another LDAP server**: it sets which attributes are read (sAMAccountName or uid for the sign-in name, displayName or cn, mail, telephoneNumber). Change any of them in its box.
+2. **Server**: \`ldaps://dc1.example.com\` (port 636), or \`ldap://...\` with **StartTLS** on. Plain LDAP is refused unless the server is this computer, because passwords would cross the network unencrypted. When the server's certificate comes from your own certificate authority, paste the authority in **Company certificate authority**.
+3. **Reading account** and **Its password**: an account allowed to read people and groups (\`reader@example.com\` on Active Directory). The password may be a key vault reference (Settings, Key vaults).
+4. **Base DN**: where people and groups are (\`dc=example,dc=com\`). **Which people** narrows them with an LDAP filter; on Active Directory, disabled accounts are always left out.
+5. **Test** signs in with the reading account and reads everyone, changing nothing: it shows how many people it found, how many have a number, and the extension each would get.
+
+## Extensions and ring groups
+- With **Make and update extensions** on, each person with a number gets an extension: the number's last **Digits kept** (4 of \`+1 212 555 0123\` is 0123; 0 keeps every digit, which must then be 2 to 8). New extensions get a SIP password and voicemail with a random PIN; the person's name and email come from the directory.
+- The directory owns an extension it made: its number, name and email follow the directory at each sync. Everything else (devices, forwarding, voicemail settings) is yours.
+- An extension you made by hand is never taken over, unless it has that person's name or email. Two people with the same number, a number someone else's extension already has, or a number of the wrong length is listed under **To look at**, and nothing is changed for them.
+- With **Turn off the extensions of people who left** on, an extension the directory made is switched off when the person leaves, is disabled, or loses their number, and comes back on when they return.
+- **Ring groups filled from directory groups**: each line puts the extensions of a group's members into a ring group (on Active Directory nested groups count). A group with nobody who has an extension leaves the ring group as it was.
+- The directory is read every **Read it every** minutes (60 by default), and at once with **Sync now**. Each sync that changes something is one [revision](#changes) named "Company directory sync", so it can be undone; the last sync's report shows below the button.
+
+## Signing in
+With **People sign in here with their directory name and password** on, the sign-in page takes directory names and passwords as well as BitVoice's own accounts:
+- Members of **Administrator groups** sign in as administrators, of **Viewer groups** as viewers (with no viewer groups, anyone else in the directory). Groups are named by their name (cn) or DN; on Active Directory nested groups count. Someone in no such group is refused.
+- The account here is made at the first sign-in and its role follows the groups at every sign-in. It never takes over a BitVoice account of the same name.
+- An empty password is always refused (LDAP would otherwise take it as an anonymous sign-in), a disabled account cannot sign in, and names are escaped before they reach the directory.
+- Two-step sign-in can be added to these accounts as to any other.`,
   },
   {
     id: 'compat', title: 'Asterisk compatibility (AMI, ARI and AGI)', keys: 'ami ari agi eagi fastagi hagi asterisk gateway interface manager rest crm wallboard click to dial originate stasis application playback record bridge confbridge queuepause parkedcalls mailboxcount filter userevent astdb database phpagi pyst ivr',

@@ -159,6 +159,8 @@ type System struct {
 	Compat Compat `json:"compat"`
 	// SSO signs people in to the web interface through an OpenID Connect identity provider.
 	SSO SSO `json:"sso"`
+	// LDAP reads the company directory (LDAP, Active Directory): extensions, ring groups, sign-in.
+	LDAP LDAP `json:"ldap"`
 	// CRM connects a customer system: who a caller is, a link to open them, and every call logged.
 	CRM CRM `json:"crm"`
 	// Metrics pushes measurements to an OpenTelemetry collector (Prometheus scrapes /metrics instead).
@@ -878,6 +880,9 @@ type Extension struct {
 	HoldMusic string `json:"holdMusic,omitempty"`
 	// GuestRoom makes this a hotel room's phone: the hotel system checks guests in and out of it.
 	GuestRoom bool `json:"guestRoom,omitempty"`
+	// LDAP is the sign-in name of the directory person this extension was made from (Settings,
+	// Company directory); empty for extensions made here.
+	LDAP string `json:"ldap,omitempty"`
 }
 
 // FollowMe is where else an extension's calls ring when its phones are not answered.
@@ -1635,6 +1640,7 @@ func (c *Config) Validate() error {
 	checkCodecs(&p, "system.codecs", c.System.Codecs, false)
 	c.validateCompat(&p)
 	c.validateSSO(&p)
+	c.validateLDAP(&p)
 	c.validateCRM(&p)
 	c.validateMetrics(&p)
 	c.validateCosts(&p)

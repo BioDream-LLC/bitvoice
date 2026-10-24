@@ -77,6 +77,16 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u, ok := s.Store.Authenticate(req.Username, req.Password)
+	via := ""
+	if !ok {
+		// Not a local account (or not its password): the company directory may know them.
+		var why string
+		if u, ok, why = s.ldapLogin(r.Context(), req.Username, req.Password); ok {
+			via = "company directory as " + u.Role
+		} else if why != "" {
+			s.Log.Info("sign-in through the company directory refused", "user", req.Username, "why", why)
+		}
+	}
 	if !ok {
 		s.loginFailed(ip)
 		s.audit(r, req.Username, "login.failed", "")
@@ -96,8 +106,11 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if via != "" {
+		s.endSessionsFor(u.Username) // a role from the directory replaces whatever the old sessions had
+	}
 	s.startSession(w, r, u)
-	s.audit(r, u.Username, "login", "")
+	s.audit(r, u.Username, "login", via)
 	full, _ := s.Store.User(u.Username)
 	writeJSON(w, 200, meResponse{u.Username, u.Name, u.Role, s.Store.State().SetupComplete, full.TOTP})
 }

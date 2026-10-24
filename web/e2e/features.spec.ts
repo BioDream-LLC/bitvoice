@@ -1074,3 +1074,63 @@ test('AI settings: speech to text on this server', async ({ page }) => {
     await fetch('./api/settings', { method: 'PUT', headers: { 'X-BitVoice': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ ...s, system: { ...s.system, ai: { ...a, localSpeech: false, localModel: '', transcribeUrl: '' } } }) })
   }, before)
 })
+
+// The company directory: its settings refuse plain LDAP across the network and say what is missing.
+// With BITVOICE_TEST_LDAP (the OpenLDAP of ~/.bvtest/ldap) and BITVOICE_TEST_LDAP_CA, the whole way:
+// Test reads its people, Sync now makes extensions shown as from the directory, and Alice signs in
+// with her directory password as an administrator.
+test('company directory: settings, test, sync and sign-in', async ({ page, browser }) => {
+  await signIn(page)
+  await page.goto('/#/settings')
+  const card = page.getByRole('region', { name: /Company directory/ })
+  await card.getByRole('switch', { name: 'Use the company directory' }).click()
+  await card.getByRole('radio', { name: 'OpenLDAP or another LDAP server' }).click()
+  await card.getByLabel('Server').fill('ldap://dir.example.com')
+  await expect(card.getByText('Plain ldap:// sends passwords unencrypted')).toBeVisible()
+  await page.getByRole('button', { name: 'Save' }).first().click()
+  await expect(card.getByText('passwords would cross the network unencrypted')).toBeVisible()
+  await expect(card.getByText('where people are, such as dc=example,dc=com')).toBeVisible()
+  const addr = process.env.BITVOICE_TEST_LDAP
+  if (!addr) {
+    await card.getByRole('switch', { name: 'Use the company directory' }).click()
+    return
+  }
+  const { readFileSync } = await import('node:fs')
+  await card.getByLabel('Server').fill(`ldap://${addr}`)
+  await card.getByRole('switch', { name: 'StartTLS' }).click()
+  await card.getByLabel('Reading account').fill('cn=admin,dc=example,dc=org')
+  await card.getByLabel('Its password').fill('admin-password')
+  await card.getByLabel('Base DN').fill('dc=example,dc=org')
+  await card.getByLabel('Digits kept').fill('3')
+  await card.getByLabel(/Company certificate authority/).fill(readFileSync(process.env.BITVOICE_TEST_LDAP_CA!, 'utf8'))
+  await card.getByRole('button', { name: 'Test' }).click()
+  await expect(card.getByText(/read 1203 people, 2 with a number/)).toBeVisible()
+  await expect(card.getByRole('table', { name: 'People with a number' }).getByRole('cell', { name: 'bob', exact: true })).toBeVisible()
+  await card.getByRole('switch', { name: 'Make extensions from the directory' }).click()
+  await card.getByRole('switch', { name: 'Directory sign-in' }).click()
+  await card.getByLabel('Administrator groups').fill('pbx-admins')
+  await card.getByLabel('Administrator groups').press('Enter')
+  await page.getByRole('button', { name: 'Save' }).first().click()
+  await expect(page.getByText('Settings saved')).toBeVisible()
+  await card.getByRole('button', { name: 'Sync now' }).click()
+  await expect(page.getByText('Directory synced')).toBeVisible()
+  await expect(card.getByText(/Made:.*202 Bob Builder/)).toBeVisible()
+  await page.goto('/#/extensions')
+  await expect(page.getByRole('row').filter({ hasText: 'Bob Builder' }).getByText('From the directory')).toBeVisible()
+
+  const ctx = await browser.newContext({ ignoreHTTPSErrors: true })
+  const alice = await ctx.newPage()
+  await alice.goto(page.url().split('#')[0])
+  await expect(alice.getByText('Your company directory name and password work here too.')).toBeVisible()
+  await alice.getByLabel('Username').fill('alice')
+  await alice.getByLabel('Password').fill('alice-password')
+  await alice.getByRole('button', { name: 'Sign in' }).click()
+  await expect(alice.getByRole('navigation', { name: 'Main' })).toBeVisible({ timeout: 15000 })
+  await ctx.close()
+
+  // Leave the directory off for the other tests.
+  await page.goto('/#/settings')
+  await card.getByRole('switch', { name: 'Use the company directory' }).click()
+  await page.getByRole('button', { name: 'Save' }).first().click()
+  await expect(page.getByText('Settings saved')).toBeVisible()
+})
