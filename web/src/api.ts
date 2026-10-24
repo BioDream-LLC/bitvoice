@@ -48,7 +48,7 @@ export interface HotelView {
 }
 export interface Conference {
   id: string; number: string; name: string; pin: string; leaderPin: string; waitForLeader: boolean; muteMembers: boolean
-  maxMembers: number; record: boolean; quiet: boolean; hd?: boolean; video?: '' | 'talker' | 'leader' | 'grid'; videoCodec?: string
+  maxMembers: number; record: boolean; quiet: boolean; hd?: boolean; video?: '' | 'talker' | 'leader' | 'grid' | 'sfu'; videoCodec?: string
 }
 export interface ConferenceMember { id: string; number: string; name: string; leader: boolean; muted: boolean; hand: boolean; speaking: boolean; waiting: boolean; joined: string; hd?: boolean; video?: boolean }
 export interface ConferenceRoom { number: string; name: string; started: string; locked: boolean; members: ConferenceMember[] | null; waiting: number; records: boolean; hd?: boolean; video?: string; showing?: string; grid?: string[] }

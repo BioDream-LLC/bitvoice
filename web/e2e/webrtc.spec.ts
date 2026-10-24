@@ -885,64 +885,121 @@ test('full ICE behind NAT, with STUN and through a TURN relay', async ({ page })
     const r = await fetch('./api/settings', { method: 'PUT', headers: { 'X-BitVoice': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(s) })
     return r.ok ? '' : JSON.stringify(await r.json())
   }, system)
-  expect(await put({ turn: { enabled: true, port: 3478, tlsPort: -1 } })).toBe('')
-  await expect.poll(async () => page.evaluate(async () => (await (await fetch('./api/turn')).json()).running), { timeout: 5000 }).toBe(true)
-  const creds = await page.evaluate(async () => (await (await fetch('./api/ice')).json()).iceServers[0] as { username: string; credential: string })
+  try {
+    expect(await put({ turn: { enabled: true, port: 3478, tlsPort: -1 } })).toBe('')
+    await expect.poll(async () => page.evaluate(async () => (await (await fetch('./api/turn')).json()).running), { timeout: 5000 }).toBe(true)
+    const creds = await page.evaluate(async () => (await (await fetch('./api/ice')).json()).iceServers[0] as { username: string; credential: string })
 
-  // On Settings: STUN on this computer, then the probe.
-  await page.goto('/#/settings')
-  const card = page.getByRole('region', { name: 'BitVoice behind NAT' })
-  await card.getByRole('switch', { name: 'This server is behind NAT' }).click()
-  await card.getByLabel('STUN servers').fill('127.0.0.1:3478')
-  await card.getByLabel('STUN servers').press('Enter')
-  await card.getByRole('button', { name: 'Find my addresses' }).click()
-  await expect(card.getByRole('list', { name: 'Addresses BitVoice offers browsers' }).getByText('this computer').first()).toBeVisible()
-  await page.getByRole('button', { name: 'Save' }).first().click()
-  await expect(page.getByText('Settings saved')).toBeVisible()
+    // On Settings: STUN on this computer, then the probe.
+    await page.goto('/#/settings')
+    const card = page.getByRole('region', { name: 'BitVoice behind NAT' })
+    await card.getByRole('switch', { name: 'This server is behind NAT' }).click()
+    await card.getByLabel('STUN servers').fill('127.0.0.1:3478')
+    await card.getByLabel('STUN servers').press('Enter')
+    await card.getByRole('button', { name: 'Find my addresses' }).click()
+    await expect(card.getByRole('list', { name: 'Addresses BitVoice offers browsers' }).getByText('this computer').first()).toBeVisible()
+    await page.getByRole('button', { name: 'Save' }).first().click()
+    await expect(page.getByText('Settings saved')).toBeVisible()
 
-  const echo = async () => page.evaluate(async () => {
-    const pc = new RTCPeerConnection()
-    const mic = await navigator.mediaDevices.getUserMedia({ audio: true })
-    mic.getTracks().forEach((t) => pc.addTrack(t, mic))
-    await pc.setLocalDescription(await pc.createOffer())
-    await new Promise<void>((ok) => { if (pc.iceGatheringState === 'complete') ok(); else pc.onicegatheringstatechange = () => pc.iceGatheringState === 'complete' && ok(); setTimeout(ok, 3000) })
-    const r = await fetch('./api/phone/echo', { method: 'POST', headers: { 'X-BitVoice': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ sdp: pc.localDescription!.sdp }) })
-    const body = await r.json()
-    if (!r.ok) return { error: body.message as string }
-    await pc.setRemoteDescription({ type: 'answer', sdp: body.sdp })
-    const deadline = Date.now() + 15000
-    while (pc.connectionState !== 'connected' && Date.now() < deadline && pc.connectionState !== 'failed') await new Promise((ok) => setTimeout(ok, 100))
-    const state = pc.connectionState
-    await new Promise((ok) => setTimeout(ok, 2000))
-    let received = 0, remote = ''
-    const stats = await pc.getStats()
-    const byId = new Map<string, any>()
-    stats.forEach((s) => byId.set(s.id, s))
-    stats.forEach((s) => {
-      if (s.type === 'inbound-rtp' && s.kind === 'audio') received = s.packetsReceived
-      if (s.type === 'candidate-pair' && s.nominated && s.state === 'succeeded') remote = byId.get(s.remoteCandidateId)?.candidateType ?? ''
+    const echo = async () => page.evaluate(async () => {
+      const pc = new RTCPeerConnection()
+      const mic = await navigator.mediaDevices.getUserMedia({ audio: true })
+      mic.getTracks().forEach((t) => pc.addTrack(t, mic))
+      await pc.setLocalDescription(await pc.createOffer())
+      await new Promise<void>((ok) => { if (pc.iceGatheringState === 'complete') ok(); else pc.onicegatheringstatechange = () => pc.iceGatheringState === 'complete' && ok(); setTimeout(ok, 3000) })
+      const r = await fetch('./api/phone/echo', { method: 'POST', headers: { 'X-BitVoice': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ sdp: pc.localDescription!.sdp }) })
+      const body = await r.json()
+      if (!r.ok) return { error: body.message as string }
+      await pc.setRemoteDescription({ type: 'answer', sdp: body.sdp })
+      const deadline = Date.now() + 15000
+      while (pc.connectionState !== 'connected' && Date.now() < deadline && pc.connectionState !== 'failed') await new Promise((ok) => setTimeout(ok, 100))
+      const state = pc.connectionState
+      await new Promise((ok) => setTimeout(ok, 2000))
+      let received = 0, remote = ''
+      const stats = await pc.getStats()
+      const byId = new Map<string, any>()
+      stats.forEach((s) => byId.set(s.id, s))
+      stats.forEach((s) => {
+        if (s.type === 'inbound-rtp' && s.kind === 'audio') received = s.packetsReceived
+        if (s.type === 'candidate-pair' && s.nominated && s.state === 'succeeded') remote = byId.get(s.remoteCandidateId)?.candidateType ?? ''
+      })
+      pc.close()
+      return { state, received, remote, lite: /a=ice-lite/.test(body.sdp), types: [...(body.sdp as string).matchAll(/typ (\w+)/g)].map((m) => m[1]),
+        offered: [...pc.localDescription!.sdp.matchAll(/a=candidate:(.*)/g)].map((m) => m[1]).join(' | '), answer: [...(body.sdp as string).matchAll(/a=candidate:(.*)/g)].map((m) => m[1]).join(' | ') }
     })
-    pc.close()
-    return { state, received, remote, lite: /a=ice-lite/.test(body.sdp), types: [...(body.sdp as string).matchAll(/typ (\w+)/g)].map((m) => m[1]),
-      offered: [...pc.localDescription!.sdp.matchAll(/a=candidate:(.*)/g)].map((m) => m[1]).join(' | '), answer: [...(body.sdp as string).matchAll(/a=candidate:(.*)/g)].map((m) => m[1]).join(' | ') }
-  })
-  const direct = await echo()
-  console.log('direct', JSON.stringify(direct))
-  expect(direct.error).toBeUndefined()
-  expect(direct.lite).toBe(false) // a full agent now
-  expect(direct.types).toContain('host')
-  expect(direct.state).toBe('connected')
-  expect(direct.received).toBeGreaterThan(20)
+    const direct = await echo()
+    console.log('direct', JSON.stringify(direct))
+    expect(direct.error).toBeUndefined()
+    expect(direct.lite).toBe(false) // a full agent now
+    expect(direct.types).toContain('host')
+    expect(direct.state).toBe('connected')
+    expect(direct.received).toBeGreaterThan(20)
 
-  // Every call relayed through the TURN server.
-  expect(await put({ ice: { full: true, stun: [], relayOnly: true, turn: [{ server: '127.0.0.1:3478', username: creds.username, password: creds.credential }] } })).toBe('')
-  const relayed = await echo()
-  console.log('relayed', JSON.stringify(relayed))
-  expect(relayed.error).toBeUndefined()
-  expect(relayed.types).toEqual(['relay'])
-  expect(relayed.state).toBe('connected')
-  expect(relayed.remote).toBe('relay') // Chromium's chosen pair is to BitVoice's relayed address
-  expect(relayed.received).toBeGreaterThan(20)
+    // Every call relayed through the TURN server.
+    expect(await put({ ice: { full: true, stun: [], relayOnly: true, turn: [{ server: '127.0.0.1:3478', username: creds.username, password: creds.credential }] } })).toBe('')
+    // Chromium hides its addresses behind mDNS names. Where BitVoice cannot resolve them (Linux without
+    // a responder), its relay lets in the address the browser signed in from, and, for a browser on
+    // this computer, every address of this computer.
+    const relayed = await echo()
+    console.log('relayed', JSON.stringify(relayed))
+    expect(relayed.error).toBeUndefined()
+    expect(relayed.types).toEqual(['relay'])
+    expect(relayed.state).toBe('connected')
+    expect(relayed.remote).toBe('relay') // Chromium's chosen pair is to BitVoice's relayed address
+    expect(relayed.received).toBeGreaterThan(20)
+  } finally {
+    // Put the settings back even when a check failed, or later tests run behind a relay.
+    expect(await put({ ice: { full: false, stun: [], turn: [], relayOnly: false }, turn: { enabled: false } })).toBe('')
+  }
+})
 
-  expect(await put({ ice: { full: false, stun: [], turn: [], relayOnly: false }, turn: { enabled: false } })).toBe('')
+// An SFU video room: three browsers send their camera once and each sees the other two, each in its
+// own picture; the big tile gets the full size of a simulcast camera, the small ones the small size.
+test("a video room with everyone's video (SFU, simulcast)", async ({ page, browser }) => {
+  test.setTimeout(120_000)
+  await signIn(page)
+  await page.goto('/#/conferences')
+  await page.getByRole('button', { name: 'Add conference room' }).click()
+  await page.getByLabel('Name', { exact: true }).fill('Camera circle')
+  const number = await page.getByLabel('Number', { exact: true }).inputValue()
+  await page.getByLabel('Video', { exact: true }).selectOption('sfu')
+  await expect(page.getByText('each in its own picture, in the size they show it')).toBeVisible()
+  await page.getByLabel('Video codec').selectOption('VP8')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByRole('button', { name: /Camera circle/ }).getByText("everyone's video")).toBeVisible()
+  await page.getByRole('link', { name: 'Open the video room' }).click()
+  await expect(page.getByRole('heading', { name: new RegExp(`Video room ${number}`) })).toBeVisible()
+
+  const others = []
+  for (let i = 0; i < 2; i++) {
+    const ctx = await browser.newContext({ ignoreHTTPSErrors: true, permissions: ['camera', 'microphone'] })
+    const p = await ctx.newPage()
+    await signIn(p)
+    await p.goto(`/#/video-room/${number}`)
+    others.push(p)
+  }
+  for (const p of [page, ...others]) await p.getByRole('button', { name: 'Join with my camera' }).click()
+  const sizes = async (p: typeof page) => p.evaluate(() => [...document.querySelectorAll<HTMLVideoElement>('video[data-publisher]')].map((v) => v.videoWidth))
+  for (const p of [page, ...others]) {
+    await expect(p.getByRole('button', { name: 'Leave' })).toBeVisible()
+    await expect.poll(async () => (await sizes(p)).filter((w) => w > 0).length, { timeout: 30_000 }).toBe(2)
+  }
+  // The first tile is big (full size), the second small: a simulcast camera sends both sizes.
+  await expect.poll(async () => { const [big, small] = await sizes(page); return big > small && small > 0 }, { timeout: 30_000 }).toBe(true)
+  const before = await sizes(page)
+  // Making the small one big swaps the sizes, switched at the next full picture.
+  await page.getByRole('button', { name: 'Make big' }).click()
+  await expect.poll(async () => { const [a, b] = await sizes(page); return a < b && a > 0 }, { timeout: 30_000 }).toBe(true)
+  expect(before[0]).toBeGreaterThan(before[1])
+  // The API lists three cameras, with their layers and viewers.
+  const room = await page.evaluate(async (n) => (await (await fetch(`./api/video-rooms/${n}`)).json()), number)
+  expect(room.publishers).toHaveLength(3)
+  for (const p of room.publishers) {
+    expect(p.layers.length).toBeGreaterThan(1)
+    expect(p.views).toBe(2)
+  }
+  // Leaving takes the camera out of everyone else's room.
+  await others[1].getByRole('button', { name: 'Leave' }).click()
+  await expect.poll(async () => (await sizes(page)).length, { timeout: 15_000 }).toBe(1)
+  for (const p of others) await p.context().close()
 })

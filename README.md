@@ -457,6 +457,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | Machine images (AWS) and configuration as code | Field-tested | an EC2 image built by `deploy/cloud/build-images.sh` from Ubuntu 24.04: each server from it starts new; `deploy/terraform` with OpenTofu 1.13 (create, change, no drift, destroy). Azure images not tried |
 | IAX2 trunks | Checked against a reference | Asterisk 23 |
 | Full ICE behind NAT (STUN and TURN client) | Checked against a reference | Chromium's ICE agent (host candidates and relay only), JsSIP softphones with BitVoice offering, coturn 4.18 and BitVoice's own TURN server as relays, mDNS host names of Chromium resolved. Not yet tried from a server behind a real NAT router |
+| Everyone's-video rooms (SFU, simulcast) | Checked against a reference | Three Chromium browsers in one room, each sending three sizes (VP8 simulcast) and receiving the two others; sizes switched at keyframes as tiles grow and shrink. Not yet tried with Firefox or Safari, over the internet, or with more than three cameras; H.264 simulcast picks layers by the browser's order only. |
 | SIP History-Info and Diversion (forwarded calls) | Checked against a reference | Asterisk 20's PJSIP both ways: its forwarded calls read by BitVoice, and BitVoice's forwards read by Asterisk's REDIRECTING() from History-Info alone and from Diversion alone; RFC 7044 entries kept and extended on a forward on. Not yet tried with a carrier or Teams sending them |
 | Company directory (LDAP, Active Directory) | Checked against a reference | OpenLDAP 2.4 (StartTLS and LDAPS, 1,203 people read through paging past its 1,000 limit, groups, sign-in) and Samba 4's Active Directory (LDAPS, paging past 1,000, disabled accounts left out, nested groups for ring groups and roles). Not tried against Microsoft's own Windows Server domain controller |
 | ARI (Asterisk REST Interface) | Checked against a reference | every operation of Asterisk's published ARI called and its answer checked against the model's required fields; ari-client 2.2.0, Asterisk's JavaScript library, reading `/ari/api-docs` and running an application |
@@ -583,7 +584,7 @@ AMI or ARI can control BitVoice too.
 The everyday features, yes: extensions, ring groups, queues, menus, schedules, voicemail, recording, paging,
 parking, conference rooms, forwarding, do not disturb, follow-me, call pickup, intercom, speed dials, a staff
 portal, SIP, IAX2 and H.323 trunks, Skinny (SCCP) phones and MGCP gateways, day/night toggles, PIN sets,
-caller ID lookup, video conference rooms (follow the speaker, or a grid of everyone), an outbound dialer, MP3 and streamed hold music, Let's Encrypt
+caller ID lookup, video conference rooms (follow the speaker, a grid of everyone, or everyone's own video forwarded to browsers), an outbound dialer, MP3 and streamed hold music, Let's Encrypt
 certificates, AudioSocket voice bots and ARI external media, and hosting several organisations on one server. Feature codes match the usual FreePBX ones (<code>*72</code>, <code>*78</code>,
 <code>*8</code> and so on) and can be changed. Telephony cards (DAHDI analogue ports; T1/E1 PRI and BRI; E&amp;M,
 MFC-R2 and SS7) work through <code>bitvoice-dahdi</code>, a separate program in the Linux download. G.723.1 is

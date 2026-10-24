@@ -344,6 +344,7 @@ func (s *Server) routes() {
 	s.soundRoutes()
 	s.agiRoutes()
 	s.ldapRoutes()
+	s.videoRoomRoutes()
 	s.hotelRoutes()
 	s.chatRoutes()
 	s.snmpRoutes()

@@ -933,7 +933,8 @@ type Conference struct {
 	// other in HD; the others hear the room as before.
 	HD bool `json:"hd"`
 	// Video makes it a video room: "talker" shows everyone whoever is speaking (and the speaker the one
-	// before), "leader" shows everyone the leader; "" is sound only. Phones send and receive one picture,
+	// before), "leader" shows everyone the leader, "grid" one picture of everyone (ffmpeg), "sfu"
+	// everyone's own picture to browsers in the room's page (desk phones see the speaker); "" is sound only. Phones send and receive one picture,
 	// switched without being decoded, so every member's video uses VideoCodec (H264 unless set: H264 or VP8).
 	Video      string `json:"video"`
 	VideoCodec string `json:"videoCodec"`
@@ -1913,7 +1914,7 @@ func (c *Config) Validate() error {
 		switch r.Video {
 		case "":
 			r.VideoCodec = ""
-		case "talker", "leader", "grid":
+		case "talker", "leader", "grid", "sfu":
 			r.VideoCodec = strings.ToUpper(strings.TrimSpace(r.VideoCodec))
 			if r.VideoCodec == "" {
 				r.VideoCodec = "H264"
@@ -1928,7 +1929,7 @@ func (c *Config) Validate() error {
 				p.add(f+".video", "video is switched off for the whole system (Settings)")
 			}
 		default:
-			p.add(f+".video", "choose sound only, follow the speaker, show the leader or a grid")
+			p.add(f+".video", "choose sound only, follow the speaker, show the leader, a grid or everyone's video")
 		}
 	}
 	checkSpeedDials := func(field string, list []SpeedDial) {

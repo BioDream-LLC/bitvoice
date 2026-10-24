@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"net"
 	"net/netip"
 	"strings"
 	"sync"
@@ -88,6 +89,8 @@ type Session struct {
 	agent *ice.Agent
 	cands []ice.Candidate
 	pair  ice.Pair
+	// simulcast is what a video answer agreed for a sending browser's layers.
+	simulcast Simulcast
 }
 
 // ICEOptions say how BitVoice takes part in ICE. The zero value is ICE-lite: BitVoice only answers
@@ -121,6 +124,13 @@ func (s *Session) startICE(o ICEOptions, host string, controlling bool) {
 	s.cands = s.agent.Gather()
 	if o.Peer.IsValid() {
 		s.agent.Permit(o.Peer)
+		if o.Peer.Unmap().IsLoopback() {
+			// The browser runs on this computer: it may send to the relay from any of this
+			// computer's own addresses (the one facing the relay), so all of them may come in.
+			for _, a := range ownAddrs() {
+				s.agent.Permit(a)
+			}
+		}
 	}
 	go s.follow()
 }
@@ -590,4 +600,21 @@ func (s *Session) retransmit() {
 			s.ep.WriteTo(d, to)
 		}
 	}
+}
+
+// ownAddrs lists this computer's own unicast addresses.
+func ownAddrs() []netip.Addr {
+	var out []netip.Addr
+	as, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil
+	}
+	for _, a := range as {
+		if n, ok := a.(*net.IPNet); ok {
+			if ip, ok := netip.AddrFromSlice(n.IP); ok && !ip.IsMulticast() {
+				out = append(out, ip.Unmap())
+			}
+		}
+	}
+	return out
 }

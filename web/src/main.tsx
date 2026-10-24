@@ -46,6 +46,7 @@ import { DeskPhones } from './DeskPhones'
 import { TelephonyCards } from './TelephonyCards'
 import { RingGroups } from './RingGroups'
 import { Conferences } from './Conferences'
+import { VideoRoom } from './VideoRoom'
 import { Portal } from './Portal'
 import { Tenants } from './Tenants'
 import { FeatureCodesPage } from './FeatureCodes'
@@ -126,6 +127,7 @@ function Admin() {
         <Route path="/cards" element={<TelephonyCards />} />
         <Route path="/paging" element={<Paging />} />
         <Route path="/conferences" element={<Conferences />} />
+        <Route path="/video-room/:number" element={<VideoRoom />} />
         <Route path="/codes" element={<FeatureCodesPage />} />
         <Route path="/faxes" element={<Faxes />} />
         <Route path="/psap" element={<PSAP />} />

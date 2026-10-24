@@ -34,7 +34,8 @@ export function Conferences() {
           {data.items.map((c) => {
             const r = inUse.get(c.number)
             return (
-              <button key={c.id} className="card p-4 text-left hover:border-slate-700" onClick={() => setEdit(c)}>
+              <div key={c.id} className="flex flex-col gap-1">
+              <button className="card p-4 text-left hover:border-slate-700" onClick={() => setEdit(c)}>
                 <div className="flex items-center gap-2">
                   <Users2 size={16} className="text-teal-300" aria-hidden />
                   <span className="font-mono text-teal-300">{c.number}</span>
@@ -48,10 +49,12 @@ export function Conferences() {
                   {c.muteMembers && <span className="text-sky-300">Members muted</span>}
                   {c.record && <span className="text-rose-300">Recorded</span>}
                   {c.hd && <span className="text-teal-300">HD</span>}
-                  {c.video && <span className="flex items-center gap-1 text-fuchsia-300"><Video size={12} aria-hidden /> video</span>}
+                  {c.video && <span className="flex items-center gap-1 text-fuchsia-300"><Video size={12} aria-hidden /> {c.video === 'sfu' ? "everyone's video" : 'video'}</span>}
                   <span className="text-slate-500">Up to {c.maxMembers}</span>
                 </div>
               </button>
+              {c.video === 'sfu' && <a className="btn justify-center text-fuchsia-200" href={`#/video-room/${c.number}`}><Video size={14} aria-hidden /> Open the video room</a>}
+              </div>
             )
           })}
         </div>
@@ -162,12 +165,13 @@ function ConferenceEditor({ c: initial, onClose }: { c: Conference; onClose: () 
           <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={!c.quiet} onChange={(v) => set('quiet', !v)} label="Tones when people join and leave" /> Tones when people join and leave</label>
         </div>
         <div className="grid gap-3 sm:grid-cols-[1fr_9rem]">
-          <Field label="Video" htmlFor="cvid" error={p('video')} hint={c.video === 'grid' ? 'Everyone sees everyone, up to nine at once, made by ffmpeg on this server (Settings, video conversion). Each member costs some processor time.' : "Video phones see one picture, switched as people talk. Nothing is decoded, so every member's video uses one codec."}>
+          <Field label="Video" htmlFor="cvid" error={p('video')} hint={c.video === 'grid' ? 'Everyone sees everyone, up to nine at once, made by ffmpeg on this server (Settings, video conversion). Each member costs some processor time.' : c.video === 'sfu' ? "Browsers open the room's page and see every camera, each in its own picture, in the size they show it (up to 16 cameras); phones in the room hear it and video phones see whoever speaks." : "Video phones see one picture, switched as people talk. Nothing is decoded, so every member's video uses one codec."}>
             <select id="cvid" className="input" value={c.video ?? ''} onChange={(e) => set('video', e.target.value as Conference['video'])}>
               <option value="">Sound only</option>
               <option value="talker">Follow the speaker (the speaker sees the one before)</option>
               <option value="leader">Show the leader (the leader sees whoever speaks)</option>
               <option value="grid">Grid: everyone sees everyone (needs ffmpeg)</option>
+              <option value="sfu">Everyone's video: each camera on its own, in the room's page (browsers)</option>
             </select>
           </Field>
           {c.video === 'grid' && sys && !sys.ffmpeg && <p className="text-xs text-amber-300 sm:col-span-2">ffmpeg is not installed on this server: until it is, the room follows the speaker instead.</p>}

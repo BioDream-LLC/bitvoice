@@ -62,6 +62,29 @@ func pickVideo(m *sdp.Media, want []string) (VideoCodec, bool) {
 // AnswerVideo answers a browser's video offer on ep: it receives (WHIP) when send is false, and
 // sends (WHEP) when true, with a codec of want. It returns the session, the answer and the codec.
 func AnswerVideo(ep *media.Endpoint, offer *sdp.Session, host string, send bool, want []string) (*Session, *sdp.Session, VideoCodec, error) {
+	return AnswerVideoWith(ep, offer, host, send, want, VideoOptions{})
+}
+
+// VideoOptions add to a video answer: simulcast (a sending browser's layers, RFC 8853, with their RIDs
+// RFC 8851) and BitVoice's part in ICE.
+type VideoOptions struct {
+	Simulcast bool
+	ICE       ICEOptions
+}
+
+// Simulcast is what an answer agreed for a browser's simulcast: its layers' RIDs, best first as the
+// browser listed them, and the header extension IDs that carry each packet's RID (and repaired RID).
+type Simulcast struct {
+	RIDs        []string
+	RIDExt      int
+	RepairedExt int
+}
+
+// Simulcast returns what the session agreed for simulcast (nil RIDs when none).
+func (s *Session) Simulcast() Simulcast { return s.simulcast }
+
+// AnswerVideoWith is AnswerVideo with simulcast and ICE choices.
+func AnswerVideoWith(ep *media.Endpoint, offer *sdp.Session, host string, send bool, want []string, o VideoOptions) (*Session, *sdp.Session, VideoCodec, error) {
 	if err := loadIdentity(); err != nil {
 		return nil, nil, VideoCodec{}, err
 	}
@@ -99,13 +122,64 @@ func AnswerVideo(ep *media.Endpoint, offer *sdp.Session, host string, send bool,
 	if s.mid == "" {
 		s.mid = "0"
 	}
+	if o.Simulcast && !send {
+		s.simulcast = simulcastOf(v)
+	}
+	if o.ICE.Full {
+		_, lite := offer.SessionAttr("ice-lite")
+		s.startICE(o.ICE, host, lite)
+	}
 	ans, err := s.describeVideo(host, dir, vc, offer, v)
 	if err != nil {
+		s.Close()
 		return nil, nil, VideoCodec{}, err
 	}
 	ep.OnOther(s.receive)
+	s.remoteICE(offer, v)
 	go s.retransmit()
 	return s, ans, vc, nil
+}
+
+// simulcastOf reads a sending browser's simulcast offer: a=rid:X send lines, a=simulcast:send X;Y,
+// and the RID header extensions.
+func simulcastOf(v *sdp.Media) Simulcast {
+	var sc Simulcast
+	send := map[string]bool{}
+	for _, r := range v.Attrs("rid") {
+		f := strings.Fields(r)
+		if len(f) >= 2 && f[1] == "send" {
+			send[f[0]] = true
+		}
+	}
+	if s, ok := v.Attr("simulcast"); ok {
+		f := strings.Fields(s)
+		if len(f) >= 2 && f[0] == "send" {
+			for _, alt := range strings.Split(f[1], ";") {
+				r := strings.TrimPrefix(strings.Split(alt, ",")[0], "~")
+				if send[r] {
+					sc.RIDs = append(sc.RIDs, r)
+				}
+			}
+		}
+	}
+	for _, e := range v.Attrs("extmap") {
+		f := strings.Fields(e)
+		if len(f) < 2 {
+			continue
+		}
+		id := 0
+		fmt.Sscan(strings.Split(f[0], "/")[0], &id)
+		switch f[1] {
+		case "urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id":
+			sc.RIDExt = id
+		case "urn:ietf:params:rtp-hdrext:sdes:repaired-rtp-stream-id":
+			sc.RepairedExt = id
+		}
+	}
+	if len(sc.RIDs) < 2 || sc.RIDExt == 0 {
+		return Simulcast{} // not simulcast after all: one stream as usual
+	}
+	return sc
 }
 
 // describeVideo writes the answer: the one video line, the transport's keys, the codec, RTCP
@@ -123,7 +197,9 @@ func (s *Session) describeVideo(host, dir string, vc VideoCodec, offer *sdp.Sess
 	w("s=-")
 	w("t=0 0")
 	w("a=group:BUNDLE %s", s.mid)
-	w("a=ice-lite")
+	if s.agent == nil {
+		w("a=ice-lite")
+	}
 	for _, m := range offer.Media {
 		if m != v {
 			mid := attr(offer, m, "mid")
@@ -150,10 +226,26 @@ func (s *Session) describeVideo(host, dir string, vc VideoCodec, offer *sdp.Sess
 		w("a=rtcp-fb:%d nack", vc.PT)
 		w("a=rtcp-fb:%d nack pli", vc.PT)
 		w("a=rtcp-fb:%d ccm fir", vc.PT)
+		if sc := s.simulcast; len(sc.RIDs) > 0 {
+			w("a=extmap:%d urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id", sc.RIDExt)
+			if sc.RepairedExt != 0 {
+				w("a=extmap:%d urn:ietf:params:rtp-hdrext:sdes:repaired-rtp-stream-id", sc.RepairedExt)
+			}
+			for _, r := range sc.RIDs {
+				w("a=rid:%s recv", r)
+			}
+			w("a=simulcast:recv %s", strings.Join(sc.RIDs, ";"))
+		}
 		if dir == "sendonly" {
 			w("a=ssrc:%d cname:bitvoice", VideoSSRC)
 		}
-		w("a=candidate:1 1 udp 2130706431 %s %d typ host", host, s.ep.Port())
+		if s.agent == nil {
+			w("a=candidate:1 1 udp 2130706431 %s %d typ host", host, s.ep.Port())
+		} else {
+			for _, c := range s.cands {
+				w("a=candidate:%s", c.SDP())
+			}
+		}
 		w("a=end-of-candidates")
 	}
 	return sdp.Parse([]byte(b.String()))

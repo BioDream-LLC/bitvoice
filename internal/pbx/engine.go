@@ -88,6 +88,7 @@ type Engine struct {
 	// ALIQuery asks the legacy ALI link (PSAP.ALILink) for a callback number's record.
 	ALIQuery func(ctx context.Context, number, position string) (i3.ALIRecord, error)
 	video    videoHub // 911 callers' video
+	sfu      sfuHub   // SFU video rooms
 
 	radioOnce sync.Once
 	radio     *radio

@@ -254,7 +254,11 @@ func (c *Call) joinConference(number string) {
 			opener: num, members: map[string]*member{}, waiting: map[string]*member{}}
 		r.bridge.SetHearing(r.hears)
 		if rc.Video != "" {
-			r.video, r.vcodec = newVideoSwitch(r, rc.Video, rc.VideoCodec, cfg.System.FFmpeg, e.Log.Warn), rc.VideoCodec
+			mode := rc.Video
+			if mode == "sfu" {
+				mode = "talker" // desk phones and other SIP video members see whoever speaks
+			}
+			r.video, r.vcodec = newVideoSwitch(r, mode, rc.VideoCodec, cfg.System.FFmpeg, e.Log.Warn), rc.VideoCodec
 		}
 		if rc.Record && e.Recordings != nil && shouldRecordRoom(cfg) {
 			r.recOn = true

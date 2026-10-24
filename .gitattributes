@@ -1,2 +1,4 @@
 # Shell scripts keep LF line ends everywhere (a CRLF install.sh would not run).
 *.sh text eol=lf
+# Recorded answers of reference programs are compared byte for byte.
+internal/*/testdata/*.txt text eol=lf

@@ -373,8 +373,9 @@ func TestSpeech(t *testing.T) {
 	ch = newFake()
 	ch.speech = true
 	s = start(t, ch, Env{}, Config{})
-	for cmd, want := range map[string]string{"SPEECH CREATE x": "200 result=1", "SPEECH LOAD GRAMMAR menu /x.gram": "200 result=1", "SPEECH ACTIVATE GRAMMAR menu": "200 result=1"} {
-		if l := s.do(cmd); l != want {
+	// In this order: a grammar needs the speech object first (a map's order is random).
+	for _, cmd := range []string{"SPEECH CREATE x", "SPEECH LOAD GRAMMAR menu /x.gram", "SPEECH ACTIVATE GRAMMAR menu"} {
+		if l := s.do(cmd); l != "200 result=1" {
 			t.Fatalf("%s: %q", cmd, l)
 		}
 	}
@@ -446,7 +447,8 @@ func TestAnswersAsAsterisk(t *testing.T) {
 		answers []string
 	}
 	var script []exchange
-	for _, line := range strings.Split(string(b), "\n") {
+	// A Windows checkout may have turned the file's line ends into CRLF.
+	for _, line := range strings.Split(strings.ReplaceAll(string(b), "\r\n", "\n"), "\n") {
 		switch {
 		case strings.HasPrefix(line, ">> "):
 			script = append(script, exchange{cmd: line[3:]})
