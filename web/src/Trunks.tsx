@@ -192,12 +192,21 @@ function Editor({ t: initial, status, onClose }: { t: Trunk; status?: TrunkStatu
           {(t.codecs ?? []).length > 0 && <CodecList id="tcodecs" value={t.codecs} onChange={(v) => set('codecs', v)} error={problemFor(err?.problems, 'codecs')} />}
           {problemFor(err?.problems, 'codecs') && <p className="field-error text-sm text-rose-300">{problemFor(err?.problems, 'codecs')}</p>}
         </div>
-        <details className="card p-4" open={['authUser', 'fromDomain', 'callerId', 'allowFrom', 'maxChannels'].some((f) => p(f)) || undefined}>
+        <details className="card p-4" open={['authUser', 'fromDomain', 'callerId', 'redirecting', 'allowFrom', 'maxChannels'].some((f) => p(f)) || undefined}>
           <summary className="cursor-pointer text-sm font-semibold text-slate-300">Advanced</summary>
           <div className="mt-4 space-y-4">
             <Field label="Authentication username" htmlFor="ta" error={p('authUser')} hint="Only if your provider gives a separate one."><input id="ta" className="input" value={t.authUser} onChange={(e) => set('authUser', e.target.value)} /></Field>
             <Field label="From domain" htmlFor="tf" error={p('fromDomain')} hint="Domain in the From header. Empty uses the provider server."><input id="tf" className="input" value={t.fromDomain} onChange={(e) => set('fromDomain', e.target.value)} /></Field>
             <Field label="Default caller ID" htmlFor="tc" error={p('callerId')} hint="Your main number, shown on outbound calls."><input id="tc" className="input font-mono" value={t.callerId} onChange={(e) => set('callerId', e.target.value)} /></Field>
+            <Field label="Forwarded calls say whose they are with" htmlFor="tredir" error={p('redirecting')}
+              hint="When an extension forwards a call out through this trunk, the provider is told which number forwarded it and why. Most take both headers; choose one if yours is confused by the other.">
+              <select id="tredir" className="input" value={t.redirecting || 'both'} onChange={(e) => set('redirecting', e.target.value as NonNullable<typeof t.redirecting>)}>
+                <option value="both">Diversion and History-Info</option>
+                <option value="diversion">Diversion only (RFC 5806)</option>
+                <option value="history-info">History-Info only (RFC 7044)</option>
+                <option value="none">Neither</option>
+              </select>
+            </Field>
             <Field label="Also accept calls from" htmlFor="tl" error={p('allowFrom')} hint="Extra provider addresses or networks, one per line (for example 203.0.113.0/24).">
               <textarea id="tl" rows={3} className="input font-mono" value={(t.allowFrom ?? []).join('\n')} onChange={(e) => set('allowFrom', e.target.value.split('\n').map((s) => s.trim()).filter(Boolean))} />
             </Field>

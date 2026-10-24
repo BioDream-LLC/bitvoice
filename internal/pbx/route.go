@@ -653,6 +653,7 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 		}
 		c.from, c.fromName = cleanNumber(from.URI.User), from.Display
 		c.inTrunkID = trunk.ID
+		c.readForward(m)
 		if info := m.Get("X-BitVoice-CAMA"); info != "" && trunk.Protocol == "dahdi" {
 			// A 911 call from a selective router's CAMA trunk, on a telephony card (only the card
 			// program can send this): the caller's number came as ANI, the location comes from ALI.

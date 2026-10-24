@@ -586,6 +586,9 @@ type CallInfo struct {
 	To        string `json:"to"`
 	ToName    string `json:"toName"`
 	Trunk     string `json:"trunk,omitempty"`
+	// ForwardedFrom and ForwardReason: the number that forwarded the call here, and why.
+	ForwardedFrom string `json:"forwardedFrom,omitempty"`
+	ForwardReason string `json:"forwardReason,omitempty"`
 	// Screen is what spam screening found about an incoming call.
 	Screen *screen.Verdict `json:"screen,omitempty"`
 	Start  time.Time       `json:"start"`

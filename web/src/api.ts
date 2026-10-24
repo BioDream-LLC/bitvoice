@@ -196,7 +196,7 @@ export interface I3Event { logEventType: string; timestamp: string; agencyAgentI
 export interface Trunk {
   id: string; name: string; enabled: boolean; host: string; port: number; transport: 'udp' | 'tcp' | 'tls'; protocol?: '' | 'iax2' | 'h323' | 'dahdi'
   username: string; authUser: string; password: string; register: boolean; fromDomain: string
-  callerId: string; maxChannels: number; allowFrom: string[]; secureMedia: boolean; requireSecureMedia?: boolean; richCallData?: boolean; teams?: boolean; sbcName?: string; codecs: string[]
+  callerId: string; maxChannels: number; allowFrom: string[]; secureMedia: boolean; requireSecureMedia?: boolean; redirecting?: '' | 'both' | 'diversion' | 'history-info' | 'none'; richCallData?: boolean; teams?: boolean; sbcName?: string; codecs: string[]
   shared?: '' | 'one'; esinet?: boolean
   rates?: Rate[] | null; inboundPerMinute?: number
   shaken?: Shaken
@@ -327,7 +327,7 @@ export interface CDR {
   id: string; start: string; answer?: string; end: string; direction: string; from: string; fromName: string
   to: string; toName: string; answeredBy: string; trunk: string; disposition: string; cause: string
   duration: number; billsec: number; hangupBy: string; mos: number; recording?: string; why?: string[]
-  paused?: { from: number; to: number }[]; held?: boolean; quality?: LegQuality[]; noSound?: CallSide[]; attest?: string; signed?: string; verified?: string; screened?: string; ext?: string; department?: string; cost?: number; rate?: string; charged?: string
+  paused?: { from: number; to: number }[]; held?: boolean; quality?: LegQuality[]; noSound?: CallSide[]; forwardedFrom?: string; original?: string; forwardReason?: string; attest?: string; signed?: string; verified?: string; screened?: string; ext?: string; department?: string; cost?: number; rate?: string; charged?: string
 }
 /** Speech to text on this server (whisper-server run by BitVoice). */
 export interface SpeechStatus {

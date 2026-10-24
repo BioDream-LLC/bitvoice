@@ -363,11 +363,10 @@ func (b *Bridge) priOut(tx *sip.ServerTx, m *sip.Message, number string) bool {
 	if f, err := sip.ParseAddress(m.Get("From")); err == nil && f.URI != nil {
 		setup.Calling, setup.Name = digits(f.URI.User), f.Display
 	}
-	if d := m.Get("Diversion"); d != "" {
-		if a, err := sip.ParseAddress(d); err == nil && a.URI != nil {
-			setup.Redirecting = digits(a.URI.User)
-			setup.RedirectReason = divCode(d)
-		}
+	if f, ok := sip.ForwardOf(m); ok {
+		// Diversion or History-Info: the network hears who forwarded the call, and why.
+		setup.Redirecting = digits(f.From)
+		setup.RedirectReason = divCode("reason=" + f.Reason)
 	}
 	for _, s := range spans {
 		b.mu.Lock()

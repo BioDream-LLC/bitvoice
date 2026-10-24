@@ -105,8 +105,13 @@ type CDR struct {
 	Taken time.Time `json:"taken,omitzero"`
 	// TakenBy and TakenName are who took it then: an extension, or for a text call taken on the 911
 	// screen or by a CAD, the person signed in (or named by a CAD's token).
-	TakenBy   string `json:"takenBy,omitempty"`
-	TakenName string `json:"takenName,omitempty"`
+	TakenBy string `json:"takenBy,omitempty"`
+	// ForwardedFrom is the number that forwarded the call here (History-Info or Diversion), Original
+	// the number first dialled, and ForwardReason why (unconditional, user-busy, no-answer ...).
+	ForwardedFrom string `json:"forwardedFrom,omitempty"`
+	Original      string `json:"original,omitempty"`
+	ForwardReason string `json:"forwardReason,omitempty"`
+	TakenName     string `json:"takenName,omitempty"`
 	// Ext is the extension that placed an outgoing call; Department is its department then.
 	Ext        string `json:"ext,omitempty"`
 	Department string `json:"department,omitempty"`

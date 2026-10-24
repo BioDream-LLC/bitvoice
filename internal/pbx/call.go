@@ -81,29 +81,33 @@ type Call struct {
 	results            chan forkResult
 
 	direction, from, fromName, to, toName, trunk string
-	callerExt                                    string
-	signed                                       string           // the SHAKEN attestation this call was signed with
-	vconv                                        *videoConverters // video converted between the two parties' codecs (under vmu)
-	vmu                                          sync.Mutex
-	keyframe                                     func() // a video room's request for a full picture for this caller
-	cidOverride                                  string // the caller ID calls out present instead (a campaign's)
-	deskExt                                      string // the hot desk the call was made from, when it was
-	notice                                       string // a recording notice still to give: announce or beep
-	noticeLeg                                    *Leg
-	vip                                          bool // on the VIP list: to the front of queues
-	screen                                       *screen.Verdict
-	screened                                     string     // labelled, when screening marked it
-	why                                          []string   // how it was routed, in plain words (guarded by mu)
-	presented                                    string     // the caller ID sent out on a trunk
-	endCode                                      int        // the SIP failure an unanswered call ended with
-	briefing                                     *recording // both sides kept for a transfer briefing
-	linkID                                       string     // web:<link id> for calls from a call link
-	start, answer                                time.Time
-	answeredBy, disposition, cause, hangupBy     string
-	localAnswer                                  bool
-	transferring                                 bool
-	transferor                                   *Leg      // who asked for the transfer under way: their hanging up only releases them
-	transferBack                                 time.Time // a 911 transfer failed and went back to transferor: their hanging up until then still rings every call-taker
+	// history is how the call was forwarded before it reached here (History-Info), kept for a forward
+	// on; fwdFrom, fwdOriginal and fwdReason say it in short (from History-Info or Diversion).
+	history                                  []sip.Hop
+	fwdFrom, fwdOriginal, fwdReason          string
+	callerExt                                string
+	signed                                   string           // the SHAKEN attestation this call was signed with
+	vconv                                    *videoConverters // video converted between the two parties' codecs (under vmu)
+	vmu                                      sync.Mutex
+	keyframe                                 func() // a video room's request for a full picture for this caller
+	cidOverride                              string // the caller ID calls out present instead (a campaign's)
+	deskExt                                  string // the hot desk the call was made from, when it was
+	notice                                   string // a recording notice still to give: announce or beep
+	noticeLeg                                *Leg
+	vip                                      bool // on the VIP list: to the front of queues
+	screen                                   *screen.Verdict
+	screened                                 string     // labelled, when screening marked it
+	why                                      []string   // how it was routed, in plain words (guarded by mu)
+	presented                                string     // the caller ID sent out on a trunk
+	endCode                                  int        // the SIP failure an unanswered call ended with
+	briefing                                 *recording // both sides kept for a transfer briefing
+	linkID                                   string     // web:<link id> for calls from a call link
+	start, answer                            time.Time
+	answeredBy, disposition, cause, hangupBy string
+	localAnswer                              bool
+	transferring                             bool
+	transferor                               *Leg      // who asked for the transfer under way: their hanging up only releases them
+	transferBack                             time.Time // a 911 transfer failed and went back to transferor: their hanging up until then still rings every call-taker
 	// xfer is set on the helper call that rings the new party of a blind transfer: whoever answers is
 	// handed over on it (nil when nobody does) instead of being connected to a caller.
 	xfer     chan *Leg
@@ -125,7 +129,7 @@ type forkResult struct {
 func (c *Call) info() CallInfo {
 	c.mu.Lock()
 	ci := CallInfo{ID: c.ID, Direction: c.direction, From: c.from, FromName: c.fromName, To: c.to, ToName: c.toName,
-		Trunk: c.trunk, Start: c.start, Answer: c.answer, Screen: c.screen, call: c}
+		Trunk: c.trunk, Start: c.start, Answer: c.answer, Screen: c.screen, ForwardedFrom: c.fwdFrom, ForwardReason: c.fwdReason, call: c}
 	if c.i3 != nil || c.esinet {
 		em := &Emergency{ESInet: c.esinet, Rebid: c.rebidAt, TakenBy: c.takenBy, TakenName: c.takenName, TakenAt: c.takenAt}
 		if d := c.i3; d != nil {
@@ -493,7 +497,7 @@ func (c *Call) startFork(t target, stageNo int) bool {
 		c.signCall(cfg, t.trunk, inv, signCID, t.number)
 	}
 	if t.trunk != nil && t.divertFrom != "" {
-		inv.Set("Diversion", fmt.Sprintf("<sip:%s@%s>;reason=%s;counter=1", t.divertFrom, e.stack.LocalHost(peer), t.divertReason))
+		c.redirecting(inv, t, e.stack.LocalHost(peer), ruri)
 	}
 	if t.binding != nil && t.binding.node != "" && t.viaTrunk != "" {
 		inv.Set(nodeHeader, e.Cluster.Sign(callID, t.ext+"@"+t.viaTrunk))
@@ -1386,6 +1390,7 @@ func (c *Call) writeRecord(info CallInfo, recording string) {
 		r.AnsweredExt = c.callee.Ext
 	}
 	r.Account = c.account
+	r.ForwardedFrom, r.Original, r.ForwardReason = c.fwdFrom, c.fwdOriginal, c.fwdReason
 	var trunkID, number string
 	if c.callee != nil && c.callee.TrunkID != "" {
 		trunkID, number = c.callee.TrunkID, c.callee.Number

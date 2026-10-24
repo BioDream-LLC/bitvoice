@@ -1134,3 +1134,27 @@ test('company directory: settings, test, sync and sign-in', async ({ page, brows
   await page.getByRole('button', { name: 'Save' }).first().click()
   await expect(page.getByText('Settings saved')).toBeVisible()
 })
+
+// Forwarded calls: a trunk chooses how forwards out tell the provider whose call it is.
+test('a trunk chooses Diversion, History-Info or both for forwarded calls', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/#/trunks')
+  await page.getByRole('button', { name: 'Add trunk' }).click()
+  await page.getByLabel('Name', { exact: true }).fill('Forwarding carrier')
+  await page.getByLabel('Provider server').fill('sip.forward.example.net')
+  await page.getByRole('textbox', { name: 'Username' }).fill('fwdacct')
+  await page.getByRole('textbox', { name: 'Password' }).fill('a forwarding password')
+  await page.getByText('Advanced').click()
+  const pick = page.getByLabel('Forwarded calls say whose they are with')
+  await expect(pick).toHaveValue('both')
+  await pick.selectOption('history-info')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('Forwarding carrier').first()).toBeVisible()
+  const saved = await page.evaluate(async () => ((await (await fetch('./api/trunks')).json()).items as { name: string; redirecting?: string }[]).find((t) => t.name === 'Forwarding carrier'))
+  expect(saved?.redirecting).toBe('history-info')
+  await page.evaluate(async () => {
+    const items = (await (await fetch('./api/trunks')).json()).items as { id: string; name: string }[]
+    const t = items.find((x) => x.name === 'Forwarding carrier')
+    if (t) await fetch(`./api/trunks/${t.id}`, { method: 'DELETE', headers: { 'X-BitVoice': '1' } })
+  })
+})

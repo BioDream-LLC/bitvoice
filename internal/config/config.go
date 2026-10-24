@@ -1071,6 +1071,10 @@ type Trunk struct {
 	// RequireSecureMedia refuses calls this trunk will not encrypt: a call out whose answer has no SRTP is
 	// hung up, and a call in offered without SRTP is refused (488). Needs SecureMedia.
 	RequireSecureMedia bool `json:"requireSecureMedia,omitempty"`
+	// Redirecting says how a call forwarded out through this trunk tells the carrier whose call it is:
+	// "" or "both" sends Diversion (RFC 5806) and History-Info (RFC 7044), "diversion" or
+	// "history-info" only one (for a carrier that takes one and is confused by the other), "none" neither.
+	Redirecting string `json:"redirecting,omitempty"`
 	// Teams makes this trunk Microsoft Teams Direct Routing, with BitVoice as the SBC: TLS to
 	// Microsoft's three SIP proxies in turn, SRTP, and Contact and From carrying SBCName.
 	Teams bool `json:"teams"`
@@ -2659,6 +2663,11 @@ func (c *Config) Validate() error {
 			p.add(f+".name", "enter a name")
 		}
 		t.Host, t.Port = splitTrunkHost(t.Host, t.Port)
+		switch t.Redirecting {
+		case "", "both", "diversion", "history-info", "none":
+		default:
+			p.add(f+".redirecting", "choose both, diversion, history-info or none")
+		}
 		if t.RequireSecureMedia && !t.SecureMedia {
 			p.add(f+".requireSecureMedia", "turn on Encrypt media first: only then can encryption be required")
 		}
