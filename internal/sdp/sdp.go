@@ -331,10 +331,18 @@ func (c Codec) Attributes() []Line {
 		}
 		return []Line{{'a', fmt.Sprintf("rtpmap:%d %s/%d", c.PT, strings.ToUpper(name), r)}, {'a', fmt.Sprintf("fmtp:%d %s", c.PT, f)}}
 	}
+	var l []Line
 	if c.Channels > 1 {
-		return []Line{{'a', fmt.Sprintf("rtpmap:%d %s/%d/%d", c.PT, name, rate, c.Channels)}}
+		l = []Line{{'a', fmt.Sprintf("rtpmap:%d %s/%d/%d", c.PT, name, rate, c.Channels)}}
+	} else {
+		l = []Line{{'a', fmt.Sprintf("rtpmap:%d %s/%d", c.PT, name, rate)}}
 	}
-	return []Line{{'a', fmt.Sprintf("rtpmap:%d %s/%d", c.PT, name, rate)}}
+	if c.Fmtp != "" {
+		// Codecs carried untouched keep their parameters: G.722.1's bitrate (RFC 5577), G.719's
+		// (RFC 5404), Codec2's mode.
+		l = append(l, Line{'a', fmt.Sprintf("fmtp:%d %s", c.PT, c.Fmtp)})
+	}
+	return l
 }
 
 // static payload types that need no rtpmap (RFC 3551).

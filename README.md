@@ -466,6 +466,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | SIP over WebSocket | Checked against a reference | JsSIP and SIP.js |
 | Codecs: GSM, G.726, iLBC, MP3 hold music | Checked against a reference | ffmpeg, the RFC 3951 reference program and minimp3, sample for sample |
 | Codecs: G.711, G.722, Opus, G.729, AMR, Speex | Software-tested | own round-trip tests; Opus and G.729 through their pinned Go libraries; Opus calls with the Android app |
+| Codecs carried untouched: G.722.1 (Siren 7), G.722.1C (Siren 14), G.719, Codec2 | Software-tested | own tests: offered with their bit rate or mode, answered, packets both ways byte for byte; not converted (no free reference code BitVoice may ship for G.722.1 and G.719). Not yet tried with a real Polycom or room system. |
 | ISDN PRI and BRI, T1/E1 | Checked against a reference | libpri (Asterisk's), both sides; and on EC2 through the real DAHDI 3.4 kernel driver (two spans wired together in the kernel, Asterisk 20's chan_dahdi as the phone company): calls both ways with numbers and names, all 23 channels at once, MOS 4.39. No physical card or line yet |
 | MFC-R2, E&M | Checked against a reference | OpenR2; MF tones by our own tests. No real card or line tried |
 | SS7 (ISUP, MTP, link sets of several links with changeover) | Checked against a reference | libss7 (Asterisk's chan_dahdi library), ITU and ANSI. No real carrier link tried |

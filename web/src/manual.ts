@@ -136,6 +136,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | SIP over WebSocket | Checked against a reference | JsSIP and SIP.js |
 | Codecs: GSM, G.726, iLBC, MP3 hold music | Checked against a reference | ffmpeg, the RFC 3951 reference program and minimp3, sample for sample |
 | Codecs: G.711, G.722, Opus, G.729, AMR, Speex | Software-tested | own round-trip tests; Opus and G.729 through their pinned Go libraries; Opus calls with the Android app |
+| Codecs carried untouched: G.722.1 (Siren 7), G.722.1C (Siren 14), G.719, Codec2 | Software-tested | own tests: offered with their bit rate or mode, answered, packets both ways byte for byte; not converted (no free reference code BitVoice may ship for G.722.1 and G.719). Not yet tried with a real Polycom or room system. |
 | ISDN PRI and BRI, T1/E1 | Checked against a reference | libpri (Asterisk's), both sides; and on EC2 through the real DAHDI 3.4 kernel driver (two spans wired together in the kernel, Asterisk 20's chan_dahdi as the phone company): calls both ways with numbers and names, all 23 channels at once, MOS 4.39. No physical card or line yet |
 | MFC-R2, E&M | Checked against a reference | OpenR2; MF tones by our own tests. No real card or line tried |
 | SS7 (ISUP, MTP, link sets of several links with changeover) | Checked against a reference | libss7 (Asterisk's chan_dahdi library), ITU and ANSI. No real carrier link tried |
@@ -1756,8 +1757,14 @@ Each login has a **Username** and **Secret**. Logins are **read only** unless ma
 | Speex | telephone | 15 kbit/s (2.15 to 24.6) | older softphones, links to other Asterisk systems |
 | GSM | rougher | 13 kbit/s | older softphones and gateways |
 | G.723.1 | rough; converted only with ffmpeg | 5.3 or 6.3 kbit/s | very old video phones and gateways |
+| G.722.1 (Siren 7) | wideband, carried untouched | 24 or 32 kbit/s | Polycom phones, video and conference phones |
+| G.722.1C (Siren 14) | super-wideband, carried untouched | 24 to 48 kbit/s | conference phones, room systems |
+| G.719 | full band, carried untouched | 32 to 128 kbit/s | telepresence room systems |
+| Codec2 | very low bandwidth, carried untouched | 0.7 to 3.2 kbit/s | radio links, amateur radio gateways |
 
 Settings lists the codecs phones may use, best first; each trunk may have its own list. Analog adapter ports always use G.711, which faxes, modems and alarm panels need.
+
+**G.722.1**, **G.722.1C**, **G.719** and **Codec2** are carried untouched between two parties that both use them, with their bit rate or mode kept in the offer (BitVoice does not convert them, so a call between one of these and a phone without it uses another codec both have). Put them in a list, above G.711, where room systems or conference phones should keep their sound range when they call each other. The lists name G.722.1 at 32 kHz **G7221C**, though SDP calls both G7221.
 
 **G.723.1** passes untouched between two parties that both use it. To let a G.723.1-only device talk to anything else, switch on **Convert G.723.1 with ffmpeg** in Settings and install ffmpeg (apt install ffmpeg, brew install ffmpeg): BitVoice then runs ffmpeg as a separate program for each direction that needs converting (heard at either rate, sent at 6.3 kbit/s, the rate ffmpeg's encoder makes), about 60 ms later than other codecs, and stops it a few seconds after the call. BitVoice carries no G.723.1 code of its own: the ITU's reference code has no licence that allows including it, and ffmpeg is installed and run on its own.
 

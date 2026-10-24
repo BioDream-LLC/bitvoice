@@ -20,8 +20,12 @@ export const codecInfo: Record<string, { label: string; detail: string; color: s
   SPEEX: { label: 'Speex', detail: 'Open narrowband codec (15 kbit/s, 2.15 to 24.6); older softphones, Asterisk links', color: 'text-sky-300', converts: true },
   G723: { label: 'G.723.1', detail: 'Very low bandwidth (5.3 or 6.3 kbit/s); converted only with ffmpeg (Convert G.723.1, below), else passed between parties that both use it', color: 'text-slate-300', converts: false },
   GSM: { label: 'GSM', detail: 'GSM 06.10 full rate (13 kbit/s); some older softphones and gateways', color: 'text-fuchsia-300', converts: true },
+  G7221: { label: 'G.722.1 (Siren 7)', detail: 'Wideband (16 kHz, 24 or 32 kbit/s) of Polycom and other video and conference phones; passed between parties that both use it, not converted', color: 'text-slate-300', converts: false },
+  G7221C: { label: 'G.722.1C (Siren 14)', detail: 'Super-wideband (32 kHz, 24 to 48 kbit/s) of conference phones and room systems; passed between parties that both use it, not converted', color: 'text-slate-300', converts: false },
+  G719: { label: 'G.719', detail: 'Full band (48 kHz, 32 to 128 kbit/s) of telepresence room systems; passed between parties that both use it, not converted', color: 'text-slate-300', converts: false },
+  CODEC2: { label: 'Codec2', detail: 'Open very low bandwidth (0.7 to 3.2 kbit/s) for radio links and amateur radio gateways; passed between parties that both use it, not converted', color: 'text-slate-300', converts: false },
 }
-export const allCodecs = ['G722', 'PCMU', 'PCMA', 'OPUS', 'AMR-WB', 'G729', 'AMR', 'G726-40', 'G726-32', 'AAL2-G726-32', 'G726-24', 'G726-16', 'ILBC', 'SPEEX', 'GSM', 'G723']
+export const allCodecs = ['G722', 'PCMU', 'PCMA', 'OPUS', 'AMR-WB', 'G729', 'AMR', 'G726-40', 'G726-32', 'AAL2-G726-32', 'G726-24', 'G726-16', 'ILBC', 'SPEEX', 'GSM', 'G723', 'G7221', 'G7221C', 'G719', 'CODEC2']
 
 /**
  * An ordered list of codecs: switch each on or off and move it up or down (buttons, or Alt+arrow keys on

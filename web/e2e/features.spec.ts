@@ -1158,3 +1158,22 @@ test('a trunk chooses Diversion, History-Info or both for forwarded calls', asyn
     if (t) await fetch(`./api/trunks/${t.id}`, { method: 'DELETE', headers: { 'X-BitVoice': '1' } })
   })
 })
+
+// Codecs carried untouched: G.722.1, its Annex C, G.719 and Codec2 can be put in the system's list.
+test('pass-through codecs in the codec list', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/#/settings')
+  const list = page.getByRole('list', { name: 'Codecs, best first' }).first()
+  for (const name of ['G.722.1 (Siren 7)', 'G.722.1C (Siren 14)', 'G.719', 'Codec2']) {
+    await expect(list.getByText(name, { exact: true })).toBeVisible()
+  }
+  await expect(list.getByRole('listitem').filter({ hasText: 'G.722.1C (Siren 14)' }).getByText('(pass-through only)')).toBeVisible()
+  await list.getByRole('switch', { name: 'Use G.722.1C (Siren 14)' }).click()
+  await page.getByRole('button', { name: 'Save' }).first().click()
+  await expect(page.getByText('Settings saved').first()).toBeVisible()
+  const codecs = async () => page.evaluate(async () => (await (await fetch('./api/settings')).json()).system.codecs as string[])
+  expect(await codecs()).toContain('G7221C')
+  await list.getByRole('switch', { name: 'Use G.722.1C (Siren 14)' }).click()
+  await page.getByRole('button', { name: 'Save' }).first().click()
+  await expect.poll(codecs).not.toContain('G7221C')
+})

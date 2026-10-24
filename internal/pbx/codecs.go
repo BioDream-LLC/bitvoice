@@ -21,6 +21,16 @@ func (e *Engine) codecsFor(trunk *config.Trunk) []string {
 	return config.DefaultCodecs
 }
 
+// codecKey is a codec's name as the codec lists write it: SDP's name, upper case, except G.722.1 at
+// 32 kHz (Annex C, Siren 14), which SDP also calls G7221 and the lists call G7221C.
+func codecKey(c sdp.Codec) string {
+	n := strings.ToUpper(c.Name)
+	if n == "G7221" && c.ClockRate == 32000 {
+		return "G7221C"
+	}
+	return n
+}
+
 func isAux(name string) bool {
 	n := strings.ToLower(name)
 	return n == "telephone-event" || n == "cn"
@@ -40,7 +50,7 @@ func shapeOffer(m *sdp.Media, allowed []string) {
 	convertible := false
 	for _, c := range offered {
 		used[c.PT] = true
-		n := strings.ToUpper(c.Name)
+		n := codecKey(c)
 		if _, ok := byName[n]; !ok && !isAux(n) {
 			byName[n] = c
 		}
