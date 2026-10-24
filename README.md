@@ -134,7 +134,7 @@ Where something has only been tested against stand-ins rather than real equipmen
 <thead><tr><th align="left" valign="middle" width="176"><img src="docs/assets/chips/phones.svg" width="168" height="40" alt="Phones"></th><th align="left" valign="middle">Any SIP phone, a browser, or a mobile</th></tr></thead>
 <tbody>
 <tr><td colspan="2"><b>Automatic set-up</b> for Yealink, Poly, Grandstream (and HT adapters) and Snom over HTTPS, by MAC address or DHCP option 66</td></tr>
-<tr><td colspan="2">A <b>browser phone</b> (WebRTC) built on our own ICE, DTLS and SRTP, docked on every screen, with BitVoice's own <b>TURN server</b> for networks that block UDP</td></tr>
+<tr><td colspan="2">A <b>browser phone</b> (WebRTC) built on our own ICE, DTLS and SRTP, docked on every screen, with BitVoice's own <b>TURN server</b> for networks that block UDP, and <b>full ICE</b> (STUN and TURN client) for a BitVoice that is itself behind NAT</td></tr>
 <tr><td colspan="2"><b>SIP over WebSocket</b> for WebRTC softphones made with JsSIP, SIP.js and the like</td></tr>
 <tr><td colspan="2">A <b>staff phone</b> page for anyone without a desk phone, signed in with the extension's own password</td></tr>
 <tr><td colspan="2"><b>iPhone and Android apps</b> that ring like a desk phone even when closed, paired by QR code</td></tr>
@@ -456,6 +456,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | Let's Encrypt | Field-tested | issues and renews the public demo's certificate |
 | Machine images (AWS) and configuration as code | Field-tested | an EC2 image built by `deploy/cloud/build-images.sh` from Ubuntu 24.04: each server from it starts new; `deploy/terraform` with OpenTofu 1.13 (create, change, no drift, destroy). Azure images not tried |
 | IAX2 trunks | Checked against a reference | Asterisk 23 |
+| Full ICE behind NAT (STUN and TURN client) | Checked against a reference | Chromium's ICE agent (host candidates and relay only), JsSIP softphones with BitVoice offering, coturn 4.18 and BitVoice's own TURN server as relays, mDNS host names of Chromium resolved. Not yet tried from a server behind a real NAT router |
 | SIP History-Info and Diversion (forwarded calls) | Checked against a reference | Asterisk 20's PJSIP both ways: its forwarded calls read by BitVoice, and BitVoice's forwards read by Asterisk's REDIRECTING() from History-Info alone and from Diversion alone; RFC 7044 entries kept and extended on a forward on. Not yet tried with a carrier or Teams sending them |
 | Company directory (LDAP, Active Directory) | Checked against a reference | OpenLDAP 2.4 (StartTLS and LDAPS, 1,203 people read through paging past its 1,000 limit, groups, sign-in) and Samba 4's Active Directory (LDAPS, paging past 1,000, disabled accounts left out, nested groups for ring groups and roles). Not tried against Microsoft's own Windows Server domain controller |
 | ARI (Asterisk REST Interface) | Checked against a reference | every operation of Asterisk's published ARI called and its answer checked against the model's required fields; ari-client 2.2.0, Asterisk's JavaScript library, reading `/ari/api-docs` and running an application |

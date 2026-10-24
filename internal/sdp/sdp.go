@@ -234,6 +234,33 @@ func (m *Media) Attr(name string) (string, bool) {
 	return "", false
 }
 
+// Attrs returns the values of every a=name:value attribute of a media section, in order.
+func (m *Media) Attrs(name string) []string {
+	var out []string
+	for _, l := range m.Lines {
+		if l.Type == 'a' && strings.HasPrefix(l.Value, name+":") {
+			out = append(out, l.Value[len(name)+1:])
+		}
+	}
+	return out
+}
+
+// SessionAttr returns a session-level a=name or a=name:value attribute, and whether it exists.
+func (s *Session) SessionAttr(name string) (string, bool) {
+	for _, l := range s.Lines {
+		if l.Type != 'a' {
+			continue
+		}
+		if l.Value == name {
+			return "", true
+		}
+		if strings.HasPrefix(l.Value, name+":") {
+			return l.Value[len(name)+1:], true
+		}
+	}
+	return "", false
+}
+
 // Direction returns sendrecv, sendonly, recvonly or inactive for a media section, falling back to the session.
 func (s *Session) Direction(m *Media) string {
 	for _, d := range []string{"sendonly", "recvonly", "inactive", "sendrecv"} {

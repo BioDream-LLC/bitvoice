@@ -116,6 +116,9 @@ type Endpoint struct {
 	closed   atomic.Bool
 	txPkts   atomic.Uint64 // RTP packets sent to the far end
 	txBytes  atomic.Uint64
+	// relay sends what is meant for the far end through a TURN server's channel, and takes what
+	// arrives on it as from the far end (ICE chose a relayed candidate pair).
+	relay    atomic.Pointer[relayPath]
 	wg       sync.WaitGroup
 	started  bool
 	onPacket func()
@@ -272,7 +275,7 @@ func (e *Endpoint) OnOther(f func(pkt []byte, from netip.AddrPort)) {
 
 // WriteTo sends a raw datagram from the media port (STUN and DTLS replies).
 func (e *Endpoint) WriteTo(b []byte, to netip.AddrPort) {
-	_, _ = e.rtp.WriteToUDPAddrPort(b, to)
+	_ = e.writeUDP(b, to)
 }
 
 // Latch fixes where media is sent and accepted from (ICE chose the address).
@@ -502,6 +505,18 @@ func (e *Endpoint) readRTP() {
 			continue
 		}
 		from = netip.AddrPortFrom(from.Addr().Unmap(), from.Port())
+		if r := e.relay.Load(); r != nil && from == r.server && n >= 4 && buf[0] >= 0x40 && buf[0] < 0x50 {
+			// Relayed by the TURN server from the far end: unwrapped, it is as if it came directly.
+			if binary.BigEndian.Uint16(buf) != r.channel {
+				continue
+			}
+			l := int(binary.BigEndian.Uint16(buf[2:]))
+			if 4+l > n {
+				continue
+			}
+			copy(buf, buf[4:4+l])
+			n, from = l, r.peer
+		}
 		if e.raw.Load() {
 			now := time.Now()
 			e.mu.Lock()
@@ -526,8 +541,9 @@ func (e *Endpoint) readRTP() {
 		e.mu.Lock()
 		other := e.other
 		e.mu.Unlock()
-		if other != nil && n > 0 && (buf[0] < 4 || buf[0] >= 20 && buf[0] < 64) {
-			// STUN (0-3) and DTLS (20-63) share the port with RTP on WebRTC legs (RFC 7983).
+		if other != nil && n > 0 && (buf[0] < 4 || buf[0] >= 20 && buf[0] < 80) {
+			// STUN (0-3), DTLS (20-63) and TURN channel data (64-79) share the port with RTP on
+			// WebRTC legs (RFC 7983).
 			other(append([]byte(nil), buf[:n]...), from)
 			continue
 		}
@@ -745,10 +761,51 @@ func (e *Endpoint) send(pkt []byte) {
 		}
 		pkt = sp
 	}
-	if _, err := e.rtp.WriteToUDPAddrPort(pkt, to); err == nil {
+	if err := e.writeUDP(pkt, to); err == nil {
 		e.txPkts.Add(1)
 		e.txBytes.Add(uint64(max(len(pkt)-12, 0)))
 	}
+}
+
+// relayPath is a TURN channel to the far end.
+type relayPath struct {
+	server  netip.AddrPort
+	channel uint16
+	peer    netip.AddrPort
+}
+
+// SetRelay sends everything meant for peer through a TURN server's channel (as ChannelData, RFC
+// 8656 12.4), and takes ChannelData arriving from the server on that channel as from peer. A zero
+// channel stops relaying.
+func (e *Endpoint) SetRelay(server netip.AddrPort, channel uint16, peer netip.AddrPort) {
+	if channel == 0 {
+		e.relay.Store(nil)
+		return
+	}
+	e.relay.Store(&relayPath{server: server, channel: channel, peer: peer})
+}
+
+// writeUDP sends a datagram from the RTP socket, through the relay when it is for the relayed peer.
+func (e *Endpoint) writeUDP(pkt []byte, to netip.AddrPort) error {
+	if r := e.relay.Load(); r != nil && to == r.peer {
+		cd := make([]byte, 4+len(pkt))
+		binary.BigEndian.PutUint16(cd, r.channel)
+		binary.BigEndian.PutUint16(cd[2:], uint16(len(pkt)))
+		copy(cd[4:], pkt)
+		to, pkt = r.server, cd
+	}
+	_, err := e.rtp.WriteToUDPAddrPort(pkt, to)
+	return err
+}
+
+// LocalAddr is the address the RTP socket is bound to (unspecified when it takes every address).
+func (e *Endpoint) LocalAddr() netip.Addr {
+	if a, ok := e.rtp.LocalAddr().(*net.UDPAddr); ok {
+		if ip, ok := netip.AddrFromSlice(a.IP); ok {
+			return ip.Unmap()
+		}
+	}
+	return netip.Addr{}
 }
 
 // SentStats counts the RTP packets and payload bytes sent to the far end.
@@ -765,7 +822,7 @@ func (e *Endpoint) sendRaw(pkt []byte) {
 	to := e.remote
 	e.mu.Unlock()
 	if to.IsValid() {
-		_, _ = e.rtp.WriteToUDPAddrPort(pkt, to)
+		_ = e.writeUDP(pkt, to)
 	}
 }
 
@@ -911,7 +968,7 @@ func (e *Endpoint) SendMuxRTCP(pkt []byte) {
 		}
 		pkt = sp
 	}
-	_, _ = e.rtp.WriteToUDPAddrPort(pkt, to)
+	_ = e.writeUDP(pkt, to)
 }
 
 // OnRTCP sets a function that takes the RTCP this party sends (it is then not relayed); nil relays again.

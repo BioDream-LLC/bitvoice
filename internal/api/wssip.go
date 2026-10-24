@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/biodream-llc/bitvoice/internal/store"
+	"github.com/biodream-llc/bitvoice/internal/webrtc"
 	"github.com/biodream-llc/bitvoice/internal/wsgw"
 )
 
@@ -30,6 +31,9 @@ func (s *Server) wsRoutes(m *http.ServeMux) {
 						}
 					}
 					return browserHost(r)
+				},
+				ICE: func(host string, client netip.Addr) webrtc.ICEOptions {
+					return webrtc.OptionsFrom(s.config().System.ICE, host, client)
 				}}
 		})
 		return g

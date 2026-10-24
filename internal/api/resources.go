@@ -459,6 +459,13 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request, u store.Use
 		if in.System.SSO.ClientSecret == "" && in.System.SSO.ClientID == c.System.SSO.ClientID {
 			in.System.SSO.ClientSecret = c.System.SSO.ClientSecret
 		}
+		for i, t := range in.System.ICE.TURN {
+			for _, old := range c.System.ICE.TURN {
+				if t.Password == "" && old.Server == t.Server && old.Username == t.Username {
+					in.System.ICE.TURN[i].Password = old.Password
+				}
+			}
+		}
 		if in.System.LDAP.BindPassword == "" && in.System.LDAP.BindDN == c.System.LDAP.BindDN {
 			in.System.LDAP.BindPassword = c.System.LDAP.BindPassword
 		}

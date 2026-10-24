@@ -4,6 +4,7 @@
 package webrtc
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -20,6 +21,7 @@ import (
 	"time"
 
 	"github.com/biodream-llc/bitvoice/internal/dtls"
+	"github.com/biodream-llc/bitvoice/internal/ice"
 	"github.com/biodream-llc/bitvoice/internal/media"
 	"github.com/biodream-llc/bitvoice/internal/sdp"
 	"github.com/biodream-llc/bitvoice/internal/srtp"
@@ -82,6 +84,105 @@ type Session struct {
 	PT, EventPT, OpusPT int
 	eventClock          int
 	mid                 string
+	// agent is the full ICE agent (nil: ICE-lite); cands its local candidates, pair the chosen pair.
+	agent *ice.Agent
+	cands []ice.Candidate
+	pair  ice.Pair
+}
+
+// ICEOptions say how BitVoice takes part in ICE. The zero value is ICE-lite: BitVoice only answers
+// the browser's checks at its one address, which suits a server with a public address. Full makes it
+// a full agent (RFC 8445) for a server behind NAT: host candidates at Hosts, server-reflexive ones
+// from STUN, relayed ones from TURN.
+type ICEOptions struct {
+	Full      bool
+	Hosts     []netip.Addr
+	STUN      []netip.AddrPort
+	TURN      []ice.TURNServer
+	RelayOnly bool
+	// Peer is the browser's own address as the web server saw it: the relays let it through from the
+	// start, for a browser whose candidates are hidden mDNS names.
+	Peer netip.Addr
+}
+
+// startICE gathers this side's candidates and gets the agent ready (the endpoint starts reading, so
+// STUN and TURN answers arrive).
+func (s *Session) startICE(o ICEOptions, host string, controlling bool) {
+	hosts := o.Hosts
+	if len(hosts) == 0 {
+		if ip, err := netip.ParseAddr(host); err == nil {
+			hosts = []netip.Addr{ip}
+		}
+	}
+	s.agent = ice.New(ice.Config{Hosts: hosts, Port: s.ep.Port(), STUN: o.STUN, TURN: o.TURN, RelayOnly: o.RelayOnly,
+		Controlling: controlling, LocalUfrag: s.ufrag, LocalPwd: s.pwd, Send: s.ep.WriteTo})
+	s.ep.OnOther(s.receive)
+	s.ep.Start()
+	s.cands = s.agent.Gather()
+	if o.Peer.IsValid() {
+		s.agent.Permit(o.Peer)
+	}
+	go s.follow()
+}
+
+// remoteICE gives the agent the far end's credentials and candidates, and starts the checks.
+func (s *Session) remoteICE(sd *sdp.Session, m *sdp.Media) {
+	if s.agent == nil {
+		return
+	}
+	var cands []ice.Candidate
+	for _, v := range m.Attrs("candidate") {
+		c, err := ice.ParseCandidate(v)
+		switch {
+		case err != nil:
+		case c.MDNS != "":
+			// A browser's host address behind an mDNS name: resolved on this network, then added.
+			go func(c ice.Candidate) {
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				defer cancel()
+				if ip, err := ice.ResolveMDNS(ctx, c.MDNS); err == nil {
+					c.Addr, c.MDNS = netip.AddrPortFrom(ip, c.Addr.Port()), ""
+					s.agent.AddRemote(c)
+				}
+			}(c)
+		default:
+			cands = append(cands, c)
+		}
+	}
+	s.agent.SetRemote(attr(sd, m, "ice-ufrag"), attr(sd, m, "ice-pwd"), cands)
+	s.agent.Start()
+}
+
+// follow puts the chosen pair on the media path: the far end's address, and the TURN channel when
+// the pair is relayed.
+func (s *Session) follow() {
+	for {
+		select {
+		case <-s.closed:
+			s.agent.Close()
+			return
+		case p := <-s.agent.Selected():
+			s.mu.Lock()
+			s.pair, s.remote = p, p.Remote
+			s.mu.Unlock()
+			s.ep.SetRelay(p.Relay, p.Channel, p.Remote)
+			s.ep.Latch(p.Remote)
+		}
+	}
+}
+
+// ICE reports how the session's media flows: "lite", or the chosen pair's local candidate type
+// (host, srflx, prflx, relay) once a full agent has chosen one ("checking" until then).
+func (s *Session) ICE() string {
+	if s.agent == nil {
+		return "lite"
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.pair.Remote.IsValid() {
+		return "checking"
+	}
+	return string(s.pair.Local.Type)
 }
 
 // Errors when a browser offer cannot be answered.
@@ -118,6 +219,11 @@ func attr(s *sdp.Session, m *sdp.Media, name string) string {
 // Answer makes a session for a browser's offer on ep and returns the SDP answer. host is the address the
 // browser reaches BitVoice on.
 func Answer(ep *media.Endpoint, offer *sdp.Session, host string) (*Session, *sdp.Session, error) {
+	return AnswerWith(ep, offer, host, ICEOptions{})
+}
+
+// AnswerWith is Answer with BitVoice's part in ICE chosen.
+func AnswerWith(ep *media.Endpoint, offer *sdp.Session, host string, o ICEOptions) (*Session, *sdp.Session, error) {
 	if err := loadIdentity(); err != nil {
 		return nil, nil, err
 	}
@@ -169,8 +275,14 @@ func Answer(ep *media.Endpoint, offer *sdp.Session, host string) (*Session, *sdp
 		dir = "sendonly"
 	}
 	s.mid = mid
+	if o.Full {
+		// The answerer of a full agent is controlled; a full agent facing an ICE-lite one controls.
+		_, lite := offer.SessionAttr("ice-lite")
+		s.startICE(o, host, lite)
+	}
 	ans, err := s.describe(host, mid, "passive", dir, nil)
 	if err != nil {
+		s.Close()
 		return nil, nil, err
 	}
 	ep.SetPayloadType(s.PT)
@@ -179,6 +291,7 @@ func Answer(ep *media.Endpoint, offer *sdp.Session, host string) (*Session, *sdp
 		ep.MapPayloadType(media.PTOpus, s.OpusPT)
 	}
 	ep.OnOther(s.receive)
+	s.remoteICE(offer, a)
 	go s.retransmit()
 	return s, ans, nil
 }
@@ -234,8 +347,19 @@ func (s *Session) describe(host, mid, setup, dir string, offer []int) (*sdp.Sess
 	w("s=-")
 	w("t=0 0")
 	w("a=group:BUNDLE %s", mid)
-	w("a=ice-lite")
-	w("m=audio %d UDP/TLS/RTP/SAVPF %s", ep.Port(), strings.Join(formats, " "))
+	port := ep.Port()
+	if s.agent == nil {
+		w("a=ice-lite")
+	} else if d, ok := defaultCandidate(s.cands); ok {
+		// The m= and c= lines carry the candidate most likely to work (RFC 8839 4.2.1.2).
+		host, port = d.Addr.Addr().String(), int(d.Addr.Port())
+		if d.Addr.Addr().Is4() {
+			fam = "IP4"
+		} else {
+			fam = "IP6"
+		}
+	}
+	w("m=audio %d UDP/TLS/RTP/SAVPF %s", port, strings.Join(formats, " "))
 	w("c=IN %s %s", fam, host)
 	w("a=mid:%s", mid)
 	w("a=ice-ufrag:%s", s.ufrag)
@@ -247,14 +371,37 @@ func (s *Session) describe(host, mid, setup, dir string, offer []int) (*sdp.Sess
 	for _, m := range maps {
 		w("%s", m)
 	}
-	w("a=candidate:1 1 udp 2130706431 %s %d typ host", host, ep.Port())
+	if s.agent == nil {
+		w("a=candidate:1 1 udp 2130706431 %s %d typ host", host, ep.Port())
+	} else {
+		for _, c := range s.cands {
+			w("a=candidate:%s", c.SDP())
+		}
+	}
 	w("a=end-of-candidates")
 	return sdp.Parse([]byte(b.String()))
+}
+
+// defaultCandidate is a relayed candidate if there is one, else server-reflexive, else host.
+func defaultCandidate(cands []ice.Candidate) (ice.Candidate, bool) {
+	for _, t := range []ice.Type{ice.Relayed, ice.ServerReflexive, ice.Host} {
+		for _, c := range cands {
+			if c.Type == t {
+				return c, true
+			}
+		}
+	}
+	return ice.Candidate{}, false
 }
 
 // Offer makes a session that offers WebRTC audio to a browser (a SIP-over-WebSocket softphone):
 // Opus, G.711 and key presses, BitVoice as ICE-lite and DTLS server. The browser's answer goes to Accept.
 func Offer(ep *media.Endpoint, host string, pts []int) (*Session, *sdp.Session, error) {
+	return OfferWith(ep, host, pts, ICEOptions{})
+}
+
+// OfferWith is Offer with BitVoice's part in ICE chosen (the offering full agent controls).
+func OfferWith(ep *media.Endpoint, host string, pts []int, o ICEOptions) (*Session, *sdp.Session, error) {
 	if err := loadIdentity(); err != nil {
 		return nil, nil, err
 	}
@@ -264,8 +411,12 @@ func Offer(ep *media.Endpoint, host string, pts []int) (*Session, *sdp.Session, 
 	s := &Session{ep: ep, ufrag: randomToken(8), pwd: randomToken(24), PT: -1, EventPT: -1, OpusPT: -1,
 		connected: make(chan struct{}), closed: make(chan struct{})}
 	s.mid = "0"
+	if o.Full {
+		s.startICE(o, host, true)
+	}
 	off, err := s.describe(host, "0", "actpass", "sendrecv", pts)
 	if err != nil {
+		s.Close()
 		return nil, nil, err
 	}
 	ep.OnOther(s.receive)
@@ -322,6 +473,7 @@ func (s *Session) Accept(answer *sdp.Session) error {
 		s.ep.MapIncoming(opus, media.PTOpus)
 		s.ep.MapPayloadType(media.PTOpus, opus)
 	}
+	s.remoteICE(answer, a) // the offering full agent stays controlling (RFC 8445 6.1.1)
 	go s.retransmit()
 	return nil
 }
@@ -339,6 +491,26 @@ func (s *Session) Close() {
 }
 
 func (s *Session) receive(pkt []byte, from netip.AddrPort) {
+	if s.agent != nil {
+		s.mu.Lock()
+		p := s.pair
+		s.mu.Unlock()
+		if p.Channel != 0 && from == p.Remote && stun.IsSTUN(pkt) {
+			// The far end's consent checks, through the relay (the endpoint has unwrapped them).
+			s.agent.HandleRelayed(pkt, from, p.Relay)
+			return
+		}
+		consumed, inner, innerFrom := s.agent.Handle(pkt, from)
+		if inner != nil {
+			s.receive(inner, innerFrom) // relayed by the TURN server before a channel was bound
+			return
+		}
+		if consumed {
+			return
+		}
+		s.dtlsIn(pkt, from)
+		return
+	}
 	if stun.IsSTUN(pkt) {
 		m, err := stun.Parse(pkt)
 
@@ -357,8 +529,20 @@ func (s *Session) receive(pkt []byte, from netip.AddrPort) {
 		}
 		return
 	}
+	s.dtlsIn(pkt, from)
+}
+
+// dtlsIn takes DTLS from the far end.
+func (s *Session) dtlsIn(pkt []byte, from netip.AddrPort) {
+	if len(pkt) == 0 || pkt[0] < 20 || pkt[0] > 63 {
+		return
+	}
 	s.mu.Lock()
 	ok := s.remote.IsValid() && from == s.remote
+	if !ok && s.agent != nil && !s.remote.IsValid() && s.agent.Valid(from) {
+		// A full agent: DTLS may come on a pair that has passed its checks before one is chosen.
+		s.remote, ok = from, true
+	}
 	d := s.dtls
 	s.mu.Unlock()
 

@@ -90,6 +90,8 @@ type System struct {
 	ACME ACME `json:"acme"`
 	// TURN is BitVoice's own TURN server for browser and WebRTC phones.
 	TURN TURN `json:"turn"`
+	// ICE is how BitVoice itself connects browser media from behind NAT (full ICE with STUN and TURN).
+	ICE ICE `json:"ice"`
 	// WebSocket is SIP over WebSocket for WebRTC softphones.
 	WebSocket WebSocketSIP `json:"webSocket"`
 	// Inbox is WhatsApp, Messenger and the web chat, answered beside the texts.
@@ -1645,6 +1647,7 @@ func (c *Config) Validate() error {
 	c.validateCompat(&p)
 	c.validateSSO(&p)
 	c.validateLDAP(&p)
+	c.validateICE(&p)
 	c.validateCRM(&p)
 	c.validateMetrics(&p)
 	c.validateCosts(&p)

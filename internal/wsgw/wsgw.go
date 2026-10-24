@@ -38,7 +38,9 @@ type Gateway struct {
 	Banned  func(netip.Addr) bool
 	// MediaHost is the address browsers reach for media, from the request (its host, or the public address).
 	MediaHost func(r *http.Request) string
-	Log       *slog.Logger
+	// ICE gives BitVoice's part in ICE for a browser at client that reached it at host (nil: ICE-lite).
+	ICE func(host string, client netip.Addr) webrtc.ICEOptions
+	Log *slog.Logger
 	// Linger is how long a closed connection's socket keeps answering the engine "not here" (480), so
 	// calls do not wait for its registration to run out (default: until the registration would have).
 	Linger time.Duration
@@ -48,6 +50,13 @@ type Gateway struct {
 
 // ClientHeader carries the softphone's real address to the engine, which trusts it only from this computer.
 const ClientHeader = "X-BitVoice-Client"
+
+func (g *Gateway) iceFor(host string, client netip.Addr) webrtc.ICEOptions {
+	if g.ICE == nil {
+		return webrtc.ICEOptions{}
+	}
+	return g.ICE(host, client)
+}
 
 // Count is how many softphones are connected.
 func (g *Gateway) Count() int { return int(g.conns.Load()) }
@@ -270,7 +279,7 @@ func (c *conn) clientOffer(m *sip.Message) error {
 	if err != nil {
 		return errors.New("no media ports free")
 	}
-	sess, ans, err := webrtc.Answer(b, offer, c.host)
+	sess, ans, err := webrtc.AnswerWith(b, offer, c.host, c.g.iceFor(c.host, c.client))
 	if err != nil {
 		b.Close()
 		return err
@@ -499,7 +508,7 @@ func (c *conn) engineOffer(m *sip.Message) error {
 	if err != nil {
 		return errors.New("no media ports free")
 	}
-	sess, off, err := webrtc.Offer(b, c.host, pts)
+	sess, off, err := webrtc.OfferWith(b, c.host, pts, c.g.iceFor(c.host, c.client))
 	if err != nil {
 		b.Close()
 		return err

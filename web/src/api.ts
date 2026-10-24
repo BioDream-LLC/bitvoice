@@ -253,6 +253,8 @@ export interface SystemSettings {
   cards?: Cards
   acme?: ACME
   turn?: TURN
+  /** How BitVoice itself connects browser media from behind NAT (full ICE). */
+  ice?: { full: boolean; stun?: string[]; turn?: { server: string; username: string; password: string }[]; relayOnly?: boolean }
   webSocket?: { enabled: boolean }
   inbox?: InboxSettings
   cdrOutputs?: { csv: boolean; syslog: { host: string; port: number; transport: '' | 'udp' | 'tcp' | 'tls'; facility: number }; postgres: { url: string; table: string } }
@@ -900,6 +902,8 @@ export const api = createApi({
       syncLdap: b.mutation<LDAPReport, void>({ query: () => ({ url: 'ldap/sync', method: 'POST' }), invalidatesTags: ['Settings', 'Extensions', 'RingGroups'] }),
       testLdap: b.mutation<{ ok: boolean; message?: string; secure?: boolean; people?: number; withNumber?: number; sample?: { login: string; name: string; number?: string; raw?: string; email?: string }[]; millis?: number }, LDAPSettings>({
         query: (body) => ({ url: 'ldap/test', method: 'POST', body }) }),
+      probeIce: b.mutation<{ candidates: { type: string; address: string; base?: string }[]; srflx: boolean; relay: boolean }, NonNullable<SystemSettings['ice']>>({
+        query: (body) => ({ url: 'ice/probe', method: 'POST', body }) }),
       testAgi: b.mutation<{ ok: boolean; message: string }, string>({ query: (address) => ({ url: 'agi/test', method: 'POST', body: { address } }) }),
       // music lists the tracks of the classes in the settings, so a saved class shows at once
       saveLangPrompt: b.mutation<{ seconds: number }, { lang: string; key: string; wav: Blob }>({
@@ -981,7 +985,7 @@ export const {
   useLookupsQuery, useCreateLookupMutation, useUpdateLookupMutation, useDeleteLookupMutation, useTestLookupMutation,
   useHotelQuery, useCheckInMutation, useCheckOutMutation, useSetRoomStatusMutation, useWakeUpsQuery, useSetWakeUpMutation, useCancelWakeUpMutation,
   useSaveNameAudioMutation, useDeleteNameAudioMutation, useSnmpStatusQuery, useDeskStatusQuery, useCardsStatusQuery, useAcmeStatusQuery, useAcmeCheckMutation, useAcmeReachMutation, useMusicStreamsQuery, useTurnStatusQuery, useWebSocketStatusQuery, useCdrCsvQuery, useTestCdrOutputsMutation, useChatListQuery, useChatMessagesQuery, useSendChatMutation, useSetChatStatusMutation,
-  useAgiSoundsQuery, useUploadAgiSoundMutation, useDeleteAgiSoundMutation, useAgiProgramsQuery, useAgiDBQuery, usePutAgiDBMutation, useDeleteAgiDBMutation, useTestAgiMutation, useAriStateQuery, useLdapStatusQuery, useSyncLdapMutation, useTestLdapMutation,
+  useAgiSoundsQuery, useUploadAgiSoundMutation, useDeleteAgiSoundMutation, useAgiProgramsQuery, useAgiDBQuery, usePutAgiDBMutation, useDeleteAgiDBMutation, useTestAgiMutation, useAriStateQuery, useLdapStatusQuery, useSyncLdapMutation, useTestLdapMutation, useProbeIceMutation,
   usePromptsQuery, useSaveLangPromptMutation, useDeleteLangPromptMutation, useGeneratePromptsMutation, useMusicQuery, useAddMusicMutation, useDeleteMusicMutation,
 } = api
 

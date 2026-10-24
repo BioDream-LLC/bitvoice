@@ -34,6 +34,12 @@ func browserHost(r *http.Request) string {
 
 var echoes sync.Map // id -> func() (closes the echo session)
 
+// iceOptions are BitVoice's part in ICE for a browser session (Settings, Behind NAT).
+func (s *Server) iceOptions(r *http.Request) webrtc.ICEOptions {
+	cfg := s.config()
+	return webrtc.OptionsFrom(cfg.System.ICE, browserHost(r), clientIP(r))
+}
+
 func (s *Server) phoneRoutes() {
 	// The browser echo test: what the microphone sends comes back, encrypted, through BitVoice. It proves
 	// the browser, the network path and BitVoice's WebRTC stack all work before a real call.
@@ -55,7 +61,7 @@ func (s *Server) phoneRoutes() {
 			writeError(w, http.StatusServiceUnavailable, "no media ports free")
 			return
 		}
-		sess, ans, err := webrtc.Answer(ep, offer, browserHost(r))
+		sess, ans, err := webrtc.AnswerWith(ep, offer, browserHost(r), s.iceOptions(r))
 		if err != nil {
 			ep.Close()
 			writeError(w, http.StatusUnprocessableEntity, err.Error())
@@ -243,7 +249,7 @@ func (s *Server) browserMedia(r *http.Request, offerSDP string) (*media.Endpoint
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	sess, ans, err := webrtc.Answer(ep, offer, browserHost(r))
+	sess, ans, err := webrtc.AnswerWith(ep, offer, browserHost(r), s.iceOptions(r))
 	if err != nil {
 		ep.Close()
 		return nil, nil, nil, err

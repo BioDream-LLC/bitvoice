@@ -341,7 +341,8 @@ test('browser audio relayed through BitVoice TURN', async ({ page }) => {
 // SIP over WebSocket against JsSIP (an independent SIP stack, MIT, bundled here only for the test):
 // two JsSIP phones register over wss://…/ws, one calls the other, and the sound flows both ways
 // through the gateway's WebRTC endpoints and the call engine.
-test('JsSIP softphones over SIP over WebSocket', async ({ page, context }) => {
+for (const ice of ['lite', 'full'] as const) {
+test(`JsSIP softphones over SIP over WebSocket (${ice} ICE)`, async ({ page, context }) => {
   const { build } = await import('vite')
   const { resolve } = await import('node:path')
   const { readFileSync, mkdtempSync, rmSync } = await import('node:fs')
@@ -354,18 +355,21 @@ test('JsSIP softphones over SIP over WebSocket', async ({ page, context }) => {
 
   await signIn(page)
   const secret = 'Softphone-Secret-2468'
-  const setup = await page.evaluate(async (secret) => {
+  const setup = await page.evaluate(async ({ secret, ice }) => {
     const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
     const s = await (await fetch('./api/settings')).json()
     s.system.webSocket = { enabled: true }
+    // full: BitVoice as a full ICE agent, offering to the callee (controlling) and answering the caller.
+    s.system.ice = ice === 'full' ? { full: true, stun: ['127.0.0.1:9'], turn: [], relayOnly: false } : { full: false }
     let r = await fetch('./api/settings', { method: 'PUT', headers: H, body: JSON.stringify(s) })
-    if (!r.ok) return (await r.json()).message
-    for (const n of ['271', '272']) {
+    if (!r.ok) return JSON.stringify(await r.json())
+    const have = ((await (await fetch('./api/extensions')).json()).items as { number: string }[]).map((x) => x.number)
+    for (const n of ['271', '272'].filter((n) => !have.includes(n))) {
       r = await fetch('./api/extensions', { method: 'POST', headers: H, body: JSON.stringify({ number: n, name: 'Softphone ' + n, secret, enabled: true, outbound: true }) })
       if (!r.ok && r.status !== 409) return (await r.json()).message
     }
     return ''
-  }, secret)
+  }, { secret, ice })
   expect(setup).toBe('')
   const bitvoice = new URL(page.url())
 
@@ -412,7 +416,15 @@ test('JsSIP softphones over SIP over WebSocket', async ({ page, context }) => {
   expect(result.caller).toBeGreaterThan(50)
   expect(result.callee).toBeGreaterThan(50)
   expect(ws).toBe(2)
+  if (ice === 'full') {
+    await page.evaluate(async () => {
+      const s = await (await fetch('./api/settings')).json()
+      s.system.ice = { full: false }
+      await fetch('./api/settings', { method: 'PUT', headers: { 'X-BitVoice': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(s) })
+    })
+  }
 })
+}
 
 // The same against SIP.js (another independent SIP stack, MIT, bundled here only for the test): two
 // SIP.js user agents register over wss://…/ws, one calls the other, and the sound flows both ways.
@@ -858,4 +870,79 @@ test('an ARI program uses hold, device states, mailboxes and user events', async
   await expect(page.getByRole('region', { name: 'Global variables and bridges' }).getByText('E2E_GLOBAL')).toBeVisible()
   await expect(page.getByRole('region', { name: 'ARI applications now' }).getByText('deviceState:Custom:e2elamp').or(
     page.getByRole('region', { name: 'ARI applications now' }).getByText(/subscribed to Custom:e2elamp/))).toBeVisible()
+})
+
+// BitVoice behind NAT: full ICE against Chromium's own ICE agent. First with its host candidates and
+// a STUN server (BitVoice's own TURN server answers STUN); then relaying every call through a TURN
+// server (its own, with credentials made for it): Chromium reaches BitVoice's relayed address, the
+// audio comes back through it. Find my addresses shows the candidates beforehand.
+test('full ICE behind NAT, with STUN and through a TURN relay', async ({ page }) => {
+  await signIn(page)
+  // Settings changed by merging a patch into system (data, not code: the page's CSP forbids eval).
+  const put = async (system: Record<string, unknown>) => page.evaluate(async (patch) => {
+    const s = await (await fetch('./api/settings')).json()
+    for (const [k, v] of Object.entries(patch)) s.system[k] = { ...(s.system[k] ?? {}), ...(v as object) }
+    const r = await fetch('./api/settings', { method: 'PUT', headers: { 'X-BitVoice': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(s) })
+    return r.ok ? '' : JSON.stringify(await r.json())
+  }, system)
+  expect(await put({ turn: { enabled: true, port: 3478, tlsPort: -1 } })).toBe('')
+  await expect.poll(async () => page.evaluate(async () => (await (await fetch('./api/turn')).json()).running), { timeout: 5000 }).toBe(true)
+  const creds = await page.evaluate(async () => (await (await fetch('./api/ice')).json()).iceServers[0] as { username: string; credential: string })
+
+  // On Settings: STUN on this computer, then the probe.
+  await page.goto('/#/settings')
+  const card = page.getByRole('region', { name: 'BitVoice behind NAT' })
+  await card.getByRole('switch', { name: 'This server is behind NAT' }).click()
+  await card.getByLabel('STUN servers').fill('127.0.0.1:3478')
+  await card.getByLabel('STUN servers').press('Enter')
+  await card.getByRole('button', { name: 'Find my addresses' }).click()
+  await expect(card.getByRole('list', { name: 'Addresses BitVoice offers browsers' }).getByText('this computer').first()).toBeVisible()
+  await page.getByRole('button', { name: 'Save' }).first().click()
+  await expect(page.getByText('Settings saved')).toBeVisible()
+
+  const echo = async () => page.evaluate(async () => {
+    const pc = new RTCPeerConnection()
+    const mic = await navigator.mediaDevices.getUserMedia({ audio: true })
+    mic.getTracks().forEach((t) => pc.addTrack(t, mic))
+    await pc.setLocalDescription(await pc.createOffer())
+    await new Promise<void>((ok) => { if (pc.iceGatheringState === 'complete') ok(); else pc.onicegatheringstatechange = () => pc.iceGatheringState === 'complete' && ok(); setTimeout(ok, 3000) })
+    const r = await fetch('./api/phone/echo', { method: 'POST', headers: { 'X-BitVoice': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ sdp: pc.localDescription!.sdp }) })
+    const body = await r.json()
+    if (!r.ok) return { error: body.message as string }
+    await pc.setRemoteDescription({ type: 'answer', sdp: body.sdp })
+    const deadline = Date.now() + 15000
+    while (pc.connectionState !== 'connected' && Date.now() < deadline && pc.connectionState !== 'failed') await new Promise((ok) => setTimeout(ok, 100))
+    const state = pc.connectionState
+    await new Promise((ok) => setTimeout(ok, 2000))
+    let received = 0, remote = ''
+    const stats = await pc.getStats()
+    const byId = new Map<string, any>()
+    stats.forEach((s) => byId.set(s.id, s))
+    stats.forEach((s) => {
+      if (s.type === 'inbound-rtp' && s.kind === 'audio') received = s.packetsReceived
+      if (s.type === 'candidate-pair' && s.nominated && s.state === 'succeeded') remote = byId.get(s.remoteCandidateId)?.candidateType ?? ''
+    })
+    pc.close()
+    return { state, received, remote, lite: /a=ice-lite/.test(body.sdp), types: [...(body.sdp as string).matchAll(/typ (\w+)/g)].map((m) => m[1]),
+      offered: [...pc.localDescription!.sdp.matchAll(/a=candidate:(.*)/g)].map((m) => m[1]).join(' | '), answer: [...(body.sdp as string).matchAll(/a=candidate:(.*)/g)].map((m) => m[1]).join(' | ') }
+  })
+  const direct = await echo()
+  console.log('direct', JSON.stringify(direct))
+  expect(direct.error).toBeUndefined()
+  expect(direct.lite).toBe(false) // a full agent now
+  expect(direct.types).toContain('host')
+  expect(direct.state).toBe('connected')
+  expect(direct.received).toBeGreaterThan(20)
+
+  // Every call relayed through the TURN server.
+  expect(await put({ ice: { full: true, stun: [], relayOnly: true, turn: [{ server: '127.0.0.1:3478', username: creds.username, password: creds.credential }] } })).toBe('')
+  const relayed = await echo()
+  console.log('relayed', JSON.stringify(relayed))
+  expect(relayed.error).toBeUndefined()
+  expect(relayed.types).toEqual(['relay'])
+  expect(relayed.state).toBe('connected')
+  expect(relayed.remote).toBe('relay') // Chromium's chosen pair is to BitVoice's relayed address
+  expect(relayed.received).toBeGreaterThan(20)
+
+  expect(await put({ ice: { full: false, stun: [], turn: [], relayOnly: false }, turn: { enabled: false } })).toBe('')
 })

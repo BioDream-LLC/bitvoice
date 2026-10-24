@@ -16,6 +16,7 @@ import {
 import { CompatSettings } from './Compat'
 import { SSOSettings } from './SSO'
 import { LDAPSettingsCard } from './LDAP'
+import { NATSettings } from './NAT'
 import { MobileSettings } from './Mobile'
 import { EmergencySettings } from './EmergencyMode'
 import { CRMSettings } from './Crm'
@@ -369,6 +370,7 @@ export function Settings() {
         <ChatSettings chat={sys.chat} onChange={(v) => setSys({ chat: v })} p={p} />
         <SNMPSettings snmp={sys.snmp} onChange={(v) => setSys({ snmp: v })} p={p} />
         <TURNSettings turn={sys.turn} onChange={(v) => setSys({ turn: v })} p={p} />
+        <NATSettings value={sys.ice} onChange={(v) => setSys({ ice: v })} p={p} />
         <WebSocketSettings value={sys.webSocket} onChange={(v) => setSys({ webSocket: v })} />
         <CDROutputSettings out={sys.cdrOutputs} onChange={(v) => setSys({ cdrOutputs: v })} p={p} />
         <EmailSettings email={sys.email} onChange={(v) => setS((s0) => ({ ...s0, system: { ...s0.system, email: { ...s0.system.email, ...v } } }))} error={p} admin={admin} />
