@@ -393,7 +393,8 @@ export interface QualityReport { days: number; calls: number; places: QualityPla
 export interface TranscriptLine { second: number; side: 'caller' | 'callee'; text: string }
 export interface CallTranscript { recording: string; callId: string; at: string; from: string; fromName: string; to: string; toName: string
   status: 'pending' | 'done' | 'failed'; error?: string; lines: TranscriptLine[]; summary: string; actionItems: string[]; done?: string
-  talk?: Talk; insight?: Insight; answeredExt?: string; coaching?: CoachingNote[] }
+  talk?: Talk; insight?: Insight; answeredExt?: string; coaching?: CoachingNote[]; facts?: CallFact[]; summaryBy?: 'model' | 'facts' }
+export interface CallFact { kind: string; value: string; quote: string; side: string; line: number; at?: number; reported?: boolean }
 export interface CoachingNote { id: string; at: string; by: string; second: number; note: string }
 export interface Talk { seconds: number; callerTalk: number; calleeTalk: number; overlap: number; silence: number; longestCaller: number; longestCallee: number; callerCutIn: number; calleeCutIn: number; longestSilence: number }
 export interface Insight { moodStart: string; moodEnd: string; observations: { second: number; kind: 'went-well' | 'look-at' | 'unanswered' | 'promise'; note: string; quote: string }[] }

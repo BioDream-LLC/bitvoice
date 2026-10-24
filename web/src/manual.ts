@@ -123,6 +123,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | Capacity | Field-tested | 2,000 calls at once, no loss, MOS 4.41, on a 16-vCPU c7i.4xlarge (about 10 vCPUs busy); 200 at once on c7g.large, c7i.large, t4g.small, an M4 and the Lightsail nano |
 | FreePBX migration (Import) | Field-tested | a real FreePBX 17.0.33 backup (70 MB) imported whole; others from FreePBX's own formats |
 | AI transcripts, summaries, receptionist | Field-tested | a real model through OpenRouter |
+| Facts and summaries without a language model | Software-tested | invented 911 calls only: 23 of 43 facts (53%) on the sealed set, 3 facts no one expected; 41/41 training, hold-out 27/40 cold. Never measured on real calls. |
 | Speech to text on this server (whisper) | Field-tested on macOS | whisper-server 1.9.5 run by BitVoice; downloads for every platform built and tried in CI |
 | Archive to S3, secrets from AWS Secrets Manager | Field-tested | real AWS, our own SigV4 |
 | SNMP monitoring and traps | Field-tested | net-snmp's snmpwalk and snmptrapd |
@@ -1887,7 +1888,21 @@ Speech can be written down without any language model: a speech recogniser (whis
 - **This server**: BitVoice runs whisper itself. Choose a **Whisper model** and save: BitVoice fetches it once from the whisper.cpp project (\`base\` is 60 MB; \`small\`, \`medium\` and \`large-v3-turbo\` are more accurate and slower; all understand about 100 languages), checks it against its published SHA-256, and starts whisper.cpp's \`whisper-server\` on 127.0.0.1 beside it, restarting it if it stops. Callers' audio never leaves the computer and nothing is paid per call. \`whisper-server\` (MIT licence) comes in BitVoice's downloads next to the program, and the installers put it beside BitVoice; BitVoice also finds one installed on its own (\`brew install whisper.cpp\`). The settings show where it stands (fetching the model, starting, running, or why it is not), and so does [Health](#/health). While it is not running, transcripts fail and say why: they are never sent anywhere else instead.
 - **A speech-to-text service**: whisper.cpp's \`whisper-server\` on another computer in the building (\`http://192.168.1.20:8178/inference\`), for one machine with a GPU serving several BitVoice servers, or any OpenAI-compatible \`…/audio/transcriptions\` (with **Its model**, such as whisper-1, and **Its key**). Plain \`http\` is accepted only to this computer or a private network address; anything else must be \`https\`. To run one: \`whisper-server -m ggml-base-q5_1.bin --host 0.0.0.0 --port 8178 -l auto\`.
 
-Whichever writes it down, every transcript goes there: voicemail, recorded calls, live 911 calls and receptionists hearing callers. Without the model, the **Model** may be left empty: transcripts are written, and what needs a language model (summaries, action items, voicemail triage, call insight, receptionists' replies, asking in plain words) is left out. Notes a recogniser makes about what it heard, such as \`[BLANK_AUDIO]\` or \`(silence)\`, are dropped, so a quiet stretch never reads as though something was said.
+Whichever writes it down, every transcript goes there: voicemail, recorded calls, live 911 calls and receptionists hearing callers. Without the model, the **Model** may be left empty: transcripts are written, summaries are written from the facts the call said (below), and what needs a language model (action items, voicemail triage, call insight, receptionists' replies, asking in plain words) is left out. Notes a recogniser makes about what it heard, such as \`[BLANK_AUDIO]\` or \`(silence)\`, are dropped, so a quiet stretch never reads as though something was said.
+
+## Facts said on the call (no language model)
+Every transcript is also read by rules, with no language model, for the facts a call-taker notes: what happened, where, how many are hurt (or that nobody is), conditions (breathing, awake, bleeding ...), hazards (fire, smoke, gas, weapons, chemicals, fuel), vehicles, who the caller is to the person in need, and a callback number. Each fact is shown with the sentence it came from and the side that said it, in the transcript's **Facts said on the call**. Without a model, the summary is written from these facts alone, and says so.
+- Nothing is added that no one said. "Nobody's hurt" is a fact of its own; a caller passing on someone else's words ("she says he's not breathing") is marked **reported**; "24 Pine Lane. No, sorry, 42" keeps 42; a bare "no" answers the question asked just before it.
+- It is faithful, not complete: words it does not know are missed. On three sets of invented 911 calls (no real caller's words), it finds:
+
+| Set | Facts found | Facts found that no one expected |
+|---|---|---|
+| Training (the rules were written from it) | 41 of 41 | 0 |
+| Hold-out, scored cold, before any rule was written from it | 27 of 40 (67%) | 2 |
+| Hold-out, after a second round of rules written from its misses | 40 of 40 | 0 |
+| Sealed, scored cold (no rule is ever written from it) | 23 of 43 (53%) | 3 |
+
+The sealed score is the one to expect on calls it has not seen, and the three sets were written by the same people as the rules, so real calls will likely do worse. Read the facts beside the transcript, never instead of it.
 
 Larger models need more processor: a server writing out many calls at once should start with \`base\`, or use one machine with a GPU as a speech-to-text service for the building. On Apple computers whisper uses the GPU.
 

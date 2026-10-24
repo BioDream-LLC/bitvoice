@@ -55,8 +55,10 @@ function TranscriptBody({ t }: { t: CallTranscript }) {
         <section aria-labelledby="tr-sum">
           <h3 id="tr-sum" className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-slate-200"><Sparkles size={14} className="text-violet-300" aria-hidden /> Summary</h3>
           <p className="text-sm text-slate-300">{t.summary}</p>
+          {t.summaryBy === 'facts' && <p className="mt-1 text-xs text-slate-500">Written from the facts below, by rules, with no language model: it says only what the call said, and may miss things.</p>}
         </section>
       )}
+      <FactsSection t={t} />
       <section aria-labelledby="tr-act">
         <h3 id="tr-act" className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-slate-200"><CheckSquare size={14} className="text-emerald-300" aria-hidden /> Action items</h3>
         {t.actionItems.length ? <ul className="list-disc space-y-1 pl-5 text-sm text-emerald-200">{t.actionItems.map((a, i) => <li key={i}>{a}</li>)}</ul>
@@ -230,5 +232,42 @@ function Coaching({ t }: { t: CallTranscript }) {
         </div>
       )}
     </div>
+  )
+}
+
+const factLabels: Record<string, { label: string; color: string }> = {
+  incident: { label: 'What happened', color: 'text-rose-300' },
+  location: { label: 'Where', color: 'text-sky-300' },
+  injured: { label: 'Hurt', color: 'text-amber-300' },
+  condition: { label: 'Condition', color: 'text-amber-200' },
+  hazard: { label: 'Hazard', color: 'text-orange-300' },
+  vehicle: { label: 'Vehicle', color: 'text-teal-300' },
+  relation: { label: 'Caller is', color: 'text-violet-300' },
+  callback: { label: 'Callback', color: 'text-emerald-300' },
+}
+
+/** The facts the call said, each with the sentence it came from (read by rules, no model). */
+function FactsSection({ t }: { t: CallTranscript }) {
+  if (!t.facts?.length) return null
+  const value = (k: string, v: string) => (k === 'injured' ? (v === 'none' ? 'nobody' : v === '1' ? 'one person' : `${v} people`) : k === 'callback' && v.length === 10 ? `${v.slice(0, 3)}-${v.slice(3, 6)}-${v.slice(6)}` : v)
+  return (
+    <section aria-labelledby="tr-facts">
+      <h3 id="tr-facts" className="mb-1 text-sm font-semibold text-slate-200">Facts said on the call</h3>
+      <ul className="space-y-1.5 text-sm" aria-label="Facts said on the call">
+        {t.facts.map((f, i) => {
+          const l = factLabels[f.kind] ?? { label: f.kind, color: 'text-slate-300' }
+          return (
+            <li key={i} className="grid grid-cols-[7rem_1fr] gap-2">
+              <span className={l.color}>{l.label}</span>
+              <span>
+                <span className="font-medium text-slate-100">{value(f.kind, f.value)}</span>
+                {f.reported && <span className="ml-1 text-xs text-amber-300">(reported by the caller)</span>}
+                <q className="mt-0.5 block text-xs text-slate-500">{f.quote}</q>
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
   )
 }

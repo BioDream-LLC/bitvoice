@@ -62,9 +62,9 @@ func score(t *testing.T, set string) (found, expected, extra int, misses []strin
 // making things worse; raising one means a better result, never a rule written for that set.
 func TestCoverage(t *testing.T) {
 	floors := map[string]struct{ found, maxExtra int }{
-		"training": {0, 100},
-		"holdout":  {0, 100},
-		"sealed":   {0, 100},
+		"training": {41, 0}, // 41 of 41: the rules were written from it
+		"holdout":  {40, 0}, // cold 27 of 40, then 40 of 40 with rules written from its misses
+		"sealed":   {23, 3}, // cold 23 of 43, and the same after; no rule is ever written from it
 	}
 	for _, set := range []string{"training", "holdout", "sealed"} {
 		found, expected, extra, misses := score(t, set)
@@ -75,5 +75,26 @@ func TestCoverage(t *testing.T) {
 		if f := floors[set]; found < f.found || extra > f.maxExtra {
 			t.Errorf("%s: %d found (floor %d), %d extra (at most %d)", set, found, f.found, extra, f.maxExtra)
 		}
+	}
+}
+
+func TestSummary(t *testing.T) {
+	got := Summary(Extract([]Line{
+		{Side: "callee", Text: "911, what is the address of your emergency?"},
+		{Side: "caller", Text: "It's 418 Maple Avenue, there's a fire in my kitchen."},
+		{Side: "callee", Text: "Is anyone hurt?"},
+		{Side: "caller", Text: "No, nobody's hurt."},
+		{Side: "caller", Text: "Call me on 540-555-0142."},
+	}))
+	want := "Fire at 418 Maple Avenue. Nobody hurt. Hazards: fire. Callback 540-555-0142."
+	if got != want {
+		t.Fatalf("%q", got)
+	}
+	if Summary(nil) != "" {
+		t.Fatal("a summary of nothing")
+	}
+	// A neighbour's words are marked as reported.
+	if got := Summary(Extract([]Line{{Side: "caller", Text: "27 Oak Street. My neighbour says her husband is not breathing."}})); !strings.Contains(got, "not breathing (reported)") || !strings.Contains(got, "Caller: neighbour") {
+		t.Fatalf("%q", got)
 	}
 }

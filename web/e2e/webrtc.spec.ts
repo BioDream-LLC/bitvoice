@@ -1003,3 +1003,92 @@ test("a video room with everyone's video (SFU, simulcast)", async ({ page, brows
   await expect.poll(async () => (await sizes(page)).length, { timeout: 15_000 }).toBe(1)
   for (const p of others) await p.context().close()
 })
+
+// Without a language model, a recorded call's summary is the facts it said, read by rules, each
+// shown with the sentence it came from.
+test('call facts and summary without a language model', async ({ page }) => {
+  const { createServer } = await import('node:http')
+  // A whisper-server stand-in: every stretch of speech "says" the same sentence.
+  const stt = createServer((req, res) => {
+    req.resume()
+    req.on('end', () => res.end(JSON.stringify({ text: "There's a fire at 418 Maple Avenue, nobody's hurt." })))
+  })
+  await new Promise<void>((r) => stt.listen(18398, '127.0.0.1', r))
+  const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
+  try {
+    await signIn(page)
+    const name = await page.evaluate(async (H) => {
+      const send = async (method: string, url: string, body: unknown) => {
+        const r = await fetch(url, { method, headers: H, body: JSON.stringify(body) })
+        const j = await r.json().catch(() => ({}))
+        if (!r.ok) throw new Error(url + ': ' + j.message)
+        return j
+      }
+      const st = await (await fetch('./api/settings')).json()
+      st.system.ai = { ...st.system.ai, enabled: true, model: '', calls: false, transcribeUrl: 'http://127.0.0.1:18398/inference' }
+      st.system.recording = { ...st.system.recording, mode: 'all', notice: 'off' }
+      await send('PUT', './api/settings', st)
+      const exts = (await (await fetch('./api/extensions')).json()).items as { number: string }[]
+      if (exts.length < 2) await send('POST', './api/extensions', { number: '177', name: 'Second browser', enabled: true, outbound: true, voicemail: { enabled: false }, record: false, secureMedia: false })
+      const all = (await (await fetch('./api/extensions')).json()).items as { number: string }[]
+      const [a, b] = [all[0].number, all[1].number]
+      const pa = await send('POST', './api/phone', { extension: a })
+      const pb = await send('POST', './api/phone', { extension: b })
+      let incoming: (id: string) => void = () => {}
+      const gotIncoming = new Promise<string>((ok) => { incoming = ok })
+      const esB = new EventSource(`./api/phone/${pb.id}/events`)
+      esB.addEventListener('call', (e) => { const ev = JSON.parse((e as MessageEvent).data); if (ev.type === 'incoming') incoming(ev.callId) })
+      await new Promise((ok) => esB.addEventListener('hello', ok, { once: true }))
+      const mic = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const peer = async () => {
+        const pc = new RTCPeerConnection()
+        mic.getTracks().forEach((t) => pc.addTrack(t, mic))
+        await pc.setLocalDescription(await pc.createOffer())
+        return pc
+      }
+      const pcA = await peer()
+      const before = ((await (await fetch('./api/cdr?limit=5')).json()).items as { id: string }[]).map((x) => x.id)
+      const call = await send('POST', `./api/phone/${pa.id}/calls`, { to: b, sdp: pcA.localDescription!.sdp })
+      await pcA.setRemoteDescription({ type: 'answer', sdp: call.sdp })
+      const callId = await Promise.race([gotIncoming, new Promise<string>((_, no) => setTimeout(() => no(new Error('no incoming call')), 8000))])
+      const pcB = await peer()
+      const ans = await send('POST', `./api/phone/${pb.id}/answer`, { callId, sdp: pcB.localDescription!.sdp })
+      await pcB.setRemoteDescription({ type: 'answer', sdp: ans.sdp })
+      await new Promise((ok) => setTimeout(ok, 4000))
+      await fetch(`./api/phone/${pa.id}/calls/${call.callId}`, { method: 'DELETE', headers: H })
+      esB.close(); pcA.close(); pcB.close()
+      for (let i = 0; i < 50; i++) {
+        const recs = (await (await fetch('./api/cdr?limit=5')).json()).items as { id: string; recording?: string }[]
+        const r = recs.find((x) => x.recording && !before.includes(x.id))
+        if (r) return r.recording!
+        await new Promise((ok) => setTimeout(ok, 200))
+      }
+      throw new Error('the call was not recorded')
+    }, H)
+    await page.evaluate(async (n) => {
+      await fetch(`./api/recordings/${n}/transcript`, { method: 'POST', headers: { 'X-BitVoice': '1' } })
+      for (let i = 0; i < 100; i++) {
+        const r = await fetch(`./api/recordings/${n}/transcript`)
+        if (r.ok && (await r.json()).status !== 'pending') return
+        await new Promise((ok) => setTimeout(ok, 200))
+      }
+    }, name)
+    await page.goto('/#/history')
+    await page.getByRole('button', { name: /^Transcript of / }).first().click()
+    const drawer = page.getByRole('dialog')
+    await expect(drawer.getByText('Fire at 418 Maple Avenue. Nobody hurt. Hazards: fire.')).toBeVisible()
+    await expect(drawer.getByText('by rules, with no language model')).toBeVisible()
+    const facts = drawer.getByRole('list', { name: 'Facts said on the call' })
+    const item = (label: string) => facts.getByRole('listitem').filter({ has: page.getByText(label, { exact: true }) })
+    await expect(item('Where')).toContainText('418 maple avenue')
+    await expect(item('Hurt')).toContainText('nobody')
+    await expect(facts.getByRole('listitem').first()).toContainText("There's a fire at 418 Maple Avenue, nobody's hurt.")
+  } finally {
+    await page.evaluate(async (H) => {
+      const st = await (await fetch('./api/settings')).json()
+      st.system.ai = { ...st.system.ai, transcribeUrl: '', enabled: false }
+      await fetch('./api/settings', { method: 'PUT', headers: H, body: JSON.stringify(st) })
+    }, H).catch(() => {})
+    stt.close()
+  }
+})

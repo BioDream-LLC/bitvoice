@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/biodream-llc/bitvoice/internal/facts"
 	"os"
 	"path/filepath"
 	"slices"
@@ -30,7 +31,11 @@ type CallTranscript struct {
 	Lines       []TranscriptLine `json:"lines"`
 	Summary     string           `json:"summary"`
 	ActionItems []string         `json:"actionItems"`
-	Done        time.Time        `json:"done,omitzero"`
+	// Facts are what the call said, read by rules with no language model, each with its sentence;
+	// SummaryBy says who wrote Summary: "model" or "facts".
+	Facts     []facts.Fact `json:"facts,omitempty"`
+	SummaryBy string       `json:"summaryBy,omitempty"`
+	Done      time.Time    `json:"done,omitzero"`
 	// Talk is measured from the recording's sound; Insight is the AI's notes for a supervisor.
 	Talk    *media.Talk `json:"talk,omitempty"`
 	Insight *ai.Insight `json:"insight,omitempty"`

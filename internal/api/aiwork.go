@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/biodream-llc/bitvoice/internal/facts"
 	"slices"
 	"strings"
 	"sync"
@@ -54,7 +55,8 @@ func (s *Server) transcribe(ctx context.Context, v store.Voicemail) {
 	summary := ""
 	if err == nil {
 		if summary, err = c.Summarize(ctx, text); errors.Is(err, ai.ErrNoModel) {
-			err = nil // a speech-to-text service alone: the transcript, no summary
+			// A speech-to-text service alone: the facts the message said, by rules.
+			err, summary = nil, facts.Summary(facts.Extract([]facts.Line{{Side: "caller", Text: text}}))
 		}
 	}
 	msg := ""
@@ -134,9 +136,12 @@ func (s *Server) transcribeCall(ctx context.Context, r store.CDR, force bool) {
 		fail(firstErr)
 		return
 	}
+	t.Facts = callFacts(t.Lines)
 	notes, err := c.SummarizeCall(ctx, t.Text())
+	t.SummaryBy = "model"
 	if errors.Is(err, ai.ErrNoModel) {
-		err = nil // a speech-to-text service alone: the transcript, no summary
+		// A speech-to-text service alone: the summary is the facts the call said, by rules.
+		err, notes.Summary, t.SummaryBy = nil, facts.Summary(t.Facts), "facts"
 	}
 	if err != nil {
 		s.Log.Warn("call summary failed", "call", r.ID, "err", err) // the transcript still stands
@@ -159,6 +164,15 @@ func (s *Server) transcribeCall(ctx context.Context, r store.CDR, force bool) {
 	}
 	s.Bus.Publish("transcript.changed", map[string]string{"recording": r.Recording})
 	s.Bus.Publish("transcript.done", t) // the CRM webhook adds the summary to the call it logged
+}
+
+// callFacts reads a transcript's facts (no language model).
+func callFacts(lines []store.TranscriptLine) []facts.Fact {
+	in := make([]facts.Line, len(lines))
+	for i, l := range lines {
+		in[i] = facts.Line{Side: l.Side, Text: l.Text, At: l.Second}
+	}
+	return facts.Extract(in)
 }
 
 func firstNonEmpty(s ...string) string {

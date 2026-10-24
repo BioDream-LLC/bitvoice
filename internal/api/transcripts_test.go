@@ -121,3 +121,76 @@ func TestCallTranscripts(t *testing.T) {
 		t.Fatalf("the transcript outlived its recording: %d", code)
 	}
 }
+
+// With a speech-to-text service and no language model, the summary is the facts the call said,
+// read by rules, each kept with its sentence.
+func TestCallFactsWithoutModel(t *testing.T) {
+	s, ts := newServer(t)
+	admin := newClient(t, ts.URL)
+	if code, _ := admin.do("POST", "/api/setup/complete", setupBody()); code != 200 {
+		t.Fatal("setup")
+	}
+	// A whisper-server stand-in "hears" a stretch by its length.
+	stt := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f, _, err := r.FormFile("file")
+		if err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		defer f.Close()
+		n := 0
+		buf := make([]byte, 4096)
+		for {
+			k, err := f.Read(buf)
+			n += k
+			if err != nil {
+				break
+			}
+		}
+		text := "There's a fire at 418 Maple Avenue, nobody's hurt."
+		if n > 30000 {
+			text = "Okay, is everyone out of the house?"
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"text": text})
+	}))
+	defer stt.Close()
+	_, rev := s.Store.Config()
+	if _, _, err := s.Store.Update("test", "ai", rev, func(c *config.Config) error {
+		c.System.AI.Enabled, c.System.AI.Calls, c.System.AI.TranscribeURL, c.System.AI.Model = true, true, stt.URL+"/inference", ""
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	silence := func(n int) []int16 { return make([]int16, n) }
+	talk := func(n int) []int16 {
+		p := make([]int16, n)
+		for i := range p {
+			p[i] = int16(6000 * math.Sin(float64(i)/4))
+		}
+		return p
+	}
+	left := append(append(silence(4000), talk(8000)...), silence(28000)...)
+	right := append(append(silence(16000), talk(16000)...), silence(8000)...)
+	start := time.Now().UTC()
+	name, err := s.Store.AddRecording("call2", start, media.EncodeStereoWAV(left, right))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cdr := store.CDR{ID: "call2", Start: start, End: start.Add(5 * time.Second), From: "100", To: "101", Recording: name}
+	if err := s.Store.AddCDR(cdr); err != nil {
+		t.Fatal(err)
+	}
+	s.transcribeCall(context.Background(), cdr, false)
+	code, out := admin.do("GET", "/api/recordings/"+name+"/transcript", nil)
+	if code != 200 || out["status"] != "done" {
+		t.Fatalf("transcript %d %v", code, out)
+	}
+	if out["summary"] != "Fire at 418 Maple Avenue. Nobody hurt. Hazards: fire." || out["summaryBy"] != "facts" {
+		t.Fatalf("summary %q by %v", out["summary"], out["summaryBy"])
+	}
+	fs := out["facts"].([]any)
+	first := fs[0].(map[string]any)
+	if first["kind"] != "incident" || first["quote"] != "There's a fire at 418 Maple Avenue, nobody's hurt." || first["side"] != "caller" {
+		t.Fatalf("facts %v", fs)
+	}
+}
