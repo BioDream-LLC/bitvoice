@@ -412,6 +412,9 @@ func (c *Call) startFork(t target, stageNo int) bool {
 			inv0Route = "<sip:" + host + ";lr>"
 		}
 		toVal = "<sip:" + t.number + "@" + host + ">"
+		if t.number == "" && t.ruri != "" {
+			toVal = "<" + t.ruri + ">" // a Teams user named by x-m and x-t, not by a number
+		}
 		domain := t.trunk.FromDomain
 		if domain == "" {
 			domain = t.trunk.Host
@@ -492,6 +495,9 @@ func (c *Call) startFork(t target, stageNo int) bool {
 	}
 	if t.trunk != nil && t.trunk.Teams {
 		teamsHeaders(inv)
+	}
+	if t.referredBy != "" {
+		inv.Set("Referred-By", t.referredBy)
 	}
 	if t.trunk != nil && signCID != "" {
 		c.signCall(cfg, t.trunk, inv, signCID, t.number)
@@ -1551,7 +1557,23 @@ func (c *Call) refer(l *Leg, tx *sip.ServerTx, m *sip.Message) {
 	c.mu.Lock()
 	c.transferor, c.transferBack = l, time.Time{}
 	c.mu.Unlock()
+	// Microsoft Teams (Direct Routing) asks its SBC to place the transfer: the Refer-To names its
+	// own proxy with an E.164 number, or with x-m and x-t naming a Teams user, and the new call
+	// goes back to Teams exactly as named, with the Referred-By it gave.
+	if t := c.e.teamsTrunkFor(l.peer); t != nil {
+		u := *referTo.URI
+		u.Headers = ""
+		go c.teamsTransfer(l, stay, t, u.String(), cleanNumber(u.User), m.Get("Referred-By"))
+		return
+	}
 	go c.blindTransfer(l, stay, cleanNumber(referTo.URI.User))
+}
+
+// teamsTransfer places a transfer Teams asked for back through the Teams trunk, to the URI it named.
+func (c *Call) teamsTransfer(transferor, stay *Leg, t *config.Trunk, ruri, number, referredBy string) {
+	p := plan{stages: []stage{{targets: []target{{trunk: t, number: number, ruri: ruri, referredBy: referredBy}}, timeout: 60 * time.Second}},
+		direction: "outbound", trunk: t.ID, why: []string{"Teams asked for the transfer, so it goes back to Teams as it named it"}}
+	c.transferTo(transferor, stay, p, firstNonEmptyStr(number, "a Teams user"))
 }
 
 // notifyRefer reports a transfer's progress to the party that asked for it.
@@ -1595,7 +1617,11 @@ func (c *Call) blindTransfer(transferor, stay *Leg, number string) {
 		}
 		return
 	}
-	p := c.e.routeCall(cfg, caller, number, false)
+	c.transferTo(transferor, stay, c.e.routeCall(cfg, caller, number, false), number)
+}
+
+// transferTo rings what a transfer resolved to, for the party who stays.
+func (c *Call) transferTo(transferor, stay *Leg, p plan, number string) {
 	// An answered 911 call from the ESInet or a CAMA trunk is never dropped by a transfer that fails:
 	// it goes back to the call-taker while they are still on, or else rings every call-taker. It is
 	// never handed to voicemail or another no-answer destination, and an extension with no phone

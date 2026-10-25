@@ -123,18 +123,67 @@ func TestTeamsDirectRouting(t *testing.T) {
 	in.Body = []byte("v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=-\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\nm=audio 40000 RTP/SAVP 0\r\na=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkw\r\na=rtpmap:0 PCMU/8000\r\n")
 	tx := ms.stack.Request(in, sip.Peer{Transport: "TLS", Addr: netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(e.stack.TLSPort()))})
 	codes := make(chan string, 8)
+	finals := make(chan *sip.Message, 1)
 	go func() {
 		for r := range tx.Responses {
 			codes <- strconv.Itoa(r.StatusCode) + " " + r.Get("Contact")
+			if r.StatusCode == 200 {
+				finals <- r
+			}
 		}
 		close(codes)
 	}()
-	if ps[1].waitRing(3*time.Second) == nil {
+	ring := ps[1].waitRing(3 * time.Second)
+	if ring == nil {
 		var got []string
 		for c := range codes {
 			got = append(got, c)
 		}
 		t.Fatalf("the Teams user's call did not ring extension 101: %v", got)
+	}
+
+	// Teams transfers the call to another Teams user: it sends its SBC a REFER naming its own proxy
+	// with x-m and x-t (the user's MRI and tenant), and the SBC places the new call back to Teams
+	// exactly as named, with the Referred-By Teams gave (Microsoft, "Direct Routing - SIP protocol").
+	ps[1].answer(ring)
+	var ok *sip.Message
+	select {
+	case ok = <-finals:
+	case <-time.After(15 * time.Second):
+		t.Fatal("the answered call sent Teams no 200")
+	}
+	peer := sip.Peer{Transport: "TLS", Addr: netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(e.stack.TLSPort()))}
+	contact, err := sip.ParseAddress(ok.Get("Contact"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := contact.URI.String()
+	lastTo := ok.Get("To")
+	ack := &sip.Message{IsRequest: true, Method: sip.ACK, RequestURI: target}
+	ack.Set("Via", "SIP/2.0/TLS 127.0.0.1:"+strconv.Itoa(ms.stack.TLSPort())+";branch=z9hG4bKteamsack1")
+	ack.Set("From", in.Get("From"))
+	ack.Set("To", lastTo)
+	ack.Set("Call-ID", "teams-in-1")
+	ack.Set("CSeq", "1 ACK")
+	ack.Set("Max-Forwards", "70")
+	_ = ms.stack.Send(ack, peer)
+	refer := &sip.Message{IsRequest: true, Method: sip.REFER, RequestURI: target}
+	refer.Set("From", in.Get("From"))
+	refer.Set("To", lastTo)
+	refer.Set("Call-ID", "teams-in-1")
+	refer.Set("CSeq", "2 REFER")
+	refer.Set("Contact", "<sip:sip.pstnhub.microsoft.com:5061;transport=tls>")
+	referTo := "<sip:sip.pstnhub.microsoft.com;x-m=8:orgid:4e1b2c3d-0000-4000-8000-000000000001;x-t=9a8b7c6d-0000-4000-8000-000000000002>"
+	refer.Set("Refer-To", referTo)
+	refer.Set("Referred-By", "<sip:sip.pstnhub.microsoft.com;x-m=8:orgid:4e1b2c3d-0000-4000-8000-000000000009;x-t=9a8b7c6d-0000-4000-8000-000000000002;x-ti=abc>")
+	rtx := ms.stack.Request(refer, peer)
+	if r := <-rtx.Responses; r == nil || r.StatusCode != 202 {
+		t.Fatalf("REFER answered %v", r)
+	}
+	xfer := ms.next(t, sip.INVITE)
+	if !strings.Contains(xfer.RequestURI, "x-m=8:orgid:4e1b2c3d-0000-4000-8000-000000000001") || !strings.Contains(xfer.RequestURI, "x-t=9a8b7c6d") ||
+		!strings.Contains(xfer.Get("Referred-By"), "x-ti=abc") || !strings.Contains(xfer.Get("To"), "x-m=8:orgid") || !strings.Contains(xfer.Get("From"), "@sbc.example.com>") {
+		t.Fatalf("transfer INVITE %s\nTo %s\nReferred-By %s", xfer.RequestURI, xfer.Get("To"), xfer.Get("Referred-By"))
 	}
 
 	// Calls out through Microsoft's own proxy name try all three, in order.

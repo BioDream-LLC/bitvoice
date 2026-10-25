@@ -57,6 +57,8 @@ type target struct {
 	// divertFrom and divertReason: a call forwarded out from an extension, sent as Diversion (RFC 5806)
 	// so the carrier, or a PRI as its redirecting number, knows whose call it is.
 	divertFrom, divertReason string
+	// referredBy is sent as Referred-By (RFC 3892): a transfer Teams asked for carries the transferor.
+	referredBy string
 }
 
 // resolve turns a destination into a plan. depth limits no-answer chains so a loop cannot ring forever.
@@ -463,6 +465,11 @@ func (e *Engine) outbound(cfg *config.Config, caller *config.Extension, dialled 
 			hosts := []string{t.Host}
 			if t.Teams && slicesContainsFold(TeamsHubs, t.Host) {
 				hosts = TeamsHubs // Microsoft's three proxies, in the order Microsoft asks for
+			}
+			if t.Teams && !strings.HasPrefix(number, "+") {
+				// Microsoft matches only numbers with + and the country code to its users.
+				p.why = append(p.why, "Teams finds its users only by numbers with + and the country code, and "+number+
+					" has none: Teams will not know it. Put + and the country code in the outbound route's Prepend ("+r.Name+").")
 			}
 			p.trunk = t.Name
 			if node := e.heldElsewhere(t); node != "" {
