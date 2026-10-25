@@ -19,8 +19,28 @@ import (
 	"time"
 )
 
-// GraphBase is Meta's Graph API; tests point it elsewhere.
-var GraphBase = "https://graph.facebook.com/v20.0"
+// GraphBase is Meta's Graph API; tests point it elsewhere. Meta retires a version two years after the
+// next one comes out (v23.0 is served until mid 2027): move it on with each new one.
+var GraphBase = "https://graph.facebook.com/v23.0"
+
+// UserAgent names BitVoice to Meta as its specification asks, NAME/MAJOR.MINOR.PATCH; main sets the
+// release number.
+var UserAgent = "BitVoice/0.0.0"
+
+// SetVersion puts a release number such as v0.1.12 into UserAgent (anything else keeps 0.0.0).
+func SetVersion(v string) {
+	v = strings.TrimPrefix(v, "v")
+	parts := strings.Split(v, ".")
+	if len(parts) != 3 {
+		return
+	}
+	for _, x := range parts {
+		if x == "" || strings.Trim(x, "0123456789") != "" {
+			return
+		}
+	}
+	UserAgent = "BitVoice/" + v
+}
 
 var client = &http.Client{Timeout: 20 * time.Second}
 
@@ -208,6 +228,7 @@ func post(ctx context.Context, u, token string, body any) (string, error) {
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", UserAgent)
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -257,6 +278,7 @@ func MessengerName(ctx context.Context, pageToken, psid string) string {
 	if err != nil {
 		return ""
 	}
+	req.Header.Set("User-Agent", UserAgent)
 	resp, err := client.Do(req)
 	if err != nil {
 		return ""

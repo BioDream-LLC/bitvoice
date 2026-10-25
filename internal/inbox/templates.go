@@ -135,6 +135,7 @@ func WhatsAppTemplates(ctx context.Context, businessAccountID, token string) ([]
 			return nil, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("User-Agent", UserAgent)
 		resp, err := client.Do(req)
 		if err != nil {
 			return nil, err
@@ -169,7 +170,8 @@ func WhatsAppTemplates(ctx context.Context, businessAccountID, token string) ([]
 
 // SendWhatsAppTemplate sends an approved template, its body's {{1}}, {{2}} ... filled with params.
 func SendWhatsAppTemplate(ctx context.Context, phoneNumberID, token, to string, t Template, params []string) (string, error) {
-	tpl := map[string]any{"name": t.Name, "language": map[string]string{"code": t.Language}}
+	// policy "deterministic" is the only value Meta's specification allows, and it requires it.
+	tpl := map[string]any{"name": t.Name, "language": map[string]string{"policy": "deterministic", "code": t.Language}}
 	if len(params) > 0 {
 		ps := make([]map[string]string, len(params))
 		for i, p := range params {

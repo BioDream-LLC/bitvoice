@@ -86,6 +86,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&o.sip, "sip", "", "SIP listen address (default: all addresses, port from settings)")
 	fs.BoolVar(&o.noBrowser, "no-browser", false, "do not open a browser at startup")
 	fs.StringVar(&o.database, "database", os.Getenv("BITVOICE_DATABASE"), "PostgreSQL address (postgres://user:password@host/db); default: the SQLite file in the data directory, or the database chosen in Settings")
+	inbox.SetVersion(version)
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
