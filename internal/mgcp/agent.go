@@ -82,7 +82,11 @@ type line struct {
 	req     int
 	noCI    bool // the gateway refused caller ID
 	pending *webphone.Event
+	refused string // why the gateway last refused to watch the port, for the status
 }
+
+// LongTran is how long to wait after a provisional response before sending a command again.
+var LongTran = 5 * time.Second
 
 // New makes an agent; Apply opens its port.
 func New(ctx context.Context, b Bridge, m Media, secret func(ext string) string, log *slog.Logger) *Agent {
@@ -186,6 +190,8 @@ func (a *Agent) Status() map[string]string {
 			case l.phone == nil:
 				s = "not registered with BitVoice"
 			case !g.addr.IsValid():
+			case l.refused != "":
+				s = l.refused
 			case l.state == idle:
 				s = "ready"
 			default:
@@ -215,11 +221,17 @@ func (a *Agent) read(conn *net.UDPConn) {
 				a.mu.Lock()
 				ch := a.pending[m.TxID]
 				a.mu.Unlock()
-				if ch != nil && m.Code >= 200 {
+				if ch != nil && m.Code >= 100 {
 					select {
 					case ch <- m:
 					default:
 					}
+				}
+				// A final response after a provisional one carries an empty ResponseAck (K): answer
+				// it with a response acknowledgement, 000, so the gateway stops sending it again
+				// (RFC 3435 3.5.6).
+				if m.Code >= 200 && m.Has("K") {
+					_, _ = conn.WriteToUDPAddrPort((&Message{Code: 0, TxID: m.TxID, Comment: "OK"}).Bytes(), from)
 				}
 				continue
 			}
@@ -313,20 +325,32 @@ func (a *Agent) send(g *gateway, m *Message) (*Message, error) {
 	}
 	b := m.Bytes()
 	wait := a.Retry
+	provisional := false
 	for try := 0; try < 4; try++ {
 		if _, err := conn.WriteToUDPAddrPort(b, to); err != nil {
 			return nil, err
 		}
-		select {
-		case r := <-ch:
-			if r.Code >= 300 {
-				return r, fmt.Errorf("mgcp: %s refused: %d %s", m.Verb, r.Code, r.Comment)
+	waiting:
+		for {
+			select {
+			case r := <-ch:
+				if r.Code < 200 {
+					// Being worked on: wait longer before sending it again (LONGTRAN-TIMER, 5 s).
+					provisional, wait = true, LongTran
+					continue
+				}
+				if r.Code >= 300 {
+					return r, fmt.Errorf("mgcp: %s refused: %d %s", m.Verb, r.Code, r.Comment)
+				}
+				return r, nil
+			case <-time.After(wait):
+				if !provisional {
+					wait *= 2
+				}
+				break waiting
+			case <-a.ctx.Done():
+				return nil, a.ctx.Err()
 			}
-			return r, nil
-		case <-time.After(wait):
-			wait *= 2
-		case <-a.ctx.Done():
-			return nil, a.ctx.Err()
 		}
 	}
 	return nil, fmt.Errorf("mgcp: gateway %s did not answer %s", g.cfg.Name, m.Verb)
@@ -398,7 +422,19 @@ func (l *line) rqnt(watch, signals string) error {
 	if strings.Contains(watch, "D/") {
 		m.Set("D", DigitMap)
 	}
-	_, err := l.a.send(l.gw, m)
+	r, err := l.a.send(l.gw, m)
+	l.mu.Lock()
+	switch {
+	case r != nil && r.Code >= 300:
+		c := r.Comment
+		if c == "" {
+			c = reason(r.Code)
+		}
+		l.refused = fmt.Sprintf("the gateway refused to watch the port: %d %s", r.Code, c)
+	case err == nil:
+		l.refused = ""
+	}
+	l.mu.Unlock()
 	return err
 }
 

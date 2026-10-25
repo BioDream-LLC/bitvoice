@@ -143,7 +143,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | SS7 (ISUP, MTP, link sets of several links with changeover) | Checked against a reference | libss7 (Asterisk's chan_dahdi library), ITU and ANSI. No real carrier link tried |
 | Fax (T.30, T.38) | Checked against a reference | spandsp (through Asterisk 20) on EC2: BitVoice receiving and sending faxes itself over T.38 (2 pages, 14,400 bit/s, error correction) and passing faxes between two other machines over T.38 and over G.711; no fax provider or gateway tried |
 | Provisioning: Yealink, Poly, Grandstream, Snom, Fanvil, Cisco, Mitel, Sangoma, Algo, CyberData | Software-tested | the vendors' documented formats; not on real handsets |
-| Skinny (SCCP) phones, MGCP gateways | Software-tested | own tests; no Cisco phone or gateway tried |
+| Skinny (SCCP) phones, MGCP gateways | Checked against a reference | Skinny: phones from the open-source mwicat/sccp library, every message read by Wireshark's dissector, sizes as Asterisk's chan_skinny; MGCP: Yate's MGCP gateway (restart, provisional answers, acknowledgements; it has no analogue ports, so no call). No Cisco phone or gateway hardware tried |
 | Microsoft Teams Direct Routing | Software-tested | own tests; no Teams tenant tried |
 | Hotel (FIAS) | Software-tested | own tests; not against Opera |
 | Texting, WhatsApp, Messenger, web chat | Software-tested | stand-ins for each provider's API |
@@ -224,7 +224,13 @@ Hold, transfer and conference are done from the extension's other phones for now
 ## Security
 Neither protocol has passwords. Skinny phones are accepted only from the local network and only when listed; MGCP commands are obeyed only from the gateway's address (or, without one, from the local network). Keep both ports off the internet.
 
-> Both are tested against BitVoice's own test phone and test gateway, which follow the protocols, but not yet against Cisco phones or gateway hardware.`,
+A gateway that is still working on a command may answer "100 Trying" first: BitVoice then waits longer before sending the command again and acknowledges the final answer (000), as RFC 3435 asks. A port the gateway will not watch shows the gateway's own refusal on the page, such as **the gateway refused to watch the port: 507 Unsupported Functionality** from a media gateway with no analogue ports.
+
+## How they are tested
+- Skinny: two phones built from a separate Skinny implementation (the open-source mwicat/sccp library) register, call each other, answer and hang up; an unlisted phone is refused. Wireshark's Skinny dissector reads every message BitVoice sends without a fault, and the messages have the full sizes Asterisk's chan_skinny sends to Cisco phones.
+- MGCP: against Yate's MGCP gateway (restart, provisional answers, acknowledgements, refusals) and BitVoice's own test gateway for whole calls. Yate's gateway has no analogue ports, so no call was made through it.
+
+> Not yet tried with Cisco phones or gateway hardware.`,
   },
   {
     id: 'cards', title: 'Telephony cards', route: '/cards', keys: 'telephony card dahdi digium sangoma openvox wildcard fxs fxo analogue analog phone line pstn pots tdm bitvoice-dahdi chan_dahdi pri t1 e1 isdn primary rate did q931 libpri calling name redirecting two b-channel transfer 2bct ect dms-100 rlt release link trunk advice of charge aoc aoc-d aoc-e charging units bri basic rate s0 s-bus tei multipoint ptmp msn overlap e&m em wink feature group d fgd mf r1 robbed bit mfc-r2 r2 cas openr2 latin america ss7 isup mtp2 mtp3 point code opc dpc apc cic stp libss7 grs',

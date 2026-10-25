@@ -97,6 +97,16 @@ func (m *Message) Get(name string) string {
 	return ""
 }
 
+// Has reports whether a parameter is present, even with an empty value (ResponseAck "K:" is).
+func (m *Message) Has(name string) bool {
+	for _, p := range m.Params {
+		if strings.EqualFold(p[0], name) {
+			return true
+		}
+	}
+	return false
+}
+
 // Set adds or replaces a parameter.
 func (m *Message) Set(name, value string) {
 	for i, p := range m.Params {

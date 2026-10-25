@@ -479,7 +479,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | SS7 (ISUP, MTP, link sets of several links with changeover) | Checked against a reference | libss7 (Asterisk's chan_dahdi library), ITU and ANSI. No real carrier link tried |
 | Fax (T.30, T.38) | Checked against a reference | spandsp (through Asterisk 20) on EC2: BitVoice receiving and sending faxes itself over T.38 (2 pages, 14,400 bit/s, error correction) and passing faxes between two other machines over T.38 and over G.711; no fax provider or gateway tried |
 | Provisioning: Yealink, Poly, Grandstream, Snom, Fanvil, Cisco, Mitel, Sangoma, Algo, CyberData | Software-tested | the vendors' documented formats; not on real handsets |
-| Skinny (SCCP) phones, MGCP gateways | Software-tested | own tests; no Cisco phone or gateway tried |
+| Skinny (SCCP) phones, MGCP gateways | Checked against a reference | Skinny: phones from the open-source mwicat/sccp library, every message read by Wireshark's dissector, sizes as Asterisk's chan_skinny; MGCP: Yate's MGCP gateway (restart, provisional answers, acknowledgements; it has no analogue ports, so no call). No Cisco phone or gateway hardware tried |
 | Microsoft Teams Direct Routing | Software-tested | own tests; no Teams tenant tried |
 | Hotel (FIAS) | Software-tested | own tests; not against Opera |
 | Texting, WhatsApp, Messenger, web chat | Software-tested | stand-ins for each provider's API |

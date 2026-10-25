@@ -234,7 +234,8 @@ func (p *phone) handle(id uint32, d []byte) {
 		p.send(msgSoftKeySetRes, softKeySets())
 	case msgLineStatReq:
 		n := le32(d, 0)
-		p.send(msgLineStat, (&builder{}).u32(n).str(p.ext, 24).str(p.ext, 24).u32(0))
+		// Number 24, display name 40, label 40, display options: 112 bytes, as phones and Wireshark read it.
+		p.send(msgLineStat, (&builder{}).u32(n).str(p.ext, 24).str(p.ext, 40).str(p.ext, 40).u32(0))
 	case msgSpeedDialStatReq:
 		p.send(msgSpeedDialStat, (&builder{}).u32(le32(d, 0)).str("", 24).str("", 40))
 	case msgConfigStatReq:
@@ -551,8 +552,10 @@ func (p *phone) openMedia(ref uint32) (*media.Endpoint, error) {
 	p.rtp = ep
 	p.mu.Unlock()
 	local := localIP(p.conn)
-	p.send(msgOpenReceiveChannel, (&builder{}).u32(ref, ref, 20, codecULaw, 0, 0, ref).zero(4*10))
-	p.send(msgStartMediaTransmit, (&builder{}).u32(ref, ref).u8(local[:]...).u32(uint32(ep.Port()), 20, codecULaw, 0, 0, 1, 0).zero(4*16))
+	// The full layouts (168 and 116 bytes, as Asterisk's chan_skinny sends them to Cisco phones): the
+	// encryption key block and the stream and DTMF fields after it are zero.
+	p.send(msgOpenReceiveChannel, (&builder{}).u32(ref, ref, 20, codecULaw, 0, 0, ref).zero(4*35))
+	p.send(msgStartMediaTransmit, (&builder{}).u32(ref, ref).u8(local[:]...).u32(uint32(ep.Port()), 20, codecULaw, 0, 0, 1, 0).zero(4*19))
 	return ep, nil
 }
 
@@ -603,8 +606,8 @@ func (p *phone) closeMedia(ref uint32) {
 	if ep == nil {
 		return
 	}
-	p.send(msgCloseReceiveChannel, (&builder{}).u32(ref, ref, ref))
-	p.send(msgStopMediaTransmit, (&builder{}).u32(ref, ref, ref))
+	p.send(msgCloseReceiveChannel, (&builder{}).u32(ref, ref, ref, 0)) // conference, party, call, port handling
+	p.send(msgStopMediaTransmit, (&builder{}).u32(ref, ref, ref, 0))
 	ep.Close()
 }
 

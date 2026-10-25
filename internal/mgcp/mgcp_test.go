@@ -248,3 +248,103 @@ func TestCallBetweenTwoPorts(t *testing.T) {
 		}
 	}
 }
+
+// A gateway that is still working on a command answers 100 first and its final answer later with an
+// empty ResponseAck, as Yate's MGCP gateway does: the agent waits for it without sending the
+// command again, answers the final response with 000, and a refusal shows on the line's status.
+func TestProvisionalResponseAndAck(t *testing.T) {
+	cfg := config.Default()
+	cfg.System.PublicAddress = "127.0.0.1"
+	cfg.Extensions = append(cfg.Extensions, config.Extension{Number: "100", Name: "Port 1", Secret: "a long enough secret 1", Enabled: true, RingSeconds: 10})
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	e := pbx.New(cfg, events.New(), nopRecorder{}, nil)
+	if err := e.Start(context.Background(), "127.0.0.1:0"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(e.Stop)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	wp, err := webphone.New(ctx, e.SIPPort(), e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { c.Close() })
+	type seen struct {
+		verb, tx string
+		code     int
+	}
+	got := make(chan seen, 64)
+	refuse := make(chan bool, 1)
+	refuse <- false
+	go func() {
+		buf := make([]byte, 8192)
+		for {
+			n, from, err := c.ReadFromUDPAddrPort(buf)
+			if err != nil {
+				return
+			}
+			ms, _ := Parse(buf[:n])
+			for _, m := range ms {
+				got <- seen{m.Verb, m.TxID, m.Code}
+				if m.Verb != "RQNT" {
+					continue
+				}
+				no := <-refuse
+				refuse <- no
+				_, _ = c.WriteToUDPAddrPort((&Message{Code: 100, TxID: m.TxID}).Bytes(), from)
+				go func(tx string) {
+					time.Sleep(400 * time.Millisecond)
+					r := &Message{Code: 200, TxID: tx}
+					if no {
+						r = &Message{Code: 507, TxID: tx, Comment: "Unsupported Functionality"}
+					}
+					r.Set("K", "")
+					_, _ = c.WriteToUDPAddrPort(r.Bytes(), from)
+				}(m.TxID)
+			}
+		}
+	}()
+	a := New(ctx, wp, e, func(string) string { return "a long enough secret 1" }, nil)
+	a.Retry = 100 * time.Millisecond
+	t.Cleanup(a.Close)
+	a.Apply(config.MGCP{Enabled: true, Gateways: []config.MGCPGateway{{Name: "gw1.test", Host: "127.0.0.1", Port: c.LocalAddr().(*net.UDPAddr).Port,
+		Lines: []config.MGCPLine{{Endpoint: "aaln/1", Extension: "100"}}}}})
+	var rqnt string
+	copies, acked := 0, false
+	deadline := time.After(3 * time.Second)
+	for !acked {
+		select {
+		case s := <-got:
+			switch {
+			case s.verb == "RQNT" && (rqnt == "" || s.tx == rqnt):
+				rqnt = s.tx
+				copies++
+			case s.verb == "" && s.code == 0 && s.tx == rqnt:
+				acked = true
+			}
+		case <-deadline:
+			t.Fatalf("no response acknowledgement (RQNT sent %d times)", copies)
+		}
+	}
+	if copies != 1 {
+		t.Fatalf("the agent sent the RQNT %d times while the gateway was working on it", copies)
+	}
+	// The gateway now refuses: the line's status says so in words.
+	<-refuse
+	refuse <- true
+	a.Apply(config.MGCP{Enabled: true, Gateways: []config.MGCPGateway{{Name: "gw1.test", Host: "127.0.0.1", Port: c.LocalAddr().(*net.UDPAddr).Port,
+		Lines: []config.MGCPLine{{Endpoint: "aaln/1", Extension: "100"}}}}})
+	a.mu.Lock()
+	l := a.gateways["gw1.test"].lines["aaln/1"]
+	a.mu.Unlock()
+	l.reset()
+	if st := a.Status()["aaln/1@gw1.test"]; !strings.Contains(st, "507 Unsupported Functionality") {
+		t.Fatalf("status %q", st)
+	}
+}

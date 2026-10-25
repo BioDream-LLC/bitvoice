@@ -140,8 +140,8 @@ func TestCallBetweenTwoPhones(t *testing.T) {
 	a.wait("a registration", msgRegisterAck, nil)
 	b.wait("a registration", msgRegisterAck, nil)
 	a.send(msgLineStatReq, (&builder{}).u32(1))
-	if d := a.wait("its line", msgLineStat, nil); cstr(d[4:28]) != "100" {
-		t.Fatalf("line %q", cstr(d[4:28]))
+	if d := a.wait("its line", msgLineStat, nil); cstr(d[4:28]) != "100" || len(d) != 112 {
+		t.Fatalf("line %q, %d bytes", cstr(d[4:28]), len(d))
 	}
 	a.send(msgSoftKeyTemplateReq, nil)
 	a.wait("soft keys", msgSoftKeyTemplateRes, nil)
@@ -153,6 +153,11 @@ func TestCallBetweenTwoPhones(t *testing.T) {
 	}
 	open := a.wait("an audio channel", msgOpenReceiveChannel, nil)
 	smt := a.wait("where to send audio", msgStartMediaTransmit, nil)
+	// The full layouts, as Wireshark's dissector and Asterisk's chan_skinny have them: a phone reads
+	// fields past the end of a short message.
+	if len(open) != 168 || len(smt) != 116 {
+		t.Fatalf("open receive channel %d bytes, start media %d", len(open), len(smt))
+	}
 	ourPort := int(le32(smt, 12))
 	ref := le32(open, 0)
 	ap := a.rtp.LocalAddr().(*net.UDPAddr)
@@ -190,7 +195,12 @@ func TestCallBetweenTwoPhones(t *testing.T) {
 		t.Fatal("no audio from A at B")
 	}
 	a.send(msgOnHook, nil)
-	b.wait("the call closed", msgCloseReceiveChannel, nil)
+	if d := b.wait("the call closed", msgCloseReceiveChannel, nil); len(d) != 16 {
+		t.Fatalf("close receive channel %d bytes", len(d))
+	}
+	if d := b.wait("its sending stopped", msgStopMediaTransmit, nil); len(d) != 16 {
+		t.Fatalf("stop media %d bytes", len(d))
+	}
 	if st := s.Status(); !strings.HasPrefix(st["SEP001122334455"], "registered") {
 		t.Errorf("status %v", st)
 	}
