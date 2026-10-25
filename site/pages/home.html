@@ -25,46 +25,50 @@
 <div class="strip"><div class="wrap">
   <div><b>$0</b><span>No licence, no per-extension or per-agent fee</span></div>
   <div><b>One file</b><span>About 37 MB, for Linux, macOS and Windows</span></div>
-  <div><b>47 MB</b><span>Memory carrying four live calls and eight phones</span></div>
+  <div><b>2,000</b><span>Calls at once on a 16-vCPU server, no loss, MOS 4.41</span></div>
   <div><b>100%</b><span>Of the settings have a screen, checked on every change</span></div>
 </div></div>
 
-<section class="band">
-  <div class="wrap">
-    <div class="intro">
-      <p class="eyebrow">Everything in the browser</p>
-      <h2>A phone system packaged like an appliance</h2>
-      <p>One program, one built-in web interface, no outside runtime. Underneath is BitVoice's own engine, written in Go: SIP and
-        IAX2, RTP and SRTP, codec conversion and WebRTC. A REST API and configuration in Git are there for those who want them.</p>
+<section class="band doors"><div class="wrap">
+  <div class="door-grid">
+    <div class="door">
+      <p class="eyebrow">For offices and hosted providers</p>
+      <h2>Replace FreePBX, keep your numbers and settings</h2>
+      <p>Import a whole FreePBX Backup &amp; Restore file (extensions with their passwords, trunks, routes, ring groups,
+        queues), or exports from Asterisk, 3CX, Cisco, Avaya and Mitel. See what changes before it is applied.</p>
+      <ul class="ticks"><li>Tested on a real FreePBX 17 backup</li><li>Asterisk's AGI, ARI and AMI keep working</li><li>Many organisations on one server</li></ul>
+      <div class="actions"><a class="btn btn-primary" href="/freepbx-alternative/">ICON:swap Leaving FreePBX</a><a class="btn btn-ghost" href="/technology/migration/">How the move works</a></div>
     </div>
-    <div class="grid">
-      <a class="card" href="/features/#calls"><div class="icon">ICON:phone</div><h3>Everything an office phone system does</h3>
-        <p>Extensions, ring groups, menus, schedules, voicemail to email, recording, parking, paging, conference rooms, forwarding,
-        follow-me, intercom and the usual feature codes.</p></a>
-      <a class="card" href="/features/#contact"><div class="icon">ICON:queue</div><h3>A contact centre</h3>
-        <p>Queues with a live wallboard, callbacks, VIP and sticky routing, supervisors listening in, an outbound dialer and one
-        inbox for web chat, WhatsApp, Messenger and texts.</p></a>
-      <a class="card" href="/features/#phones"><div class="icon">ICON:browser</div><h3>Desk phones and browsers</h3>
-        <p>Yealink, Poly, Grandstream, Snom, Fanvil and more set up automatically; a phone in every browser; WebRTC softphones over
-        SIP over WebSocket.</p></a>
-      <a class="card" href="/freepbx-alternative/"><div class="icon">ICON:swap</div><h3>Bring your FreePBX with you</h3>
-        <p>Import FreePBX, Asterisk, 3CX, Cisco, Avaya and Mitel exports. See exactly what would change before it is applied, and
-        undo it in one click.</p></a>
-      <a class="card" href="/features/#ai"><div class="icon">ICON:spark</div><h3>AI you choose, or none</h3>
-        <p>Transcripts, summaries and an AI receptionist with the AI service you pick, or one you run yourself. Off until you set
-        it up.</p></a>
-      <a class="card" href="/features/#operations"><div class="icon">ICON:server</div><h3>Runs anywhere, many at once</h3>
-        <p>SQLite on one server or PostgreSQL for several; many organisations on one server, each with its own data, address and
-        administrators.</p></a>
-      <a class="card" href="/features/#security"><div class="icon">ICON:shield</div><h3>Secure by default</h3>
-        <p>HTTPS only, SIP over TLS with SRTP, Let's Encrypt, two-step sign-in and single sign-on, signed updates, and an audit of
-        every change.</p></a>
-      <a class="card" href="/features/#calls"><div class="icon">ICON:code</div><h3>Scripts that never lose a call</h3>
-        <p>Route calls with JavaScript or Lua, sandboxed and time-limited, with a fixed fallback when a script fails. Asterisk's
-        AMI and ARI tools work too.</p></a>
+    <div class="door">
+      <p class="eyebrow">For contact centres</p>
+      <h2>Queues, dialling out and every channel, in one program</h2>
+      <p>Queues with wallboards and supervisors, callbacks, an outbound dialer with answering-machine detection and
+        do-not-call lists, and one inbox for web chat, WhatsApp, Messenger and texts.</p>
+      <ul class="ticks"><li>Transcripts on the server, with no cloud</li><li>Call quality judged on both halves of every call</li><li>No per-agent fee</li></ul>
+      <div class="actions"><a class="btn btn-primary" href="/technology/queues/">ICON:queue Queues</a><a class="btn btn-ghost" href="/technology/#contact-centre">The contact centre</a></div>
+    </div>
+    <div class="door">
+      <p class="eyebrow">For developers</p>
+      <h2>Program calls the way you already do</h2>
+      <p>AGI and FastAGI scripts, the whole ARI, AMI, call scripts in JavaScript or Lua, a REST API with live events,
+        and configuration as code with Terraform.</p>
+      <ul class="ticks"><li>Every AGI answer compared with Asterisk 20's</li><li>Every operation of Asterisk's ARI</li><li>Sandboxed scripts with a fixed fallback</li></ul>
+      <div class="actions"><a class="btn btn-primary" href="/technology/asterisk-compat/">ICON:code Asterisk compatibility</a><a class="btn btn-ghost" href="/technology/#developers">For developers</a></div>
     </div>
   </div>
-</section>
+</div></section>
+
+<section class="band tech-band"><div class="wrap">
+  <div class="intro">
+    <p class="eyebrow">Everything in one program</p>
+    <h2>The technology inside BitVoice</h2>
+    <p>Most phone systems are a stack: Asterisk, a GUI on top, modules bought one at a time, a media server, a
+      transcription service. BitVoice is one program written in Go. Each square is an article about one technology:
+      what it is, how BitVoice does it, and what has been tested.</p>
+  </div>
+{{TILES}}
+  <p class="center"><a class="btn btn-line" href="/technology/">ICON:layers All {{ARTICLES}} articles, by area</a></p>
+</div></section>
 
 <section class="band soft">
   <div class="wrap">
@@ -118,6 +122,14 @@
     <a class="btn btn-line" href="/proof/">ICON:check How it is tested</a>
   </div>
 </section>
+
+<section class="band maker-band"><div class="wrap maker-row">
+  <a href="https://biodream.io" aria-label="BioDream LLC"><img src="/assets/biodream-wordmark.png" alt="BioDream" width="132" height="90"></a>
+  <div><p class="eyebrow">Who makes it</p><h2>A product of BioDream LLC</h2>
+  <p>BioDream builds free and source-available software for healthcare, telecom and 911, and publishes the source. Use
+    BitVoice free, for anything; when it carries calls that matter, <a href="https://biodream.io/support/">BioDream can keep it
+    running with you</a>. No paid modules, no licence meter: support and hosting are the whole business.</p></div>
+</div></section>
 
 <section class="calltoaction">
   <div class="wrap">

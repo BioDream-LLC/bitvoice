@@ -97,10 +97,12 @@ Where something has only been tested against stand-ins rather than real equipmen
 <tr><td colspan="2">A <b>call flow diagram</b> of where calls go, and a <b>call-path simulator</b>: pick a caller, number and time and see the exact route, without ringing anything</td></tr>
 <tr><td colspan="2"><b>Check every situation</b>: the whole call plan tried in every combination of hours over the coming year, toggles, menu keys and no-answers, and every extension dialling 911, listing calls that end nowhere, loops, dead branches and emergency calls resting on one trunk, each with the situation that shows it; the same check runs on a change before it is made</td></tr>
 <tr><td colspan="2"><b>Every call says how it was routed</b>, in plain words on its record: the route, the hours, toggles, scripts, keys, forwards and trunks that decided it</td></tr>
+<tr><td colspan="2"><b>Forwarded calls keep their history</b>: SIP History-Info (RFC 7044) and Diversion read from carriers and Teams and sent on forwards out, so voicemail and the next system know who was really called</td></tr>
 <tr><td colspan="2"><b>Judges that give their reasons</b>: a <b>toll-fraud guard</b> on every call abroad (first call to a country, out of hours, from outside, bursts, attacks; never an emergency call), a <b>trunk health judge</b> that tells a provider that is down from your own link being down, and a call-quality diagnosis that compares both halves of each call. Each follows a rulebook checked in every combination of its facts; something not measured is never taken for safe</td></tr>
 <tr><td colspan="2"><b>Video calls</b> between phones that both send video, relayed and encrypted like the sound</td></tr>
 <tr><td colspan="2"><b>Hot desking</b> (<code>*33</code>), a company directory on every phone, calendar-driven do not disturb from Outlook and Google</td></tr>
 <tr><td colspan="2"><b>Conference rooms</b> with a PIN and a leader PIN, wait for the leader, members joining muted (press 1 to ask to speak), lock, recording, and a live view to mute or remove people</td></tr>
+<tr><td colspan="2"><b>Video rooms</b>: switched (the speaker), a grid of up to nine mixed by ffmpeg, or <b>everyone's video</b> (SFU): each browser sends its camera in three sizes and sees up to 15 others, each at the size it chooses</td></tr>
 <tr><td colspan="2"><b>Forwarding</b> always, when busy and when not answered (<code>*72</code>, <code>*90</code>, <code>*52</code>), <b>do not disturb</b> (<code>*78</code>, <code>*79</code>, <code>*76</code>) and <b>follow-me</b> (<code>*21</code>) with press 1 to take the call, so a mobile's voicemail never answers it</td></tr>
 <tr><td colspan="2"><b>Call pickup</b> for a group (<code>*8</code>) or one phone (<code>**</code>), <b>intercom</b> with auto-answer (<code>*80</code>), company and personal <b>speed dials</b> (<code>*0</code>); every code can be changed on one page</td></tr>
 <tr><td colspan="2">A <b>staff portal</b>: people sign in with their extension and voicemail PIN to set do not disturb, forwarding, follow-me and speed dials, hear their voicemail, record their greeting and see their calls</td></tr>
@@ -124,6 +126,7 @@ Where something has only been tested against stand-ins rather than real equipmen
 <tbody>
 <tr><td colspan="2"><b>AI receptionists</b> that say they are automated, answer from facts you approved, take messages, book callbacks and always reach a person. A set-up that would loop a caller back to an assistant is refused</td></tr>
 <tr><td colspan="2"><b>Transcripts and summaries</b> of recorded calls and voicemails, and search across what was said</td></tr>
+<tr><td colspan="2"><b>Facts and summaries without a language model</b>: rules read each call for what happened, where, who is hurt, hazards, vehicles and a callback number, every fact shown with the sentence it came from; coverage published honestly (53% on calls no rule was written from)</td></tr>
 <tr><td colspan="2"><b>Speech to text on the server itself</b>: BitVoice runs whisper (whisper.cpp, in the downloads) so transcripts, live 911 ones included, never leave the building; no language model or account needed</td></tr>
 <tr><td colspan="2"><b>Transfer briefings</b>: a two-sentence summary for whoever a call is transferred to, so callers never repeat themselves</td></tr>
 <tr><td colspan="2"><b>Ask in plain words</b> ("forward sales to my mobile after 5 pm"), shown as a proposed change you approve</td></tr>
@@ -157,6 +160,7 @@ Where something has only been tested against stand-ins rather than real equipmen
 <tbody>
 <tr><td colspan="2"><b>G.711, G.722, Opus, G.729, G.726 (all four rates), AMR and AMR-WB, iLBC, Speex and GSM</b>, converted between any two, so a browser on Opus talks to a carrier on G.729 or an old gateway on G.726; G.723.1 too, through ffmpeg when you allow it</td></tr>
 <tr><td colspan="2"><b>SRTP</b> to every phone that encrypts, and SIP over TLS</td></tr>
+<tr><td colspan="2"><b>Carried untouched</b> between phones that share them: G.722.1 (Siren 7), G.722.1C (Siren 14), G.719 and Codec2, with their bit rate and mode kept in the offer</td></tr>
 <tr><td colspan="2">Recording in stereo, a <b>pause for card numbers</b> (<code>*7</code> and <code>*8</code>, PCI DSS), retention, <b>legal holds</b>, and <b>recording consent</b> announcements by region</td></tr>
 <tr><td colspan="2">The <b>IMBE</b> P25 voice codec: decoded with code from GopherTrunk and encoded by our own encoder</td></tr>
 </tbody></table>
@@ -176,6 +180,7 @@ Where something has only been tested against stand-ins rather than real equipmen
 <tbody>
 <tr><td colspan="2"><b>Fail-to-ban</b> for addresses that keep failing, and <b>toll-fraud limits</b>: premium-rate numbers refused unless allowed</td></tr>
 <tr><td colspan="2"><b>Two-step sign-in</b> with an authenticator app, and <b>single sign-on</b> through any OpenID Connect provider</td></tr>
+<tr><td colspan="2"><b>Company directory from LDAP or Active Directory</b>: people become extensions and groups become ring groups and roles, kept in step on a schedule, and staff sign in with their directory password (StartTLS or LDAPS, our own LDAPv3 client)</td></tr>
 <tr><td colspan="2">An <b>audit log</b> of every administrative action, and API tokens that are shown once</td></tr>
 <tr><td colspan="2">Secrets from <b>AWS Secrets Manager or Azure Key Vault</b>; cryptography only from Go's standard library, never written here</td></tr>
 </tbody></table>
@@ -187,6 +192,7 @@ Where something has only been tested against stand-ins rather than real equipmen
 <tr><td colspan="2"><b>Hosted organisations</b>: many phone systems on one server, each with its own data (its own folder on SQLite, its own schema on PostgreSQL), web address or domain and administrators; limits on extensions, calls at once, storage and AI use; suspend without deleting. Emergency calls are never refused</td></tr>
 <tr><td colspan="2"><b>SQLite</b> on one server, <b>PostgreSQL</b> for several</td></tr>
 <tr><td colspan="2"><b>Health</b> page saying what is missing, emergency calling first; a live <b>SIP trace</b>; a <b>call generator</b> that measures what your hardware carries</td></tr>
+<tr><td colspan="2"><b>Measured capacity</b>: 2,000 calls at once on a 16-vCPU server with no loss and MOS 4.41, about 10 vCPUs and 380 MB of memory (<a href="#capacity">Capacity</a>)</td></tr>
 <tr><td colspan="2"><b>Updates</b> uploaded in the browser, installed when no calls are up, with <b>Go back</b> in one click and an automatic rollback if the new version fails to start</td></tr>
 <tr><td colspan="2"><b>Every change is a revision</b>: see what changed, restore with a preview, export and import</td></tr>
 <tr><td colspan="2"><b>Prometheus</b> and <b>OpenTelemetry</b> metrics</td></tr>

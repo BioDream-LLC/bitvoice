@@ -43,26 +43,34 @@
   </table>
 
   <h2 style="margin-top:56px">Not yet tried for real</h2>
-  <p>These are built and tested against stand-ins, but not yet with the real thing. Reports from anyone who tries them are welcome
-    on <a href="https://github.com/BioDream-LLC/bitvoice/issues">GitHub</a>.</p>
+  <p>Built and tested against stand-ins or the makers' published formats, but not yet with the real thing. Reports from anyone
+    who tries them are welcome on <a href="https://github.com/BioDream-LLC/bitvoice/issues">GitHub</a>.</p>
   <ul class="ticks">
     <li>Real desk phones: the automatic set-up (Yealink, Poly, Grandstream, Snom, Fanvil, Cisco, Mitel and Aastra, Sangoma, Algo,
-      CyberData) is checked against each maker's published formats, not yet on the phones themselves</li>
-    <li>SIP carriers in production, the outbound dialer's answering-machine detection on real lines, and T.38 fax through real carriers</li>
-    <li>Telephony cards and PRI switches, including transfers handed to the phone company on real lines</li>
-    <li>Skinny, MGCP and H.323 equipment; hotel systems (FIAS) against a real property-management system; SNMP managers</li>
-    <li>Let's Encrypt itself (as against its test authority), TURN through real NATs, and Meta's live WhatsApp and Messenger
-      APIs</li>
-    <li>Published capacity figures on stated hardware</li>
+      CyberData) is checked against each maker's published formats, not on the phones themselves</li>
+    <li>Calls in from a commercial carrier (calls out to the phone network through SIP.US work), and T.38 fax through a real carrier</li>
+    <li>Telephony cards on real lines: PRI has run through real DAHDI drivers on Linux, between two software spans</li>
+    <li>Skinny and MGCP equipment, a Microsoft Teams tenant, a hotel's property-management system, Meta's live WhatsApp and
+      Messenger APIs, and the iPhone app on a real iPhone</li>
     <li>The public-safety lab track with a live ESInet, a text control centre, a selective router's CAMA trunks, a P25
-      system, or a CAD: built and tested against stand-ins, waiting on a design partner's lab</li>
+      system, or a production CAD: built and tested against stand-ins, waiting on a design partner's lab</li>
   </ul>
 
-  <h2 style="margin-top:56px">Not built</h2>
+  <h2 style="margin-top:56px">Not offered</h2>
   <ul class="ticks">
-    <li>SS7 link sets of several links, a signal transfer point, and the SS7 database lookups (number portability,
-      toll-free)</li>
-    <li>MFC-R2's China variant: OpenR2's own one contradicts itself, so there is nothing sound to test against</li>
     <li>P25 Phase 2 half-rate voice (AMBE+2): patented until 2028</li>
+    <li>Ed448 signatures: not in Go's standard library, and BitVoice writes no cryptography of its own</li>
+    <li>An SS7 signal transfer point and SCCP/TCAP: a PBX is an end point; number portability and toll-free lookups are the carrier's</li>
+    <li>MFC-R2's China variant: OpenR2's own one contradicts itself, so there is nothing sound to test against</li>
+    <li>ALI over PAM or E2: through a gateway</li>
   </ul>
+</div></section>
+
+<section class="band soft" id="maturity"><div class="wrap prose-lite">
+{{MATURITY}}
+</div></section>
+
+<section class="band" id="capacity"><div class="wrap prose-lite">
+  <h2>Capacity</h2>
+{{CAPACITY}}
 </div></section>

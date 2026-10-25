@@ -34,6 +34,15 @@ var icons = map[string]string{
 	"lab":      `<path d="M7 3h10M8 3v4l-3 9a4 4 0 0 0 3.8 5h6.4a4 4 0 0 0 3.8-5l-3-9V3"/>`,
 	"layers":   `<path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/>`,
 	"menu":     `<path d="M4 7h16M4 12h16M4 17h16"/>`,
+	"radio":    `<rect x="4" y="9" width="16" height="12" rx="2"/><path d="M8 9l9-5M8 15h.01M12 13h4M12 17h4"/>`,
+	"video":    `<rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/>`,
+	"fax":      `<path d="M7 9V3h8l2 2v4"/><rect x="3" y="9" width="18" height="9" rx="2"/><path d="M7 18v3h10v-3M7 13h.01M11 13h6"/>`,
+	"wave":     `<path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 7v10M21 12h0"/>`,
+	"plug":     `<path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0V8zM12 17v4"/>`,
+	"lock":     `<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>`,
+	"globe":    `<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>`,
+	"cpu":      `<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M10 10h4v4h-4zM9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/>`,
+	"arrow":    `<path d="M5 12h14M13 6l6 6-6 6"/>`,
 }
 
 func icon(name string) string {
@@ -48,11 +57,16 @@ type navItem struct{ key, title, href string }
 // menu is the top menu; key matches a page's section, so the menu marks where the reader is.
 var menu = []navItem{
 	{"features", "Features", "/features/"},
-	{"freepbx", "Leaving FreePBX", "/freepbx-alternative/"},
+	{"technology", "Technology", "/technology/"},
+	{"developers", "Developers", "/technology/#developers"},
+	{"freepbx", "From FreePBX", "/freepbx-alternative/"},
 	{"proof", "Proof", "/proof/"},
+	{"lab", "Public safety", "/public-safety/"},
 	{"manual", "Manual", "/manual/"},
-	{"lab", "Public safety (lab)", "/public-safety/"},
 }
+
+// manualLangs are the languages the manual is built in besides English, as [code, name] pairs; set by build.
+var manualLangs [][2]string
 
 // layout wraps a page body in the head, menu and footer.
 func layout(base, path, section, title, description, body, version string) string {
@@ -71,7 +85,7 @@ func layout(base, path, section, title, description, body, version string) strin
 	fmt.Fprintf(&b, "<meta property=\"og:image\" content=\"%s/assets/screens/dashboard.%s\">\n", base, map[bool]string{true: "png", false: "webp"}[pngFallback])
 	b.WriteString("<meta name=\"author\" content=\"BioDream Developer\">\n</head>\n<body>\n<a class=\"skip\" href=\"#main\">Skip to content</a>\n")
 
-	b.WriteString("<header class=\"top\"><div class=\"wrap\">\n<a class=\"brand\" href=\"/\"><img src=\"/assets/bitvoice-logo.svg\" alt=\"\">BitVoice</a>\n<ul class=\"menu\">\n")
+	b.WriteString("<header class=\"top\"><div class=\"wrap\">\n<a class=\"brand\" href=\"/\"><img src=\"/assets/bitvoice-logo.svg\" alt=\"\"><span>Bit<b>Voice</b></span></a>\n<ul class=\"menu\">\n")
 	for _, m := range menu {
 		cur := ""
 		if m.key == section {
@@ -89,19 +103,33 @@ func layout(base, path, section, title, description, body, version string) strin
 	b.WriteString(`<a href="/download/">Download</a><a href="https://github.com/BioDream-LLC/bitvoice">GitHub</a></nav></details>` + "\n</div></header>\n")
 
 	b.WriteString("<main id=\"main\">\n" + body + "\n</main>\n")
-	b.WriteString(footer)
+	b.WriteString(footer())
 	b.WriteString("</body>\n</html>\n")
 	return b.String()
 }
 
-const footer = `<footer class="site"><div class="wrap">
+// footer is the bottom menu: the product, moving to it, its technology, the evidence, help, the
+// manual's languages, and the company that makes it.
+func footer() string {
+	var langs strings.Builder
+	langs.WriteString(`<a href="/manual/" hreflang="en">English</a>`)
+	for _, l := range manualLangs {
+		fmt.Fprintf(&langs, `<a href="/manual/%s/" hreflang="%s" lang="%s">%s</a>`, l[0], l[0], l[0], html.EscapeString(l[1]))
+	}
+	return `<footer class="site"><div class="wrap">
 <div class="cols">
-<div><a class="brand" href="/"><img src="/assets/bitvoice-logo.svg" alt="">BitVoice</a>
-<p>An open-source phone system from BioDream LLC. Apache License 2.0.</p></div>
-<div><b>Product</b><a href="/features/">Features</a><a href="/freepbx-alternative/">Leaving FreePBX</a><a href="/public-safety/">Public safety (lab)</a></div>
-<div><b>Evidence</b><a href="/proof/">How it is tested</a><a href="https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml">Continuous integration</a></div>
-<div><b>Help</b><a href="/manual/">Manual</a><a href="/manual/bitvoice-manual.pdf">Manual (PDF)</a><a href="/download/">Download</a><a href="https://github.com/BioDream-LLC/bitvoice">GitHub</a></div>
+<div class="about"><a class="brand" href="/"><img src="/assets/bitvoice-logo.svg" alt="">BitVoice</a>
+<p>A free, open-source phone system from BioDream LLC: one program, run entirely from its web interface. Apache License 2.0.</p>
+<a class="btn btn-primary small" href="/download/">` + icon("download") + `Download</a></div>
+<div><b>Product</b><a href="/features/">Features</a><a href="/technology/">Technology</a><a href="/technology/#contact-centre">Contact centres</a><a href="/technology/#developers">Developers</a><a href="/public-safety/">Public safety (lab)</a></div>
+<div><b>Moving</b><a href="/freepbx-alternative/">Leaving FreePBX</a><a href="/technology/migration/">Bringing your settings</a><a href="/technology/asterisk-compat/">Asterisk compatibility</a><a href="/technology/hosting/">Hosting organisations</a></div>
+<div><b>Evidence</b><a href="/proof/">How it is tested</a><a href="/proof/#maturity">How mature each part is</a><a href="https://demo.bitvoice.org">Public demo</a><a href="https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml">Continuous integration</a></div>
+<div><b>Help</b><a href="/manual/">Manual</a><a href="/manual/bitvoice-manual.pdf">Manual (PDF)</a><a href="/download/">Download</a><a href="https://github.com/BioDream-LLC/bitvoice">GitHub</a><a href="https://github.com/BioDream-LLC/bitvoice/issues/new">Report a bug</a></div>
+<div class="langs"><b>The manual in</b>` + langs.String() + `</div>
 </div>
+<div class="maker"><a href="https://biodream.io" aria-label="BioDream LLC"><img src="/assets/biodream-wordmark.png" alt="BioDream" width="88" height="60"></a>
+<p>BitVoice is a product of <a href="https://biodream.io">BioDream LLC</a>, which builds free and source-available software for healthcare, telecom and 911, and the support to run it. <a href="https://biodream.io/support/">Support from BioDream</a></p></div>
 <div class="legal">© BioDream LLC. BitVoice is free software under the Apache License 2.0. FreePBX and Asterisk are trademarks of Sangoma Technologies; other names belong to their owners. BitVoice is not affiliated with them.</div>
 </div></footer>
 `
+}

@@ -20,6 +20,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -31,6 +32,8 @@ type page struct {
 var pages = []page{
 	{"home.html", "/", "", "BitVoice: an open-source, single-binary alternative to FreePBX and Asterisk",
 		"BitVoice is a complete Apache-2.0 phone system for offices, contact centres and hosted providers: one file, run entirely from its web interface. No Asterisk underneath, no paid modules, no licence meter.", "1.0"},
+	{"technology.html", "/technology/", "technology", "The technology inside BitVoice",
+		"Every technology a phone system rests on, from SIP and codecs to queues, fax, ISDN, SS7, WebRTC and NG911, explained, with how BitVoice does each and how it is tested.", "0.9"},
 	{"features.html", "/features/", "features", "Everything BitVoice does",
 		"Extensions, queues, menus, voicemail, recording, conferences, trunks, desk-phone provisioning, WebRTC, AI receptionists, an outbound dialer, an omnichannel inbox and more, itemised.", "0.9"},
 	{"freepbx.html", "/freepbx-alternative/", "freepbx", "A FreePBX and Asterisk alternative you run from the browser",
@@ -47,12 +50,22 @@ func main() {
 	out := flag.String("out", "dist-site", "directory to write the site into (emptied first)")
 	base := flag.String("base", "https://bitvoice.org", "the site's canonical origin, without a trailing slash")
 	root := flag.String("root", ".", "the repository checkout")
+	manuals := flag.String("manuals", "", "a directory of translated manuals, LANG.html each (make manuals); none when empty")
 	flag.Parse()
+	manualDir = *manuals
 	if err := build(*root, *out, strings.TrimSuffix(*base, "/")); err != nil {
 		fmt.Fprintln(os.Stderr, "bitvoicesite:", err)
 		os.Exit(1)
 	}
 }
+
+// manualDir holds the translated manuals; manualNames names their languages.
+var manualDir string
+
+var manualNames = map[string]string{"de": "Deutsch", "fr": "Français", "es": "Español", "it": "Italiano", "pt": "Português", "nl": "Nederlands",
+	"pl": "Polski", "sv": "Svenska", "da": "Dansk", "nb": "Norsk bokmål", "fi": "Suomi", "ja": "日本語", "zh": "简体中文"}
+
+var chapterRE = regexp.MustCompile(`<section class="chapter" id="([a-z0-9-]+)"><div class="chapno">[^<]*</div><h2>([^<]+)</h2>`)
 
 // build writes the whole site.
 func build(root, out, base string) error {
@@ -69,6 +82,14 @@ func build(root, out, base string) error {
 		return err
 	}
 	lab, err := section(string(readme), "## Public safety", "## What it looks like")
+	if err != nil {
+		return err
+	}
+	maturity, err := section(string(readme), "### Feature maturity", "### Capacity")
+	if err != nil {
+		return err
+	}
+	capacity, err := section(string(readme), "### Capacity", "## Documentation")
 	if err != nil {
 		return err
 	}
@@ -91,6 +112,40 @@ func build(root, out, base string) error {
 	if err := copyAssets(root, out); err != nil {
 		return err
 	}
+	arts, err := loadArticles(root)
+	if err != nil {
+		return err
+	}
+	man, err := os.ReadFile(filepath.Join(root, "docs/manual/index.html"))
+	if err != nil {
+		return err
+	}
+	chapters := map[string]string{}
+	for _, m := range chapterRE.FindAllStringSubmatch(string(man), -1) {
+		chapters[m[1]] = html.UnescapeString(m[2])
+	}
+	for _, a := range arts {
+		if _, ok := chapters[a.manual]; !ok {
+			return fmt.Errorf("article %s names manual chapter %q, which the manual does not have", a.slug, a.manual)
+		}
+	}
+	manualLangs = nil
+	if manualDir != "" {
+		for _, code := range sortedKeys(manualNames) {
+			f := filepath.Join(manualDir, code+".html")
+			if _, err := os.Stat(f); err != nil {
+				continue
+			}
+			if err := copyFile(f, filepath.Join(out, "manual", code, "index.html")); err != nil {
+				return err
+			}
+			manualLangs = append(manualLangs, [2]string{code, manualNames[code]})
+		}
+	}
+	words := 0
+	for _, a := range arts {
+		words += a.words
+	}
 
 	fill := strings.NewReplacer(
 		"{{VERSION}}", version,
@@ -101,6 +156,12 @@ func build(root, out, base string) error {
 			`which has changes since `+version+` was released (`+released(root, version)+`). They come in the next release; until then, build from source (below) to have them.</p>`),
 		"{{FEATURES}}", tables(features),
 		"{{LAB}}", tables(lab),
+		"{{MATURITY}}", "<h2>How mature each part is</h2>\n"+rendered(maturity),
+		"{{CAPACITY}}", rendered(capacity),
+		"{{TILES}}", tiles(arts, false),
+		"{{TECH}}", tiles(arts, true),
+		"{{ARTICLES}}", fmt.Sprint(len(arts)),
+		"{{ARTICLE_WORDS}}", thousands(words),
 	)
 	var sitemap strings.Builder
 	sitemap.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n")
@@ -117,6 +178,17 @@ func build(root, out, base string) error {
 			return err
 		}
 		fmt.Fprintf(&sitemap, "<url><loc>%s%s</loc><priority>%s</priority></url>\n", base, p.path, p.priority)
+	}
+
+	for _, a := range arts {
+		path := "/technology/" + a.slug + "/"
+		if err := write(out, path, layout(base, path, "technology", a.title+" · BitVoice", a.description, articlePage(a, arts, chapters, version), version)); err != nil {
+			return err
+		}
+		fmt.Fprintf(&sitemap, "<url><loc>%s%s</loc><priority>0.7</priority></url>\n", base, path)
+	}
+	for _, l := range manualLangs {
+		fmt.Fprintf(&sitemap, "<url><loc>%s/manual/%s/</loc><priority>0.5</priority></url>\n", base, l[0])
 	}
 
 	// The manual, as it is in docs/manual: one HTML file with its own styles, and the PDF.
@@ -227,7 +299,7 @@ func tables(md string) string {
 // copyAssets copies the logo, artwork and chips, and the screenshots: as WebP at the size they are
 // shown when cwebp is installed (a fifth of the bytes), else the PNGs as they are.
 func copyAssets(root, out string) error {
-	for _, glob := range []string{"docs/assets/*.svg", "docs/assets/chips/*.svg", "docs/assets/*.mp4"} {
+	for _, glob := range []string{"docs/assets/*.svg", "docs/assets/*.png", "docs/assets/chips/*.svg", "docs/assets/*.mp4"} {
 		files, _ := filepath.Glob(filepath.Join(root, glob))
 		for _, f := range files {
 			rel, _ := filepath.Rel(filepath.Join(root, "docs"), f)
@@ -284,4 +356,27 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	return o.Close()
+}
+
+func sortedKeys(m map[string]string) []string {
+	ks := make([]string, 0, len(m))
+	for k := range m {
+		ks = append(ks, k)
+	}
+	sort.Strings(ks)
+	return ks
+}
+
+// rendered is a piece of the README as HTML, its links to its own headings sent to the site's pages.
+func rendered(md string) string {
+	h, _ := markdown(md)
+	return hrefRE.ReplaceAllStringFunc(h, func(s string) string {
+		switch hrefRE.FindStringSubmatch(s)[1] {
+		case "capacity":
+			return `href="/proof/#capacity"`
+		case "how-it-is-tested":
+			return `href="/proof/"`
+		}
+		return `href="/manual/"`
+	})
 }

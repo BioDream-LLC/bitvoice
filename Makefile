@@ -10,7 +10,7 @@ RELEASE_KEY ?=
 BIODREAM_KEY := M6UaGaLM1T0SekufRzAlUSeSTjfxpVL18YHE5eKkKxY=
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.releaseKey=$(RELEASE_KEY)
 
-.PHONY: all build test vet fmt check clean web e2e manual release site
+.PHONY: manual-units manuals all build test vet fmt check clean web e2e manual release site
 
 all: check build
 
@@ -84,5 +84,17 @@ release:
 # The bitvoice.org website, built from README.md, docs/manual and docs/assets (site/ holds its pages).
 # Needs cwebp for the screenshots (brew install webp; without it they stay PNG). Publish with
 # deploy/site.sh.
-site:
-	go run ./cmd/bitvoicesite -out dist-site -base https://bitvoice.org
+# manual-units lists every piece of the manual a translation needs (docs/manual/i18n/units.json); then
+# OPENROUTER_API_KEY=... node web/scripts/i18n-manual.mjs de fr ... fills docs/manual/i18n/LANG.json, where only
+# new or changed units are translated. manuals builds the manual in each of those languages, as HTML for the
+# website (not committed: the translations are).
+MANUAL_LANGS := $(basename $(notdir $(filter-out %/units.json,$(wildcard docs/manual/i18n/*.json))))
+manual-units: manual
+	cd web && node scripts/manual.mjs /tmp/bitvoice-manual/manual.mjs --units $(CURDIR)/docs/manual/i18n/units.json
+
+manuals: manual
+	@mkdir -p dist-manuals
+	@cd web && for l in $(MANUAL_LANGS); do node scripts/manual.mjs /tmp/bitvoice-manual/manual.mjs $(CURDIR)/dist-manuals/$$l.html --lang $$l --tr $(CURDIR)/docs/manual/i18n/$$l.json || exit 1; done
+
+site: manuals
+	go run ./cmd/bitvoicesite -out dist-site -base https://bitvoice.org -manuals dist-manuals
