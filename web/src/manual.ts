@@ -147,7 +147,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | Microsoft Teams Direct Routing | Software-tested | own tests; no Teams tenant tried |
 | Hotel (FIAS) | Software-tested | own tests; not against Opera |
 | Texting, WhatsApp, Messenger, web chat | Software-tested | stand-ins for each provider's API |
-| CRM caller cards, Azure Blob, Azure Key Vault | Software-tested | stand-ins |
+| CRM caller cards, Azure Blob, Azure Key Vault | Checked against a reference | EspoCRM (a real open-source CRM, in Docker) for caller cards; Microsoft's Azurite emulator for Blob uploads (container SAS, refusals); Lowkey Vault for Key Vault with a managed identity. Not yet against Azure itself or a hosted CRM |
 | iPhone and Android apps | Field-tested (Android) | Android: a Google Pixel 11 (Android 17) in AWS Device Farm against BitVoice on EC2 with a Let's Encrypt certificate: paired by link, rang, answered from the notification, called out; Opus, MOS 4.1, about 5% of packets lost between the phone lab and the server. iPhone: Simulator only; push wake-up needs our own Apple and Firebase accounts |
 | 911 profile, radio console, NG911 Core Services, caller video | Lab | NENA's schemas and sample data, Wireshark, spandsp, OpenSSL, ExifTool, ffmpeg, a NIST P25 capture; never on a live ESInet, P25 system or PSAP CAD, and not certified |
 | P25 Phase 2 half-rate voice (AMBE+2) | Not offered | patented until 2028 |
@@ -928,6 +928,17 @@ While a call from outside rings, Live calls shows a card: who it is (from your C
 
 For the name, set **Lookup address**: BitVoice asks it (GET) with the caller's number in place of {number}, sending **Lookup header** with its value (a vault reference works), and expects JSON with name, company, url and notes; 404 means unknown. Answers are kept for five minutes. **Open in CRM link** puts a link to the caller on the card. Use **Look it up** to try a number before saving.
 
+## A CRM's own answer
+Most CRMs answer a search in their own shape, usually a list of matches, not BitVoice's \`{"name": ...}\`. Open **Answer fields** and say where each part is, as a dotted path: a name steps into an object and a number into a list, so \`list.0.name\` is the first match's name. **Link to the contact** may be a path to a link the CRM gives, or a web address with paths in braces, such as \`https://crm.example.com/#Contact/view/{list.0.id}\`. An empty field reads BitVoice's own name for it. A search that finds nobody is the same as 404: the card says the caller is not known. Try a number with **Look it up** before saving.
+
+For example, EspoCRM (tested against a real EspoCRM): make an API user (Administration, API users, authentication by API key) with a role that may read contacts and accounts, then set:
+
+- **Lookup address**: \`https://crm.example.com/api/v1/Contact?select=name,accountName,description&maxSize=1&where%5B0%5D%5Btype%5D=equals&where%5B0%5D%5Battribute%5D=phoneNumber&where%5B0%5D%5Bvalue%5D={number}\`
+- **Lookup header** \`X-Api-Key\`, its value the API user's key
+- **Answer fields**: name \`list.0.name\`, company \`list.0.accountName\`, notes \`list.0.description\`, link \`https://crm.example.com/#Contact/view/{list.0.id}\`
+
+EspoCRM keeps numbers in international form (+15405550117), as BitVoice passes them. Other CRMs work the same way with their own search address and field names; check the shape of their answer in their API documentation, or with **Look it up**, whose message names what it found.
+
 ## Call logging
 Set **Call log address** and **Signing secret**, and every call is sent there as it ends (event call.ended), again with its summary, action items and transcript once transcribed (call.summarized), and each booked callback (callback.new). Each POST carries X-BitVoice-Event, X-BitVoice-Timestamp and X-BitVoice-Signature: sha256= followed by the HMAC-SHA256, with the secret, of the timestamp, a dot and the body. A failed delivery is tried four times over about a minute; if it still fails, Health says so. **Send a test event** checks the address and the secret.`,
   },
@@ -1495,7 +1506,7 @@ Callers dialling a number that route takes hear "Please enter your PIN, then pre
     id: 'lookups', title: 'Caller ID lookup', route: '/lookups', keys: 'caller id lookup cnam opencnam caller name superfecta crm name callers contact lookup',
     body: `Many phone companies send a caller's number but no name. BitVoice first looks in the [company contacts](#/contacts); after that, an inbound route can ask a [caller ID lookup](#/lookups):
 
-- **A web address**: your CRM or any service that answers with the name. Put \`{number}\` where the number goes (\`https://crm.example.com/api/callers?phone={number}\`). A plain-text answer gives the name on its first line; for JSON, give the **name field** as a dotted path (\`data.contact.name\`). Basic authentication is optional.
+- **A web address**: your CRM or any service that answers with the name. Put \`{number}\` where the number goes (\`https://crm.example.com/api/callers?phone={number}\`). A plain-text answer gives the name on its first line; for JSON, give the **name field** as a dotted path (\`data.contact.name\`; a number steps into a list, as in \`results.0.name\`). Basic authentication is optional.
 - **OpenCNAM**: the North American caller-name database, with your account SID and auth token.
 
 Choose the lookup on an inbound route on [Call routing](#/routes) (**Caller ID lookup**). Phones show the name while they ring, and it goes into the call record.

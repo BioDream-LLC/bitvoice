@@ -1,10 +1,12 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -99,6 +101,7 @@ func (c *Config) FindLookup(id string) *CallerIDLookup {
 var (
 	toggleCodeRe = regexp.MustCompile(`^[0-9]{1,3}$`)
 	jsonPathRe   = regexp.MustCompile(`^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$`)
+	braced       = regexp.MustCompile(`\{[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*\}`)
 )
 
 func (c *Config) validateFlow(p *Problems, checkID func(field string, id *string), checkDest func(field string, d *Destination)) {
@@ -197,7 +200,7 @@ func (c *Config) validateFlow(p *Problems, checkID func(field string, id *string
 			}
 			l.Field = strings.TrimSpace(l.Field)
 			if l.Field != "" && !jsonPathRe.MatchString(l.Field) {
-				p.add(f+".field", "a field is a dotted path such as name or data.callerName")
+				p.add(f+".field", "a field is a dotted path such as name, data.callerName or results.0.name")
 			}
 		case "opencnam":
 			if l.Username == "" || l.Password == "" {
@@ -232,4 +235,46 @@ func (c *Config) validateFlow(p *Problems, checkID func(field string, id *string
 // ToggleAllowed says whether an extension may switch a toggle from its phone.
 func (t *Toggle) ToggleAllowed(ext string) bool {
 	return len(t.Allowed) == 0 || slices.Contains(t.Allowed, ext)
+}
+
+// JSONAt follows a dotted path through decoded JSON: a name steps into an object, a number into a
+// list (results.0.name). It returns nil when the path leads nowhere.
+func JSONAt(v any, path string) any {
+	for _, k := range strings.Split(path, ".") {
+		switch x := v.(type) {
+		case map[string]any:
+			v = x[k]
+		case []any:
+			i, err := strconv.Atoi(k)
+			if err != nil || i < 0 || i >= len(x) {
+				return nil
+			}
+			v = x[i]
+		default:
+			return nil
+		}
+	}
+	return v
+}
+
+// JSONText is JSONAt as text: strings as they are, numbers and booleans written out, anything else "".
+func JSONText(v any, path string) string {
+	switch x := JSONAt(v, path).(type) {
+	case string:
+		return x
+	case float64:
+		return strconv.FormatFloat(x, 'f', -1, 64)
+	case json.Number:
+		return x.String()
+	case bool:
+		return strconv.FormatBool(x)
+	}
+	return ""
+}
+
+// FillBraced replaces each {dotted.path} in a link with that value from the JSON, URL-encoded.
+func FillBraced(link string, v any) string {
+	return braced.ReplaceAllStringFunc(link, func(m string) string {
+		return url.PathEscape(JSONText(v, m[1:len(m)-1]))
+	})
 }

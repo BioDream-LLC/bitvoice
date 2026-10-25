@@ -380,7 +380,8 @@ export interface NumberReputation {
   unwanted: number; rejected: number; peakDay: number; prevRate: number; status: 'good' | 'watch' | 'labelled' | 'few'; why: string[]; watch: boolean
 }
 export interface Metrics { otlpUrl: string; otlpHeader: string; otlpSecret: string; intervalSeconds: number }
-export interface CRM { lookupUrl: string; lookupHeader: string; lookupSecret: string; openUrl: string; logUrl: string; logSecret: string }
+export interface CRMFields { name: string; company: string; notes: string; url: string }
+export interface CRM { lookupUrl: string; lookupHeader: string; lookupSecret: string; openUrl: string; logUrl: string; logSecret: string; fields?: CRMFields }
 export interface Contact { name: string; company?: string; url?: string; notes?: string; source: 'crm' | 'extension' }
 export interface CallerCard { number: string; contact: Contact | null; lookupError?: string; openUrl?: string; calls: number; lastCall?: string; recent?: CDR[]; callbacks: Callback[]; lastSummary?: string }
 export interface SimBranch { when: string; taken: boolean; step: SimStep }

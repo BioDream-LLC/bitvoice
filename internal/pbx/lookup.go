@@ -135,18 +135,7 @@ func fetchName(ctx context.Context, l *config.CallerIDLookup, number string) (st
 		if err := json.Unmarshal(body, &v); err != nil {
 			return "", err
 		}
-		name = ""
-		for _, k := range strings.Split(l.Field, ".") {
-			m, ok := v.(map[string]any)
-			if !ok {
-				v = nil
-				break
-			}
-			v = m[k]
-		}
-		if s, ok := v.(string); ok {
-			name = s
-		}
+		name = config.JSONText(v, l.Field)
 	}
 	return cleanName(name), nil
 }

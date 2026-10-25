@@ -29,7 +29,7 @@ export function CRMSettings({ value, onChange, error }: { value: CRM; onChange: 
         Use <span className="font-mono text-amber-300">{'{number}'}</span> where the caller's number goes.
       </p>
       <div className="grid gap-4 md:grid-cols-2">
-        <Field label="Lookup address" htmlFor="crml" error={error('system.crm.lookupUrl')} hint={'BitVoice asks it (GET) and expects JSON: {"name", "company", "url", "notes"}; 404 when unknown.'}>
+        <Field label="Lookup address" htmlFor="crml" error={error('system.crm.lookupUrl')} hint={'BitVoice asks it (GET). JSON {"name", "company", "url", "notes"}, or the CRM\'s own shape with the answer fields below; 404 or no match when unknown.'}>
           <input id="crml" className="input font-mono" placeholder="https://crm.example.com/api/contacts?phone={number}" value={value.lookupUrl} onChange={(e) => onChange({ lookupUrl: e.target.value.trim() })} />
         </Field>
         <Field label="Open in CRM link" htmlFor="crmo" error={error('system.crm.openUrl')} hint="A link on the caller card, such as the CRM's search page.">
@@ -42,6 +42,22 @@ export function CRMSettings({ value, onChange, error }: { value: CRM; onChange: 
           <input id="crms" className="input font-mono" type="password" autoComplete="off" value={value.lookupSecret} onChange={(e) => onChange({ lookupSecret: e.target.value })} />
         </Field>
       </div>
+      <details className="rounded-lg border border-slate-800 p-3" open={Object.values(value.fields ?? {}).some(Boolean)}>
+        <summary className="cursor-pointer text-sm font-medium text-slate-200">Answer fields <span className="font-normal text-slate-500">for a CRM that answers in its own shape</span></summary>
+        <p className="mt-2 text-sm text-slate-400">
+          Most CRMs answer a search with a <span className="text-sky-300">list of matches</span>. Say where each part is as a dotted path; a number steps into the list, so
+          <span className="font-mono text-amber-300"> list.0.name</span> is the first match's name. The link may be a web address with paths in braces, such as
+          <span className="font-mono text-amber-300"> {'https://crm.example.com/#Contact/view/{list.0.id}'}</span>. Empty fields read BitVoice's own shape.
+        </p>
+        <div className="mt-3 grid gap-4 md:grid-cols-2">
+          {([['name', 'Name field', 'list.0.name'], ['company', 'Company field', 'list.0.accountName'], ['notes', 'Notes field', 'list.0.description'], ['url', 'Link to the contact', 'https://crm.example.com/#Contact/view/{list.0.id}']] as const).map(([k, label, ph]) => (
+            <Field key={k} label={label} htmlFor={`crmf-${k}`} error={error(`system.crm.fields.${k}`)}>
+              <input id={`crmf-${k}`} className="input font-mono" placeholder={ph} value={value.fields?.[k] ?? ''}
+                onChange={(e) => onChange({ fields: { name: '', company: '', notes: '', url: '', ...value.fields, [k]: e.target.value.trim() } })} />
+            </Field>
+          ))}
+        </div>
+      </details>
       <div className="flex flex-wrap items-end gap-2">
         <Field label="Number to try" htmlFor="crmn"><input id="crmn" className="input w-48 font-mono" inputMode="tel" value={number} onChange={(e) => setNumber(e.target.value)} /></Field>
         <button type="button" className="btn" disabled={isLoading || !number.trim()} onClick={() => run('lookup')}><UserRound size={14} className="text-sky-300" aria-hidden /> Look it up</button>

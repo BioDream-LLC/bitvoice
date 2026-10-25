@@ -3836,6 +3836,19 @@ type CRM struct {
 	LogURL string `json:"logUrl"`
 	// LogSecret signs what is sent to LogURL: X-BitVoice-Signature is sha256=HMAC(secret, timestamp.body).
 	LogSecret string `json:"logSecret"`
+	// Fields says where a CRM's own answer keeps each part, for CRMs that answer in their own shape
+	// (most do: a list of matches). Empty fields read BitVoice's shape: name, company, url, notes.
+	Fields CRMFields `json:"fields"`
+}
+
+// CRMFields are dotted paths into the lookup's JSON answer; a number steps into a list (list.0.name
+// is the first match's name). URL may instead be a link with paths in braces, such as
+// https://crm.example.com/#Contact/view/{list.0.id}.
+type CRMFields struct {
+	Name    string `json:"name"`
+	Company string `json:"company"`
+	Notes   string `json:"notes"`
+	URL     string `json:"url"`
 }
 
 func (c *Config) validateCRM(p *Problems) {
@@ -3863,6 +3876,23 @@ func (c *Config) validateCRM(p *Problems) {
 	}
 	if m.LookupHeader == "" && m.LookupSecret != "" {
 		p.add("system.crm.lookupHeader", "name the header the secret goes in, such as Authorization")
+	}
+	f := &m.Fields
+	f.Name, f.Company, f.Notes, f.URL = strings.TrimSpace(f.Name), strings.TrimSpace(f.Company), strings.TrimSpace(f.Notes), strings.TrimSpace(f.URL)
+	for name, v := range map[string]string{"name": f.Name, "company": f.Company, "notes": f.Notes} {
+		if v != "" && !jsonPathRe.MatchString(v) {
+			p.add("system.crm.fields."+name, "a field is a dotted path such as name or list.0.name")
+		}
+	}
+	if f.URL != "" {
+		if strings.Contains(f.URL, "{") {
+			u, err := url.Parse(braced.ReplaceAllString(f.URL, "0"))
+			if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || strings.ContainsAny(braced.ReplaceAllString(f.URL, ""), "{}") {
+				p.add("system.crm.fields.url", "a link starting with https://, with dotted paths in braces such as {list.0.id}")
+			}
+		} else if !jsonPathRe.MatchString(f.URL) {
+			p.add("system.crm.fields.url", "a dotted path such as list.0.url, or a link with paths in braces")
+		}
 	}
 	if m.LogURL != "" && m.LogSecret == "" {
 		p.add("system.crm.logSecret", "set a secret, so the receiver can check each call came from this system")

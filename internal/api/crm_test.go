@@ -6,9 +6,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -157,5 +159,82 @@ func TestCRM(t *testing.T) {
 	_, h := admin.do("GET", "/api/health", nil)
 	if !strings.Contains(toJSON(h), "Calls are not reaching the CRM") {
 		t.Fatalf("health %v", h)
+	}
+}
+
+// Most CRMs answer a search in their own shape, a list of matches: the answer fields say where the
+// name, company, notes and link are, a number stepping into the list.
+func TestCRMAnswerFields(t *testing.T) {
+	_, ts := newServer(t)
+	admin := newClient(t, ts.URL)
+	if code, _ := admin.do("POST", "/api/setup/complete", setupBody()); code != 200 {
+		t.Fatal("setup")
+	}
+	crm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("phone") == "+15405550117" {
+			_, _ = io.WriteString(w, `{"total":1,"list":[{"id":"6ade6847","name":"Dana Okafor","accountName":"Riverside Clinic","description":"Prefers mornings"}]}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"total":0,"list":[]}`)
+	}))
+	defer crm.Close()
+	form := map[string]any{"lookupUrl": crm.URL + "/api/v1/Contact?phone={number}",
+		"fields": map[string]any{"name": "list.0.name", "company": "list.0.accountName", "notes": "list.0.description", "url": "https://crm.example.com/#Contact/view/{list.0.id}"}}
+	code, out := admin.do("POST", "/api/crm/test", map[string]any{"crm": form, "number": "+15405550117", "what": "lookup"})
+	c, _ := out["contact"].(map[string]any)
+	if code != 200 || out["ok"] != true || c["name"] != "Dana Okafor" || c["company"] != "Riverside Clinic" || c["notes"] != "Prefers mornings" ||
+		c["url"] != "https://crm.example.com/#Contact/view/6ade6847" {
+		t.Fatalf("lookup: %d %v", code, out)
+	}
+	if _, out := admin.do("POST", "/api/crm/test", map[string]any{"crm": form, "number": "+15405550199", "what": "lookup"}); out["ok"] != true || !strings.Contains(out["message"].(string), "does not know") {
+		t.Fatalf("unknown number: %v", out)
+	}
+	// Without fields, a list-shaped answer says what to do instead of finding nobody quietly.
+	delete(form, "fields")
+	if _, out := admin.do("POST", "/api/crm/test", map[string]any{"crm": form, "number": "+15405550117", "what": "lookup"}); out["ok"] != true {
+		t.Fatalf("no fields: %v", out)
+	}
+	// Fields that are not paths are refused on save.
+	cfgCode, cfgOut := admin.do("GET", "/api/settings", nil)
+	if cfgCode != 200 {
+		t.Fatal("config")
+	}
+	sys := cfgOut["system"].(map[string]any)
+	sys["crm"] = map[string]any{"lookupUrl": crm.URL + "/c?phone={number}", "fields": map[string]any{"name": "list[0].name", "url": "https://crm.example.com/{list.0.id"}}
+	if code, out := admin.do("PUT", "/api/settings", cfgOut); code != 422 || !strings.Contains(fmt.Sprint(out), "system.crm.fields.name") || !strings.Contains(fmt.Sprint(out), "system.crm.fields.url") {
+		t.Fatalf("bad fields saved: %d %v", code, out)
+	}
+}
+
+// Against a real CRM, EspoCRM (docker espocrm/espocrm with MariaDB): a contact with +1 540 555 0117
+// and an API user allowed to read contacts.
+//
+//	BITVOICE_TEST_ESPOCRM=http://127.0.0.1:18090 BITVOICE_TEST_ESPOCRM_KEY=... go test ./internal/api -run EspoCRM
+func TestEspoCRM(t *testing.T) {
+	base, key := os.Getenv("BITVOICE_TEST_ESPOCRM"), os.Getenv("BITVOICE_TEST_ESPOCRM_KEY")
+	if base == "" || key == "" {
+		t.Skip("set BITVOICE_TEST_ESPOCRM and BITVOICE_TEST_ESPOCRM_KEY")
+	}
+	_, ts := newServer(t)
+	admin := newClient(t, ts.URL)
+	if code, _ := admin.do("POST", "/api/setup/complete", setupBody()); code != 200 {
+		t.Fatal("setup")
+	}
+	form := map[string]any{
+		"lookupUrl":    base + "/api/v1/Contact?select=name,accountName,description&maxSize=1&where%5B0%5D%5Btype%5D=equals&where%5B0%5D%5Battribute%5D=phoneNumber&where%5B0%5D%5Bvalue%5D={number}",
+		"lookupHeader": "X-Api-Key", "lookupSecret": key,
+		"fields": map[string]any{"name": "list.0.name", "company": "list.0.accountName", "notes": "list.0.description", "url": base + "/#Contact/view/{list.0.id}"},
+	}
+	code, out := admin.do("POST", "/api/crm/test", map[string]any{"crm": form, "number": "+15405550117", "what": "lookup"})
+	c, _ := out["contact"].(map[string]any)
+	if code != 200 || out["ok"] != true || c["name"] != "Dana Okafor" || c["company"] != "Riverside Clinic" || !strings.HasPrefix(fmt.Sprint(c["url"]), base+"/#Contact/view/") {
+		t.Fatalf("EspoCRM lookup: %d %v", code, out)
+	}
+	if _, out := admin.do("POST", "/api/crm/test", map[string]any{"crm": form, "number": "+15405550199", "what": "lookup"}); out["ok"] != true || !strings.Contains(out["message"].(string), "does not know") {
+		t.Fatalf("EspoCRM unknown: %v", out)
+	}
+	form["lookupSecret"] = "wrong"
+	if _, out := admin.do("POST", "/api/crm/test", map[string]any{"crm": form, "number": "+15405550117", "what": "lookup"}); out["ok"] != false || !strings.Contains(out["message"].(string), "401") {
+		t.Fatalf("EspoCRM wrong key: %v", out)
 	}
 }

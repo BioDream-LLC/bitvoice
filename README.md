@@ -483,7 +483,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | Microsoft Teams Direct Routing | Software-tested | own tests; no Teams tenant tried |
 | Hotel (FIAS) | Software-tested | own tests; not against Opera |
 | Texting, WhatsApp, Messenger, web chat | Software-tested | stand-ins for each provider's API |
-| CRM caller cards, Azure Blob, Azure Key Vault | Software-tested | stand-ins |
+| CRM caller cards, Azure Blob, Azure Key Vault | Checked against a reference | EspoCRM (a real open-source CRM, in Docker) for caller cards; Microsoft's Azurite emulator for Blob uploads (container SAS, refusals); Lowkey Vault for Key Vault with a managed identity. Not yet against Azure itself or a hosted CRM |
 | iPhone and Android apps | Field-tested (Android) | Android: a Google Pixel 11 (Android 17) in AWS Device Farm against BitVoice on EC2 with a Let's Encrypt certificate: paired by link, rang, answered from the notification, called out; Opus, MOS 4.1, about 5% of packets lost between the phone lab and the server. iPhone: Simulator only; push wake-up needs our own Apple and Firebase accounts |
 | 911 profile, radio console, NG911 Core Services, caller video | Lab | NENA's schemas and sample data, Wireshark, spandsp, OpenSSL, ExifTool, ffmpeg, a NIST P25 capture; never on a live ESInet, P25 system or PSAP CAD, and not certified |
 | P25 Phase 2 half-rate voice (AMBE+2) | Not offered | patented until 2028 |

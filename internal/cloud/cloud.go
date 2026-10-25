@@ -178,12 +178,24 @@ func (s *S3) Put(ctx context.Context, name string, body []byte, contentType stri
 
 func s3Error(xmlBody []byte) string {
 	s := string(xmlBody)
-	if i := strings.Index(s, "<Message>"); i >= 0 {
-		if j := strings.Index(s[i:], "</Message>"); j > 0 {
-			return s[i+9 : i+j]
+	tag := func(name string) string {
+		if i := strings.Index(s, "<"+name+">"); i >= 0 {
+			if j := strings.Index(s[i:], "</"+name+">"); j > 0 {
+				return strings.TrimSpace(s[i+len(name)+2 : i+j])
+			}
 		}
+		return ""
 	}
-	return strings.TrimSpace(s)
+	msg := tag("Message")
+	if msg == "" {
+		return strings.TrimSpace(s)
+	}
+	// Azure follows its message with RequestId and Time lines: keep the sentence.
+	msg, _, _ = strings.Cut(msg, "\n")
+	if code := tag("Code"); code != "" {
+		msg = strings.TrimSpace(msg) + " (" + code + ")"
+	}
+	return msg
 }
 
 // InstanceCredentials reads the instance role's temporary keys: the ECS task role when running in ECS,

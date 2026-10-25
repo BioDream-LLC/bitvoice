@@ -120,8 +120,32 @@ func (s *Server) askCRM(ctx context.Context, m config.CRM, number string) (*Cont
 		return nil, fmt.Errorf("the CRM answered %s", resp.Status)
 	}
 	var c Contact
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&c); err != nil {
-		return nil, errors.New("the CRM's answer is not the JSON expected: {\"name\": ...}")
+	f := m.Fields
+	if f == (config.CRMFields{}) {
+		if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&c); err != nil {
+			return nil, errors.New("the CRM's answer is not the JSON expected: {\"name\": ...}; if it answers in its own shape, say where each part is (Answer fields)")
+		}
+	} else {
+		var v any
+		if err := json.NewDecoder(io.LimitReader(resp.Body, 256<<10)).Decode(&v); err != nil {
+			return nil, errors.New("the CRM's answer is not JSON")
+		}
+		// An unset field keeps BitVoice's own name for it.
+		at := func(path, own string) string {
+			if path == "" {
+				path = own
+			}
+			return config.JSONText(v, path)
+		}
+		c.Name, c.Company, c.Notes = at(f.Name, "name"), at(f.Company, "company"), at(f.Notes, "notes")
+		switch {
+		case strings.Contains(f.URL, "{"):
+			if c.Name != "" || c.Company != "" { // a link for a match only, never to an empty record
+				c.URL = config.FillBraced(f.URL, v)
+			}
+		default:
+			c.URL = at(f.URL, "url")
+		}
 	}
 	c.Name, c.Company, c.Notes = clipText(c.Name, 120), clipText(c.Company, 120), clipText(c.Notes, 500)
 	if u, err := url.Parse(c.URL); err != nil || (u.Scheme != "https" && u.Scheme != "http") {

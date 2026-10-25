@@ -1177,3 +1177,39 @@ test('pass-through codecs in the codec list', async ({ page }) => {
   await page.getByRole('button', { name: 'Save' }).first().click()
   await expect.poll(codecs).not.toContain('G7221C')
 })
+
+// A CRM that answers a search in its own shape, a list of matches (EspoCRM's, as a stand-in): the
+// answer fields point at the parts, "Look it up" finds the caller, and the fields are saved.
+test('CRM: answer fields for a CRM\'s own shape', async ({ page }) => {
+  const { createServer } = await import('node:http')
+  const crm = createServer((req, res) => {
+    const found = new URL(req.url ?? '/', 'http://x').searchParams.get('phone') === '+15405550117'
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify(found ? { total: 1, list: [{ id: '6ade6847', name: 'Dana Okafor', accountName: 'Riverside Clinic' }] } : { total: 0, list: [] }))
+  })
+  await new Promise<void>((r) => crm.listen(18403, '127.0.0.1', r))
+  try {
+    await signIn(page)
+    await page.goto('/#/settings')
+    await page.getByLabel('Lookup address').fill('http://127.0.0.1:18403/api/v1/Contact?phone={number}')
+    await page.getByLabel('Number to try').fill('+15405550117')
+    await page.getByRole('button', { name: 'Look it up' }).click()
+    await expect(page.getByRole('status').filter({ hasText: /does not know|answer fields/ })).toBeVisible() // BitVoice's own shape finds nobody
+    await page.locator('summary', { hasText: 'Answer fields' }).click()
+    await page.getByLabel('Name field').fill('list.0.name')
+    await page.getByLabel('Company field').fill('list.0.accountName')
+    await page.getByLabel('Link to the contact').fill('https://crm.example.com/#Contact/view/{list.0.id}')
+    await page.getByRole('button', { name: 'Look it up' }).click()
+    await expect(page.getByRole('status').filter({ hasText: 'found Dana Okafor Riverside Clinic' })).toBeVisible()
+    await page.getByLabel('Name field').fill('list[0].name')
+    await page.getByRole('button', { name: 'Save' }).first().click()
+    await expect(page.getByLabel('CRM', { exact: true }).getByText('a field is a dotted path such as name or list.0.name')).toBeVisible()
+    await page.getByLabel('Name field').fill('list.0.name')
+    await page.getByRole('button', { name: 'Save' }).first().click()
+    await expect(page.getByText('Settings saved').first()).toBeVisible()
+    const crmCfg = (await page.evaluate(async () => (await (await fetch('./api/settings')).json()).system.crm)) as { fields: Record<string, string> }
+    expect(crmCfg.fields).toEqual({ name: 'list.0.name', company: 'list.0.accountName', notes: '', url: 'https://crm.example.com/#Contact/view/{list.0.id}' })
+  } finally {
+    crm.close()
+  }
+})
