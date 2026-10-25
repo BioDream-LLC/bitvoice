@@ -56,7 +56,7 @@ func TestLinkWithHotelSystem(t *testing.T) {
 	ev := &events{}
 	l := &Link{Addr: ln.Addr().String(), Handler: ev, Loc: time.UTC}
 	// A charge made while the link is down waits for it.
-	l.Charge("101", "0044207946000", 125, 95*time.Second, time.Date(2026, 10, 14, 9, 0, 0, 0, time.UTC))
+	l.Charge("101", "+44 20 7946 000", 125, 95*time.Second, time.Date(2026, 10, 14, 9, 0, 0, 0, time.UTC))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go l.Run(ctx)
@@ -66,6 +66,7 @@ func TestLinkWithHotelSystem(t *testing.T) {
 	}
 	defer c.Close()
 	br := bufio.NewReader(c)
+	var wire []string
 	read := func() Record {
 		_ = c.SetReadDeadline(time.Now().Add(15 * time.Second))
 		if _, err := br.ReadBytes(stx); err != nil {
@@ -75,6 +76,7 @@ func TestLinkWithHotelSystem(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		wire = append(wire, string(b[:len(b)-1]))
 		r, _ := Parse(string(b[:len(b)-1]))
 		return r
 	}
@@ -90,9 +92,20 @@ func TestLinkWithHotelSystem(t *testing.T) {
 	if types[0] != "LD" || !strings.Contains(strings.Join(types, " "), "LR LR") || ps.Fields["TA"] != "125" || ps.Fields["DU"] != "000135" || ps.Fields["RN"] != "101" {
 		t.Fatalf("hello %v, charge %+v", types, ps)
 	}
+	// As Oracle's FIAS 2.20.23 specification has them: a link record is LR|RIxx|FLxxxx| in that
+	// order; dialled digits are digits only; no sales outlet (numeric, and only for several posting
+	// types).
+	for _, w := range wire {
+		if strings.HasPrefix(w, "LR|") && !strings.HasPrefix(w, "LR|RI") {
+			t.Errorf("link record out of order: %q", w)
+		}
+	}
+	if ps.Fields["DD"] != "44207946000" || ps.Fields["SO"] != "" {
+		t.Errorf("posting %+v", ps.Fields)
+	}
 	send := func(r Record) { _, _ = c.Write(r.Encode()) }
 	send(Record{Type: "GI", Fields: map[string]string{"RN": "101", "GN": "Smith, John", "G#": "4711", "GL": "SP"}})
-	send(Record{Type: "WR", Fields: map[string]string{"RN": "101", "DA": "261015", "TI": "0630"}})
+	send(Record{Type: "WR", Fields: map[string]string{"RN": "101", "DA": "261015", "TI": "063000"}})
 	send(Record{Type: "GC", Fields: map[string]string{"RN": "102", "RO": "101", "GN": "Smith, John", "G#": "4711"}})
 	send(Record{Type: "GO", Fields: map[string]string{"RN": "102"}})
 	deadline := time.Now().Add(15 * time.Second)
@@ -110,5 +123,18 @@ func TestLinkWithHotelSystem(t *testing.T) {
 	}
 	if !l.Status().Up {
 		t.Fatal("status should be up")
+	}
+}
+
+// A wake-up booked with seconds is answered with the same time (the specification asks it, so the
+// hotel system can match the answer to its request).
+func TestWakeKeepsSeconds(t *testing.T) {
+	l := &Link{Loc: time.UTC}
+	at, ok := l.when("261031", "070030")
+	if !ok || at.Format("060102150405") != "261031070030" {
+		t.Fatalf("%v %v", at, ok)
+	}
+	if f := l.stamp(map[string]string{}, at); f["TI"] != "070030" || f["DA"] != "261031" {
+		t.Fatalf("answer %v", f)
 	}
 }

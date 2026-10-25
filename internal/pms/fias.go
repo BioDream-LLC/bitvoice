@@ -43,6 +43,10 @@ func (r Record) Encode() []byte {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
+	if r.Type == "LR" {
+		// A link record's order is fixed by the specification: LR|RIxx|FLxxxx|.
+		sort.SliceStable(keys, func(i, j int) bool { return keys[i] == "RI" && keys[j] != "RI" })
+	}
 	for _, k := range keys {
 		v := strings.NewReplacer("|", "/", "\x02", "", "\x03", "").Replace(r.Fields[k])
 		b.WriteString(k + v + "|")
@@ -156,8 +160,19 @@ func (l *Link) Charge(room, dialled string, cents int64, dur time.Duration, at t
 	seq := l.seq
 	l.mu.Unlock()
 	h, m, s := int(dur.Hours()), int(dur.Minutes())%60, int(dur.Seconds())%60
+	// Dialled digits are digits only (no + or spaces), at most 20. The sales outlet is left out: it
+	// is numeric and only needed when one interface posts more than one kind of charge.
+	digits := strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, dialled)
+	if len(digits) > 20 {
+		digits = digits[:20]
+	}
 	l.Send(Record{Type: "PS", Fields: l.stamp(map[string]string{"RN": room, "P#": strconv.Itoa(seq), "PT": "C",
-		"TA": strconv.FormatInt(cents, 10), "DD": dialled, "DU": fmt.Sprintf("%02d%02d%02d", h, m, s), "SO": "S"}, at)})
+		"TA": strconv.FormatInt(cents, 10), "DD": digits, "DU": fmt.Sprintf("%02d%02d%02d", h, m, s)}, at)})
 }
 
 // Run keeps the link up until ctx ends.
@@ -207,7 +222,7 @@ func (l *Link) session(ctx context.Context) error {
 		{Type: "LR", Fields: map[string]string{"RI": "WC", "FL": "RNDATI"}},
 		{Type: "LR", Fields: map[string]string{"RI": "WA", "FL": "RNDATIAS"}},
 		{Type: "LR", Fields: map[string]string{"RI": "RE", "FL": "RNRSDATI"}},
-		{Type: "LR", Fields: map[string]string{"RI": "PS", "FL": "RNP#PTTADDDUSODATI"}},
+		{Type: "LR", Fields: map[string]string{"RI": "PS", "FL": "RNP#PTTADDDUDATI"}},
 		{Type: "LA", Fields: l.stamp(map[string]string{}, now)},
 	}
 	for _, r := range hello {
@@ -310,6 +325,13 @@ func (l *Link) when(da, ti string) (time.Time, bool) {
 	if err1 != nil || err2 != nil || h > 23 || m > 59 {
 		return time.Time{}, false
 	}
+	// Seconds are kept: the wake-up answer must give back the time exactly as requested (HHMMSS).
+	sec := 0
+	if len(ti) >= 6 {
+		if v, err := strconv.Atoi(ti[4:6]); err == nil && v <= 59 {
+			sec = v
+		}
+	}
 	y, mo, d := now.Date()
 	if len(da) == 6 {
 		t, err := time.ParseInLocation("060102", da, l.loc())
@@ -318,7 +340,7 @@ func (l *Link) when(da, ti string) (time.Time, bool) {
 		}
 		y, mo, d = t.Date()
 	}
-	at := time.Date(y, mo, d, h, m, 0, 0, l.loc())
+	at := time.Date(y, mo, d, h, m, sec, 0, l.loc())
 	if len(da) != 6 && !at.After(now) {
 		at = at.AddDate(0, 0, 1)
 	}
