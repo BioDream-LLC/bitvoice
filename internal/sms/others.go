@@ -23,11 +23,14 @@ type Vonage struct {
 }
 
 func (v *Vonage) Send(ctx context.Context, from, to, text string) (string, error) {
-	form := url.Values{"api_key": {v.Username}, "api_secret": {v.Key}, "from": {digits(from)}, "to": {digits(to)}, "text": {text}}
+	// The key and secret go as HTTP Basic, as Vonage's SMS specification (1.5.1) has it; the older
+	// api_key/api_secret form fields are no longer in it.
+	form := url.Values{"from": {digits(from)}, "to": {digits(to)}, "text": {text}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, v.Base+"/sms/json", strings.NewReader(form.Encode()))
 	if err != nil {
 		return "", err
 	}
+	req.SetBasicAuth(v.Username, v.Key)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	var out struct {
 		Messages []struct {

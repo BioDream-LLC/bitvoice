@@ -26,7 +26,7 @@ func TestProviders(t *testing.T) {
 			inType: "application/json", inBody: `{"data":{"event_type":"message.received","payload":{"id":"T2","from":{"phone_number":"+15550001"},"to":[{"phone_number":"+15550002"}],"text":"hi","received_at":"2026-10-11T10:00:00Z"}}}`},
 		{kind: "bandwidth", account: "acc", app: "app1", wantPath: "/api/v2/users/acc/messages", wantBody: `"applicationId":"app1"`, answer: `{"id":"B1"}`, wantID: "B1",
 			inType: "application/json", inBody: `[{"type":"message-received","to":"+15550002","message":{"id":"B2","from":"+15550001","text":"hi","time":"2026-10-11T10:00:00Z"}}]`},
-		{kind: "vonage", wantPath: "/sms/json", wantBody: "api_secret=key", answer: `{"messages":[{"status":"0","message-id":"V1"}]}`, wantID: "V1",
+		{kind: "vonage", wantPath: "/sms/json", wantBody: "text=hello", answer: `{"messages":[{"status":"0","message-id":"V1"}]}`, wantID: "V1",
 			inType: "application/x-www-form-urlencoded", inBody: "msisdn=15550001&to=15550002&text=hi&messageId=V2"},
 		{kind: "plivo", wantPath: "/v1/Account/user/Message/", wantBody: `"dst":"15550001"`, answer: `{"message_uuid":["P1"]}`, wantID: "P1",
 			inType: "application/x-www-form-urlencoded", inBody: "From=15550001&To=15550002&Text=hi&MessageUUID=P2"},
@@ -94,5 +94,25 @@ func TestProviderErrors(t *testing.T) {
 	}
 	if _, err := NewWith("webhook", "", "", "", "", ""); err == nil {
 		t.Fatal("webhook without address")
+	}
+}
+
+// Vonage takes the key and secret as HTTP Basic (its SMS specification 1.5.1), never in the body.
+func TestVonageBasicAuth(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u, p, ok := r.BasicAuth()
+		b, _ := io.ReadAll(r.Body)
+		if !ok || u != "key1" || p != "secret1" || strings.Contains(string(b), "api_secret") {
+			t.Errorf("auth %q %q %v, body %s", u, p, ok, b)
+		}
+		w.Write([]byte(`{"messages":[{"status":"0","message-id":"V1"}]}`))
+	}))
+	defer srv.Close()
+	p, err := NewWith("vonage", "key1", "secret1", srv.URL, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id, err := p.Send(context.Background(), "+15550002", "+15550001", "hi"); err != nil || id != "V1" {
+		t.Fatal(id, err)
 	}
 }

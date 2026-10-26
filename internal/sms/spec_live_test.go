@@ -58,3 +58,75 @@ func TestSpecTelnyx(t *testing.T) {
 		t.Fatalf("send: %q %v", id, err)
 	}
 }
+
+// Bandwidth's messaging specification (Bandwidth/api-docs site/specs/messaging.yml):
+//
+//	docker run -p 127.0.0.1:4012:4010 -v DIR:/s stoplight/prism:4 mock -h 0.0.0.0 -p 4010 --errors /s/bandwidth-messaging.yml
+//	BITVOICE_TEST_SPEC_BANDWIDTH=http://127.0.0.1:4012
+func TestSpecBandwidth(t *testing.T) {
+	base := os.Getenv("BITVOICE_TEST_SPEC_BANDWIDTH")
+	if base == "" {
+		t.Skip("set BITVOICE_TEST_SPEC_BANDWIDTH to a Prism mock of Bandwidth's specification")
+	}
+	// The specification's server is https://messaging.bandwidth.com/api/v2: strip /api/v2.
+	front := strip(t, base, "/api/v2")
+	p, err := NewWith("bandwidth", "user", "pass", front, "9900000", "93de2206-9669-4e07-948d-329f4b722ee2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := p.Send(context.Background(), "+15550002", "+15550001", "hello from BitVoice")
+	if err != nil || id == "" {
+		t.Fatalf("send: %q %v", id, err)
+	}
+}
+
+// Vonage's SMS specification (developer.vonage.com/api/v1/developer/api/file/sms?format=json&vendorId=vonage):
+//
+//	docker run -p 127.0.0.1:4013:4010 -v DIR:/s stoplight/prism:4 mock -h 0.0.0.0 -p 4010 --errors /s/vonage-sms.json
+//	BITVOICE_TEST_SPEC_VONAGE=http://127.0.0.1:4013
+func TestSpecVonage(t *testing.T) {
+	base := os.Getenv("BITVOICE_TEST_SPEC_VONAGE")
+	if base == "" {
+		t.Skip("set BITVOICE_TEST_SPEC_VONAGE to a Prism mock of Vonage's specification")
+	}
+	p, err := NewWith("vonage", "abcd1234", "abcdef0123456789", base, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := p.Send(context.Background(), "+15550002", "+447700900000", "hello from BitVoice")
+	if err != nil || id == "" {
+		t.Fatalf("send: %q %v", id, err)
+	}
+}
+
+// strip serves base's mock behind a front that removes prefix from every path.
+func strip(t *testing.T, base, prefix string) string {
+	u, _ := url.Parse(base)
+	rp := httputil.NewSingleHostReverseProxy(u)
+	front := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.URL.Path = strings.TrimPrefix(r.URL.Path, prefix)
+		rp.ServeHTTP(w, r)
+	}))
+	t.Cleanup(front.Close)
+	return front.URL
+}
+
+// TextMagic's specification, the one its own Go client is generated from
+// (textmagic/textmagic-rest-go-v2 api/openapi.yaml):
+//
+//	docker run -p 127.0.0.1:4014:4010 -v DIR:/s stoplight/prism:4 mock -h 0.0.0.0 -p 4010 --errors /s/textmagic.yaml
+//	BITVOICE_TEST_SPEC_TEXTMAGIC=http://127.0.0.1:4014
+func TestSpecTextMagic(t *testing.T) {
+	base := os.Getenv("BITVOICE_TEST_SPEC_TEXTMAGIC")
+	if base == "" {
+		t.Skip("set BITVOICE_TEST_SPEC_TEXTMAGIC to a Prism mock of TextMagic's specification")
+	}
+	p, err := NewWith("textmagic", "user", "KEY0123456789", base, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := p.Send(context.Background(), "+15550002", "+447860021130", "hello from BitVoice")
+	if err != nil || id == "" {
+		t.Fatalf("send: %q %v", id, err)
+	}
+}
