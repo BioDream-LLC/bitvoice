@@ -82,7 +82,10 @@ func layout(base, path, section, title, description, body, version string) strin
 	fmt.Fprintf(&b, "<link rel=\"stylesheet\" href=\"/site.css?v=%s\">\n", cssVersion)
 	fmt.Fprintf(&b, "<meta property=\"og:type\" content=\"website\">\n<meta property=\"og:title\" content=\"%s\">\n<meta property=\"og:description\" content=\"%s\">\n<meta property=\"og:url\" content=\"%s\">\n",
 		html.EscapeString(title), html.EscapeString(description), html.EscapeString(canonical))
-	fmt.Fprintf(&b, "<meta property=\"og:image\" content=\"%s/assets/screens/dashboard.%s\">\n", base, map[bool]string{true: "png", false: "webp"}[pngFallback])
+	fmt.Fprintf(&b, "<meta property=\"og:image\" content=\"%s/assets/social-card.png\">\n", base)
+	b.WriteString("<meta property=\"og:image:width\" content=\"1280\">\n<meta property=\"og:image:height\" content=\"640\">\n")
+	b.WriteString("<meta property=\"og:image:alt\" content=\"BitVoice: the phone system that is one file and one web page\">\n")
+	b.WriteString("<meta name=\"twitter:card\" content=\"summary_large_image\">\n")
 	b.WriteString("<meta name=\"author\" content=\"BioDream Developer\">\n</head>\n<body>\n<a class=\"skip\" href=\"#main\">Skip to content</a>\n")
 
 	b.WriteString("<header class=\"top\"><div class=\"wrap\">\n<a class=\"brand\" href=\"/\"><img src=\"/assets/bitvoice-logo.svg\" alt=\"BitVoice logo\"><span>Bit<b>Voice</b></span></a>\n<ul class=\"menu\">\n")

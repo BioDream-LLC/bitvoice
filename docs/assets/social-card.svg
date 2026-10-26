@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640">
+  <!-- BitVoice's social card (link previews, GitHub's social preview). Rendered to social-card.png. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#121419"/>
+      <stop offset="60%" stop-color="#0b0c10"/>
+      <stop offset="100%" stop-color="#07080b"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#ff6a3d" stop-opacity="0.20"/>
+      <stop offset="100%" stop-color="#ff6a3d" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="v" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#38bdf8"/><stop offset="55%" stop-color="#818cf8"/><stop offset="100%" stop-color="#a78bfa"/>
+    </linearGradient>
+    <linearGradient id="rule" gradientUnits="userSpaceOnUse" x1="96" y1="0" x2="1184" y2="0">
+      <stop offset="0%" stop-color="#ff6a3d" stop-opacity="0.95"/>
+      <stop offset="55%" stop-color="#ffb547" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#ffb547" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#ffffff" stroke-opacity="0.035" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <rect width="1280" height="640" fill="url(#grid)"/>
+  <ellipse cx="1040" cy="180" rx="420" ry="320" fill="url(#halo)"/>
+
+  <!-- The headset logo, large, top right. -->
+  <g transform="translate(930 52) scale(2.6)">
+    <rect x="4" y="4" width="88" height="88" rx="20" fill="#0b1220"/>
+    <rect x="4.75" y="4.75" width="86.5" height="86.5" rx="19.25" fill="none" stroke="#1e293b" stroke-width="1.5"/>
+    <path d="M21 51c0-15 12-27 27-27s27 12 27 27" fill="none" stroke="url(#v)" stroke-width="6" stroke-linecap="round"/>
+    <rect x="15" y="48" width="15" height="24" rx="6" fill="url(#v)"/>
+    <rect x="66" y="48" width="15" height="24" rx="6" fill="url(#v)"/>
+    <path d="M36 60h5l4.5-12 6 24 4.5-12H61" fill="none" stroke="#46e3b7" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
+  </g>
+
+  <text x="96" y="126" font-size="24" fill="#ff6a3d" letter-spacing="0.22em" font-weight="600"
+        font-family="ui-monospace, SF Mono, Menlo, Consolas, monospace">FREE AND OPEN SOURCE · APACHE 2.0</text>
+
+  <text x="92" y="262" font-size="136" font-weight="800" letter-spacing="-0.025em" fill="#f6f2e9"
+        font-family="Avenir Next, Futura, Century Gothic, Segoe UI, system-ui, sans-serif">Bit<tspan fill="#ff6a3d">Voice</tspan></text>
+
+  <text x="96" y="330" font-size="38" font-weight="600" fill="#c5c9d2"
+        font-family="Avenir Next, Futura, Century Gothic, Segoe UI, system-ui, sans-serif">The phone system that is one file and one web page</text>
+
+  <path d="M96 378 H1184" stroke="url(#rule)" stroke-width="2.5"/>
+
+  <g font-family="Avenir Next, Futura, Century Gothic, Segoe UI, system-ui, sans-serif" font-size="27" fill="#c5c9d2">
+    <circle cx="106" cy="434" r="7" fill="#46e3b7"/>
+    <text x="128" y="443">An alternative to FreePBX and Asterisk, with neither underneath</text>
+    <circle cx="106" cy="486" r="7" fill="#ffb547"/>
+    <text x="128" y="495">Queues, menus, voicemail, recording, trunks, desk phones, WebRTC</text>
+    <circle cx="106" cy="538" r="7" fill="#7cc4ff"/>
+    <text x="128" y="547">Linux, macOS and Windows · no paid modules, no licence meter</text>
+  </g>
+
+  <text x="1184" y="600" text-anchor="end" font-size="26" fill="#8a909c" letter-spacing="0.04em"
+        font-family="ui-monospace, SF Mono, Menlo, Consolas, monospace">bitvoice.org</text>
+  <text x="96" y="600" font-size="22" fill="#8a909c"
+        font-family="Avenir Next, Futura, Century Gothic, Segoe UI, system-ui, sans-serif">BioDream LLC</text>
+</svg>
