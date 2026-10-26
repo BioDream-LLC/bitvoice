@@ -3,7 +3,7 @@ title: NG911 Core Services
 tile: A lab-track core: ESRP routing, ECRF and LoST, LVF address validation, a BCF with STIR/SHAKEN and media checks, LIS, i3 logging and a forest guide.
 icon: layers
 area: Public safety
-description: BitVoice's lab-track NG911 Core Services: ESRP, ECRF and LoST, LVF, a BCF with STIR/SHAKEN and media inspection, LIS, the i3 logging service and NENA state events.
+description: BitVoice's lab-track NG911 Core Services: ESRP, ECRF and LoST, LVF, a BCF with STIR/SHAKEN and media checks, LIS, i3 logging and NENA state events.
 manual: core
 ---
 

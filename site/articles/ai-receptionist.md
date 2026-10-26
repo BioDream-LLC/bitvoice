@@ -1,5 +1,5 @@
 ---
-title: AI receptionists, transfer briefings and asking in plain words
+title: AI receptionists, transfer briefings and plain-words setup
 tile: An AI receptionist that says it is automated, answers from facts you approved, and always reaches a person.
 icon: spark
 area: AI

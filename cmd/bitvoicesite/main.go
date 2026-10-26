@@ -30,18 +30,18 @@ type page struct {
 }
 
 var pages = []page{
-	{"home.html", "/", "", "BitVoice: an open-source, single-binary alternative to FreePBX and Asterisk",
-		"BitVoice is a complete Apache-2.0 phone system for offices, contact centres and hosted providers: one file, run entirely from its web interface. No Asterisk underneath, no paid modules, no licence meter.", "1.0"},
+	{"home.html", "/", "", "BitVoice: open-source alternative to FreePBX and Asterisk",
+		"A complete Apache-2.0 phone system for offices and contact centres: one file, run entirely from its web interface. No Asterisk underneath, no paid modules.", "1.0"},
 	{"technology.html", "/technology/", "technology", "The technology inside BitVoice",
-		"Every technology a phone system rests on, from SIP and codecs to queues, fax, ISDN, SS7, WebRTC and NG911, explained, with how BitVoice does each and how it is tested.", "0.9"},
+		"The technologies a phone system rests on, from SIP and codecs to fax, ISDN, SS7, WebRTC and NG911: how BitVoice does each, and how it is tested.", "0.9"},
 	{"features.html", "/features/", "features", "Everything BitVoice does",
-		"Extensions, queues, menus, voicemail, recording, conferences, trunks, desk-phone provisioning, WebRTC, AI receptionists, an outbound dialer, an omnichannel inbox and more, itemised.", "0.9"},
+		"Every BitVoice feature: extensions, queues, menus, voicemail, recording, conferences, trunks, desk phones, WebRTC, AI receptionists, a dialer and an inbox.", "0.9"},
 	{"freepbx.html", "/freepbx-alternative/", "freepbx", "A FreePBX and Asterisk alternative you run from the browser",
 		"How BitVoice compares with FreePBX and Asterisk, what moves over with the import, and what BitVoice does not do yet.", "0.9"},
 	{"proof.html", "/proof/", "proof", "How BitVoice is tested, and what has not been tested",
 		"The tests every change must pass, the real software BitVoice is checked against, and the equipment it has not been tried with yet.", "0.8"},
 	{"lab.html", "/public-safety/", "lab", "Public safety: the lab and design-partner track",
-		"NG911 call handling, a P25 radio dispatch console and NG911 Core Services, built on the same engine. Not certified, not yet run against live public-safety systems; we are looking for design partners.", "0.6"},
+		"NG911 call handling, a P25 radio console and NG911 Core Services on the same engine. Not certified or run on live systems yet; design partners wanted.", "0.6"},
 	{"download.html", "/download/", "download", "Download BitVoice",
 		"Download BitVoice for Linux, macOS and Windows, on Intel and Arm. One file, nothing to install, signed releases, free under Apache 2.0.", "0.9"},
 }
@@ -276,8 +276,8 @@ func tables(md string) string {
 	var b strings.Builder
 	for _, m := range tableRE.FindAllStringSubmatch(md, -1) {
 		chip, title, sub, rows := m[1], m[2], m[3], m[4]
-		fmt.Fprintf(&b, "<section class=\"area\" id=\"%s\">\n<div class=\"area-head\"><img src=\"/assets/chips/%s.svg\" width=\"168\" height=\"40\" alt=\"\"><div><h2>%s</h2><p>%s</p></div></div>\n<ul class=\"ticks\">\n",
-			chip, chip, html.EscapeString(title), sub)
+		fmt.Fprintf(&b, "<section class=\"area\" id=\"%s\">\n<div class=\"area-head\"><img src=\"/assets/chips/%s.svg\" width=\"168\" height=\"40\" alt=\"%s icon\"><div><h2>%s</h2><p>%s</p></div></div>\n<ul class=\"ticks\">\n",
+			chip, chip, html.EscapeString(title), html.EscapeString(title), sub)
 		for _, r := range rowRE.FindAllStringSubmatch(rows, -1) {
 			// Links inside the README point at its own headings; on the site those are other pages.
 			line := hrefRE.ReplaceAllStringFunc(r[1], func(h string) string {

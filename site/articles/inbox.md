@@ -1,5 +1,5 @@
 ---
-title: The omnichannel inbox: web chat, WhatsApp, Messenger and texts
+title: One inbox for web chat, WhatsApp, Messenger and texts
 tile: One inbox for your website's chat box, WhatsApp, Facebook Messenger and business texting through ten SMS providers.
 icon: chat
 area: Contact centre

@@ -3,7 +3,7 @@ title: The radio dispatch console
 tile: A lab-track console: P25 talkgroups over the ISSI, radio over IP, IMBE voice, emergencies, patches, simulselect, unit names and positions.
 icon: radio
 area: Public safety
-description: BitVoice's lab-track radio dispatch console: P25 ISSI and CSSI, radio over IP, IMBE voice, emergency acknowledge, patches, simulselect, unit aliases and AES-256.
+description: BitVoice's lab-track radio dispatch console: P25 ISSI and CSSI, radio over IP, IMBE voice, emergency acknowledge, patches, simulselect and AES-256.
 manual: radio
 ---
 

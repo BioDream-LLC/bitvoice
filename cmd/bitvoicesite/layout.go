@@ -85,7 +85,7 @@ func layout(base, path, section, title, description, body, version string) strin
 	fmt.Fprintf(&b, "<meta property=\"og:image\" content=\"%s/assets/screens/dashboard.%s\">\n", base, map[bool]string{true: "png", false: "webp"}[pngFallback])
 	b.WriteString("<meta name=\"author\" content=\"BioDream Developer\">\n</head>\n<body>\n<a class=\"skip\" href=\"#main\">Skip to content</a>\n")
 
-	b.WriteString("<header class=\"top\"><div class=\"wrap\">\n<a class=\"brand\" href=\"/\"><img src=\"/assets/bitvoice-logo.svg\" alt=\"\"><span>Bit<b>Voice</b></span></a>\n<ul class=\"menu\">\n")
+	b.WriteString("<header class=\"top\"><div class=\"wrap\">\n<a class=\"brand\" href=\"/\"><img src=\"/assets/bitvoice-logo.svg\" alt=\"BitVoice logo\"><span>Bit<b>Voice</b></span></a>\n<ul class=\"menu\">\n")
 	for _, m := range menu {
 		cur := ""
 		if m.key == section {
@@ -118,7 +118,7 @@ func footer() string {
 	}
 	return `<footer class="site"><div class="wrap">
 <div class="cols">
-<div class="about"><a class="brand" href="/"><img src="/assets/bitvoice-logo.svg" alt="">BitVoice</a>
+<div class="about"><a class="brand" href="/"><img src="/assets/bitvoice-logo.svg" alt="BitVoice logo">BitVoice</a>
 <p>A free, open-source phone system from BioDream LLC: one program, run entirely from its web interface. Apache License 2.0.</p>
 <a class="btn btn-primary small" href="/download/">` + icon("download") + `Download</a></div>
 <div><b>Product</b><a href="/features/">Features</a><a href="/technology/">Technology</a><a href="/technology/#contact-centre">Contact centres</a><a href="/technology/#developers">Developers</a><a href="/public-safety/">Public safety (lab)</a></div>
