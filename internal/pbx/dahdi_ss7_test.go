@@ -254,8 +254,15 @@ func TestTelephonyCardSS7LinkSet(t *testing.T) {
 	if !strings.HasPrefix(b.Status()["span2"], "SS7 link set up (1 of 2 links in service") {
 		t.Fatalf("span 2: %s", b.Status()["span2"])
 	}
+	// The switch must have seen the cut too before it releases: a message it hands to the cut link
+	// before then is lost to time-controlled changeover (Q.704 5.6), and only ISUP's T1 would send
+	// it again. Under load that is what made this test fail now and then.
+	waitFor(t, "the switch's link 0 did not change over", func() bool {
+		l := sw.Links()
+		return l[0] == "changed over" && l[1] == "in service"
+	})
 	span2.Hangup(ss7.CauseNormal)
-	callee.waitBye(t, 3*time.Second)
+	callee.waitBye(t, 15*time.Second)
 	waitSS7(t, span2, "released")
 	for _, c := range calls[:len(calls)-1] {
 		c.Hangup(ss7.CauseNormal)
