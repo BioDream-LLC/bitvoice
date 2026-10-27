@@ -637,7 +637,21 @@ func (m *mtp3) receive(on *sigLink, msu []byte) {
 	default:
 		m.mu.Lock()
 		up := m.isUp
+		// The adjacent point sends user traffic only once its restart is done: a message from it on a
+		// link in service tells us that as its TRA would. Its TRA may come on another link after it
+		// (load sharing): without this, its first ISUP (the circuit reset) was dropped and sent
+		// again only after T22, 15 s later.
+		implied := !up && m.traSent && !m.traGot && l.OPC == m.cfg.APC && on.available()
+		if implied {
+			m.traGot = true
+		}
 		m.mu.Unlock()
+		if implied {
+			m.check()
+			m.mu.Lock()
+			up = m.isUp
+			m.mu.Unlock()
+		}
 		if up {
 			m.deliver(si, l, data)
 		}

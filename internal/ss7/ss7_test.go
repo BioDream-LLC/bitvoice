@@ -3,6 +3,7 @@ package ss7
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
@@ -79,7 +80,7 @@ func waitUp(t *testing.T, ss ...*SS7) {
 	for _, s := range ss {
 		for !s.IsUp() {
 			if time.Now().After(deadline) {
-				t.Fatal("the link set did not come up")
+				t.Fatalf("the link set did not come up: %s", s.state())
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
@@ -453,4 +454,19 @@ func TestAgainstLibss7In(t *testing.T) {
 		}
 		s.Close()
 	})
+}
+
+// state describes a link set's MTP3 and ISUP state, for a test that failed.
+func (s *SS7) state() string {
+	m := s.mtp
+	m.mu.Lock()
+	out := fmt.Sprintf("opc %d mtpUp %v traSent %v traGot %v;", m.cfg.OPC, m.isUp, m.traSent, m.traGot)
+	for _, l := range m.links {
+		out += fmt.Sprintf(" link %d testOK %v fails %d co %d;", l.slc, l.testOK, l.sltFails, l.co)
+	}
+	m.mu.Unlock()
+	s.mu.Lock()
+	out += fmt.Sprintf(" isup up %v mtpOK %v waitGRA %d", s.isUp, s.mtpOK, s.waitGRA)
+	s.mu.Unlock()
+	return out
 }
