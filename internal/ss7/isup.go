@@ -120,6 +120,9 @@ type SS7 struct {
 	Incoming func(*Call)
 	// Up is told when the link set comes up (MTP3 and the circuits reset) or goes down.
 	Up func(bool)
+	// User is given the messages for this point code of user parts other than ISUP (SCCP, SI 3), in
+	// the reading goroutine: do not block.
+	User func(si int, l Label, data []byte)
 
 	mu      sync.Mutex
 	calls   map[int]*Call
@@ -161,6 +164,13 @@ func (s *SS7) AddLink(link Link, slc int) error {
 	s.mtp.remove(sl)
 	return err
 }
+
+// SendMTP sends a user part message (SCCP, or one an STP passes on) over the link set, with the
+// label as given (its OPC need not be this end's).
+func (s *SS7) SendMTP(si int, l Label, data []byte) error { return s.mtp.send(si, l, data) }
+
+// APC is the link set's adjacent point code.
+func (s *SS7) APC() int { return s.cfg.APC }
 
 // AddCICs adds voice circuits (a span joining the link set).
 func (s *SS7) AddCICs(cics []int) {
@@ -690,7 +700,13 @@ func (c *Call) release(cause int) {
 
 // receive handles an ISUP message.
 func (s *SS7) receive(si int, l Label, data []byte) {
-	if si != siISUP || l.OPC != s.cfg.APC {
+	if si != siISUP {
+		if s.User != nil {
+			s.User(si, l, data)
+		}
+		return
+	}
+	if l.OPC != s.cfg.APC {
 		return
 	}
 	m, ok := s.parse(data)

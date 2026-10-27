@@ -97,6 +97,9 @@ type MTPConfig struct {
 	// Emergency aligns with the emergency proving period: always for a link set of one link (Q.704);
 	// a link set of several aligns normally unless this is set.
 	Emergency bool
+	// Relay, when set, is given user part messages addressed to another point code (an STP passes them
+	// on); without it they are dropped.
+	Relay func(si int, l Label, data []byte)
 }
 
 // ErrLinkSetFull: a link set has no room for another link, or the code is in use.
@@ -520,10 +523,22 @@ func (m *mtp3) receive(on *sigLink, msu []byte) {
 	}
 	si := int(msu[0] & 0xF)
 	l, ok := parseLabel(msu[1:], m.cfg.ANSI)
-	if !ok || l.DPC != m.cfg.OPC {
-		return // not for us (a PBX does not route)
+	if !ok {
+		return
 	}
 	data := msu[1+labelSize(m.cfg.ANSI):]
+	if l.DPC != m.cfg.OPC {
+		// Not for us: an STP passes it on (Relay); a PBX alone does not route.
+		if m.cfg.Relay != nil && si != siSNM && si != siSTM && si != siSpecTest {
+			m.mu.Lock()
+			up := m.isUp
+			m.mu.Unlock()
+			if up {
+				m.cfg.Relay(si, l, data)
+			}
+		}
+		return
+	}
 	reply := Label{DPC: l.OPC, OPC: m.cfg.OPC, SLS: l.SLS}
 	switch si {
 	case siSTM, siSpecTest:
