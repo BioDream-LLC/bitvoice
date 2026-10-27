@@ -17,6 +17,7 @@ type Page struct {
 type Result struct {
 	Pages    []Page
 	RemoteID string // the sender's TSI, usually its fax number
+	Rate     int    // bit/s of the last pages, as the sender's DCS chose (0 before any DCS)
 	Err      error  // nil when the sender finished normally (EOP and DCN)
 }
 
@@ -44,6 +45,7 @@ type Receiver struct {
 	page       []byte
 	pages      []Page
 	remote     string
+	rate       int
 	tcfBytes   int
 	tcfZeros   int
 	lastReply  []byte
@@ -67,7 +69,7 @@ func (r *Receiver) Done() <-chan struct{} { return r.done }
 func (r *Receiver) Result() Result {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return Result{Pages: append([]Page(nil), r.pages...), RemoteID: r.remote, Err: r.err}
+	return Result{Pages: append([]Page(nil), r.pages...), RemoteID: r.remote, Rate: r.rate, Err: r.err}
 }
 
 // Start answers: CED, then the capabilities; they are sent again every few seconds until the sender
@@ -257,6 +259,7 @@ func (r *Receiver) onFrame(f []byte) {
 		r.mu.Unlock()
 	case fcfDCS:
 		r.params = parseDCS(info)
+		r.rate = dcsRate(info)
 		r.state, r.tcfBytes, r.tcfZeros = stTraining, 0, 0
 		// With localTCF the far gateway checks training itself and sends no TCF: confirm anyway.
 		r.trainTimer = time.AfterFunc(3*time.Second, func() {

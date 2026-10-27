@@ -274,8 +274,8 @@ func TestSendFaxFromScreen(t *testing.T) {
 	}
 	select {
 	case in := <-got:
-		if in.Result.Err != nil || len(in.Result.Pages) != 2 {
-			t.Fatalf("received %d pages: %v", len(in.Result.Pages), in.Result.Err)
+		if in.Result.Err != nil || len(in.Result.Pages) != 2 || in.Result.Rate != 14400 || in.Station != "+12125550110" {
+			t.Fatalf("received %d pages at %d bit/s from %q: %v", len(in.Result.Pages), in.Result.Rate, in.Station, in.Result.Err)
 		}
 	case <-time.After(60 * time.Second):
 		t.Fatal("nothing arrived")

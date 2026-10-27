@@ -26,6 +26,17 @@ var rates = []rate{
 	{2400, [4]bool{false, false, false, false}, 12, IndV27_2400, IndV27_2400, DataV27_2400},
 }
 
+// dcsRate is the bit rate a DCS chose, from its bits 11 to 14 (0 when they name no rate BitVoice
+// knows). The two 9,600 and 7,200 codes (V.17 and V.29) give the same bit rate.
+func dcsRate(dcs []byte) int {
+	for _, r := range rates {
+		if r.dcs == [4]bool{bit(dcs, 11), bit(dcs, 12), bit(dcs, 13), bit(dcs, 14)} {
+			return r.bps
+		}
+	}
+	return 0
+}
+
 // minScan is the receiver's minimum scan line time in milliseconds, from DIS bits 21 to 23.
 func minScan(dis []byte) int {
 	v := 0

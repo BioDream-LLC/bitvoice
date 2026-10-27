@@ -317,6 +317,27 @@ test('send a fax: a note and a document, queued', async ({ page }) => {
   await expect(page.getByRole('region', { name: /Sent and received/ }).getByText('2125550199').first()).toBeVisible()
 })
 
+// A received fax shows the sending machine's identity and the speed; its PDF is at ID.pdf, and the
+// bare ID says so.
+test('a received fax: machine, speed and its PDF', async ({ page }) => {
+  const fs = await import('node:fs')
+  const id = 'feedfacecafe0001'
+  fs.mkdirSync('/tmp/bitvoice-e2e/faxes', { recursive: true })
+  fs.writeFileSync(`/tmp/bitvoice-e2e/faxes/${id}.json`, JSON.stringify({ id, direction: 'in', box: '300', boxName: 'Office fax',
+    from: '2125550177', station: '+1 212 555 0100', at: new Date().toISOString(), pages: 1, status: 'received', rate: 9600 }))
+  fs.writeFileSync(`/tmp/bitvoice-e2e/faxes/${id}.pdf`, '%PDF-1.4\n%%EOF\n')
+  await signIn(page)
+  await page.goto('./#/faxes')
+  const row = page.getByRole('row').filter({ hasText: '2125550177' })
+  await expect(row.getByText('machine: +1 212 555 0100')).toBeVisible()
+  await expect(row.getByText('9,600 bit/s')).toBeVisible()
+  const r = await page.evaluate(async (id) => {
+    const bare = await fetch(`./api/faxes/${id}`); const pdf = await fetch(`./api/faxes/${id}.pdf`)
+    return { bare: bare.status, says: (await bare.json()).message, pdf: pdf.status, type: pdf.headers.get('content-type') }
+  }, id)
+  expect(r).toEqual({ bare: 404, says: `a fax is fetched as /api/faxes/${id}.pdf or /api/faxes/${id}.tif`, pdf: 200, type: 'application/pdf' })
+})
+
 test('911 calls page: settings and reports', async ({ page }) => {
   await signIn(page)
   await page.goto('./#/psap')

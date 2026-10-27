@@ -22,6 +22,8 @@ const statusOf: Record<FaxRecord['status'], { label: string; status: 'ok' | 'war
 const outStatus = (f: FaxRecord) => (f.status === 'partial' && f.direction === 'out' ? 'Part sent' : statusOf[f.status].label)
 
 /** Who sent a fax: the caller's number, else the identity the sending machine gave. */
+/** The speed the pages went at, under the page count: the first thing to look at when one machine's faxes keep failing. */
+const Speed = ({ rate }: { rate?: number }) => (rate ? <div className="text-xs text-slate-500">{rate.toLocaleString('en-US')} bit/s</div> : null)
 const senderOf = (f: FaxRecord) => (f.from && f.from !== 'anonymous' ? f.from : f.station || 'unknown')
 
 export function Faxes() {
@@ -79,11 +81,11 @@ export function Faxes() {
                     {f.direction === 'out' ? <>
                       <td className="p-3 text-slate-300"><span className="inline-flex items-center gap-1"><ArrowUpRight size={14} className="text-emerald-300" aria-label="Sent" /><span className="font-mono text-amber-300">{f.box}</span></span> {f.boxName}{f.by && <div className="text-xs text-slate-500">by {f.by}</div>}</td>
                       <td className="p-3"><span className="font-mono text-sky-300">{f.to}</span>{f.remoteId && f.remoteId !== f.to && <div className="text-xs text-slate-500">machine: {f.remoteId}</div>}</td>
-                      <td className="p-3 text-slate-300">{f.status === 'sent' || !f.sent ? f.pages : `${f.sent} of ${f.pages}`}</td>
+                      <td className="p-3 text-slate-300">{f.status === 'sent' || !f.sent ? f.pages : `${f.sent} of ${f.pages}`}<Speed rate={f.rate} /></td>
                     </> : <>
                       <td className="p-3"><span className="inline-flex items-center gap-1"><ArrowDownLeft size={14} className="text-sky-300" aria-label="Received" /><span className="font-mono text-sky-300">{senderOf(f)}</span></span>{f.station && senderOf(f) !== f.station && <div className="text-xs text-slate-500">machine: {f.station}</div>}</td>
                       <td className="p-3 text-slate-300"><span className="font-mono text-amber-300">{f.box}</span> {f.boxName}</td>
-                      <td className="p-3 text-slate-300">{f.pages}</td>
+                      <td className="p-3 text-slate-300">{f.pages}<Speed rate={f.rate} /></td>
                     </>}
                     <td className="p-3"><Badge status={statusOf[f.status].status}>{outStatus(f)}</Badge>{f.error && <div className="mt-1 max-w-xs text-xs text-slate-500">{f.error}</div>}
                       {f.subject && <div className="mt-1 max-w-xs truncate text-xs text-slate-500">Email: {f.subject}</div>}

@@ -46,8 +46,8 @@ func TestSendToReceiver(t *testing.T) {
 	if sr.Err != nil || rr.Err != nil {
 		t.Fatalf("send %v, receive %v", sr.Err, rr.Err)
 	}
-	if sr.Pages != 2 || len(rr.Pages) != 2 || sr.Rate != 14400 {
-		t.Fatalf("sent %d pages at %d, received %d", sr.Pages, sr.Rate, len(rr.Pages))
+	if sr.Pages != 2 || len(rr.Pages) != 2 || sr.Rate != 14400 || rr.Rate != 14400 {
+		t.Fatalf("sent %d pages at %d, received %d at %d", sr.Pages, sr.Rate, len(rr.Pages), rr.Rate)
 	}
 	if rr.RemoteID != "+15550002222" || sr.RemoteID != "+15550001111" {
 		t.Fatalf("ids %q %q", rr.RemoteID, sr.RemoteID)

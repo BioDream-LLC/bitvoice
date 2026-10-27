@@ -41,7 +41,7 @@ type FaxRecord struct {
 	Tries     int       `json:"tries,omitempty"`
 	NextTry   time.Time `json:"nextTry,omitempty"`
 	Sent      int       `json:"sent,omitempty"`     // pages the receiver confirmed
-	Rate      int       `json:"rate,omitempty"`     // bit/s
+	Rate      int       `json:"rate,omitempty"`     // bit/s, sent or received
 	RemoteID  string    `json:"remoteId,omitempty"` // the receiving machine's identity
 	SentAt    time.Time `json:"sentAt,omitempty"`
 }
@@ -56,7 +56,7 @@ func (s *Server) FaxReceived(in pbx.FaxIn) {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
 	r := FaxRecord{ID: hex.EncodeToString(b), Direction: "in", Box: in.Box, From: in.From, Station: in.Station, At: in.At,
-		Pages: len(in.Result.Pages), Status: "received"}
+		Pages: len(in.Result.Pages), Status: "received", Rate: in.Result.Rate}
 	box := cfg.FindFax(in.Box)
 	if box != nil {
 		r.BoxName = box.Name
@@ -147,8 +147,12 @@ func (s *Server) faxRoutes() {
 	})
 	s.handle("GET /api/faxes/{id}", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
 		id, kind, _ := strings.Cut(r.PathValue("id"), ".")
-		if !faxID.MatchString(id) || (kind != "pdf" && kind != "tif") {
+		if !faxID.MatchString(id) {
 			http.NotFound(w, r)
+			return
+		}
+		if kind != "pdf" && kind != "tif" {
+			writeError(w, 404, "a fax is fetched as /api/faxes/"+id+".pdf or /api/faxes/"+id+".tif")
 			return
 		}
 		b, err := os.ReadFile(filepath.Join(s.faxDir(), id+"."+kind))
