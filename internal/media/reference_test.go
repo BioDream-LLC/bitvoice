@@ -391,6 +391,11 @@ func TestReferenceAMRWBVectors(t *testing.T) {
 	}
 	t.Logf("AMR-WB against 3GPP: %d sequences, %d sample for sample; %.1f dB below 3GPP's decoder on average, %.1f at worst",
 		files, exact, sum/float64(files), worst)
+	// goamr-wb v1.3.0 decodes like opencore: about 85% of the sequences sample for sample, none
+	// measurably below 3GPP's decoder. A drop below either means the codec changed.
+	if exact*100 < files*80 || worst > 0.1 {
+		t.Errorf("AMR-WB against 3GPP: %d of %d sequences exact, %.1f dB worst", exact, files, worst)
+	}
 	if sum/float64(files) > 2 {
 		t.Errorf("AMR-WB decode is %.1f dB below 3GPP's decoder on average", sum/float64(files))
 	}
