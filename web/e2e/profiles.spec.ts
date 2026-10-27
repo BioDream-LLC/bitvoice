@@ -180,13 +180,28 @@ test('radio console: a P25 talkgroup over the ISSI', async ({ page }) => {
     await signIn(page)
     await page.goto('./#/radio')
     const setup = page.locator('section[aria-labelledby="rs-h"]')
+    // What an earlier run of this test left (with --repeat-each, or after a failure) goes first;
+    // run alone, the console needs a number of its own.
+    await expect(setup.getByRole('button', { name: 'Save' })).toBeVisible()
+    if (!(await page.locator('#rcn').inputValue())) await page.locator('#rcn').fill('800')
+    const leftovers = [setup.getByRole('button', { name: 'Remove channel County fire' }), setup.getByRole('button', { name: 'Remove key Fire tac' }), setup.getByRole('button', { name: 'Remove the name for unit 197' })]
+    let removed = false
+    for (const b of leftovers) {
+      while (await b.count()) { await b.first().click(); removed = true }
+    }
+    if (removed) {
+      await setup.getByRole('button', { name: 'Save' }).click()
+      await expect(page.getByText('Radio console saved').last()).toBeVisible()
+    }
+    const n = await setup.locator('[id^="rcnm"]').count() // the new channel's place in the list
     await page.getByRole('button', { name: 'Add a channel' }).click()
-    await page.locator('#rcnm2').fill('County fire')
-    await page.locator('#rck2').selectOption('p25')
+    await page.locator(`#rcnm${n}`).fill('County fire')
+    await page.locator(`#rck${n}`).selectOption('p25')
     await expect(page.getByText('This console on the P25 system')).toBeVisible()
-    await page.locator('#rcg2').fill('819')
-    await page.locator('#rch2').fill('127.0.0.1:' + rfss.port)
-    await page.locator('#rchi2').fill('3')
+    await page.locator(`#rcg${n}`).fill('819')
+    await page.locator(`#rch${n}`).fill('127.0.0.1:' + rfss.port)
+    await page.locator(`#rchi${n}`).fill('3')
+    await page.locator('#p25s').fill(''); await page.locator('#p25r').fill('') // as on a first visit
     await page.locator('#p25w').fill('bee07zz') // only hex digits stay, upper case
     await expect(page.locator('#p25w')).toHaveValue('BEE07')
     await setup.getByRole('button', { name: 'Save' }).click()
@@ -202,11 +217,12 @@ test('radio console: a P25 talkgroup over the ISSI', async ({ page }) => {
     // The group call comes up with the talkgroup's ISSI identity.
     const tile = page.getByRole('region', { name: 'Channels' }).getByRole('article', { name: 'County fire' })
     await expect(tile.getByText('P25', { exact: true })).toBeVisible({ timeout: 10_000 })
-    expect(rfss.invited()).toBe('INVITE sip:bee07ad50333@p25dr;user=TIA-P25-SG SIP/2.0')
+    await expect.poll(rfss.invited, { timeout: 10_000 }).toBe('INVITE sip:bee07ad50333@p25dr;user=TIA-P25-SG SIP/2.0')
     await expect.poll(rfss.linked, { timeout: 10_000 }).toBe(true)
 
     // Recording on, an AES-256 key, and the talkgroup transmitting with it.
-    await setup.getByRole('switch', { name: /Record every transmission/ }).click()
+    const rec = setup.getByRole('switch', { name: /Record every transmission/ })
+    if (!(await rec.isChecked())) await rec.click()
     await setup.getByRole('button', { name: 'Add a key' }).click()
     await page.locator('#pkn0').fill('Fire tac')
     await page.locator('#pki0').fill('257')
@@ -217,7 +233,7 @@ test('radio console: a P25 talkgroup over the ISSI', async ({ page }) => {
     await setup.getByRole('button', { name: 'Save' }).click()
     await expect(page.getByText('Radio console saved').last()).toBeVisible()
     await expect(page.locator('#pkk0')).toHaveValue('') // never shown again
-    await page.locator('#rctk2').selectOption({ label: 'Fire tac (AES-256)' })
+    await page.locator(`#rctk${n}`).selectOption({ label: 'Fire tac (AES-256)' })
     await setup.getByRole('button', { name: 'Save' }).click()
     await expect(tile.getByText('TX AES-256')).toBeVisible({ timeout: 10_000 })
     await expect(tile.getByText('P25', { exact: true })).toBeVisible({ timeout: 10_000 })
@@ -246,9 +262,9 @@ test('radio console: a P25 talkgroup over the ISSI', async ({ page }) => {
     await expect(tile.getByText('Engine 5')).toBeHidden({ timeout: 5_000 })
     // ... and is in the radio log, recorded, by name.
     const log = page.getByRole('region', { name: 'Radio log' })
-    await expect(log.getByText('Engine 5 (bee07.ad5.0000c5)')).toBeVisible({ timeout: 10_000 })
+    await expect(log.getByText('Engine 5 (bee07.ad5.0000c5)').first()).toBeVisible({ timeout: 10_000 })
     await log.getByRole('button', { name: 'Play' }).first().click()
-    await expect(log.getByLabel(/Recording of County fire/)).toBeVisible()
+    await expect(log.getByLabel(/Recording of County fire/).first()).toBeVisible()
 
     // A dispatcher joins with the browser phone, sends an alert tone and calls a radio.
     await page.getByRole('button', { name: 'Browser phone', exact: true }).click()
@@ -260,13 +276,16 @@ test('radio console: a P25 talkgroup over the ISSI', async ({ page }) => {
     const simul = page.getByRole('region', { name: 'Simulselect' })
     await expect(simul.getByRole('button', { name: /Talk on 0 channels/ })).toBeDisabled()
     const picks = page.getByRole('region', { name: 'Channels' }).getByRole('checkbox', { name: /^Simulselect / })
-    await picks.nth(0).check(); await picks.nth(1).check()
-    await expect(simul.getByRole('button', { name: 'Talk on 2 channels' })).toBeEnabled()
-    await picks.nth(0).uncheck(); await picks.nth(1).uncheck()
+    if ((await picks.count()) >= 2) { // the setup test's channels are there unless this test runs alone
+      await picks.nth(0).check(); await picks.nth(1).check()
+      await expect(simul.getByRole('button', { name: 'Talk on 2 channels' })).toBeEnabled()
+      await picks.nth(0).uncheck(); await picks.nth(1).uncheck()
+    }
     const before = rfss.requests()
+    const beeps = await log.getByText('Beep').count()
     await tile.getByLabel('Alert tone on County fire').selectOption('beep')
     await expect.poll(rfss.requests, { timeout: 5_000 }).toBeGreaterThan(before)
-    await expect(log.getByText('Beep')).toBeVisible({ timeout: 10_000 })
+    await expect.poll(() => log.getByText('Beep').count(), { timeout: 10_000 }).toBeGreaterThan(beeps)
     await page.getByLabel('Call a radio (unit ID)').fill('197')
     await page.getByRole('form', { name: 'Call a radio' }).getByRole('button', { name: 'Call' }).click()
     const priv = page.getByRole('region', { name: 'Channels' }).getByRole('article', { name: 'Unit 197' })
