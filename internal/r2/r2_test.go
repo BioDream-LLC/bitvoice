@@ -13,15 +13,28 @@ type wire struct {
 	peer *Chan
 	log  *[]string
 	name string
+	last chan struct{} // closed once the previous line signal is delivered
 }
 
+// SetBits delivers line signals in the order they were set, as timeslot 16 does: a later signal never
+// overtakes an earlier one (which once made a stale clear-back read as the next call's seize-ack).
 func (w *wire) SetBits(b int) {
 	w.mu.Lock()
-	p := w.peer
+	p, prev, done := w.peer, w.last, make(chan struct{})
+	w.last = done
 	w.mu.Unlock()
-	if p != nil {
-		go func() { time.Sleep(2 * time.Millisecond); p.Bits(b) }()
+	if p == nil {
+		close(done)
+		return
 	}
+	go func() {
+		defer close(done)
+		time.Sleep(2 * time.Millisecond)
+		if prev != nil {
+			<-prev
+		}
+		p.Bits(b)
+	}()
 }
 
 func (w *wire) SetTone(n int) {
@@ -122,7 +135,7 @@ func TestCallsInEveryVariant(t *testing.T) {
 
 // The called end refuses: busy reaches the caller, and the circuit is idle again.
 func TestBusy(t *testing.T) {
-	for _, code := range []string{"itu", "mx", "br"} {
+	for _, code := range []string{"itu", "mx", "br", "cn"} {
 		t.Run(code, func(t *testing.T) {
 			// Long enough that a stalled runner (macOS CI) never times out a signal mid-number;
 			// short enough for the variants with no end-of-number signal to go on quickly.
@@ -136,4 +149,131 @@ func TestBusy(t *testing.T) {
 			ra.want(t, "ended")
 		})
 	}
+}
+
+// tapped is a wire that also writes down every signal sent on it (tones by number, F for forward
+// and A or B for backward as the group it is heard in).
+type tapped struct {
+	wire
+	mu   *sync.Mutex
+	tape *[]int
+}
+
+func (w *tapped) SetTone(n int) {
+	if n != 0 {
+		w.mu.Lock()
+		*w.tape = append(*w.tape, n)
+		w.mu.Unlock()
+	}
+	w.wire.SetTone(n)
+}
+
+// China No. 1 as Cisco's VCO/4K China 3 Supplement shows it (chapter 4, examples 1 and 3): each digit
+// of the number dialled asked by A-1 and ended by I-15; A-6 for KA (1, ordinary); the caller's
+// number digit by digit on A-1, ended by I-15; A-3 for KD (3, a local call); B-1 (idle). The C and
+// D bits are both 1. A busy local line is KB-4 (with KD 3), which the caller hears as busy.
+func TestChinaAsDocumented(t *testing.T) {
+	v := Variants["cn"]
+	var mu sync.Mutex
+	var tape []int
+	var bits []int
+	wa, wb := &tapped{mu: &mu, tape: &tape}, &tapped{mu: &mu, tape: &tape}
+	ra, rb := newRec(), newRec()
+	var a, b *Chan
+	a = New(v, &bitTap{wa, &mu, &bits}, ra.events(&a, nil))
+	b = New(v, wb, rb.events(&b, func(c *Chan) { c.Accept(true); time.AfterFunc(100*time.Millisecond, c.Answer) }))
+	wa.peer, wb.peer = b, a
+	t.Cleanup(func() { a.Close(); b.Close() })
+	a.Start()
+	b.Start()
+	time.Sleep(20 * time.Millisecond)
+	if err := a.Dial("3125550199", "9677958", CategoryNational, false); err != nil {
+		t.Fatal(err)
+	}
+	rb.want(t, "offered")
+	ra.want(t, "accepted")
+	ra.want(t, "answered")
+	want := []int{}
+	for _, d := range "9677958" {
+		want = append(want, signalOf(byte(d)), 1) // a digit, A-1
+	}
+	want = append(want, 15, 6, 1, 1) // I-15, A-6, KA 1, A-1
+	for _, d := range "3125550199" {
+		want = append(want, signalOf(byte(d)), 1)
+	}
+	want = append(want, 15, 3, 3, 1) // I-15, A-3, KD 3, B-1
+	mu.Lock()
+	got := append([]int(nil), tape...)
+	sent := append([]int(nil), bits...)
+	mu.Unlock()
+	if len(got) != len(want) {
+		t.Fatalf("signals\n got  %v\n want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("signal %d is %d, want %d\n got  %v\n want %v", i, got[i], want[i], got, want)
+		}
+	}
+	for _, b := range sent {
+		if b&0x3 != 0x3 {
+			t.Fatalf("C and D bits %02b, want 11 (China)", b&0x3)
+		}
+	}
+	rb.mu.Lock()
+	ani, dnis, cat := rb.ani, rb.dnis, rb.cat
+	rb.mu.Unlock()
+	if ani != "3125550199" || dnis != "9677958" || cat != CategoryNational {
+		t.Fatalf("offered ANI %q DNIS %q category %d", ani, dnis, cat)
+	}
+	a.Hangup()
+	rb.want(t, "disconnected normal clearing")
+	ra.want(t, "ended")
+	rb.want(t, "ended") // both ends idle before the next call
+
+	// Busy on a local call is KB-4; vacant is KB-5 whatever the KD.
+	for _, c := range []struct {
+		cause Cause
+		kb    int
+		heard string
+	}{{Busy, 4, "disconnected busy"}, {Unallocated, 5, "disconnected unallocated number"}} {
+		mu.Lock()
+		tape = nil
+		mu.Unlock()
+		b.ev.Offered = rb.events(&b, func(ch *Chan) { ch.Reject(c.cause) }).Offered
+		if err := a.Dial("3125550199", "9677958", CategoryNational, false); err != nil {
+			t.Fatal(err)
+		}
+		func() {
+			defer func() {
+				if t.Failed() {
+					mu.Lock()
+					t.Logf("tape %v", tape)
+					mu.Unlock()
+				}
+			}()
+			ra.want(t, c.heard)
+		}()
+		ra.want(t, "ended")
+		rb.want(t, "ended")
+		mu.Lock()
+		last := tape[len(tape)-1]
+		mu.Unlock()
+		if last != c.kb {
+			t.Fatalf("%v sent as KB-%d, want KB-%d", c.cause, last, c.kb)
+		}
+	}
+}
+
+// bitTap writes down the line bits a channel sets.
+type bitTap struct {
+	*tapped
+	mu   *sync.Mutex
+	bits *[]int
+}
+
+func (w *bitTap) SetBits(b int) {
+	w.mu.Lock()
+	*w.bits = append(*w.bits, b)
+	w.mu.Unlock()
+	w.tapped.SetBits(b)
 }

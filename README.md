@@ -152,7 +152,7 @@ Where something has only been tested against stand-ins rather than real equipmen
 <tr><td colspan="2"><b>T.38 fax relay</b> with G.711 fallback through fax gateways and providers</td></tr>
 <tr><td colspan="2"><b>Fax numbers BitVoice answers itself</b>: every fax kept as a PDF and emailed</td></tr>
 <tr><td colspan="2"><b>Faxes sent</b> from the web interface or by emailing a document</td></tr>
-<tr><td colspan="2">Analogue phones, fax machines, door phones and ISDN through SIP gateways: Grandstream HT, Patton SmartNode, AudioCodes; or telephony cards in the server: analogue ports, T1/E1 PRI and BRI ISDN (caller names, redirecting numbers, transfers handed to the phone company, advice of charge), E&amp;M trunks with Feature Group D, MFC-R2 in nine country variants, and SS7 (ISUP, ITU and ANSI)</td></tr>
+<tr><td colspan="2">Analogue phones, fax machines, door phones and ISDN through SIP gateways: Grandstream HT, Patton SmartNode, AudioCodes; or telephony cards in the server: analogue ports, T1/E1 PRI and BRI ISDN (caller names, redirecting numbers, transfers handed to the phone company, advice of charge), E&amp;M trunks with Feature Group D, MFC-R2 in ten country variants, and SS7 (ISUP, ITU and ANSI)</td></tr>
 <tr><td colspan="2"><b>Business texting</b> from your numbers through TextMagic, Twilio, SignalWire, Telnyx, Bandwidth, Vonage, Plivo, Flowroute, VoIP.ms or your own webhook, several at once, with a guided US 10DLC registration</td></tr>
 <tr><td colspan="2">One <b>Inbox</b> for the chat box on your website, <b>WhatsApp</b> (templates included), <b>Facebook Messenger</b> and texts</td></tr>
 </tbody></table>
@@ -493,7 +493,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | P25 Phase 2 half-rate voice (AMBE+2) | Not offered | patented until 2028 |
 | Ed448 signatures (NENA) | Not offered | not in Go's standard library, and BitVoice writes no cryptography of its own; Ed25519 is used |
 | SS7 signal transfer (STP), SCCP/TCAP | Not offered | a PBX is an end point; number portability and toll-free lookups are the carrier's |
-| MFC-R2 China variant | Not offered | OpenR2's own China variant disagrees with itself, so there is nothing sound to test against |
+| MFC-R2 China variant (China No. 1) | Software-tested | every signal of a call checked against Cisco's published China tables and call sequences (KA, KD, Group B by the KD sent, C and D bits 11). OpenR2's China variant disagrees with itself, so no program to test against; no real line tried |
 | ALI over PAM or E2 | Not offered | through a gateway; BitVoice speaks the request-and-text ALI links |
 
 ### Capacity

@@ -222,6 +222,7 @@ func startOpenR2(t *testing.T, variant string, args []string, ev func(**Chan) Ev
 func TestAgainstOpenR2Forward(t *testing.T) {
 	for _, v := range Codes() {
 		t.Run(v, func(t *testing.T) {
+			skipChina(t, v)
 			got := make(chan string, 16)
 			ch, k, o := startOpenR2(t, v, []string{"answer"}, func(c **Chan) Events {
 				return Events{Accepted: func(bool) { got <- "accepted" }, Answered: func() { got <- "answered" },
@@ -250,6 +251,7 @@ func TestAgainstOpenR2Forward(t *testing.T) {
 func TestAgainstOpenR2Backward(t *testing.T) {
 	for _, v := range Codes() {
 		t.Run(v, func(t *testing.T) {
+			skipChina(t, v)
 			got := make(chan string, 16)
 			ch, _, o := startOpenR2(t, v, []string{"call", "3125550199", "5550100"}, func(c **Chan) Events {
 				return Events{
@@ -304,5 +306,14 @@ func want(t *testing.T, ch chan string, prefix string) string {
 		case <-timeout:
 			t.Fatalf("never %q", prefix)
 		}
+	}
+}
+
+// skipChina: OpenR2's China variant disagrees with itself (its backward side reads the first digits of
+// the number dialled as the caller's number), so China is checked against Cisco's published tables
+// instead (TestChinaAsDocumented).
+func skipChina(t *testing.T, v string) {
+	if v == "cn" {
+		t.Skip("OpenR2's China variant is not a sound reference; see TestChinaAsDocumented")
 	}
 }

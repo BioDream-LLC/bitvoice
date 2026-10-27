@@ -734,6 +734,12 @@ test('E&M and MFC-R2 spans on a telephony card', async ({ page }) => {
   expect(r2).toHaveLength(30)
   expect(r2[0]).toMatchObject({ channel: 401, variant: 'mx', number: '5550100' })
   expect(r2.map((c: { channel: number }) => c.channel)).not.toContain(416) // timeslot 16 carries the bits
+  // China No. 1 is one of the variants.
+  await page.getByLabel('Country variant').last().selectOption('cn')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText('Telephony cards saved').last()).toBeVisible()
+  const cn = await page.evaluate(async (tok) => (await (await fetch('./api/cards/bridge', { headers: { Authorization: 'Bearer ' + tok } })).json()), token)
+  expect(cn.channels.find((c: { channel: number }) => c.channel === 401)).toMatchObject({ kind: 'r2', variant: 'cn' })
 })
 
 // SS7 on an E1: point codes checked, and bitvoice-dahdi told the link set and the circuits' codes.

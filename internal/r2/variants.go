@@ -26,7 +26,36 @@ type Variant struct {
 	INoMoreDNIS, INoMoreANI, IANIRestricted int
 
 	IINational, IINationalPriority, IITest, IIInternational, IIInternationalPriority, IICollect, IIPayPhone int
+
+	// AUnallocated is a Group A "vacant number" (China's A-5).
+	AUnallocated int
+
+	// China No. 1: the category request (A-6) is answered with KA, a Group I signal of the caller's
+	// class (KAOrdinary, KAPriority), and the change to Group B (A-3) with KD, the Group II call type.
+	// What a Group B signal means depends on the KD: China says so.
+	China                  bool
+	KAOrdinary, KAPriority int
 }
+
+// China No. 1's KD (Group II, the call type) and KB (Group B) signals, from ITU-T Q.441 as China
+// applies it (Cisco VCO/4K China 3 Supplement, tables 2-2 and 2-4).
+const (
+	kdTollOperator = 1
+	kdTollAuto     = 2
+	kdLocal        = 3
+	kdLocalPrio    = 4
+	kdTest         = 6
+
+	kbIdle         = 1 // every KD
+	kbBusyLocal    = 2 // KD 1, 2, 6: busy, local duty
+	kbBusyToll     = 3 // KD 1, 2, 6: busy, toll duty
+	kbCongestion   = 4 // KD 1, 2, 6: congestion; KD 3, 4: called subscriber busy or congestion
+	kbVacant       = 5 // every KD
+	kbIdleCallerCt = 6 // KD 3, 4: called subscriber idle, calling party control
+)
+
+// localKD says whether a KD is a local call (3 or 4), whose Group B signals read differently.
+func localKD(kd int) bool { return kd == kdLocal || kd == kdLocalPrio }
 
 // itu is ITU-T Q.441 as most countries use it.
 func itu() Variant {
@@ -64,9 +93,18 @@ func init() {
 		v.AAddressCompleteCharge, v.ADNISMinus1, v.AAllDNISAgain = 0, 9, 2
 		v.BAcceptCharge, v.BBusy, v.BAcceptNoCharge, v.BSIT, v.BNumberChanged, v.BUnallocated = 1, 2, 5, 6, 3, 7
 	})
-	// China is not offered: its practice is not published in a form we could check, and OpenR2's China
-	// variant does not agree with itself (its backward side reads the first digits of the number
-	// dialled as the caller's number, its forward side sends the number dialled first).
+	// China No. 1 (Cisco VCO/4K China 3 Supplement, chapters 2 and 4): the number dialled first, each
+	// digit asked by A-1 and ended by I-15; A-6 asks for KA and the caller's number (each digit by A-1,
+	// ended by I-15); A-3 for KD; then KB. A-2 starts the number again; C and D bits both 1.
+	add("cn", func(v *Variant) { // China
+		v.CDBits, v.GetANIFirst, v.China = 0x3, false, true
+		v.ANextDNIS, v.ADNISMinus1, v.ADNISMinus2, v.ADNISMinus3, v.AAllDNISAgain = 1, 0, 0, 0, 2
+		v.ACategory, v.ANextANI, v.AChangeToG2, v.ACongestion, v.AUnallocated, v.AAddressCompleteCharge = 6, 1, 3, 4, 5, 0
+		v.INoMoreDNIS, v.INoMoreANI, v.IANIRestricted = 15, 15, 0
+		v.KAOrdinary, v.KAPriority = 1, 8
+		v.IINational, v.IINationalPriority, v.IITest, v.IIInternational, v.IIInternationalPriority = kdLocal, kdLocalPrio, kdTest, kdTollAuto, 0
+		v.BAcceptCharge, v.BAcceptNoCharge, v.BBusy, v.BCongestion, v.BUnallocated, v.BOutOfOrder, v.BSIT = kbIdle, 0, kbBusyLocal, kbCongestion, kbVacant, 0, 0
+	})
 	add("co", func(v *Variant) { // Colombia
 		v.IANIRestricted = 12
 		v.BAcceptCharge, v.BBusy, v.BAcceptNoCharge, v.BUnallocated = 1, 2, 5, 6

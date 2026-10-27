@@ -192,6 +192,8 @@ type Chan struct {
 	restricted    bool
 	category      int // the Group II signal
 	categorySent  bool
+	kd            int  // China: the KD (Group II) signal received, which says how to read Group B
+	kaPriority    bool // China: the caller's KA said priority
 	timers        map[string]*time.Timer
 	timerGen      map[string]int
 	answeredFlag  bool
@@ -325,7 +327,7 @@ func (c *Chan) init() {
 	c.dnis, c.ani = nil, nil
 	c.dnisIdx, c.aniIdx = 0, 0
 	c.restricted, c.aniGiven = false, false
-	c.category = 0
+	c.category, c.kd, c.kaPriority = 0, 0, false
 	c.categorySent = false
 	c.line, c.call, c.dir = lsIdle, csIdle, dirNone
 	c.offMF()
@@ -606,7 +608,7 @@ func (c *Chan) receiveANI(n int) {
 		if n != 0 {
 			c.ani = append(c.ani, digitOf(n))
 		}
-		if n == 0 || c.MaxANI > len(c.ani) {
+		if n == 0 || c.MaxANI > len(c.ani) || (c.v.China && len(c.ani) < 20) {
 			c.state = mfANIRqTxd
 			c.prepareTone(next)
 		} else {
@@ -676,6 +678,11 @@ func (c *Chan) forwardTone(n int) {
 			c.receiveDNIS(n)
 		case mfCategoryRqTxd:
 			c.category = n
+			if c.v.China {
+				c.kaPriority = n == c.v.KAPriority || n == 10 // KA 8 and 10: priority (regular, free)
+				c.receiveANI(0)                               // A-1s ask for the caller's number until I-15
+				return
+			}
 			if c.MaxANI > 0 {
 				c.receiveANI(0)
 			} else {
@@ -691,6 +698,9 @@ func (c *Chan) forwardTone(n int) {
 			c.protocolError()
 			return
 		}
+		if c.v.China {
+			c.kd, c.category = n, n
+		}
 		c.offer()
 	default:
 		c.protocolError()
@@ -703,8 +713,12 @@ func (c *Chan) offer() {
 		return
 	}
 	c.call = csOffered
+	cat := c.v.categoryOf(c.category)
+	if c.v.China && c.kaPriority && cat == CategoryNational {
+		cat = CategoryNationalPriority
+	}
 	if c.ev.Offered != nil {
-		c.ev.Offered(string(c.ani), string(c.dnis), c.v.categoryOf(c.category), c.restricted)
+		c.ev.Offered(string(c.ani), string(c.dnis), cat, c.restricted)
 	}
 }
 
@@ -755,6 +769,19 @@ func (c *Chan) accept(charge bool) {
 
 func (c *Chan) reject(cause Cause) {
 	if c.call != csOffered || c.dir != dirBackward {
+		return
+	}
+	if c.v.China {
+		tone := kbCongestion // local KD: busy or congestion are one signal
+		switch {
+		case cause == Unallocated || cause == NumberChanged:
+			tone = kbVacant
+		case cause == Busy && !localKD(c.kd):
+			tone = kbBusyLocal
+		}
+		c.state = mfDisconnectTxd
+		c.disconnectReq = true
+		c.prepareTone(tone)
 		return
 	}
 	tone := c.v.BOutOfOrder
@@ -863,6 +890,16 @@ func (c *Chan) sendDNIS(offset int) {
 
 func (c *Chan) sendCategory() {
 	c.state = mfCategoryTxd
+	if c.v.China && c.group == gI {
+		// A-6: KA, the caller's class, then the caller's number on A-1s.
+		c.categorySent = true
+		ka := c.v.KAOrdinary
+		if c.category == c.v.IINationalPriority {
+			ka = c.v.KAPriority
+		}
+		c.prepareTone(ka)
+		return
+	}
 	c.categorySent = true
 	c.prepareTone(c.category)
 }
@@ -881,7 +918,8 @@ func (c *Chan) sendANI() {
 		c.state = mfANITxd
 		c.prepareTone(signalOf(c.ani[c.aniIdx]))
 		c.aniIdx++
-	case c.v.INoMoreANI != 0 && !c.restricted:
+	case c.v.INoMoreANI != 0 && (!c.restricted || c.v.IANIRestricted == 0):
+		// No more digits; a variant with no "withheld" signal (China) ends a withheld number the same way.
 		c.state = mfANIEndTxd
 		c.prepareTone(c.v.INoMoreANI)
 	case c.v.IANIRestricted != 0 && c.restricted:
@@ -934,6 +972,9 @@ func (c *Chan) groupA(n int) {
 		catTone = v.ACategoryAndGC
 	}
 	switch {
+	case c.categorySent && n == v.ANextANI && n != 0 && (c.state == mfCategoryTxd || c.state == mfANITxd):
+		// The caller's number is being asked for: China asks for it with A-1, as for the number dialled.
+		c.sendANI()
 	case c.dnisRequest(n):
 	case c.categorySent && n == v.ANextANI && n != 0:
 		c.sendANI()
@@ -950,6 +991,9 @@ func (c *Chan) groupA(n int) {
 	case n == v.ACongestion:
 		c.line = lsClearBackToneRxd
 		c.disconnected(Congestion)
+	case n == v.AUnallocated && n != 0:
+		c.line = lsClearBackToneRxd
+		c.disconnected(Unallocated)
 	default:
 		c.protocolError()
 	}
@@ -976,6 +1020,35 @@ func (c *Chan) groupC(n int) {
 
 func (c *Chan) groupB(n int) {
 	v := c.v
+	if v.China {
+		// What KB means depends on the KD this side sent.
+		local := localKD(c.category)
+		cause := ProtocolError
+		switch {
+		case n == kbIdle:
+			c.acceptedTone(true)
+			return
+		case n == kbIdleCallerCt && local:
+			c.acceptedTone(false)
+			return
+		case n == kbVacant:
+			cause = Unallocated
+		case n == kbCongestion && local:
+			cause = Busy // called subscriber busy or congestion: a busy line to the caller
+		case n == kbCongestion:
+			cause = Congestion
+		case (n == kbBusyLocal || n == kbBusyToll) && !local:
+			cause = Busy
+		}
+		if cause == ProtocolError {
+			c.protocolError()
+			return
+		}
+		c.line = lsClearBackToneRxd
+		c.offMF()
+		c.disconnected(cause)
+		return
+	}
 	switch {
 	case n == v.BAcceptCharge:
 		c.acceptedTone(true)

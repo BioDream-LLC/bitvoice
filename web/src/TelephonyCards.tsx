@@ -20,7 +20,7 @@ function StateText({ s }: { s?: string }) {
 }
 
 /** Telephony cards: this computer's analogue ports (DAHDI), joined to BitVoice by bitvoice-dahdi. */
-const r2Variants: [string, string][] = [['itu', 'ITU-T (Q.421, Q.441)'], ['ar', 'Argentina'], ['br', 'Brazil'], ['co', 'Colombia'], ['cz', 'Czech Republic'], ['ec', 'Ecuador'], ['mx', 'Mexico'], ['ph', 'Philippines'], ['ve', 'Venezuela']]
+const r2Variants: [string, string][] = [['itu', 'ITU-T (Q.421, Q.441)'], ['ar', 'Argentina'], ['br', 'Brazil'], ['cn', 'China (China No. 1)'], ['co', 'Colombia'], ['cz', 'Czech Republic'], ['ec', 'Ecuador'], ['mx', 'Mexico'], ['ph', 'Philippines'], ['ve', 'Venezuela']]
 
 const emHelp: Record<string, string> = {
   wink: 'Wink start: the far end winks when it is ready for the number, and BitVoice winks back at a call coming in. Answered when the far end goes off hook.',
