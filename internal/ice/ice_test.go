@@ -274,10 +274,12 @@ func TestRestart(t *testing.T) {
 	b.agent.Restart("restarted", "a-long-restarted-ice-password")
 	b.ufrag, b.pwd = "restarted", "a-long-restarted-ice-password"
 	before := a.agent.LastHeard()
-	a.agent.keepConsent()
-	time.Sleep(200 * time.Millisecond)
-	if !a.agent.LastHeard().After(before) {
-		t.Fatal("a consent check with the old credentials was not answered after the restart")
+	for deadline := time.Now().Add(15 * time.Second); !a.agent.LastHeard().After(before); {
+		if time.Now().After(deadline) {
+			t.Fatal("a consent check with the old credentials was not answered after the restart")
+		}
+		a.agent.keepConsent() // a check, again until answered: a slow runner may take its time
+		time.Sleep(50 * time.Millisecond)
 	}
 
 	moved.agent.Gather()

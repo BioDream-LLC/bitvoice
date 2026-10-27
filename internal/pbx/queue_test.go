@@ -118,8 +118,11 @@ func TestAgentPresence(t *testing.T) {
 		t.Fatal("pause code refused")
 	}
 	ps[1].waitBye(t, 3*time.Second)
-	if qs := e.Queues(); qs[0].Agents[0].State != "paused" {
-		t.Fatalf("101 not paused: %+v", qs[0].Agents)
+	// The pause call is over once its BYE is handled: until then 101 is busy on it.
+	for deadline := time.Now().Add(15 * time.Second); e.Queues()[0].Agents[0].State != "paused"; time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("101 not paused: %+v", e.Queues()[0].Agents)
+		}
 	}
 	go ps[0].dial("700")
 	if ps[2].waitRing(3*time.Second) == nil {
