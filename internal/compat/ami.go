@@ -265,9 +265,12 @@ func (s *session) handle(ctx context.Context, m amiMsg) bool {
 		if strings.EqualFold(m.get("Events"), "off") {
 			s.events = false
 		}
+		// Subscribed before the reply: a call that starts the moment the client is told it is in
+		// must not be missed.
+		sub := s.a.Bus.Subscribe()
 		reply("Message", "Authentication accepted")
 		s.send("Event", "FullyBooted", "Privilege", "system,all", "Status", "Fully Booted")
-		go s.stream(ctx)
+		go s.stream(ctx, sub)
 		return true
 	case "logoff":
 		s.send("Response", "Goodbye", "ActionID", id, "Message", "Thanks for all the fish.")
@@ -506,8 +509,7 @@ func channelFields(ch Channel, c pbx.CallInfo) []string {
 }
 
 // stream sends channel events while the session lasts.
-func (s *session) stream(ctx context.Context) {
-	sub := s.a.Bus.Subscribe()
+func (s *session) stream(ctx context.Context, sub *events.Sub) {
 	defer s.a.Bus.Unsubscribe(sub)
 	tr := NewTracker(s.a.PBX.Calls())
 	peers := map[string]string{}
