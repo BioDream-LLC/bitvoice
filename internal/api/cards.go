@@ -10,6 +10,7 @@ import (
 
 	"github.com/biodream-llc/bitvoice/internal/config"
 	"github.com/biodream-llc/bitvoice/internal/dahdi"
+	"github.com/biodream-llc/bitvoice/internal/ss7/sccp"
 	"github.com/biodream-llc/bitvoice/internal/store"
 )
 
@@ -88,6 +89,20 @@ func (s *Server) cardsRoutes() {
 				sc.Q931 = append(sc.Q931, ch-sp.First+1)
 			}
 			out.Spans = append(out.Spans, sc)
+		}
+		if st := k.STP; st.Enabled {
+			pc, _ := config.PointCode(st.PointCode, false)
+			ni := 2
+			for _, sp := range k.Spans {
+				if o, _ := config.PointCode(sp.OPC, false); sp.Signalling == "ss7" && sp.Variant == "itu" && o == pc && sp.NI == "international" {
+					ni = 0
+				}
+			}
+			out.STP = &dahdi.STPConf{OPC: pc, NI: ni, Relay: st.Relay, M3UA: st.M3UA, RC: uint32(st.RoutingContext)}
+			for _, t := range st.Translations {
+				to, _ := config.PointCode(t.PointCode, false)
+				out.STP.Translations = append(out.STP.Translations, sccp.Translation{Prefix: t.Prefix, TranslationType: t.TranslationType, PC: to, SSN: t.SSN})
+			}
 		}
 		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, 200, out)

@@ -1,11 +1,12 @@
-import { CircleDot, Copy, Cpu, KeyRound, Network, Phone, PhoneIncoming, Plus, Save, Trash2 } from 'lucide-react'
+import { CircleDot, Copy, Cpu, KeyRound, Network, Phone, PhoneIncoming, Plus, Route, Save, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { useCardsStatusQuery, useExtensionsQuery, useSaveSettingsMutation, useSettingsQuery, useSystemQuery, useTrunksQuery, type ApiErrorBody, type Cards, type CardSpan } from './api'
+import { useCardsStatusQuery, useExtensionsQuery, useSaveSettingsMutation, useSettingsQuery, useSystemQuery, useTrunksQuery, type ApiErrorBody, type Cards, type CardSpan, type CardSTP } from './api'
 import { attempt, useIsAdmin } from './Editor'
 import { Field, Page, problemFor, Toggle } from './ui'
 
 const defaults: Cards = { enabled: false, token: '', linePort: 5091, alaw: false, channels: [], spans: [] }
+const stpDefaults: CardSTP = { enabled: false, pointCode: '', relay: true, m3ua: '', routingContext: 0, translations: [] }
 
 function newToken() {
   const b = new Uint8Array(24)
@@ -15,7 +16,7 @@ function newToken() {
 
 function StateText({ s }: { s?: string }) {
   if (!s) return <span className="text-xs text-slate-500">no report</span>
-  const ok = s === 'idle' || s === 'in a call' || s === 'ringing' || s === 'dial tone' || s === 'dialling' || s === 'calling' || s.startsWith('D-channel up')
+  const ok = s === 'idle' || s === 'in a call' || s === 'ringing' || s === 'dial tone' || s === 'dialling' || s === 'calling' || s.startsWith('D-channel up') || (s.startsWith('STP') && !s.includes('down'))
   return <span className={ok ? 'text-xs text-emerald-300' : 'text-xs text-amber-300'}><CircleDot size={11} className="mr-1 inline" aria-hidden />{s}</span>
 }
 
@@ -261,6 +262,61 @@ export function TelephonyCards() {
             <button type="button" className="btn" onClick={() => set({ spans: [...spans, { type: 't1', first: Math.max(1, ...k.channels.map((c) => c.channel + 1), ...spans.map((s) => s.first + (s.type === 'e1' ? 31 : s.type === 'bri' ? 3 : 24))), role: 'user', switch: 'ni2' }] })}><Plus size={14} aria-hidden /> Add a T1, E1 or BRI</button>
           </section>
         )}
+        {k.enabled && spans.some((s) => s.signalling === 'ss7') && (() => {
+          const st: CardSTP = { ...stpDefaults, ...k.stp, translations: k.stp?.translations ?? [] }
+          const tr = st.translations ?? []
+          const setStp = (v: Partial<CardSTP>) => set({ stp: { ...st, ...v } })
+          const setTr = (i: number, v: Partial<NonNullable<CardSTP['translations']>[number]>) => setStp({ translations: tr.map((x, j) => (j === i ? { ...x, ...v } : x)) })
+          const sp = (f: string) => p('stp.' + f)
+          return (
+            <section className="card space-y-4 p-5" aria-labelledby="cstp-h">
+              <h2 id="cstp-h" className="flex items-center gap-2 font-semibold text-slate-100"><Route size={17} className="text-sky-300" aria-hidden /> Signal transfer point (SS7)</h2>
+              <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={st.enabled} onChange={(v) => setStp(v && !st.enabled ? { enabled: true, relay: true } : { enabled: v })} label="Signal transfer point" />
+                Run bitvoice-dahdi as an STP for its ITU SS7 link sets</label>
+              {sp('enabled') && <p className="text-xs text-rose-300">{sp('enabled')}</p>}
+              {st.enabled && (
+                <>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <Field label="STP point code" htmlFor="stpc" error={sp('pointCode')} hint="This end of its link sets: the SS7 spans' own point code.">
+                      <input id="stpc" className="input font-mono" value={st.pointCode} placeholder={spans.find((s) => s.signalling === 'ss7' && s.variant !== 'ansi')?.opc ?? ''} onChange={(e) => setStp({ pointCode: e.target.value.trim() })} />
+                    </Field>
+                    <Field label="IP STP (M3UA)" htmlFor="stpm" error={sp('m3ua')} hint="host:port of an IP STP or signalling gateway, over TCP. Empty: none.">
+                      <input id="stpm" className="input font-mono" value={st.m3ua} placeholder="10.0.0.5:2905" onChange={(e) => setStp({ m3ua: e.target.value.trim() })} />
+                    </Field>
+                    <Field label="Routing context" htmlFor="stprc" error={sp('routingContext')} hint="The one the IP STP gave you; 0: BitVoice registers its point codes itself.">
+                      <input id="stprc" type="number" min={0} className="input w-32" value={st.routingContext || 0} onChange={(e) => setStp({ routingContext: Number(e.target.value) })} />
+                    </Field>
+                  </div>
+                  <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={st.relay} onChange={(v) => setStp({ relay: v })} label="Pass on messages for other point codes" />
+                    Pass on messages for other point codes <span className="text-xs text-slate-500">(to the link set of that point, else to the IP STP; off: only SCCP for this point code is taken)</span></label>
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium text-slate-200">Global title translation</h3>
+                    <p className="text-xs text-slate-500">SCCP messages addressed to the STP by global title go to the point code and subsystem of the longest prefix that matches. One that matches none comes back to its sender (if it asked) as &quot;no translation for this address&quot;.</p>
+                    {tr.map((x, i) => (
+                      <div key={i} className="grid items-end gap-2 sm:grid-cols-[1fr_8rem_1fr_7rem_auto]">
+                        <Field label="Digits starting" htmlFor={`stt-p-${i}`} error={sp(`translations[${i}].prefix`)}>
+                          <input id={`stt-p-${i}`} className="input font-mono" value={x.prefix} onChange={(e) => setTr(i, { prefix: e.target.value.replace(/\D/g, '') })} />
+                        </Field>
+                        <Field label="Translation type" htmlFor={`stt-t-${i}`} error={sp(`translations[${i}].translationType`)}>
+                          <input id={`stt-t-${i}`} type="number" min={-1} max={255} className="input" value={x.translationType} onChange={(e) => setTr(i, { translationType: Number(e.target.value) })} />
+                        </Field>
+                        <Field label="To point code" htmlFor={`stt-c-${i}`} error={sp(`translations[${i}].pointCode`)}>
+                          <input id={`stt-c-${i}`} className="input font-mono" value={x.pointCode} onChange={(e) => setTr(i, { pointCode: e.target.value.trim() })} />
+                        </Field>
+                        <Field label="Subsystem" htmlFor={`stt-s-${i}`} error={sp(`translations[${i}].ssn`)}>
+                          <input id={`stt-s-${i}`} type="number" min={0} max={255} className="input" value={x.ssn} onChange={(e) => setTr(i, { ssn: Number(e.target.value) })} />
+                        </Field>
+                        <button type="button" className="btn px-2 text-rose-300" aria-label={`Remove translation ${i + 1}`} onClick={() => setStp({ translations: tr.filter((_, j) => j !== i) })}><Trash2 size={14} aria-hidden /></button>
+                      </div>
+                    ))}
+                    <button type="button" className="btn" onClick={() => setStp({ translations: [...tr, { prefix: '', translationType: -1, pointCode: '', ssn: 0 }] })}><Plus size={14} aria-hidden /> Add a translation</button>
+                  </div>
+                  <p className="text-xs text-slate-500">Status: <StateText s={status?.channels.stp} /></p>
+                </>
+              )}
+            </section>
+          )
+        })()}
         <button type="button" className="btn btn-primary" disabled={isLoading || !edit} onClick={submit}><Save size={14} aria-hidden /> Save</button>
       </fieldset>
     </Page>

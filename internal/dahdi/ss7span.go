@@ -59,7 +59,10 @@ func (b *Bridge) linkSet(s *span) *ss7.SS7 {
 		}
 	}
 	c := s.conf.SS7
-	l := ss7.NewLinkSet(ss7.Config{MTPConfig: ss7.MTPConfig{ANSI: c.ANSI, OPC: c.OPC, APC: c.APC, NI: c.NI, SLC: c.SLC, Emergency: len(members) == 1}, CICs: cics})
+	relay, user := b.stp.hooks(c)
+	l := ss7.NewLinkSet(ss7.Config{MTPConfig: ss7.MTPConfig{ANSI: c.ANSI, OPC: c.OPC, APC: c.APC, NI: c.NI, SLC: c.SLC,
+		Emergency: len(members) == 1, Relay: relay}, CICs: cics})
+	l.User = user
 	l.Incoming = func(call *ss7.Call) {
 		b.mu.Lock()
 		p := b.ports[b.channelOfCIC(k, call.CIC)]

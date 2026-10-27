@@ -786,6 +786,49 @@ test('SS7 span on a telephony card', async ({ page }) => {
   await expect(page.getByText('Telephony cards saved')).toBeVisible()
 })
 
+// The STP: its point code must be one of the SS7 spans' own, translations are checked, and
+// bitvoice-dahdi is told the STP, its M3UA link and the translations by point code number.
+test('signal transfer point for the SS7 link sets', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/#/cards')
+  const on = page.getByRole('switch', { name: 'Telephony cards' })
+  if (!(await on.isChecked())) await on.click()
+  if (!(await page.getByRole('heading', { name: 'Signal transfer point (SS7)' }).isVisible())) {
+    await page.getByRole('button', { name: 'Add a T1, E1 or BRI' }).click()
+    await page.getByLabel('Line', { exact: true }).last().selectOption('e1')
+    await page.getByLabel('First channel').last().fill('701')
+    await page.locator('[id^="sp-g-"]').last().selectOption('ss7')
+    await page.getByLabel('Our point code').last().fill('1-10-2')
+    await page.getByLabel('Adjacent point code').last().fill('1-10-3')
+  }
+  const card = page.locator('section[aria-labelledby="cstp-h"]')
+  const stp = card.getByRole('switch', { name: 'Signal transfer point' })
+  if (!(await stp.isChecked())) await stp.click()
+  await card.getByLabel('STP point code').fill('1-10-7') // a valid point code, not one of the spans' own
+  await card.getByLabel('IP STP (M3UA)').fill('stp.example')
+  await card.getByRole('button', { name: 'Add a translation' }).click()
+  await card.getByLabel('Digits starting').fill('4420')
+  await card.getByLabel('To point code').fill('1-10-2')
+  await card.getByLabel('Subsystem').fill('6')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(card.getByText('no ITU SS7 span has this point code as its own')).toBeVisible()
+  await expect(card.getByText(/give the IP STP as host:port/)).toBeVisible()
+  await card.getByLabel('STP point code').fill('1-10-2')
+  await card.getByLabel('IP STP (M3UA)').fill('stp.example:2905')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(card.getByText("the STP's own point code has no subsystems to send them to")).toBeVisible()
+  await card.getByLabel('To point code').fill('1-10-5')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText('Telephony cards saved').last()).toBeVisible()
+  const token = await page.getByRole('textbox', { name: 'Token' }).inputValue()
+  const cfg = await page.evaluate(async (tok) => (await (await fetch('./api/cards/bridge', { headers: { Authorization: 'Bearer ' + tok } })).json()), token)
+  expect(cfg.stp).toMatchObject({ opc: 2130, relay: true, m3ua: 'stp.example:2905', translations: [{ prefix: '4420', translationType: -1, pc: 2133, ssn: 6 }] })
+  // Off again, so other tests see no STP.
+  await stp.click()
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText('Telephony cards saved').last()).toBeVisible()
+})
+
 // The outbound dialer: a campaign is made for a queue, a CSV list is loaded (one number on the
 // do-not-call list), preview hands out the next contact, and the do-not-call list takes numbers.
 test('outbound dialer campaign', async ({ page }) => {

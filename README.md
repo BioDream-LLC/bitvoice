@@ -152,7 +152,7 @@ Where something has only been tested against stand-ins rather than real equipmen
 <tr><td colspan="2"><b>T.38 fax relay</b> with G.711 fallback through fax gateways and providers</td></tr>
 <tr><td colspan="2"><b>Fax numbers BitVoice answers itself</b>: every fax kept as a PDF and emailed</td></tr>
 <tr><td colspan="2"><b>Faxes sent</b> from the web interface or by emailing a document</td></tr>
-<tr><td colspan="2">Analogue phones, fax machines, door phones and ISDN through SIP gateways: Grandstream HT, Patton SmartNode, AudioCodes; or telephony cards in the server: analogue ports, T1/E1 PRI and BRI ISDN (caller names, redirecting numbers, transfers handed to the phone company, advice of charge), E&amp;M trunks with Feature Group D, MFC-R2 in ten country variants, and SS7 (ISUP, ITU and ANSI)</td></tr>
+<tr><td colspan="2">Analogue phones, fax machines, door phones and ISDN through SIP gateways: Grandstream HT, Patton SmartNode, AudioCodes; or telephony cards in the server: analogue ports, T1/E1 PRI and BRI ISDN (caller names, redirecting numbers, transfers handed to the phone company, advice of charge), E&amp;M trunks with Feature Group D, MFC-R2 in ten country variants, and SS7 (ISUP, ITU and ANSI), with a signal transfer point and M3UA to IP STPs</td></tr>
 <tr><td colspan="2"><b>Business texting</b> from your numbers through TextMagic, Twilio, SignalWire, Telnyx, Bandwidth, Vonage, Plivo, Flowroute, VoIP.ms or your own webhook, several at once, with a guided US 10DLC registration</td></tr>
 <tr><td colspan="2">One <b>Inbox</b> for the chat box on your website, <b>WhatsApp</b> (templates included), <b>Facebook Messenger</b> and texts</td></tr>
 </tbody></table>
@@ -492,9 +492,9 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | 911 profile, radio console, NG911 Core Services, caller video | Lab | NENA's schemas and sample data, Wireshark, spandsp, OpenSSL, ExifTool, ffmpeg, a NIST P25 capture (its IMBE voice frames unpacked as mbelib unpacks them: same pitch, harmonics, voicing and amplitudes); never on a live ESInet, P25 system or PSAP CAD, and not certified |
 | P25 Phase 2 half-rate voice (AMBE+2) | Not offered | patented until 2028 |
 | Ed448 signatures (NENA) | Not offered | not in Go's standard library, and BitVoice writes no cryptography of its own; Ed25519 is used |
-| SS7 signal transfer (STP), SCCP/TCAP | Not offered | a PBX is an end point; number portability and toll-free lookups are the carrier's |
+| SS7 signal transfer (STP), SCCP and TCAP | Checked against a reference | OsmoSTP 2.3.0 over M3UA/TCP with libosmo-sigtran's SCCP echo user behind it: UDT and XUDT both ways, UDTS returned, global title translation through the STP, a switch on a link set reaching the echo over IP; TCAP against libosmo-asn1-tcap both ways. ITU only; no SCTP, connection-oriented SCCP or SCCP management; no real carrier tried |
 | MFC-R2 China variant (China No. 1) | Software-tested | every signal of a call checked against Cisco's published China tables and call sequences (KA, KD, Group B by the KD sent, C and D bits 11). OpenR2's China variant disagrees with itself, so no program to test against; no real line tried |
-| ALI over PAM or E2 | Not offered | through a gateway; BitVoice speaks the request-and-text ALI links |
+| ALI over PAM or E2 | Not offered | PAM is Intrado's own protocol with no published specification; E2 (J-STD-036, NENA 05-001) runs between a mobile positioning center and the ALI database, not to a PSAP. BitVoice speaks the request-and-text ALI links and HELD instead |
 
 ### Capacity
 

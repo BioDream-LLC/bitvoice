@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"regexp"
 	"strconv"
 	"strings"
@@ -22,6 +23,31 @@ type Cards struct {
 	// Spans are the card's digital lines: T1 or E1 primary rate ISDN (PRI), or basic rate ISDN (BRI).
 	// Their B-channels are lines of the card trunk, with the called number (DID) and caller ID carried.
 	Spans []CardSpan `json:"spans"`
+	// STP makes bitvoice-dahdi a signal transfer point for the ITU SS7 link sets: messages for other
+	// point codes passed on, SCCP global titles translated, and a link to an IP STP over M3UA.
+	STP CardSTP `json:"stp"`
+}
+
+// CardSTP is the STP. PointCode is its own (the SS7 spans' point code); Relay passes on messages
+// for other point codes; M3UA (host:port, over TCP) links it to an IP STP or signalling gateway,
+// with RoutingContext when that STP gave one (0: the point codes are registered); Translations
+// turn global titles addressed to it into a point code and subsystem.
+type CardSTP struct {
+	Enabled        bool              `json:"enabled"`
+	PointCode      string            `json:"pointCode"`
+	Relay          bool              `json:"relay"`
+	M3UA           string            `json:"m3ua"`
+	RoutingContext int               `json:"routingContext"`
+	Translations   []CardTranslation `json:"translations"`
+}
+
+// CardTranslation is one global title translation: titles starting with Prefix (of translation type
+// TranslationType; -1 for any) go to PointCode, subsystem SSN (0: the message's own).
+type CardTranslation struct {
+	Prefix          string `json:"prefix"`
+	TranslationType int    `json:"translationType"`
+	PointCode       string `json:"pointCode"`
+	SSN             int    `json:"ssn"`
 }
 
 // CardSpan is one T1 or E1 line run as PRI, or one BRI. Its channels are the ones dahdi_cfg gives
@@ -366,6 +392,75 @@ func (c *Config) validateCards(p *Problems) {
 	for i, t := range c.Trunks {
 		if t.Protocol == "dahdi" && !k.Enabled {
 			p.add(fmt.Sprintf("trunks[%d].protocol", i), "switch on Telephony cards in Settings first")
+		}
+	}
+	validateSTP(k, p)
+}
+
+// validateSTP checks the STP: it serves ITU link sets of its own point code.
+func validateSTP(k *Cards, p *Problems) {
+	s := &k.STP
+	if !s.Enabled {
+		return
+	}
+	var itu []CardSpan
+	for _, sp := range k.Spans {
+		if sp.Signalling == "ss7" && sp.Variant == "itu" {
+			itu = append(itu, sp)
+		}
+	}
+	if len(itu) == 0 {
+		p.add("system.cards.stp.enabled", "the STP serves ITU SS7 link sets: add an E1 or T1 with SS7, variant itu")
+		return
+	}
+	if s.PointCode == "" {
+		s.PointCode = itu[0].OPC
+	}
+	pc, ok := PointCode(s.PointCode, false)
+	if !ok {
+		p.add("system.cards.stp.pointCode", "give the STP's point code (a number, or zone-area-point)")
+	}
+	mine := false
+	for _, sp := range itu {
+		if o, _ := PointCode(sp.OPC, false); o == pc {
+			mine = true
+		}
+	}
+	if ok && !mine {
+		p.add("system.cards.stp.pointCode", "no ITU SS7 span has this point code as its own: the STP is this end of its link sets")
+	}
+	if s.M3UA != "" {
+		h, port, err := net.SplitHostPort(s.M3UA)
+		if n, perr := strconv.Atoi(port); err != nil || h == "" || perr != nil || n < 1 || n > 65535 {
+			p.add("system.cards.stp.m3ua", "give the IP STP as host:port (M3UA's port is usually 2905)")
+		}
+	}
+	if s.RoutingContext < 0 {
+		p.add("system.cards.stp.routingContext", "a routing context is 0 (register) or a positive number")
+	}
+	if len(s.Translations) > 200 {
+		p.add("system.cards.stp.translations", "at most 200 translations")
+	}
+	for i, t := range s.Translations {
+		f := fmt.Sprintf("system.cards.stp.translations[%d]", i)
+		if t.Prefix == "" || len(t.Prefix) > 20 || strings.Trim(t.Prefix, "0123456789") != "" {
+			p.add(f+".prefix", "the first digits of the global titles, 1 to 20 digits")
+		}
+		if t.TranslationType < -1 || t.TranslationType > 255 {
+			p.add(f+".translationType", "a translation type is 0 to 255, or -1 for any")
+		}
+		if v, ok := PointCode(t.PointCode, false); !ok {
+			p.add(f+".pointCode", "give the point code the titles go to")
+		} else if v == pc {
+			p.add(f+".pointCode", "the STP's own point code has no subsystems to send them to")
+		}
+		if t.SSN < 0 || t.SSN > 255 {
+			p.add(f+".ssn", "a subsystem number is 1 to 255 (0: the message's own)")
+		}
+		for j := 0; j < i; j++ {
+			if s.Translations[j].Prefix == t.Prefix && s.Translations[j].TranslationType == t.TranslationType {
+				p.add(f+".prefix", "translation %d has this prefix already", j+1)
+			}
 		}
 	}
 }

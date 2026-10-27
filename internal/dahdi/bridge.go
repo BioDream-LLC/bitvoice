@@ -28,6 +28,8 @@ type Config struct {
 	ALaw     bool          `json:"alaw"`
 	Channels []ChannelConf `json:"channels"`
 	Spans    []SpanConf    `json:"spans,omitempty"`
+	// STP makes this program a signal transfer point for its SS7 link sets (nil: none).
+	STP *STPConf `json:"stp,omitempty"`
 }
 
 // ChannelConf is one port as the bridge needs it.
@@ -69,6 +71,7 @@ type Bridge struct {
 	spans []*span
 	// linkSets are the SS7 link sets, by variant, point codes and network indicator.
 	linkSets map[[4]int]*ss7.SS7
+	stp      *stp
 }
 
 type portState int
@@ -161,6 +164,7 @@ func New(ctx context.Context, cfg Config, open func(int, bool) (Channel, error),
 		b.running.Add(1)
 		go p.run()
 	}
+	b.startSTP()
 	b.startSpans()
 	return b, nil
 }
@@ -187,6 +191,9 @@ func (b *Bridge) Status() map[string]string {
 		st := s.status()
 		b.mu.Lock()
 		out["span"+strconv.Itoa(i+1)] = st
+	}
+	if b.stp != nil {
+		out["stp"] = b.stp.status()
 	}
 	return out
 }

@@ -426,7 +426,12 @@ export interface ACME { enabled: boolean; domains: string[]; email: string; dire
 export interface ACMEStatus { state: 'off' | 'ok' | 'working' | 'failed'; detail?: string; lastTry?: string; nextTry?: string; notAfter?: string; challenge?: string; listening?: string; portProblem?: string }
 
 /** Telephony cards (DAHDI) on this computer, through bitvoice-dahdi. */
-export interface Cards { enabled: boolean; token: string; linePort: number; alaw: boolean; channels: { channel: number; kind: 'phone' | 'line'; extension: string; number: string }[]; spans?: CardSpan[] | null }
+export interface Cards { enabled: boolean; token: string; linePort: number; alaw: boolean; channels: { channel: number; kind: 'phone' | 'line'; extension: string; number: string }[]; spans?: CardSpan[] | null; stp?: CardSTP }
+/** bitvoice-dahdi as a signal transfer point for its ITU SS7 link sets. */
+export interface CardSTP {
+  enabled: boolean; pointCode: string; relay: boolean; m3ua: string; routingContext: number
+  translations: { prefix: string; translationType: number; pointCode: string; ssn: number }[] | null
+}
 /** A T1 or E1 line run as PRI. */
 export interface CardSpan { type: 't1' | 'e1' | 'bri'; first: number; role: 'user' | 'network'; switch: string; networkTransfer?: boolean; charges?: boolean; multipoint?: boolean; signalling?: string; start?: string; address?: string; number?: string; npd?: string[]; variant?: string; opc?: string; apc?: string; ni?: string; slc?: number; firstCic?: number }
 
