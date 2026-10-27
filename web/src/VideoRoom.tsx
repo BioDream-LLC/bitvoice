@@ -39,6 +39,11 @@ function Tile({ room, pin, pub, big, onPick }: { room: string; pin: string; pub:
       const r = await fetch(`./api/video-rooms/${room}/subscribe`, { method: 'POST', headers: { ...H, 'X-Room-PIN': pin },
         body: JSON.stringify({ publisher: pub.id, sdp: pc.localDescription!.sdp, layer: big ? 'high' : 'low' }) })
       const j = await r.json()
+      if (r.ok && gone) {
+        // The tile went while BitVoice was answering: end the subscription it made, or it keeps a viewer
+        // nobody is and sends video to nowhere.
+        fetch(`./api/video-rooms/${room}/${j.id}`, { method: 'DELETE', headers: { ...H, 'X-Room-PIN': pin } }).catch(() => {})
+      }
       if (!r.ok || gone) { pc.close(); if (!gone) setState(j.message ?? 'failed'); return }
       sub.current = { pc, id: j.id }
       await pc.setRemoteDescription({ type: 'answer', sdp: j.sdp })

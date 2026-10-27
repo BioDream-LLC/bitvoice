@@ -99,6 +99,8 @@ type Endpoint struct {
 	remote   netip.AddrPort // where to send RTP
 	remoteRC netip.AddrPort
 	latched  bool
+	// expect is an address ICE found after a restart: media moves to it with its first packet.
+	expect   netip.AddrPort
 	peer     *Endpoint // where received packets go; nil drops them
 	echo     bool
 	recorder func(pkt []byte)
@@ -283,6 +285,17 @@ func (e *Endpoint) OnOther(f func(pkt []byte, from netip.AddrPort)) {
 // WriteTo sends a raw datagram from the media port (STUN and DTLS replies).
 func (e *Endpoint) WriteTo(b []byte, to netip.AddrPort) {
 	_ = e.writeUDP(b, to)
+}
+
+// Expect names an address an ICE restart has found: media is still sent to and taken from the
+// current one, which may still work, and moves to this one with the first packet that comes from it
+// (the far end has switched).
+func (e *Endpoint) Expect(addr netip.AddrPort) {
+	e.mu.Lock()
+	if addr != e.remote {
+		e.expect = addr
+	}
+	e.mu.Unlock()
 }
 
 // Latch fixes where media is sent and accepted from (ICE chose the address).
@@ -650,6 +663,10 @@ func (e *Endpoint) readRTP() {
 // adopted only after the current one has been silent for two seconds (a phone that changed network).
 func (e *Endpoint) latch(from netip.AddrPort, now time.Time) {
 	if from == e.remote && e.latched {
+		return
+	}
+	if e.expect.IsValid() && from == e.expect {
+		e.remote, e.remoteRC, e.expect, e.haveSeq = from, netip.AddrPortFrom(from.Addr(), from.Port()+1), netip.AddrPort{}, false
 		return
 	}
 	silent := e.stats.LastSeen == 0 || now.Sub(time.UnixMilli(e.stats.LastSeen)) > 2*time.Second

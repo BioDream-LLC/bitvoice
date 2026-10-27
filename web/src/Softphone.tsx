@@ -107,7 +107,8 @@ function CallCard({ c, phoneId, answer, hangup, mute }: {
   c: PhoneCall; phoneId?: string; answer: (id: string) => void; hangup: (id: string) => void; mute: (id: string, on: boolean) => void
 }) {
   const now = useNow()
-  const label = { incoming: 'Incoming call', calling: 'Calling…', ringing: 'Ringing…', connected: formatDuration(Math.round((now - c.since) / 1000)), ended: c.reason ?? 'Call ended' }[c.state]
+  const label = c.state === 'connected' && c.reconnecting ? 'Reconnecting…'
+    : { incoming: 'Incoming call', calling: 'Calling…', ringing: 'Ringing…', connected: formatDuration(Math.round((now - c.since) / 1000)), ended: c.reason ?? 'Call ended' }[c.state]
   const Icon = c.direction === 'in' ? PhoneIncoming : PhoneOutgoing
   return (
     <div className={clsx('card p-3', c.state === 'incoming' && 'ringing border-emerald-600')}>
@@ -115,7 +116,8 @@ function CallCard({ c, phoneId, answer, hangup, mute }: {
         <Icon size={16} className={c.state === 'ended' ? 'text-slate-500' : 'text-emerald-300'} aria-hidden />
         <div className="min-w-0 flex-1">
           <div className="truncate font-mono text-amber-300">{c.number}{c.name && <span className="ml-2 font-sans text-slate-300">{c.name}</span>}</div>
-          <div className={clsx('text-xs', c.state === 'connected' ? 'font-mono tabular-nums text-emerald-300' : 'text-slate-400')}>{label}</div>
+          <div className={clsx('text-xs', c.reconnecting && c.state === 'connected' ? 'text-amber-300' : c.state === 'connected' ? 'font-mono tabular-nums text-emerald-300' : 'text-slate-400')}
+            role={c.reconnecting ? 'status' : undefined}>{label}</div>
           {c.briefing && <p className="mt-1 rounded bg-violet-500/10 px-2 py-1 text-xs text-violet-200" role="note" aria-label="Briefing"><span className="font-semibold text-violet-300">Briefing: </span>{c.briefing}</p>}
         </div>
         {c.state === 'incoming' && (

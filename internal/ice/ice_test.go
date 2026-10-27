@@ -258,3 +258,54 @@ func TestMDNSAnswer(t *testing.T) {
 		t.Fatal("a truncated answer was taken")
 	}
 }
+
+// An ICE restart: the far end moves to a new socket (a phone from Wi-Fi to a mobile network) with new
+// credentials; the agent checks again and chooses the new pair, and media crosses it. Checks with the
+// old credentials are still answered meanwhile.
+func TestRestart(t *testing.T) {
+	a := newSide(t, true, nil, nil, false, true)
+	b := newSide(t, false, nil, nil, false, true)
+	pa, pb := connect(t, a, b)
+	exchange(t, a, b, pa, pb)
+	cb := []Candidate{{Foundation: "1", Priority: priority(Host, 65535), Addr: netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(b.conn.LocalAddr().(*net.UDPAddr).Port)), Type: Host}}
+
+	// The old credentials are still answered for a while after the restart.
+	moved := newSide(t, true, nil, nil, false, true)
+	b.agent.Restart("restarted", "a-long-restarted-ice-password")
+	b.ufrag, b.pwd = "restarted", "a-long-restarted-ice-password"
+	before := a.agent.LastHeard()
+	a.agent.keepConsent()
+	time.Sleep(200 * time.Millisecond)
+	if !a.agent.LastHeard().After(before) {
+		t.Fatal("a consent check with the old credentials was not answered after the restart")
+	}
+
+	moved.agent.Gather()
+	moved.agent.SetRemote(b.ufrag, b.pwd, cb)
+	b.agent.SetRemote(moved.ufrag, moved.pwd, nil) // the new address is learnt from its checks
+	moved.agent.Start()
+	var pm, pb2 Pair
+	for pm.Remote == (netip.AddrPort{}) || pb2.Remote == (netip.AddrPort{}) {
+		select {
+		case pm = <-moved.agent.Selected():
+		case pb2 = <-b.agent.Selected():
+		case <-time.After(10 * time.Second):
+			t.Fatalf("no pair after the restart: %+v %+v", pm, pb2)
+		}
+	}
+	if pb2.Remote != netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(moved.conn.LocalAddr().(*net.UDPAddr).Port)) {
+		t.Fatalf("after the restart the pair goes to %v, not the moved far end", pb2.Remote)
+	}
+	exchange(t, moved, b, pm, pb2)
+
+	// Once the old credentials have run out, they are not answered.
+	b.agent.mu.Lock()
+	b.agent.oldUntil = time.Now()
+	b.agent.mu.Unlock()
+	before = a.agent.LastHeard()
+	a.agent.keepConsent()
+	time.Sleep(200 * time.Millisecond)
+	if a.agent.LastHeard() != before {
+		t.Fatal("old credentials still answered after they ran out")
+	}
+}

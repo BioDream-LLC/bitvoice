@@ -4,6 +4,7 @@
 package webrtc
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -91,6 +92,17 @@ type Session struct {
 	pair  ice.Pair
 	// simulcast is what a video answer agreed for a sending browser's layers.
 	simulcast Simulcast
+	// peerFP is the far end's DTLS certificate fingerprint and remoteUfrag its ICE user name: an offer
+	// with another user name is an ICE restart (RFC 8445 9), which must keep the certificate.
+	peerFP      []byte
+	remoteUfrag string
+	// After a restart: the credentials before it, still answered until oldUntil (ICE-lite), and
+	// relatch, which moves the media to the first address checked with the new ones.
+	oldUfrag, oldPwd string
+	oldUntil         time.Time
+	relatch          bool
+	// restarted: ICE has restarted at least once, so a new path is taken only once media comes on it.
+	restarted bool
 }
 
 // ICEOptions say how BitVoice takes part in ICE. The zero value is ICE-lite: BitVoice only answers
@@ -173,8 +185,14 @@ func (s *Session) follow() {
 			return
 		case p := <-s.agent.Selected():
 			s.mu.Lock()
+			direct := s.restarted && p.Channel == 0 && s.pair.Channel == 0 && s.pair.Remote.IsValid()
 			s.pair, s.remote = p, p.Remote
 			s.mu.Unlock()
+			if direct {
+				// After a restart the old path may still carry the call: move once media comes on the new.
+				s.ep.Expect(p.Remote)
+				continue
+			}
 			s.ep.SetRelay(p.Relay, p.Channel, p.Remote)
 			s.ep.Latch(p.Remote)
 		}
@@ -248,7 +266,7 @@ func AnswerWith(ep *media.Endpoint, offer *sdp.Session, host string, o ICEOption
 		return nil, nil, ErrNoKeys
 	}
 	s := &Session{ep: ep, ufrag: randomToken(8), pwd: randomToken(24), PT: -1, EventPT: -1, OpusPT: -1,
-		connected: make(chan struct{}), closed: make(chan struct{})}
+		connected: make(chan struct{}), closed: make(chan struct{}), peerFP: peerFP, remoteUfrag: attr(offer, a, "ice-ufrag")}
 	s.dtls = dtls.NewServer(identity.der, identity.key, peerFP)
 	events := map[int]int{}
 	for _, c := range a.Codecs() {
@@ -477,6 +495,7 @@ func (s *Session) Accept(answer *sdp.Session) error {
 	s.mu.Lock()
 	s.PT, s.OpusPT, s.EventPT, s.eventClock = pt, opus, ev, 8000
 	s.dtls = dtls.NewServer(identity.der, identity.key, peerFP)
+	s.peerFP, s.remoteUfrag = peerFP, attr(answer, a, "ice-ufrag")
 	s.mu.Unlock()
 	s.ep.SetPayloadType(pt)
 	if opus >= 0 {
@@ -486,6 +505,60 @@ func (s *Session) Accept(answer *sdp.Session) error {
 	s.remoteICE(answer, a) // the offering full agent stays controlling (RFC 8445 6.1.1)
 	go s.retransmit()
 	return nil
+}
+
+// Errors for an ICE restart BitVoice cannot take.
+var (
+	ErrRestartKeys = errors.New("webrtc: an ICE restart must keep the DTLS certificate and bring new ICE credentials")
+)
+
+// Restarting says whether a new offer from the far end is an ICE restart: new ICE credentials for
+// the same session (a phone that moved from Wi-Fi to a mobile network, say).
+func (s *Session) Restarting(offer *sdp.Session) bool {
+	a := offer.Audio()
+	if a == nil {
+		return false
+	}
+	u := attr(offer, a, "ice-ufrag")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return u != "" && s.remoteUfrag != "" && u != s.remoteUfrag
+}
+
+// Restart answers the far end's ICE restart offer: new credentials on this side, checks done again
+// to the far end's new candidates, and the media moved to the new path once it is found. DTLS and
+// SRTP carry on (the same keys); the old path carries the call until then.
+func (s *Session) Restart(offer *sdp.Session, host string) (*sdp.Session, error) {
+	a := offer.Audio()
+	if a == nil || a.Port == 0 {
+		return nil, ErrNoAudio
+	}
+	_, val, _ := strings.Cut(attr(offer, a, "fingerprint"), " ")
+	fp, err := hex.DecodeString(strings.ReplaceAll(strings.TrimSpace(val), ":", ""))
+	u, p := attr(offer, a, "ice-ufrag"), attr(offer, a, "ice-pwd")
+	s.mu.Lock()
+	if err != nil || !bytes.Equal(fp, s.peerFP) || u == "" || p == "" || u == s.remoteUfrag {
+		s.mu.Unlock()
+		return nil, ErrRestartKeys
+	}
+	s.oldUfrag, s.oldPwd, s.oldUntil = s.ufrag, s.pwd, time.Now().Add(ice.OldCredentialsFor)
+	s.ufrag, s.pwd, s.remoteUfrag, s.relatch, s.restarted = randomToken(8), randomToken(24), u, true, true
+	ufrag, pwd := s.ufrag, s.pwd
+	s.mu.Unlock()
+	if s.agent != nil {
+		s.agent.Restart(ufrag, pwd)
+		s.remoteICE(offer, a)
+	}
+	dir := "sendrecv"
+	switch offer.Direction(a) {
+	case "sendonly":
+		dir = "recvonly"
+	case "recvonly":
+		dir = "sendonly"
+	case "inactive":
+		dir = "inactive"
+	}
+	return s.Describe(host, dir)
 }
 
 // Connected is closed once DTLS has finished and SRTP is running.
@@ -523,18 +596,31 @@ func (s *Session) receive(pkt []byte, from netip.AddrPort) {
 	}
 	if stun.IsSTUN(pkt) {
 		m, err := stun.Parse(pkt)
-
-		if err != nil || m.Type != stun.BindingRequest || !strings.HasPrefix(m.Username(), s.ufrag+":") || m.Check(s.pwd) != nil {
+		if err != nil || m.Type != stun.BindingRequest {
 			return
 		}
-		s.ep.WriteTo(stun.BindingResponse(m, from, s.pwd), from)
 		s.mu.Lock()
-		first := !s.remote.IsValid()
-		if first || m.UseCandidate() {
-			s.remote = from
+		u, p, ou, op := s.ufrag, s.pwd, s.oldUfrag, s.oldPwd
+		old := ou != "" && time.Now().Before(s.oldUntil)
+		s.mu.Unlock()
+		if !strings.HasPrefix(m.Username(), u+":") || m.Check(p) != nil {
+			if old && strings.HasPrefix(m.Username(), ou+":") && m.Check(op) == nil {
+				s.ep.WriteTo(stun.BindingResponse(m, from, op), from) // the old path's consent, until it moves
+			}
+			return
+		}
+		s.ep.WriteTo(stun.BindingResponse(m, from, p), from)
+		s.mu.Lock()
+		move := !s.remote.IsValid() || s.relatch || m.UseCandidate()
+		expect := move && s.restarted
+		if move {
+			s.remote, s.relatch = from, false
 		}
 		s.mu.Unlock()
-		if first || m.UseCandidate() {
+		switch {
+		case expect:
+			s.ep.Expect(from) // after a restart: the old path carries the call until media comes on this one
+		case move:
 			s.ep.Latch(from)
 		}
 		return

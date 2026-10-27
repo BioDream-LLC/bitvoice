@@ -218,7 +218,14 @@ type Agent struct {
 	closeOnce   sync.Once
 	started     bool
 	nominating  bool
+	// oldUfrag and oldPwd are the credentials before a restart, still answered until oldUntil.
+	oldUfrag, oldPwd string
+	oldUntil         time.Time
 }
+
+// OldCredentialsFor is how long checks with the credentials before an ICE restart are still
+// answered: the old path keeps its consent while the new one is checked.
+var OldCredentialsFor = 30 * time.Second
 
 // New makes an agent.
 func New(cfg Config) *Agent {
@@ -659,6 +666,20 @@ func (a *Agent) Permit(ip netip.Addr) {
 	for _, al := range allocs {
 		go a.permit(al, netip.AddrPortFrom(ip.Unmap(), 1))
 	}
+}
+
+// Restart begins an ICE restart (RFC 8445 9): this side's new credentials, the far end's to come
+// with SetRemote, and every check done again. The local candidates stay (this side has not moved).
+// The chosen pair goes on carrying media until a new one is chosen, and checks with the old
+// credentials are still answered for OldCredentialsFor, so the old path keeps its consent meanwhile.
+func (a *Agent) Restart(ufrag, pwd string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.oldUfrag, a.oldPwd, a.oldUntil = a.cfg.LocalUfrag, a.cfg.LocalPwd, time.Now().Add(OldCredentialsFor)
+	a.cfg.LocalUfrag, a.cfg.LocalPwd = ufrag, pwd
+	a.remoteUfrag, a.remotePwd = "", ""
+	a.remote, a.pairs = nil, nil
+	a.selected, a.nominating = nil, false
 }
 
 // SetRemote gives the far end's credentials and candidates; Start begins checking once both sides
@@ -1144,8 +1165,14 @@ func (a *Agent) handleSTUN(pkt []byte, from, arrivedOn netip.AddrPort) {
 	// A check from the far end.
 	a.mu.Lock()
 	lu, lp := a.cfg.LocalUfrag, a.cfg.LocalPwd
+	ou, op := a.oldUfrag, a.oldPwd
+	old := ou != "" && time.Now().Before(a.oldUntil)
 	a.mu.Unlock()
 	if !strings.HasPrefix(m.Username(), lu+":") || m.Check(lp) != nil {
+		if old && strings.HasPrefix(m.Username(), ou+":") && m.Check(op) == nil && !(a.cfg.RelayOnly && !arrivedOn.IsValid()) {
+			// Consent on the path from before a restart: answered, nothing paired.
+			a.sendFrom(a.localFor(arrivedOn, from), stun.BindingResponse(m, from, op), from)
+		}
 		return
 	}
 	local := a.localFor(arrivedOn, from)

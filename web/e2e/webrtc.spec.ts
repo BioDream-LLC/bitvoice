@@ -228,6 +228,111 @@ test('the browser phone in the GUI calls the echo test', async ({ page }) => {
   await expect(page.getByText('you hung up')).toBeVisible()
 })
 
+// An ICE restart, as when a phone moves from Wi-Fi to a mobile network: the browser offers new ICE
+// credentials for the call it has, BitVoice answers with new ones of its own, and sound keeps coming
+// back from the echo test on the new path, with BitVoice as an ICE-lite and as a full agent.
+test('a browser call carries on through an ICE restart', async ({ page }) => {
+  await signIn(page)
+  const put = async (system: Record<string, unknown>) => page.evaluate(async (patch) => {
+    const s = await (await fetch('./api/settings')).json()
+    for (const [k, v] of Object.entries(patch)) s.system[k] = { ...(s.system[k] ?? {}), ...(v as object) }
+    const r = await fetch('./api/settings', { method: 'PUT', headers: { 'X-BitVoice': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(s) })
+    return r.ok ? '' : JSON.stringify(await r.json())
+  }, system)
+  const call = () => page.evaluate(async () => {
+    const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
+    const post = async (url: string, body: unknown) => {
+      const r = await fetch(url, { method: 'POST', headers: H, body: JSON.stringify(body) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(url + ': ' + j.message)
+      return j
+    }
+    const ext = ((await (await fetch('./api/extensions')).json()).items as { number: string }[])[0].number
+    const ph = await post('./api/phone', { extension: ext })
+    const mic = await navigator.mediaDevices.getUserMedia({ audio: true })
+    const pc = new RTCPeerConnection()
+    mic.getTracks().forEach((t) => pc.addTrack(t, mic))
+    const gathered = () => new Promise<void>((ok) => {
+      if (pc.iceGatheringState === 'complete') return ok()
+      pc.addEventListener('icegatheringstatechange', () => pc.iceGatheringState === 'complete' && ok())
+      setTimeout(ok, 3000)
+    })
+    await pc.setLocalDescription(await pc.createOffer())
+    await gathered()
+    const c = await post(`./api/phone/${ph.id}/calls`, { to: '*43', sdp: pc.localDescription!.sdp })
+    await pc.setRemoteDescription({ type: 'answer', sdp: c.sdp })
+    const stats = async () => {
+      let received = 0, pair = ''
+      const all = await pc.getStats()
+      all.forEach((s) => {
+        if (s.type === 'inbound-rtp' && s.kind === 'audio') received = s.packetsReceived
+        if (s.type === 'transport') pair = s.selectedCandidatePairId ?? ''
+      })
+      return { received, pair }
+    }
+    const deadline = Date.now() + 15000
+    while (pc.connectionState !== 'connected' && Date.now() < deadline) await new Promise((ok) => setTimeout(ok, 100))
+    await new Promise((ok) => setTimeout(ok, 2000))
+    const before = await stats()
+    await pc.setLocalDescription(await pc.createOffer({ iceRestart: true }))
+    await gathered()
+    const r = await post(`./api/phone/${ph.id}/calls/${c.callId}/ice`, { sdp: pc.localDescription!.sdp })
+    await pc.setRemoteDescription({ type: 'answer', sdp: r.sdp })
+    // Sound every half second from the restart on: no gap while the new path is found.
+    const trace: number[] = []
+    for (let i = 0; i < 6; i++) { await new Promise((ok) => setTimeout(ok, 500)); trace.push((await stats()).received) }
+    const restarted = await stats()
+    await new Promise((ok) => setTimeout(ok, 2000))
+    const after = await stats()
+    const ufrag = (sdp: string) => /a=ice-ufrag:(\S+)/.exec(sdp)?.[1]
+    // An answer that is not a restart (the old credentials) is refused.
+    const again = await fetch(`./api/phone/${ph.id}/calls/${c.callId}/ice`, { method: 'POST', headers: H, body: JSON.stringify({ sdp: pc.localDescription!.sdp }) })
+    const res = { trace, state: pc.connectionState, before, restarted, after, oldUfrag: ufrag(c.sdp), newUfrag: ufrag(r.sdp), repeat: again.status }
+    await fetch(`./api/phone/${ph.id}/calls/${c.callId}`, { method: 'DELETE', headers: H })
+    await fetch(`./api/phone/${ph.id}`, { method: 'DELETE', headers: H })
+    pc.close()
+    return res
+  })
+  try {
+    // A full agent needs a STUN server: BitVoice's own TURN server answers Binding.
+    expect(await put({ turn: { enabled: true, port: 3478, tlsPort: -1 } })).toBe('')
+    await expect.poll(async () => page.evaluate(async () => (await (await fetch('./api/turn')).json()).running), { timeout: 5000 }).toBe(true)
+    for (const full of [false, true]) {
+      expect(await put({ ice: { full, stun: full ? ['127.0.0.1:3478'] : [], turn: [], relayOnly: false } })).toBe('')
+      const r = await call()
+      console.log(full ? 'full' : 'lite', JSON.stringify(r))
+      expect(r.state).toBe('connected')
+      expect(r.newUfrag).toBeTruthy()
+      expect(r.newUfrag).not.toBe(r.oldUfrag)
+      expect(r.before.received).toBeGreaterThan(20)
+      expect(r.after.received - r.restarted.received).toBeGreaterThan(40) // two seconds of sound after the restart
+      expect(r.repeat).toBe(422)
+      for (let i = 1; i < r.trace.length; i++) expect(r.trace[i] - r.trace[i - 1], `sound in half second ${i} after the restart`).toBeGreaterThan(10)
+    }
+  } finally {
+    expect(await put({ ice: { full: false, stun: [], turn: [], relayOnly: false }, turn: { enabled: false } })).toBe('')
+  }
+})
+
+// The docked phone restarts ICE by itself when the browser says its network changed.
+test('the browser phone restarts ICE when the network changes', async ({ page }) => {
+  await signIn(page)
+  await page.getByRole('button', { name: 'Browser phone' }).click()
+  await page.getByRole('button', { name: /^Sign in as/ }).click()
+  await expect(page.getByText(/^Extension/).first()).toBeVisible()
+  for (const k of ['*', '4', '3']) await page.getByRole('group', { name: 'Keypad' }).getByRole('button', { name: k, exact: true }).click()
+  await page.getByRole('button', { name: 'Call', exact: true }).click()
+  const phone = page.getByRole('region', { name: 'Browser phone' })
+  await expect(phone.getByText(/^0:0[1-9]$/)).toBeVisible({ timeout: 10000 })
+  const restarted = page.waitForResponse((r) => /\/api\/phone\/[^/]+\/calls\/[^/]+\/ice$/.test(r.url()))
+  await page.evaluate(() => window.dispatchEvent(new Event('online')))
+  expect((await restarted).status()).toBe(200)
+  await expect(phone.getByText('Reconnecting…')).toHaveCount(0, { timeout: 10000 })
+  await expect(phone.getByText(/^0:\d\d$/)).toBeVisible()
+  await page.getByRole('button', { name: 'Hang up' }).click()
+  await expect(page.getByText('you hung up')).toBeVisible()
+})
+
 test('a greeting recorded in the browser is saved and plays back', async ({ page }) => {
   await signIn(page)
   await page.goto('./#/extensions')
@@ -498,13 +603,26 @@ test('SIP.js softphones over SIP over WebSocket', async ({ page, context }) => {
       return n
     }
     ;(window as any).end = async () => { await inviter.bye().catch(() => {}); await new Promise((ok) => setTimeout(ok, 500)); await a.stop(); await b.stop() }
-    return { caller: await packets(inviter), callee: incoming ? await packets(incoming) : -1, connected: inviter.sessionDescriptionHandler.peerConnection.connectionState }
+    const caller = await packets(inviter), callee = incoming ? await packets(incoming) : -1
+    // An ICE restart by re-INVITE (the softphone's network changed): new credentials come back from the
+    // gateway, and sound carries on.
+    const pc = inviter.sessionDescriptionHandler.peerConnection as RTCPeerConnection
+    const ufrag = () => /a=ice-ufrag:(\S+)/.exec(pc.remoteDescription?.sdp ?? '')?.[1]
+    const oldUfrag = ufrag()
+    await new Promise<void>((ok, bad) => inviter.invite({ sessionDescriptionHandlerOptions: { offerOptions: { iceRestart: true } },
+      requestDelegate: { onAccept: () => ok(), onReject: (r: any) => bad(new Error('restart refused ' + r.message.statusCode)) } }).catch(bad))
+    const atRestart = await packets(inviter)
+    await new Promise((ok) => setTimeout(ok, 2000))
+    return { caller, callee, connected: pc.connectionState, oldUfrag, newUfrag: ufrag(), afterRestart: (await packets(inviter)) - atRestart }
   }, { secret, host: bitvoice.host })
   await phone.evaluate(async () => (window as any).end())
   console.log(JSON.stringify(result))
   expect(result.connected).toBe('connected')
   expect(result.caller).toBeGreaterThan(50)
   expect(result.callee).toBeGreaterThan(50)
+  expect(result.newUfrag).toBeTruthy()
+  expect(result.newUfrag).not.toBe(result.oldUfrag)
+  expect(result.afterRestart).toBeGreaterThan(40)
 })
 
 // Coaching notes: two browser phones make a recorded call; a stand-in AI service writes it out; in Call

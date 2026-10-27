@@ -98,6 +98,23 @@ type browserPhone struct {
 	ext      string
 	lastSeen time.Time
 	mu       sync.Mutex
+	// sessions are the calls' WebRTC sessions, for an ICE restart when the browser's network changes.
+	sessions map[string]*webrtc.Session
+}
+
+// keep remembers a call's session until the call ends.
+func (bp *browserPhone) keep(call string, sess *webrtc.Session) func() {
+	bp.mu.Lock()
+	if bp.sessions == nil {
+		bp.sessions = map[string]*webrtc.Session{}
+	}
+	bp.sessions[call] = sess
+	bp.mu.Unlock()
+	return func() {
+		bp.mu.Lock()
+		delete(bp.sessions, call)
+		bp.mu.Unlock()
+	}
 }
 
 var phones sync.Map // phone id -> *browserPhone
@@ -283,7 +300,8 @@ func (s *Server) phoneCall(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	c.SetCleanup(func() { sess.Close(); ep.Close() })
+	forget := bp.keep(c.ID, sess)
+	c.SetCleanup(func() { forget(); sess.Close(); ep.Close() })
 	writeJSON(w, 200, map[string]string{"callId": c.ID, "sdp": string(ans.Bytes())})
 }
 
@@ -310,7 +328,8 @@ func (s *Server) phoneAnswer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	c.SetCleanup(func() { sess.Close(); ep.Close() })
+	forget := bp.keep(in.CallID, sess)
+	c.SetCleanup(func() { forget(); sess.Close(); ep.Close() })
 	if err := c.Answer(ep, sess.PT, sess.EventPT); err != nil {
 		writeError(w, http.StatusConflict, err.Error())
 		return
@@ -355,6 +374,40 @@ func (s *Server) browserPhoneRoutes() {
 			out = append(out, entry{e.Name, e.Number, e.Company, e.Group})
 		}
 		writeJSON(w, 200, map[string]any{"items": out})
+	})
+	// An ICE restart: the browser's network changed (Wi-Fi to mobile, a new address) and it offers new
+	// ICE credentials for the same call; the answer carries BitVoice's, and the call moves to the new
+	// path without being dialled again.
+	s.mux.HandleFunc("POST /api/phone/{id}/calls/{call}/ice", func(w http.ResponseWriter, r *http.Request) {
+		bp := phoneOf(w, r)
+		if bp == nil {
+			return
+		}
+		var in struct {
+			SDP string `json:"sdp"`
+		}
+		if err := readJSON(r, &in); err != nil {
+			writeErr(w, err)
+			return
+		}
+		offer, err := sdp.Parse([]byte(in.SDP))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "that is not an SDP offer")
+			return
+		}
+		bp.mu.Lock()
+		sess := bp.sessions[r.PathValue("call")]
+		bp.mu.Unlock()
+		if sess == nil {
+			writeError(w, http.StatusNotFound, "that call has ended")
+			return
+		}
+		ans, err := sess.Restart(offer, browserHost(r))
+		if err != nil {
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		writeJSON(w, 200, map[string]string{"sdp": string(ans.Bytes())})
 	})
 	s.mux.HandleFunc("DELETE /api/phone/{id}/calls/{call}", func(w http.ResponseWriter, r *http.Request) {
 		if bp := phoneOf(w, r); bp != nil {

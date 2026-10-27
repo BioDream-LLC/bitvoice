@@ -14,6 +14,7 @@ export interface PhoneCall {
   since: number
   reason?: string
   muted?: boolean
+  reconnecting?: boolean // the network changed: ICE is restarting, the call carries on once it has
   briefing?: string // what the call is about, when it was passed on with a briefing
 }
 
@@ -93,6 +94,56 @@ export function usePhone() {
     }
     await pc.setLocalDescription(await pc.createOffer())
     return pc
+  }, [])
+
+  // An ICE restart: when the network changes (Wi-Fi to a mobile network, a new address) or the path
+  // stops answering, the page offers new ICE credentials for the same call and BitVoice answers with
+  // its own; the call moves to the new path without being dialled again.
+  const restarting = useRef(new Set<string>())
+  const restart = useCallback(async (id: string) => {
+    const pc = pcs.current.get(id)
+    if (!phone || !pc || restarting.current.has(id) || pc.signalingState !== 'stable' || !pc.remoteDescription) return
+    restarting.current.add(id)
+    update(id, { reconnecting: true })
+    try {
+      await pc.setLocalDescription(await pc.createOffer({ iceRestart: true }))
+      await new Promise<void>((ok) => {
+        if (pc.iceGatheringState === 'complete') return ok()
+        pc.addEventListener('icegatheringstatechange', () => pc.iceGatheringState === 'complete' && ok())
+        setTimeout(ok, 1500)
+      })
+      const r = await post<{ sdp: string }>(`./api/phone/${phone.id}/calls/${id}/ice`, { sdp: pc.localDescription!.sdp })
+      await pc.setRemoteDescription({ type: 'answer', sdp: r.sdp })
+      // A path that never failed stays connected through the restart: no state change will say so.
+      if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') update(id, { reconnecting: false })
+    } catch {
+      if ((pc.signalingState as RTCSignalingState) === 'have-local-offer') await pc.setLocalDescription({ type: 'rollback' }).catch(() => {})
+      update(id, { reconnecting: false })
+    } finally {
+      restarting.current.delete(id)
+    }
+  }, [phone, update])
+  const restartRef = useRef(restart)
+  restartRef.current = restart
+
+  const watch = useCallback((id: string, pc: RTCPeerConnection) => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    pc.addEventListener('iceconnectionstatechange', () => {
+      const s = pc.iceConnectionState
+      clearTimeout(timer)
+      if (s === 'connected' || s === 'completed') update(id, { reconnecting: false })
+      else if (s === 'failed') restartRef.current(id)
+      else if (s === 'disconnected') timer = setTimeout(() => pc.iceConnectionState === 'disconnected' && restartRef.current(id), 2000)
+    })
+  }, [update])
+
+  // A new network: every call restarts ICE at once, rather than waiting for its path to fail.
+  useEffect(() => {
+    const moved = () => pcs.current.forEach((_, id) => restartRef.current(id))
+    const conn = (navigator as Navigator & { connection?: EventTarget }).connection
+    window.addEventListener('online', moved)
+    conn?.addEventListener('change', moved)
+    return () => { window.removeEventListener('online', moved); conn?.removeEventListener('change', moved) }
   }, [])
 
   const drop = useCallback((id: string) => {
@@ -195,6 +246,7 @@ export function usePhone() {
       const pc = await peer()
       const r = await post<{ callId: string; sdp: string }>(`./api/phone/${phone.id}/calls`, { to: number, sdp: pc.localDescription!.sdp })
       pcs.current.set(r.callId, pc)
+      watch(r.callId, pc)
       await pc.setRemoteDescription({ type: 'answer', sdp: r.sdp })
       // Events for this call may have come first (the echo test answers at once). update() keeps them in
       // early from inside a state updater, which React runs later, in order: so read them in an updater too,
@@ -203,7 +255,7 @@ export function usePhone() {
     } catch (e) {
       setError((e as Error).message)
     }
-  }, [phone, peer])
+  }, [phone, peer, watch])
 
   const answer = useCallback(async (id: string) => {
     if (!phone) return
@@ -211,12 +263,13 @@ export function usePhone() {
     try {
       const pc = await peer()
       pcs.current.set(id, pc)
+      watch(id, pc)
       const r = await post<{ sdp: string }>(`./api/phone/${phone.id}/answer`, { callId: id, sdp: pc.localDescription!.sdp })
       await pc.setRemoteDescription({ type: 'answer', sdp: r.sdp })
     } catch (e) {
       setError((e as Error).message)
     }
-  }, [phone, peer])
+  }, [phone, peer, watch])
 
   const hangup = useCallback(async (id: string) => {
     if (!phone) return

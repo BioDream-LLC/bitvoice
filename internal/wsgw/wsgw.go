@@ -264,9 +264,14 @@ func (c *conn) clientOffer(m *sip.Message) error {
 		dir = offer.Direction(a)
 	}
 	if l != nil && l.sess != nil {
-		// A re-INVITE (hold, resume): the same media; the engine hears the direction.
+		// A re-INVITE (hold, resume): the same media; the engine hears the direction. With new ICE
+		// credentials it is an ICE restart (the softphone's network changed): answered with new ones.
 		l.dir = dir
-		ans, err := l.sess.Describe(c.host, inverse(dir))
+		describe := func() (*sdp.Session, error) { return l.sess.Describe(c.host, inverse(dir)) }
+		if l.sess.Restarting(offer) {
+			describe = func() (*sdp.Session, error) { return l.sess.Restart(offer, c.host) }
+		}
+		ans, err := describe()
 		if err != nil {
 			return err
 		}
