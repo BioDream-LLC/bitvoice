@@ -56,7 +56,13 @@ func TestCallGeneratorAnswers(t *testing.T) {
 		t.Fatal(err)
 	}
 	<-run.Done()
-	if r := run.Snapshot(); r.Answered != 3 || r.Received == 0 {
+	r := run.Snapshot()
+	// Each call's jitter and longest gap as the sound came back, and the runtime's pauses in the run.
+	if r.JitterMS.Max <= 0 || r.JitterMS.Max > 200 || r.GapMS.P50 < 15 || r.GapMS.Max > 1000 {
+		t.Fatalf("jitter %+v, gaps %+v", r.JitterMS, r.GapMS)
+	}
+	t.Logf("jitter %+v ms, longest gaps %+v ms, GC pauses %+v", r.JitterMS, r.GapMS, r.Pauses)
+	if r.Answered != 3 || r.Received == 0 {
 		t.Fatalf("result %+v", r)
 	}
 }

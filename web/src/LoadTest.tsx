@@ -130,6 +130,17 @@ function Results({ run, pct, series }: { run: LoadRun; pct: number; series: [num
         <Kpi label="Audio lost" value={`${run.lossPct.toFixed(1)} %`} color={run.lossPct > 1 ? 'text-amber-300' : 'text-emerald-300'} hint={`${run.received} of ${run.sent} packets came back`} />
         <Kpi label="Packets sent" value={run.sent} color="text-slate-300" />
       </div>
+      {run.jitterMs && run.gapMs && run.answered > 0 && (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <Kpi label="Jitter, 95% of calls" value={`${run.jitterMs.p95.toFixed(2)} ms`} color={run.jitterMs.p95 > 20 ? 'text-amber-300' : 'text-emerald-300'}
+            hint="Interarrival jitter as the sound came back (RFC 3550), averaged over each call; phones smooth up to about 20 ms." />
+          <Kpi label="Longest gap, worst call" value={`${run.gapMs.max.toFixed(0)} ms`} color={run.gapMs.max > 60 ? 'text-amber-300' : 'text-emerald-300'}
+            hint={`The longest wait between two packets in any call; packets come every 20 ms. 99% of calls: ${run.gapMs.p99.toFixed(0)} ms.`} />
+          <Kpi label="Memory pauses" value={run.gcPauses?.count ?? 0} color="text-slate-300" hint="Times the Go runtime paused everything to tidy memory during the run." />
+          <Kpi label="Longest pause" value={run.gcPauses?.count ? `${run.gcPauses.maxMs.toFixed(2)} ms` : '–'} color={(run.gcPauses?.maxMs ?? 0) > 10 ? 'text-amber-300' : 'text-emerald-300'}
+            hint={run.gcPauses?.count ? `99% of pauses: ${run.gcPauses.p99Ms.toFixed(2)} ms or less.` : 'No pause in this run.'} />
+        </div>
+      )}
       {series.length > 1 && (
         <div className="card p-4">
           <h3 className="mb-1 flex items-center gap-2 text-sm text-slate-300"><Timer size={14} aria-hidden /> Calls in progress</h3>

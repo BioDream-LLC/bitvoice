@@ -12,6 +12,7 @@ import (
 	"math"
 	"net"
 	"net/netip"
+	"runtime/metrics"
 	"slices"
 	"strconv"
 	"sync"
@@ -82,8 +83,24 @@ type Result struct {
 	Received int64          `json:"received"`
 	LossPct  float64        `json:"lossPct"`
 	MOS      float64        `json:"mos"`
-	Stopped  bool           `json:"stopped"`
+	// JitterMS is each call's interarrival jitter as it came back (RFC 3550 6.4.1, the running value
+	// averaged over the call); GapMS each call's longest wait between two packets, where a stall of
+	// BitVoice (a pause, a busy machine) shows. Pauses are the Go runtime's stop-the-world pauses
+	// during the run: the generator runs inside BitVoice, so they hold up both.
+	JitterMS Spread   `json:"jitterMs"`
+	GapMS    Spread   `json:"gapMs"`
+	Pauses   GCPauses `json:"gcPauses"`
+	Stopped  bool     `json:"stopped"`
 	answers  []float64
+	jitters  []float64
+	gaps     []float64
+}
+
+// GCPauses are the garbage collector's stop-the-world pauses in a run.
+type GCPauses struct {
+	Count int     `json:"count"`
+	P99MS float64 `json:"p99Ms"`
+	MaxMS float64 `json:"maxMs"`
 }
 
 // PlanInfo is the plan as shown on screen.
@@ -101,7 +118,66 @@ type PlanInfo struct {
 type Spread struct {
 	P50 float64 `json:"p50"`
 	P95 float64 `json:"p95"`
+	P99 float64 `json:"p99"`
 	Max float64 `json:"max"`
+}
+
+func spread(s []float64) Spread {
+	if len(s) == 0 {
+		return Spread{}
+	}
+	s = slices.Clone(s)
+	slices.Sort(s)
+	at := func(q int) float64 { return s[min(len(s)-1, len(s)*q/100)] }
+	return Spread{P50: s[len(s)/2], P95: at(95), P99: at(99), Max: s[len(s)-1]}
+}
+
+const gcMetric = "/sched/pauses/total/gc:seconds"
+
+// gcPauses reads the runtime's pause histogram.
+func gcPauses() *metrics.Float64Histogram {
+	s := []metrics.Sample{{Name: gcMetric}}
+	metrics.Read(s)
+	if s[0].Value.Kind() != metrics.KindFloat64Histogram {
+		return nil
+	}
+	return s[0].Value.Float64Histogram()
+}
+
+// pausesSince are the pauses since an earlier reading of the histogram.
+func pausesSince(before *metrics.Float64Histogram) GCPauses {
+	now := gcPauses()
+	if now == nil || before == nil || len(now.Counts) != len(before.Counts) {
+		return GCPauses{}
+	}
+	var out GCPauses
+	delta := make([]uint64, len(now.Counts))
+	for i := range now.Counts {
+		delta[i] = now.Counts[i] - before.Counts[i]
+		out.Count += int(delta[i])
+	}
+	if out.Count == 0 {
+		return out
+	}
+	upper := func(i int) float64 {
+		b := now.Buckets[i+1]
+		if math.IsInf(b, 1) {
+			b = now.Buckets[i]
+		}
+		return math.Round(b*1e6) / 1e3 // milliseconds, to the microsecond
+	}
+	seen := 0
+	for i, n := range delta {
+		if n == 0 {
+			continue
+		}
+		seen += int(n)
+		if out.P99MS == 0 && seen*100 >= out.Count*99 {
+			out.P99MS = upper(i)
+		}
+		out.MaxMS = upper(i)
+	}
+	return out
 }
 
 // Run is a run in progress.
@@ -115,6 +191,7 @@ type Run struct {
 	answer     *sip.Stack
 	sent       atomic.Int64
 	recv       atomic.Int64
+	gc0        *metrics.Float64Histogram
 	ended      map[string]chan struct{} // calls ended by BitVoice, by Call-ID
 	stopStacks context.CancelFunc
 	emu        sync.Mutex
@@ -129,7 +206,7 @@ func Start(p Plan) (*Run, error) {
 	// hear the answers to the hang-ups.
 	ctx, cancel := context.WithCancel(context.Background())
 	sctx, scancel := context.WithCancel(context.Background())
-	r := &Run{plan: p, cancel: cancel, done: make(chan struct{}), ended: map[string]chan struct{}{}, stopStacks: scancel}
+	r := &Run{plan: p, cancel: cancel, done: make(chan struct{}), ended: map[string]chan struct{}{}, stopStacks: scancel, gc0: gcPauses()}
 	r.res = Result{Running: true, Started: time.Now(), Failures: map[string]int{},
 		Plan: PlanInfo{p.From, p.To, p.AnswerAs, p.Calls, p.Rate, p.Concurrent, int(p.Hold.Seconds())}}
 	r.stack = sip.NewStack(r.handle)
@@ -187,10 +264,11 @@ func (r *Run) Snapshot() Result {
 	if out.Sent > 0 {
 		out.LossPct = math.Max(0, 100*(1-float64(out.Received)/float64(out.Sent)))
 	}
-	if len(r.res.answers) > 0 {
-		s := slices.Clone(r.res.answers)
-		slices.Sort(s)
-		out.SetupMS = Spread{P50: s[len(s)/2], P95: s[min(len(s)-1, len(s)*95/100)], Max: s[len(s)-1]}
+	out.SetupMS = spread(r.res.answers)
+	out.JitterMS, out.GapMS = spread(r.res.jitters), spread(r.res.gaps)
+	out.jitters, out.gaps = nil, nil
+	if r.res.Running {
+		out.Pauses = pausesSince(r.gc0)
 	}
 	if out.Answered > 0 {
 		out.MOS = estimateMOS(out.LossPct)
@@ -217,8 +295,9 @@ func (r *Run) loop(ctx context.Context) {
 		if r.answer != nil {
 			r.answer.Close()
 		}
+		pauses := pausesSince(r.gc0)
 		r.mu.Lock()
-		r.res.Running, r.res.Finished = false, time.Now()
+		r.res.Running, r.res.Finished, r.res.Pauses = false, time.Now(), pauses
 		r.mu.Unlock()
 	}()
 	gap := time.Duration(float64(time.Second) / r.plan.Rate)
@@ -397,19 +476,47 @@ func (r *Run) media(ctx context.Context, conn *net.UDPConn, to netip.AddrPort, e
 	if !to.IsValid() || r.plan.Hold == 0 {
 		return
 	}
+	read := make(chan struct{})
 	go func() {
+		defer close(read)
 		buf := make([]byte, 2048)
+		// RFC 3550 6.4.1: D is the change in transit time between two packets, from their arrival
+		// times and RTP timestamps (8 kHz); J moves a sixteenth of the way to each |D|.
+		var j, jsum, gap float64
+		var lastAt time.Time
+		var lastTS uint32
+		got := 0
+		defer func() {
+			if got > 1 {
+				r.mu.Lock()
+				r.res.jitters = append(r.res.jitters, math.Round(jsum/float64(got-1)*1000)/1000)
+				r.res.gaps = append(r.res.gaps, math.Round(gap*1000)/1000)
+				r.mu.Unlock()
+			}
+		}()
 		for {
 			_ = conn.SetReadDeadline(time.Now().Add(r.plan.Hold + 2*time.Second))
 			n, _, err := conn.ReadFromUDP(buf)
 			if err != nil {
 				return
 			}
-			if n >= 12 && buf[1]&0x7f != 101 {
-				r.recv.Add(1)
+			if n < 12 || buf[1]&0x7f == 101 {
+				continue
 			}
+			r.recv.Add(1)
+			now, ts := time.Now(), binary.BigEndian.Uint32(buf[4:])
+			if got > 0 {
+				wait := float64(now.Sub(lastAt)) / float64(time.Millisecond)
+				d := wait - float64(int32(ts-lastTS))/8
+				j += (math.Abs(d) - j) / 16
+				jsum += j
+				gap = max(gap, wait)
+			}
+			lastAt, lastTS = now, ts
+			got++
 		}
 	}()
+	defer func() { conn.SetReadDeadline(time.Now()); <-read }()
 	payload := make([]byte, 160)
 	for i := range payload {
 		payload[i] = media.LinearToUlaw(int16(4000 * math.Sin(2*math.Pi*1000*float64(i)/8000)))

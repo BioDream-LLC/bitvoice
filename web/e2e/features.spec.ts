@@ -1213,3 +1213,25 @@ test('CRM: answer fields for a CRM\'s own shape', async ({ page }) => {
     crm.close()
   }
 })
+
+// The call generator times how the sound came back: each call's jitter and longest gap, and the
+// runtime's memory pauses during the run.
+test('the call generator reports jitter, gaps and memory pauses', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/#/loadtest')
+  const from = page.locator('#lgf')
+  await from.selectOption({ index: 1 })
+  await page.locator('#lgt').fill(await page.locator('#lgt').getAttribute('placeholder') ?? '*43')
+  await page.locator('#lgn').fill('3')
+  await page.locator('#lgc').fill('3')
+  await page.locator('#lgh').fill('3')
+  await page.getByRole('button', { name: 'Start' }).click()
+  const card = (label: string) => page.locator('.card', { hasText: label }).locator('div').nth(1)
+  await expect(card('Answered')).toHaveText('3', { timeout: 20_000 })
+  await expect(page.getByRole('button', { name: 'Start' })).toBeVisible({ timeout: 20_000 })
+  await expect(card('Jitter, 95% of calls')).toHaveText(/^\d+\.\d\d ms$/)
+  const gap = Number((await card('Longest gap, worst call').textContent())!.replace(' ms', ''))
+  expect(gap).toBeGreaterThanOrEqual(15) // packets come every 20 ms
+  expect(gap).toBeLessThan(500)
+  await expect(card('Memory pauses')).toHaveText(/^\d+$/)
+})

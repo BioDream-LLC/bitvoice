@@ -120,7 +120,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | Browser phone (WebRTC) | Field-tested | from outside to EC2; Chromium browser tests with sound both ways |
 | Two servers, one PostgreSQL, failover | Field-tested | kill -9 and planned stop on EC2: the call carries on, the provider line moves |
 | One-command install | Field-tested | Ubuntu 24.04 (x86, Arm), Debian 12, Amazon Linux 2023, Windows Server 2022, macOS; back after a reboot |
-| Capacity | Field-tested | 2,000 calls at once, no loss, MOS 4.41, on a 16-vCPU c7i.4xlarge (about 10 vCPUs busy); 200 at once on c7g.large, c7i.large, t4g.small, an M4 and the Lightsail nano |
+| Capacity | Field-tested | 2,000 calls at once, no loss, MOS 4.41, on a 16-vCPU c7i.4xlarge (about 10 vCPUs busy); 200 at once on c7g.large, c7i.large, t4g.small, an M4 and the Lightsail nano. At 2,000: jitter 4.0 ms for 95% of calls, longest gap between packets 74 ms, longest garbage-collection pause 4.2 ms |
 | FreePBX migration (Import) | Field-tested | a real FreePBX 17.0.33 backup (70 MB) imported whole; others from FreePBX's own formats |
 | AI transcripts, summaries, receptionist | Field-tested | a real model through OpenRouter |
 | Facts and summaries without a language model | Software-tested | invented 911 calls only: 23 of 43 facts (53%) on the sealed set, 3 facts no one expected; 41/41 training, hold-out 27/40 cold. Never measured on real calls. |
@@ -1870,6 +1870,9 @@ Every release from v0.1.3 carries BioDream's release key. Such a build installs 
 | Answer time, median and 95% | how long callers waited |
 | Audio lost | the share of sound packets that never arrived |
 | Audio score | an estimate of the sound (MOS): 4 and over is good, under 3.6 is poor |
+| Jitter, 95% of calls | how unevenly the sound came back (RFC 3550 interarrival jitter, averaged over each call); phones smooth up to about 20 ms |
+| Longest gap, worst call | the longest wait between two sound packets in any call; they come every 20 ms, so a stall of the server shows here |
+| Memory pauses, longest pause | how often, and for how long at most, the Go runtime paused everything to tidy memory during the run |
 | Calls in progress over time | a chart of the load |
 
 > It only calls numbers inside BitVoice, never trunks or emergency numbers, so a test can never cost money or reach 911. It is for this server's administrators only.`,

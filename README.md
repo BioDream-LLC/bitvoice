@@ -455,7 +455,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | Browser phone (WebRTC) | Field-tested | from outside to EC2; Chromium browser tests with sound both ways |
 | Two servers, one PostgreSQL, failover | Field-tested | kill -9 and planned stop on EC2: the call carries on, the provider line moves |
 | One-command install | Field-tested | Ubuntu 24.04 (x86, Arm), Debian 12, Amazon Linux 2023, Windows Server 2022, macOS; back after a reboot |
-| Capacity | Field-tested | 2,000 calls at once, no loss, MOS 4.41, on a 16-vCPU c7i.4xlarge (about 10 vCPUs busy); 200 at once on c7g.large, c7i.large, t4g.small, an M4 and the Lightsail nano |
+| Capacity | Field-tested | 2,000 calls at once, no loss, MOS 4.41, on a 16-vCPU c7i.4xlarge (about 10 vCPUs busy); 200 at once on c7g.large, c7i.large, t4g.small, an M4 and the Lightsail nano. At 2,000: jitter 4.0 ms for 95% of calls, longest gap between packets 74 ms, longest garbage-collection pause 4.2 ms |
 | FreePBX migration (Import) | Field-tested | a real FreePBX 17.0.33 backup (70 MB) imported whole; others from FreePBX's own formats |
 | AI transcripts, summaries, receptionist | Field-tested | a real model through OpenRouter |
 | Facts and summaries without a language model | Software-tested | invented 911 calls only: 23 of 43 facts (53%) on the sealed set, 3 facts no one expected; 41/41 training, hold-out 27/40 cold. Never measured on real calls. |
@@ -550,6 +550,39 @@ calls):
 same process. 2,000 is the generator's ceiling, not BitVoice's. The run found that a changed media port
 range only applied after a restart; it now applies at once. Your numbers depend on the codec, conversion,
 recording and the network: run the generator on your own server before you go live.
+
+#### Jitter, gaps and pauses
+
+The call generator also times how the sound came back (build of 2026-10-26): each call's interarrival jitter
+(RFC 3550, averaged over the call) and its longest wait between two packets, which come every 20 ms, so a
+stall of the server shows there; and the Go runtime's stop-the-world garbage-collection pauses during the
+run. The generator's callers and answerers run in the same process, so their own scheduling is in these
+figures too.
+
+On Amazon EC2 c7i.4xlarge (16 vCPUs), Ubuntu 24.04, media ports 10000-32000:
+
+| Calls at once | Audio loss | Jitter, 95% of calls | Longest gap: median call, worst call | GC pauses: count, 99%, longest |
+|---|---|---|---|---|
+| 200 | 0% | 0.7 ms | 25 ms, 26 ms | 456, 1.8 ms, 3.1 ms |
+| 500 | 0% | 1.2 ms | 29 ms, 31 ms | 540, 1.8 ms, 2.1 ms |
+| 1,000 | 0% | 1.7 ms | 35 ms, 43 ms | 652, 1.6 ms, 2.1 ms |
+| 1,500 | 0% | 2.8 ms | 47 ms, 57 ms | 722, 1.6 ms, 2.1 ms |
+| 2,000 | 0% | 4.0 ms | 63 ms, 74 ms | 868, 1.6 ms, 4.2 ms |
+
+On the Apple M4 desktop:
+
+| Calls at once | Audio loss | Jitter, 95% of calls | Longest gap: median call, worst call | GC pauses: count, 99%, longest |
+|---|---|---|---|---|
+| 50 | 0% | 0.4 ms | 24 ms, 25 ms | 176, 0.4 ms, 0.5 ms |
+| 200 | 0% | 1.6 ms | 30 ms, 33 ms | 312, 0.4 ms, 0.5 ms |
+| 500 | 0% | 1.9 ms | 28 ms, 33 ms | 464, 0.3 ms, 0.5 ms |
+| 750 | 3.9% | 1.9 ms | 47 ms, 55 ms | 550, 0.3 ms, 0.4 ms |
+
+The longest garbage-collection pause in any run was 4.2 ms, well under one packet's 20 ms, so the collector
+does not cut the sound. The longest gap grows with the load (the machine running 2,000 callers, 2,000
+answerers and the PBX between them), to 74 ms at worst at 2,000 calls: a phone's jitter buffer rides that
+out without a sound lost. On the Mac, sound began to be lost between 500 and 750 calls at once, with macOS
+counting UDP packets dropped for full socket buffers; Linux on the 16-vCPU machine lost none at 2,000.
 
 The **iPhone app** is tested in the iOS Simulator against a real BitVoice: paired by link, rung by a call,
 answered and hung up (`mobile/ios/BitVoiceUITests`). The phone's own call screen and push wake-up need a

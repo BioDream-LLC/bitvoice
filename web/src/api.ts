@@ -407,6 +407,11 @@ export interface LoadRun {
   plan: { from: string; to: string; answerAs: string; calls: number; rate: number; concurrent: number; holdSeconds: number }
   placed: number; answered: number; failed: number; active: number; failures: Record<string, number>
   setupMs: { p50: number; p95: number; max: number }; sent: number; received: number; lossPct: number; mos: number
+  /** Per call, as the sound came back: interarrival jitter (RFC 3550) and the longest wait between packets. */
+  jitterMs?: { p50: number; p95: number; p99: number; max: number }
+  gapMs?: { p50: number; p95: number; p99: number; max: number }
+  /** The Go runtime's stop-the-world pauses during the run. */
+  gcPauses?: { count: number; p99Ms: number; maxMs: number }
 }
 export interface LoadStatus { run: LoadRun | null; limits: { calls: number; concurrent: number; rate: number; holdSeconds: number } }
 export interface UpgradeStatus {
