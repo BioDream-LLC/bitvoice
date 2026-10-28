@@ -102,6 +102,7 @@ BitVoice is first a phone system for offices and contact centres, and a hosted p
 
 ## Finding your way
 - Press **⌘K** (Ctrl+K) anywhere to jump to a screen, or type an extension's name or number to open it.
+- On a phone, the menu is behind the **☰** button at the top left (and search beside it, at the top right); choosing a page closes it again.
 - Every screen has a **Help** link at the top right that opens its chapter of this manual.
 - **Changes** keeps every version of the configuration: you can see what changed and undo it.
 - Three themes (Midnight, Dark and Light) are at the foot of the menu.`,

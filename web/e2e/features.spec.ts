@@ -1285,3 +1285,33 @@ test('the call generator reports jitter, gaps and memory pauses', async ({ page 
   expect(gap).toBeLessThan(500)
   await expect(card('Memory pauses')).toHaveText(/^\d+$/)
 })
+
+// On a phone-sized screen (a Pixel 8's 412 pixels) the menu is a drawer behind a menu button, so the
+// page has the width; it closes on choosing a page and on Escape. Each group's pages sit under one
+// heading.
+test('the menu on a phone-sized screen', async ({ page }) => {
+  await page.setViewportSize({ width: 412, height: 915 })
+  await signIn(page)
+  const menu = page.getByRole('button', { name: 'Menu' })
+  const nav = page.getByRole('navigation', { name: 'Main' })
+  await expect(menu).toHaveAttribute('aria-expanded', 'false')
+  await expect(nav).not.toBeInViewport()
+  const main = await page.locator('main').boundingBox()
+  expect(main!.width).toBeGreaterThan(400)
+  await menu.click()
+  await expect(nav).toBeInViewport()
+  const headings = await nav.locator(':scope > div > div:first-child').allTextContents()
+  expect(headings.length).toBeGreaterThan(1)
+  expect(new Set(headings).size).toBe(headings.length)
+  await nav.getByRole('link', { name: 'Call history' }).click()
+  await expect(page).toHaveURL(/#\/history$/)
+  await expect(nav).not.toBeInViewport()
+  await menu.click()
+  await expect(nav).toBeInViewport()
+  await page.keyboard.press('Escape')
+  await expect(nav).not.toBeInViewport()
+  // On a wide screen the menu is always there and the button is not.
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await expect(nav).toBeInViewport()
+  await expect(menu).toBeHidden()
+})

@@ -4,7 +4,8 @@ import {
   Activity, BookOpen, BookOpenText, Braces, CloudUpload, Megaphone, Workflow, CalendarClock, FileUp, Grid3x3, ListOrdered, Smartphone, Voicemail, ChevronRight, History, LayoutDashboard, LogOut, Monitor, Moon, Phone, PhoneCall, PhoneForwarded, Signal, Coins, BookUser, MessageSquare, ScrollText, Link2, BadgeCheck, Server as ServerIcon,
   Gauge, MapPin, PackageCheck, Route, Scale, Search, Server, Settings, Shield, Stethoscope, Sun, Users, UserCog, Waypoints,
   Bot, Printer,
-  Siren, Network, RadioTower, Users2, Asterisk, Building2, FlaskConical, AudioLines, BookA, KeyRound, BedDouble, Router, Cpu, ToggleRight, Contact, Inbox as InboxIcon } from 'lucide-react'
+  Siren, Network, RadioTower, Users2, Asterisk, Building2, FlaskConical, AudioLines, BookA, KeyRound, BedDouble, Router, Cpu, ToggleRight, Contact, Inbox as InboxIcon,
+  Menu as MenuIcon, X } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { Crash } from './Crash'
@@ -104,6 +105,9 @@ export const nav: NavItem[] = [
   { to: '/core', label: 'Core services', icon: Network, color: 'text-violet-300', keys: 'ng911 core services ecrf lost esrp routing boundaries gis geojson psap overflow policy rules bcf border lvf address validation', admin: true, group: 'Public safety · lab', safety: true },
   { to: '/help', label: 'Help', icon: BookOpenText, color: 'text-sky-300', keys: 'manual how to documentation guide', group: 'System' },
 ]
+
+/** The menu's groups in the order they first appear, so each group's items show together under one heading. */
+const groupOrder = [...new Set(nav.map((n) => n.group))]
 
 type Theme = 'midnight' | 'dark' | 'light'
 const themes: { id: Theme; label: string; icon: typeof Moon }[] = [
@@ -218,6 +222,16 @@ export function Shell({ me, children }: { me: Me; children: ReactNode }) {
   const visible = useVisible(me)
   const location = useLocation()
   const [palette, setPalette] = useState(false)
+  // On a phone-sized screen the menu is a drawer: closed until the menu button opens it, closed again
+  // on every page change and by Escape.
+  const [drawer, setDrawer] = useState(false)
+  useEffect(() => setDrawer(false), [location.pathname])
+  useEffect(() => {
+    if (!drawer) return
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') setDrawer(false) }
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [drawer])
   const [logout] = useLogoutMutation()
   const { data: stats } = useStatsQuery()
   useLiveEvents(true)
@@ -274,7 +288,9 @@ export function Shell({ me, children }: { me: Me; children: ReactNode }) {
 
   return (
     <div className="flex h-full">
-      <aside className="flex w-60 shrink-0 flex-col border-r border-slate-800 bg-slate-950">
+      {drawer && <div className="fixed inset-0 z-30 bg-black/60 md:hidden" aria-hidden onClick={() => setDrawer(false)} />}
+      <aside id="main-menu" className={clsx('fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col border-r border-slate-800 bg-slate-950 transition-transform md:static md:translate-x-0',
+        drawer ? 'translate-x-0' : '-translate-x-full')}>
         <div className="flex items-center gap-2 px-4 py-4">
           <Logo />
           <div>
@@ -286,7 +302,7 @@ export function Shell({ me, children }: { me: Me; children: ReactNode }) {
           <Search size={14} aria-hidden /> Search <kbd className="ml-auto rounded border border-slate-700 px-1 text-[10px]">⌘K</kbd>
         </button>
         <nav aria-label="Main" className="flex-1 overflow-auto px-2">
-          {nav.filter(visible).map((n, i, all) => (
+          {nav.filter(visible).sort((a, b) => groupOrder.indexOf(a.group) - groupOrder.indexOf(b.group)).map((n, i, all) => (
             <div key={n.to}>
             {(i === 0 || all[i - 1].group !== n.group) && (
               <div className="px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-600">{n.group}</div>
@@ -329,6 +345,14 @@ export function Shell({ me, children }: { me: Me; children: ReactNode }) {
         </div>
       </aside>
       <main className="min-w-0 flex-1 overflow-auto">
+        <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-slate-800 bg-slate-950 px-3 py-2 md:hidden">
+          <button className="btn-ghost p-2" aria-label="Menu" aria-expanded={drawer} aria-controls="main-menu" onClick={() => setDrawer((v) => !v)}>
+            {drawer ? <X size={18} aria-hidden /> : <MenuIcon size={18} aria-hidden />}
+          </button>
+          <Logo />
+          <span className="bg-gradient-to-r from-sky-300 to-violet-300 bg-clip-text font-bold text-transparent">BitVoice</span>
+          <button className="btn-ghost ml-auto p-2" aria-label="Search" onClick={() => setPalette(true)}><Search size={16} aria-hidden /></button>
+        </div>
         <EmergencyBanner />
         <LabNotice />
         <Crash resetKey={location.pathname}>{children}</Crash>
