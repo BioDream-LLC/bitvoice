@@ -243,7 +243,9 @@ func (s *Session) describeVideo(host, dir string, vc VideoCodec, offer *sdp.Sess
 			w("a=ssrc:%d cname:bitvoice", VideoSSRC)
 		}
 		if s.agent == nil {
-			w("a=candidate:1 1 udp 2130706431 %s %d typ host", host, s.ep.Port())
+			for _, c := range liteCandidates(host, s.ep.Port()) {
+				w("%s", c)
+			}
 		} else {
 			for _, c := range s.cands {
 				w("a=candidate:%s", c.SDP())

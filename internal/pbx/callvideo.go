@@ -553,7 +553,9 @@ func (e *Engine) sipVideoSource(v *callVideo) {
 // When the address is not this computer's own (a public address in front of a router), every
 // address is used, as for phones.
 func (e *Engine) browserEndpoint(host string) (*media.Endpoint, error) {
-	if ip := net.ParseIP(host); ip != nil {
+	// A browser on this computer may send from any of its addresses (see webrtc's liteCandidates):
+	// the endpoint takes them all.
+	if ip := net.ParseIP(host); ip != nil && !ip.IsLoopback() {
 		if ep, err := e.pool.AllocateOn(host); err == nil {
 			return ep, nil
 		}

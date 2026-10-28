@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"log/slog"
 	"math/big"
 	"net"
@@ -72,6 +73,7 @@ type options struct {
 	sip       string
 	noBrowser bool
 	database  string // a PostgreSQL address; empty reads the data directory's setting
+	logFile   string // also write the log here
 }
 
 // run is main without the process exit, so it can be tested.
@@ -86,6 +88,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&o.sip, "sip", "", "SIP listen address (default: all addresses, port from settings)")
 	fs.BoolVar(&o.noBrowser, "no-browser", false, "do not open a browser at startup")
 	fs.StringVar(&o.database, "database", os.Getenv("BITVOICE_DATABASE"), "PostgreSQL address (postgres://user:password@host/db); default: the SQLite file in the data directory, or the database chosen in Settings")
+	fs.StringVar(&o.logFile, "log", "", "also write the log to this file, for a computer where nobody sees the window (kept under 10 MB: the older part moves to FILE.1)")
 	inbox.SetVersion(version)
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -93,6 +96,18 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if *showVersion {
 		fmt.Fprintf(stdout, "bitvoice %s\n", version)
 		return 0
+	}
+	if o.logFile != "" {
+		lf, err := openLog(o.logFile)
+		if err != nil {
+			fmt.Fprintln(stderr, "bitvoice: cannot write the log:", err)
+			return 1
+		}
+		defer lf.Close()
+		// The file first: without a console (a Windows scheduled task), writing to stdout fails, and
+		// MultiWriter stops at the first writer that fails.
+		stdout, stderr = io.MultiWriter(lf, stdout), io.MultiWriter(lf, stderr)
+		log.SetOutput(stderr) // the standard library's own messages (TLS handshakes and the like)
 	}
 	self, _ := os.Executable()
 	// The installed program is the launcher: if an upgrade made another version current, start it.

@@ -21,6 +21,11 @@ param(
   [string]$Https = $(if ($env:BITVOICE_HTTPS) { $env:BITVOICE_HTTPS } else { ':8443' })
 )
 $ErrorActionPreference = 'Stop'
+# Windows PowerShell started from PowerShell 7 inherits 7's module folders first, and then its own
+# cmdlets (Get-FileHash, Expand-Archive) fail to load. Its own folders only, for this script.
+if ($PSVersionTable.PSEdition -ne 'Core' -and $env:PSModulePath) {
+  $env:PSModulePath = ($env:PSModulePath -split ';' | Where-Object { $_ -and $_ -notmatch '\\PowerShell\\(7[^\\]*\\)?Modules\\?$' -and $_ -notmatch '\\Documents\\PowerShell\\Modules' }) -join ';'
+}
 $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
@@ -104,8 +109,13 @@ try {
 
   # The signature, with OpenSSL 3 when it is here (Git for Windows brings one).
   $openssl = (Get-Command openssl -ErrorAction SilentlyContinue).Source
-  if (-not $openssl) { $g = Join-Path $env:ProgramFiles 'Git\usr\bin\openssl.exe'; if (Test-Path $g) { $openssl = $g } }
-  if ($openssl -and ((& $openssl version) -match '^OpenSSL ([3-9]|\d\d)\.')) {
+  # Git for Windows has two; either may be OpenSSL 3, depending on its version.
+  $three = { param($o) $o -and ((& $o version 2>$null) -match '^OpenSSL ([3-9]|\d\d)\.') }
+  if (-not (& $three $openssl)) {
+    $openssl = 'mingw64\bin', 'usr\bin' | ForEach-Object { Join-Path $env:ProgramFiles "Git\$_\openssl.exe" } |
+      Where-Object { (Test-Path $_) -and (& $three $_) } | Select-Object -First 1
+  }
+  if ($openssl) {
     Set-Content -Path (Join-Path $work 'key.pem') -Encoding ascii -Value "-----BEGIN PUBLIC KEY-----`nMCowBQYDK2VwAyEA$Key`n-----END PUBLIC KEY-----"
     # bitvoice.exe, and whisper-server.exe (speech to text on this server) when the download has it.
     foreach ($p in @($exe, (Join-Path $work "$name\whisper-server.exe"))) {
@@ -130,7 +140,9 @@ try {
   $program = Join-Path $Dir 'bitvoice.exe'
   Write-Host "  Program: $program"
 
-  $argline = "-data `"$Data`" -no-browser -https $Https"
+  # The log in the data folder: a scheduled task has no window to show it in.
+  $log = Join-Path $Data 'bitvoice.log'
+  $argline = "-data `"$Data`" -log `"$log`" -no-browser -https $Https"
   $action = New-ScheduledTaskAction -Execute $program -Argument $argline -WorkingDirectory $Dir
   $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable `
     -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
@@ -158,6 +170,8 @@ try {
     $lnk.TargetPath = $program; $lnk.Arguments = "-data `"$Data`" -https $Https"; $lnk.WorkingDirectory = $Dir; $lnk.Save()
     Write-Host '  Starts when you sign in (scheduled task "BitVoice"); BitVoice is also in the Start menu.'
   }
+  # Only what this start writes counts (an older start's setup code is no use).
+  $seen = if (Test-Path $log) { @(Get-Content $log).Count } else { 0 }
   Start-ScheduledTask -TaskName $Task
 
   $port = ($Https -split ':')[-1]
@@ -194,6 +208,10 @@ try {
   Write-Host ''
   Write-Host "BitVoice $Version is running. Open $url in a browser to set it up."
   Write-Host "  The browser warns once about BitVoice's own certificate until you give it yours (Settings, Certificate)."
+  Write-Host "  Its log: $log"
+  # From another computer the setup wizard asks for the code the program printed when it started.
+  $code = Get-Content $log -ErrorAction SilentlyContinue | Select-Object -Skip $seen | Select-String 'Setup code for another computer: (\d+)' | Select-Object -Last 1
+  if ($code) { Write-Host "  Setup code (the wizard asks for it from another computer): $($code.Matches[0].Groups[1].Value)" }
 } finally {
   Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
 }

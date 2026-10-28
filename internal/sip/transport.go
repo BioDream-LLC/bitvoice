@@ -147,7 +147,7 @@ func (s *Stack) listen(addr string, ua *net.UDPAddr) error {
 	if s.SharePort {
 		u, err = listenSharedUDP(ua.String())
 	} else {
-		u, err = net.ListenUDP("udp", ua)
+		u, err = listenUDP(ua)
 	}
 	if err != nil {
 		return fmt.Errorf("sip: listen udp %s: %w", addr, err)
@@ -162,7 +162,7 @@ func (s *Stack) listen(addr string, ua *net.UDPAddr) error {
 	if s.SharePort {
 		t, err = listenSharedTCP(net.JoinHostPort(host, strconv.Itoa(s.udpPort)))
 	} else {
-		t, err = net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(s.udpPort)))
+		t, err = listenTCP(net.JoinHostPort(host, strconv.Itoa(s.udpPort)))
 	}
 	if err != nil {
 		u.Close()

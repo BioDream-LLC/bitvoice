@@ -400,7 +400,9 @@ func (s *Session) describe(host, mid, setup, dir string, offer []int) (*sdp.Sess
 		w("%s", m)
 	}
 	if s.agent == nil {
-		w("a=candidate:1 1 udp 2130706431 %s %d typ host", host, ep.Port())
+		for _, c := range liteCandidates(host, ep.Port()) {
+			w("%s", c)
+		}
 	} else {
 		for _, c := range s.cands {
 			w("a=candidate:%s", c.SDP())
@@ -689,6 +691,26 @@ func (s *Session) retransmit() {
 }
 
 // ownAddrs lists this computer's own unicast addresses.
+// liteCandidates are the host candidates of an ICE-lite answer: the address the browser reached
+// BitVoice on and, when that is loopback, this computer's own addresses after it. A browser allowed
+// the microphone or camera offers its own network addresses rather than one hidden behind an mDNS
+// name, and on Windows a socket on one of them cannot reach 127.0.0.1: without these the call would
+// stay silent. The endpoint takes every address (see the engine's browserEndpoint).
+func liteCandidates(host string, port int) []string {
+	out := []string{fmt.Sprintf("a=candidate:1 1 udp 2130706431 %s %d typ host", host, port)}
+	if ip, err := netip.ParseAddr(host); err != nil || !ip.IsLoopback() {
+		return out
+	}
+	for _, a := range ownAddrs() {
+		if a.IsLoopback() || a.IsLinkLocalUnicast() || a.IsUnspecified() || len(out) >= 8 {
+			continue
+		}
+		// Lower priorities after the loopback one, in the order the system lists its addresses.
+		out = append(out, fmt.Sprintf("a=candidate:%d 1 udp %d %s %d typ host", len(out)+1, 2130706431-len(out)*256, a, port))
+	}
+	return out
+}
+
 func ownAddrs() []netip.Addr {
 	var out []netip.Addr
 	as, err := net.InterfaceAddrs()

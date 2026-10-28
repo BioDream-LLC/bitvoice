@@ -1,7 +1,11 @@
 import { defineConfig } from '@playwright/test'
+import { dataDir } from './e2e/paths'
 
 // Runs the real binary on a fresh data directory, so the sweep starts at the setup wizard.
 const port = 18380
+// The same command on Linux, macOS and Windows: node empties the data directory, then the program starts.
+const program = process.platform === 'win32' ? '..\\bin\\bitvoice.exe' : '../bin/bitvoice'
+const fresh = `node -e "require('fs').rmSync(process.argv[1], { recursive: true, force: true })" "${dataDir}"`
 export default defineConfig({
   testDir: 'e2e',
   timeout: 180_000,
@@ -17,7 +21,7 @@ export default defineConfig({
   // HTTPS only; the fresh server's certificate is its own self-signed one.
   use: { baseURL: `https://127.0.0.1:${port}`, ignoreHTTPSErrors: true },
   webServer: {
-    command: `rm -rf /tmp/bitvoice-e2e && ../bin/bitvoice -data /tmp/bitvoice-e2e -no-browser -https 127.0.0.1:${port} -sip 127.0.0.1:25060`,
+    command: `${fresh} && ${program} -data "${dataDir}" -no-browser -https 127.0.0.1:${port} -sip 127.0.0.1:25060`,
     url: `https://127.0.0.1:${port}/api/health/live`,
     ignoreHTTPSErrors: true,
     reuseExistingServer: false,

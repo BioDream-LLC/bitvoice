@@ -1,9 +1,12 @@
 import { expect, test } from '@playwright/test'
+import { fileURLToPath } from 'node:url'
 import dgram from 'node:dgram'
 import http from 'node:http'
 import net from 'node:net'
 import { readFileSync } from 'node:fs'
 import { signIn } from './helpers'
+import { dataDir } from './paths'
+import path from 'node:path'
 
 // The browser phone joins the radio console with Chromium's fake microphone.
 test.use({ launchOptions: { args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] } })
@@ -322,10 +325,11 @@ test('send a fax: a note and a document, queued', async ({ page }) => {
 test('a received fax: machine, speed and its PDF', async ({ page }) => {
   const fs = await import('node:fs')
   const id = 'feedfacecafe0001'
-  fs.mkdirSync('/tmp/bitvoice-e2e/faxes', { recursive: true })
-  fs.writeFileSync(`/tmp/bitvoice-e2e/faxes/${id}.json`, JSON.stringify({ id, direction: 'in', box: '300', boxName: 'Office fax',
+  const faxes = path.join(dataDir, 'faxes')
+  fs.mkdirSync(faxes, { recursive: true })
+  fs.writeFileSync(path.join(faxes, `${id}.json`), JSON.stringify({ id, direction: 'in', box: '300', boxName: 'Office fax',
     from: '2125550177', station: '+1 212 555 0100', at: new Date().toISOString(), pages: 1, status: 'received', rate: 9600 }))
-  fs.writeFileSync(`/tmp/bitvoice-e2e/faxes/${id}.pdf`, '%PDF-1.4\n%%EOF\n')
+  fs.writeFileSync(path.join(faxes, `${id}.pdf`), '%PDF-1.4\n%%EOF\n')
   await signIn(page)
   await page.goto('./#/faxes')
   const row = page.getByRole('row').filter({ hasText: '2125550177' })
@@ -782,7 +786,7 @@ test('caller video and photos on a 911 call', async ({ page, browser }) => {
     await expect(caller.getByRole('heading', { name: 'Show 911 what is happening' })).toBeVisible()
     await caller.getByRole('button', { name: 'Share live video' }).click()
     await expect(caller.getByText('911 can see your video.')).toBeVisible({ timeout: 15_000 })
-    await caller.locator('#files').setInputFiles(new URL('./fixtures/caller-photo.jpg', import.meta.url).pathname)
+    await caller.locator('#files').setInputFiles(fileURLToPath(new URL('./fixtures/caller-photo.jpg', import.meta.url)))
     await expect(caller.getByText('Sent to 911.')).toBeVisible()
 
     // The call-taker watches: blurred until revealed.

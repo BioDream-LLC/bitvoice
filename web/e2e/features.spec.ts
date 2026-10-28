@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { expect, test } from '@playwright/test'
 import { signIn } from './helpers'
 
@@ -983,7 +984,7 @@ test('import a FreePBX backup', async ({ page }) => {
   const before = await page.evaluate(async () => (await (await fetch('./api/queues')).json()).items as { number: string }[])
   await page.goto('/#/import')
   await page.getByLabel('Files to import').setInputFiles(
-    new URL('../../internal/importer/testdata/20261001-100000-1790000000-17.0.19-1234567.tar.gz', import.meta.url).pathname)
+    fileURLToPath(new URL('../../internal/importer/testdata/20261001-100000-1790000000-17.0.19-1234567.tar.gz', import.meta.url)))
   await expect(page.getByText('FreePBX backup (FreePBX 17.0.19)')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Queues' })).toBeVisible()
   await expect(page.getByLabel('Import queue 400')).toBeAttached()
