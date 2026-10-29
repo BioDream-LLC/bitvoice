@@ -58,33 +58,7 @@ func TestRadioConsole(t *testing.T) {
 	gwB, _ := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
 	defer gwA.Close()
 	defer gwB.Close()
-	// Two free even ports (and the odd ones after them) for the channels.
-	free := func() int {
-		for {
-			c, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
-			if err != nil {
-				t.Fatal(err)
-			}
-			p := c.LocalAddr().(*net.UDPAddr).Port &^ 1
-			c.Close()
-			if p > 40000 && p < 64000 {
-				a, e1 := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: p})
-				b, e2 := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: p + 1})
-				if a != nil {
-					a.Close()
-				}
-				if b != nil {
-					b.Close()
-				}
-				if e1 == nil && e2 == nil {
-					return p
-				}
-			}
-		}
-	}
-	portA, portB := free(), 0
-	for portB = free(); portB == portA; portB = free() {
-	}
+	portA, portB := freeUDP(t), freeUDP(t) // two even ports, free with the odd ones after them
 	cfg := testConfig()
 	cfg.System.Radio = config.Radio{Console: "800", Channels: []config.RadioChannel{
 		{ID: "a", Name: "Fire dispatch", Port: portA, Gateway: gwA.LocalAddr().String()},

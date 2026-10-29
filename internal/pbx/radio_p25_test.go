@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"math"
+	"math/rand/v2"
 	"net"
 	"net/netip"
 	"os"
@@ -223,13 +224,11 @@ func freeUDP(t *testing.T) int {
 	handedOut.Lock()
 	defer handedOut.Unlock()
 	for range 1000 {
-		c, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
-		if err != nil {
-			t.Fatal(err)
-		}
-		p := c.LocalAddr().(*net.UDPAddr).Port &^ 1
-		c.Close()
-		if p <= 40000 || p >= 64000 || handedOut.ports[p] {
+		// Below every system's range for automatic ports (Linux from 32768, Windows and macOS from 49152)
+		// and clear of the test calls' ports (32000 to 33000): a port the system hands out may go to the next socket anyone
+		// opens (Windows gives them out in order), and then BitVoice, binding it for itself alone, cannot.
+		p := (24000 + rand.IntN(7000)) &^ 1
+		if handedOut.ports[p] {
 			continue
 		}
 		// Both on loopback and on every address: Windows lets a socket on every address share a port

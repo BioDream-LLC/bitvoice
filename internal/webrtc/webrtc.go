@@ -18,6 +18,7 @@ import (
 	"math/big"
 	"net"
 	"net/netip"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -692,13 +693,19 @@ func (s *Session) retransmit() {
 
 // ownAddrs lists this computer's own unicast addresses.
 // liteCandidates are the host candidates of an ICE-lite answer: the address the browser reached
-// BitVoice on and, when that is loopback, this computer's own addresses after it. A browser allowed
-// the microphone or camera offers its own network addresses rather than one hidden behind an mDNS
-// name, and on Windows a socket on one of them cannot reach 127.0.0.1: without these the call would
-// stay silent. The endpoint takes every address (see the engine's browserEndpoint).
+// BitVoice on and, on Windows when that is loopback, this computer's own addresses after it. A browser
+// allowed the microphone or camera offers its own network addresses rather than one hidden behind an
+// mDNS name, and on Windows a socket on one of them cannot reach 127.0.0.1: without these the call
+// would stay silent. Elsewhere loopback is reachable from them, and the extra pairs only cost the first
+// seconds of sound while the browser tries them. The endpoint takes every address (see the engine's
+// browserEndpoint).
 func liteCandidates(host string, port int) []string {
+	return liteCandidatesOn(runtime.GOOS, host, port)
+}
+
+func liteCandidatesOn(goos, host string, port int) []string {
 	out := []string{fmt.Sprintf("a=candidate:1 1 udp 2130706431 %s %d typ host", host, port)}
-	if ip, err := netip.ParseAddr(host); err != nil || !ip.IsLoopback() {
+	if ip, err := netip.ParseAddr(host); goos != "windows" || err != nil || !ip.IsLoopback() {
 		return out
 	}
 	for _, a := range ownAddrs() {

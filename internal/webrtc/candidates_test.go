@@ -5,9 +5,13 @@ import (
 	"testing"
 )
 
-// A browser that reached BitVoice on loopback gets this computer's addresses as candidates too, after
-// the loopback one; a browser on the network gets just the address it reached.
+// On Windows, a browser that reached BitVoice on loopback gets this computer's addresses as candidates
+// too, after the loopback one; elsewhere, and for a browser on the network, just the address it reached.
 func TestLiteCandidates(t *testing.T) {
+	if c := liteCandidatesOn("linux", "127.0.0.1", 10002); len(c) != 1 {
+		t.Fatalf("linux: %q", c)
+	}
+	liteCandidates := func(h string, p int) []string { return liteCandidatesOn("windows", h, p) }
 	lan := liteCandidates("192.0.2.10", 10000)
 	if len(lan) != 1 || lan[0] != "a=candidate:1 1 udp 2130706431 192.0.2.10 10000 typ host" {
 		t.Fatalf("network browser: %q", lan)
