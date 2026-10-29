@@ -134,15 +134,29 @@ try {
     Write-Host '  (OpenSSL 3 is not here, so the signature is not checked; the SHA-256 sum was.)'
   }
 
+  # A web port another program holds: Windows may let BitVoice open it too, and the browser then reaches
+  # whichever answers. Say so before changing anything. (An older BitVoice of this install is fine.)
+  $webPort = [int](($Https -split ':')[-1])
+  $holders = Get-NetTCPConnection -LocalPort $webPort -State Listen -ErrorAction SilentlyContinue |
+    ForEach-Object { Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue } |
+    Where-Object { $_.Path -ne (Join-Path $Dir 'bitvoice.exe') } | Sort-Object Id -Unique
+  if ($holders) {
+    Fail ("port $webPort is in use by " + (($holders | ForEach-Object { "$($_.ProcessName) (process $($_.Id))" }) -join ', ') +
+      ". Stop it, or choose another port: .\install.ps1 -Https :8444")
+  }
+
   Stop-BitVoice
   New-Item -ItemType Directory -Force -Path $Dir, $Data | Out-Null
   Copy-Item (Join-Path $work "$name\*") $Dir -Recurse -Force
   $program = Join-Path $Dir 'bitvoice.exe'
   Write-Host "  Program: $program"
 
-  # The log in the data folder: a scheduled task has no window to show it in.
+  # The log in the data folder: a scheduled task has no window to show it in. Releases before v0.1.14
+  # have no -log and would stop at it; their output goes nowhere, as it always did.
   $log = Join-Path $Data 'bitvoice.log'
-  $argline = "-data `"$Data`" -log `"$log`" -no-browser -https $Https"
+  # (Its help goes to stderr, which Windows PowerShell 5.1 turns into errors that Stop would end the script at.)
+  $hasLog = (& { $ErrorActionPreference = 'Continue'; & $program -h 2>&1 | Out-String }) -match '(?m)^\s+-log\b'
+  $argline = "-data `"$Data`"" + $(if ($hasLog) { " -log `"$log`"" } else { '' }) + " -no-browser -https $Https"
   $action = New-ScheduledTaskAction -Execute $program -Argument $argline -WorkingDirectory $Dir
   $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable `
     -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
@@ -178,9 +192,11 @@ try {
   $url = "https://127.0.0.1:$port"
   $ok = $false
   for ($i = 0; $i -lt 60 -and -not $ok; $i++) {
+    # A program that stopped will not answer: say why now rather than after a minute.
+    if ($i -ge 2 -and (Get-ScheduledTask -TaskName $Task).State -ne 'Running') { break }
     try {
       if ($PSVersionTable.PSVersion.Major -ge 6) {
-        $r = Invoke-RestMethod "$url/api/health/live" -SkipCertificateCheck
+        $r = Invoke-RestMethod "$url/api/health/live" -SkipCertificateCheck -TimeoutSec 3
       } else {
         # Windows PowerShell 5.1: a script block as the certificate callback fails ("no Runspace")
         # when .NET calls it on another thread, as it does on Windows Server 2022; a compiled one
@@ -195,7 +211,7 @@ try {
           if ($protocols -ne [Net.SecurityProtocolType]::SystemDefault) {
             [Net.ServicePointManager]::SecurityProtocol = $protocols -bor [Net.SecurityProtocolType]::Tls12 # older Windows offers TLS 1.0 alone
           }
-          $r = Invoke-RestMethod "$url/api/health/live" -UseBasicParsing
+          $r = Invoke-RestMethod "$url/api/health/live" -UseBasicParsing -TimeoutSec 3
         } finally {
           [Net.ServicePointManager]::ServerCertificateValidationCallback = $was
           [Net.ServicePointManager]::SecurityProtocol = $protocols
@@ -204,11 +220,24 @@ try {
       $ok = $r.status -eq 'ok'
     } catch { Start-Sleep 1 }
   }
-  if (-not $ok) { Fail "BitVoice did not start: run `"$program`" -data `"$Data`" to see why" }
+  if (-not $ok) {
+    # Its own words: the log's new lines, or else what it prints when started here for a few seconds.
+    $why = if (Test-Path $log) { @(Get-Content $log | Select-Object -Skip $seen) } else { @() }
+    if (-not $why) {
+      Stop-BitVoice
+      $out = Join-Path $work 'start.txt'
+      $p = Start-Process $program -ArgumentList "-data `"$Data`" -no-browser -https $Https" -WorkingDirectory $Dir `
+        -RedirectStandardError $out -RedirectStandardOutput "$out.1" -WindowStyle Hidden -PassThru
+      if (-not $p.WaitForExit(8000)) { $p.Kill() }
+      $why = @(Get-Content $out, "$out.1" -ErrorAction SilentlyContinue)
+    }
+    $why | Select-Object -Last 15 | ForEach-Object { Write-Host "    $_" }
+    Fail "BitVoice did not start (above, what it said). Its data: $Data"
+  }
   Write-Host ''
   Write-Host "BitVoice $Version is running. Open $url in a browser to set it up."
   Write-Host "  The browser warns once about BitVoice's own certificate until you give it yours (Settings, Certificate)."
-  Write-Host "  Its log: $log"
+  if ($hasLog) { Write-Host "  Its log: $log" }
   # From another computer the setup wizard asks for the code the program printed when it started.
   $code = Get-Content $log -ErrorAction SilentlyContinue | Select-Object -Skip $seen | Select-String 'Setup code for another computer: (\d+)' | Select-Object -Last 1
   if ($code) { Write-Host "  Setup code (the wizard asks for it from another computer): $($code.Matches[0].Groups[1].Value)" }
