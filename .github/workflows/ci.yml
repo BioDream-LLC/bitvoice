@@ -157,11 +157,26 @@ jobs:
           Get-Content deploy\install.ps1 -Raw | Invoke-Expression
           if ((Invoke-RestMethod -SkipCertificateCheck https://127.0.0.1:8443/api/health/live).status -ne 'ok') { throw 'not running' }
           if (-not (Get-ScheduledTask -TaskName BitVoice)) { throw 'no task' }
+          # In Installed apps; the data for SYSTEM and administrators only; a second start opens the first.
+          if (-not (Test-Path HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\BitVoice)) { throw 'not in Installed apps' }
+          if ((icacls "$env:ProgramData\BitVoice") -match 'BUILTIN\\Users') { throw 'the data folder is open to every user' }
+          $again = & "$env:ProgramFiles\BitVoice\bitvoice.exe" -data "$env:ProgramData\BitVoice" -no-browser 2>&1 | Out-String
+          if ($again -notmatch 'already running') { throw "a second start did not find the first: $again" }
+          # A program changed after signing is refused, even with a matching SHA256SUMS.
+          New-Item -ItemType Directory "$t\bad" | Out-Null
+          Expand-Archive "$t\rel\$name.zip" "$t\bad"
+          Add-Content "$t\bad\$name\bitvoice.exe" 'x'
+          Compress-Archive "$t\bad\$name" "$t\bad\$name.zip"
+          "$((Get-FileHash "$t\bad\$name.zip").Hash.ToLower())  $name.zip" | Set-Content "$t\bad\SHA256SUMS"
+          $env:BITVOICE_FROM = "$t\bad"
+          try { & .\deploy\install.ps1; throw 'a tampered program was installed' } catch { if ($_.Exception.Message -notmatch 'does not match') { throw } }
+          $env:BITVOICE_FROM = "$t\rel"
           # Again: an upgrade in place.
           & .\deploy\install.ps1
           if ((Invoke-RestMethod -SkipCertificateCheck https://127.0.0.1:8443/api/health/live).status -ne 'ok') { throw 'not running after the upgrade' }
           & .\deploy\install.ps1 -Purge
           if (Test-Path "$env:ProgramFiles\BitVoice") { throw 'not removed' }
+          if (Test-Path HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\BitVoice) { throw 'still in Installed apps' }
           try { Invoke-RestMethod -SkipCertificateCheck -TimeoutSec 3 https://127.0.0.1:8443/api/health/live; throw 'still running' } catch { if ($_.Exception.Message -eq 'still running') { throw } }
 
   web:

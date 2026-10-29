@@ -3,8 +3,8 @@
 #   irm https://raw.githubusercontent.com/BioDream-LLC/bitvoice/main/deploy/install.ps1 | iex
 #
 # It downloads the latest release for this computer from GitHub, checks it against the release's
-# SHA256SUMS (and BioDream's release signature when OpenSSL 3 is on this computer, as Git for Windows
-# brings), and installs it:
+# SHA256SUMS and BioDream's release signature (with Windows' own ssh-keygen, or OpenSSL 3 when it is
+# here; releases before v0.1.14 need OpenSSL 3), and installs it:
 #   As administrator: C:\Program Files\BitVoice, data in C:\ProgramData\BitVoice, a scheduled task
 #     "BitVoice" that starts it when Windows starts (web interface on port 8443), and firewall rules
 #     letting phones reach it on private and domain networks.
@@ -12,7 +12,8 @@
 #     and Windows asks once whether BitVoice may use the network.
 # Run it again to upgrade. To choose, save it and run it with parameters:
 #   .\install.ps1 -Version v0.1.5      that release instead of the latest
-#   .\install.ps1 -Uninstall [-Purge]  remove it (with -Purge, its data too)
+#   .\install.ps1 -Uninstall [-Purge]  remove it (with -Purge, its data too); or from Settings, Apps,
+#                                      Installed apps, which asks about the data
 # For a copy kept off the internet: $env:BITVOICE_FROM = folder with the .zip and SHA256SUMS.
 param(
   [string]$Version = $env:BITVOICE_VERSION,
@@ -48,6 +49,53 @@ if ($admin) {
 }
 $Task = 'BitVoice'
 
+# Removing BitVoice: kept as text because the installer also writes it beside the program as
+# uninstall.ps1, which Windows' Installed apps runs (a script run by "irm | iex" has no file of its own).
+# __DIR__, __DATA__, __TASK__ and __ADMIN__ are filled in.
+$UninstallScript = @'
+param([switch]$Purge, [switch]$Quiet)
+$ErrorActionPreference = 'Stop'
+$Dir = '__DIR__'; $Data = '__DATA__'; $Task = '__TASK__'; $ForAll = [bool]__ADMIN__
+$admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if ($ForAll -and -not $admin) {
+  # Installed for everyone: removing it takes an administrator. (Installed apps starts this unelevated.)
+  $a = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"") + $(if ($Purge) { '-Purge' }) + $(if ($Quiet) { '-Quiet' })
+  Start-Process powershell.exe -Verb RunAs -ArgumentList $a -Wait
+  return
+}
+if (-not $Quiet -and -not $Purge -and $PSCommandPath -and (Test-Path $Data)) {
+  # From Installed apps: ask, since nobody gave -Purge.
+  $Purge = (Read-Host "Remove BitVoice's data too: settings, call history, voicemail and recordings in $Data? [y/N]") -match '^(y|yes)$'
+}
+if (Get-ScheduledTask -TaskName $Task -ErrorAction SilentlyContinue) {
+  Stop-ScheduledTask -TaskName $Task -ErrorAction SilentlyContinue
+  Unregister-ScheduledTask -TaskName $Task -Confirm:$false
+}
+foreach ($n in 'bitvoice', 'whisper-server') {
+  Get-Process $n -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq (Join-Path $Dir "$n.exe") } | Stop-Process -Force
+}
+Start-Sleep -Milliseconds 500
+if ($ForAll) { Get-NetFirewallRule -DisplayName 'BitVoice*' -ErrorAction SilentlyContinue | Remove-NetFirewallRule }
+# The rules Windows made when someone answered its firewall question for this program.
+$asked = @(Get-NetFirewallApplicationFilter -Program (Join-Path $Dir 'bitvoice.exe') -ErrorAction SilentlyContinue | Get-NetFirewallRule -ErrorAction SilentlyContinue)
+if ($asked -and $admin) { $asked | Remove-NetFirewallRule }
+elseif ($asked) { Write-Host 'Windows keeps the network permission it asked you about; an administrator can remove it in Windows Security, Firewall, Allow an app (bitvoice.exe).' }
+$programs = [Environment]::GetFolderPath($(if ($ForAll) { 'CommonPrograms' } else { 'Programs' }))
+Remove-Item -Force (Join-Path $programs 'BitVoice.lnk') -ErrorAction SilentlyContinue
+$hive = if ($ForAll) { 'HKLM:' } else { 'HKCU:' }
+Remove-Item -Force -Recurse "$hive\Software\Microsoft\Windows\CurrentVersion\Uninstall\BitVoice" -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force $Dir -ErrorAction SilentlyContinue
+if ($Purge) {
+  Remove-Item -Recurse -Force $Data -ErrorAction SilentlyContinue
+  Write-Host 'BitVoice and its data are removed.'
+} else {
+  Write-Host "BitVoice is removed. Its data stays in $Data."
+}
+if ($PSCommandPath -and -not $Quiet) { Start-Sleep 3 } # in its own window: long enough to read
+'@
+$UninstallScript = $UninstallScript.Replace('__DIR__', $Dir.Replace("'", "''")).Replace('__DATA__', $Data.Replace("'", "''")).
+  Replace('__TASK__', $Task).Replace('__ADMIN__', $(if ($admin) { '1' } else { '0' }))
+
 function Stop-BitVoice {
   if (Get-ScheduledTask -TaskName $Task -ErrorAction SilentlyContinue) {
     Stop-ScheduledTask -TaskName $Task -ErrorAction SilentlyContinue
@@ -59,17 +107,8 @@ function Stop-BitVoice {
 }
 
 if ($Uninstall) {
-  Stop-BitVoice
-  Unregister-ScheduledTask -TaskName $Task -Confirm:$false -ErrorAction SilentlyContinue
-  if ($admin) { Get-NetFirewallRule -DisplayName 'BitVoice*' -ErrorAction SilentlyContinue | Remove-NetFirewallRule }
-  Remove-Item -Recurse -Force $Dir -ErrorAction SilentlyContinue
-  Remove-Item -Force (Join-Path ([Environment]::GetFolderPath('Programs')) 'BitVoice.lnk') -ErrorAction SilentlyContinue
-  if ($Purge) {
-    Remove-Item -Recurse -Force $Data -ErrorAction SilentlyContinue
-    Write-Host 'BitVoice and its data are removed.'
-  } else {
-    Write-Host "BitVoice is removed. Its data stays in $Data (-Purge removes it)."
-  }
+  & ([scriptblock]::Create($UninstallScript)) -Purge:$Purge -Quiet
+  if (-not $Purge) { Write-Host '(-Purge removes it too.)' }
   return
 }
 
@@ -107,7 +146,10 @@ try {
   $exe = Join-Path $work "$name\bitvoice.exe"
   if (-not (Test-Path $exe)) { Fail 'the archive holds no bitvoice.exe' }
 
-  # The signature, with OpenSSL 3 when it is here (Git for Windows brings one).
+  # The signature: with OpenSSL 3 when it is here (newer Git for Windows brings one), or else with
+  # Windows' own ssh-keygen (Windows 10 and 11) and the same key's OpenSSH signature (.sshsig, from
+  # v0.1.14 on). bitvoice.exe, and whisper-server.exe (speech to text) when the download has it.
+  $signed = @($exe, (Join-Path $work "$name\whisper-server.exe")) | Where-Object { Test-Path $_ }
   $openssl = (Get-Command openssl -ErrorAction SilentlyContinue).Source
   # Git for Windows has two; either may be OpenSSL 3, depending on its version.
   $three = { param($o) $o -and ((& $o version 2>$null) -match '^OpenSSL ([3-9]|\d\d)\.') }
@@ -115,11 +157,11 @@ try {
     $openssl = 'mingw64\bin', 'usr\bin' | ForEach-Object { Join-Path $env:ProgramFiles "Git\$_\openssl.exe" } |
       Where-Object { (Test-Path $_) -and (& $three $_) } | Select-Object -First 1
   }
+  $keygen = Join-Path $env:SystemRoot 'System32\OpenSSH\ssh-keygen.exe'
+  $sshsigs = @($signed | Where-Object { Test-Path "$_.sshsig" }).Count -eq $signed.Count
   if ($openssl) {
     Set-Content -Path (Join-Path $work 'key.pem') -Encoding ascii -Value "-----BEGIN PUBLIC KEY-----`nMCowBQYDK2VwAyEA$Key`n-----END PUBLIC KEY-----"
-    # bitvoice.exe, and whisper-server.exe (speech to text on this server) when the download has it.
-    foreach ($p in @($exe, (Join-Path $work "$name\whisper-server.exe"))) {
-      if ($p -ne $exe -and -not (Test-Path $p)) { continue }
+    foreach ($p in $signed) {
       $pn = Split-Path $p -Leaf
       $sig = "$p.sig"
       if (-not (Test-Path $sig)) { Fail "$pn has no signature beside it: this is not a BioDream release" }
@@ -128,10 +170,28 @@ try {
       if ($LASTEXITCODE -ne 0) { Fail "the signature of $pn does not match ${KeyName}: not installed" }
     }
     Write-Host "  Signature checked: signed by $KeyName."
+  } elseif ((Test-Path $keygen) -and $sshsigs) {
+    # The key as OpenSSH writes it: string "ssh-ed25519", string key.
+    $raw = [Convert]::FromBase64String($Key)
+    $blob = [byte[]](0, 0, 0, 11) + [Text.Encoding]::ASCII.GetBytes('ssh-ed25519') + [byte[]](0, 0, 0, $raw.Length) + $raw
+    $signers = Join-Path $work 'signers'
+    Set-Content -Path $signers -Encoding ascii -Value "biodream ssh-ed25519 $([Convert]::ToBase64String($blob))"
+    foreach ($p in $signed) {
+      $pn = Split-Path $p -Leaf
+      # The program goes in as ssh-keygen's input, byte for byte (a PowerShell pipe would turn it into text).
+      $v = Start-Process $keygen -ArgumentList '-Y', 'verify', '-f', "`"$signers`"", '-I', 'biodream', '-n', 'file', '-s', "`"$p.sshsig`"" `
+        -RedirectStandardInput $p -RedirectStandardOutput (Join-Path $work 'v.out') -RedirectStandardError (Join-Path $work 'v.err') `
+        -NoNewWindow -Wait -PassThru
+      if ($v.ExitCode -ne 0) { Fail "the signature of $pn does not match ${KeyName}: not installed" }
+    }
+    Write-Host "  Signature checked (with Windows' ssh-keygen): signed by $KeyName."
+  } elseif ((Test-Path $keygen) -and [version]$Version.TrimStart('v') -ge [version]'0.1.14') {
+    # Every release from v0.1.14 on has them: one missing was taken away.
+    Fail "the download has no OpenSSH signature (.sshsig) beside each program: this is not a BioDream release"
   } elseif ($env:BITVOICE_REQUIRE_SIGNATURE -eq '1') {
-    Fail 'OpenSSL 3 is needed to check the release signature'
+    Fail 'the release signature cannot be checked here (it needs OpenSSL 3, or a release from v0.1.14 on)'
   } else {
-    Write-Host '  (OpenSSL 3 is not here, so the signature is not checked; the SHA-256 sum was.)'
+    Write-Host '  (This release can be checked only with OpenSSL 3, which is not here: the signature is not checked; the SHA-256 sum was.)'
   }
 
   # A web port another program holds: Windows may let BitVoice open it too, and the browser then reaches
@@ -166,12 +226,32 @@ try {
     Register-ScheduledTask -TaskName $Task -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
     Get-NetFirewallRule -DisplayName 'BitVoice*' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
     New-NetFirewallRule -DisplayName 'BitVoice' -Direction Inbound -Program $program -Action Allow -Profile Private, Domain | Out-Null
-    Write-Host '  Starts with Windows (scheduled task "BitVoice", as SYSTEM). Firewall: phones may connect on private and domain networks.'
-    if (Get-NetConnectionProfile -ErrorAction SilentlyContinue | Where-Object NetworkCategory -eq 'Public') {
-      # A cloud server's network is Public to Windows: the rule above lets nothing in there.
-      Write-Host '  This computer is on a network Windows calls Public, where that rule lets nothing in. On a cloud'
-      Write-Host '  server, allow the ports yourself (and in the provider''s firewall), for example:'
-      Write-Host "    New-NetFirewallRule -DisplayName 'BitVoice (public)' -Direction Inbound -Program '$program' -Action Allow -Profile Public"
+    # ProgramData lets every user of this computer read what is in it: BitVoice's database and keys
+    # are for SYSTEM and administrators only.
+    & icacls.exe $Data /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' /T /Q | Out-Null
+    if ($LASTEXITCODE -ne 0) { Fail "could not limit $Data to administrators" }
+    # For everyone: the Start menu opens the web interface (BitVoice itself runs as SYSTEM).
+    $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'BitVoice.lnk'))
+    $lnk.TargetPath = Join-Path $env:SystemRoot 'explorer.exe'; $lnk.Arguments = "https://127.0.0.1:$(($Https -split ':')[-1])"
+    $lnk.IconLocation = "$program,0"; $lnk.Description = 'Open the BitVoice web interface'; $lnk.Save()
+    Write-Host '  Starts with Windows (scheduled task "BitVoice", as SYSTEM); its data is for administrators only. Firewall: phones may connect on private and domain networks.'
+    # Windows calls a new Wi-Fi or network Public until someone says otherwise, and the rule above lets
+    # nothing in there. A home or office network (a private address) should be Private; a cloud server
+    # (a public address) needs its ports opened. Either way it is for the owner to decide, not this script.
+    foreach ($net in @(Get-NetConnectionProfile -ErrorAction SilentlyContinue | Where-Object NetworkCategory -eq 'Public')) {
+      $ip = (Get-NetIPAddress -InterfaceIndex $net.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1).IPAddress
+      $lan = $ip -match '^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.)'
+      Write-Host ''
+      if ($lan) {
+        Write-Host "  Phones on `"$($net.Name)`" ($($net.InterfaceAlias), $ip) cannot reach BitVoice yet: Windows calls that" -ForegroundColor Yellow
+        Write-Host '  network Public. If it is your home or office network, make it Private: Settings, Network & internet,' -ForegroundColor Yellow
+        Write-Host "  $($net.InterfaceAlias), Properties, Private network. Or, as administrator:" -ForegroundColor Yellow
+        Write-Host "    Set-NetConnectionProfile -InterfaceIndex $($net.InterfaceIndex) -NetworkCategory Private"
+      } else {
+        Write-Host "  $($net.InterfaceAlias) ($ip) is a network Windows calls Public, where the rule lets nothing in. On a" -ForegroundColor Yellow
+        Write-Host '  cloud server, allow BitVoice there yourself (and in the provider''s firewall):' -ForegroundColor Yellow
+        Write-Host "    New-NetFirewallRule -DisplayName 'BitVoice (public)' -Direction Inbound -Program '$program' -Action Allow -Profile Public"
+      }
     }
   } else {
     $trigger = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
@@ -181,9 +261,24 @@ try {
     Register-ScheduledTask -TaskName $Task -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
     $ws = New-Object -ComObject WScript.Shell
     $lnk = $ws.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Programs')) 'BitVoice.lnk'))
-    $lnk.TargetPath = $program; $lnk.Arguments = "-data `"$Data`" -https $Https"; $lnk.WorkingDirectory = $Dir; $lnk.Save()
+    # It starts BitVoice when it is not running, and opens the one that is (v0.1.14 on) when it is.
+    $lnk.TargetPath = $program; $lnk.Arguments = "-data `"$Data`" -https $Https"; $lnk.WorkingDirectory = $Dir
+    $lnk.Description = 'Open BitVoice'; $lnk.Save()
     Write-Host '  Starts when you sign in (scheduled task "BitVoice"); BitVoice is also in the Start menu.'
   }
+  Set-Content -Path (Join-Path $Dir 'uninstall.ps1') -Value $UninstallScript -Encoding UTF8
+  $key = "$(if ($admin) { 'HKLM:' } else { 'HKCU:' })\Software\Microsoft\Windows\CurrentVersion\Uninstall\BitVoice"
+  New-Item -Path $key -Force | Out-Null
+  $size = [int]((Get-ChildItem $Dir -Recurse -File | Measure-Object Length -Sum).Sum / 1KB)
+  @{ DisplayName = 'BitVoice'; DisplayVersion = $Version.TrimStart('v'); Publisher = 'BioDream LLC'; DisplayIcon = $program
+    InstallLocation = $Dir; URLInfoAbout = 'https://bitvoice.org'; HelpLink = 'https://bitvoice.org/manual/'
+    UninstallString = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $Dir 'uninstall.ps1')`""
+    QuietUninstallString = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $Dir 'uninstall.ps1')`" -Quiet"
+  }.GetEnumerator() | ForEach-Object { New-ItemProperty -Path $key -Name $_.Key -Value $_.Value -PropertyType String -Force | Out-Null }
+  foreach ($d in 'NoModify', 'NoRepair', 'EstimatedSize') {
+    New-ItemProperty -Path $key -Name $d -Value $(if ($d -eq 'EstimatedSize') { $size } else { 1 }) -PropertyType DWord -Force | Out-Null
+  }
+
   # Only what this start writes counts (an older start's setup code is no use).
   $seen = if (Test-Path $log) { @(Get-Content $log).Count } else { 0 }
   Start-ScheduledTask -TaskName $Task

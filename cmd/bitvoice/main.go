@@ -148,6 +148,23 @@ func defaultDataDir() string {
 
 func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 	log := slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	inst, err := claimData(o.data)
+	if errors.Is(err, errAlreadyRunning) {
+		// Started again (the Start menu, a double-click) while it runs: show the one that runs.
+		u := runningURL(o.data)
+		fmt.Fprintln(stdout, "BitVoice is already running with this data folder ("+o.data+").")
+		if u != "" {
+			fmt.Fprintln(stdout, "  Open "+u+" in a browser.")
+			if !o.noBrowser && hasDisplay() {
+				openBrowser(u)
+			}
+		}
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("opening the data folder: %w", err)
+	}
+	defer inst.Close()
 	spec, fixed := o.database, o.database != ""
 	if spec == "" {
 		var err error
@@ -449,6 +466,7 @@ func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 		secureURLs = append(secureURLs, "https://"+net.JoinHostPort(a, port))
 	}
 
+	inst.SetURL(localURL)
 	fmt.Fprintf(stdout, "BitVoice %s is running.\n", version)
 	fmt.Fprintf(stdout, "  On this computer:   %s\n", localURL)
 	for _, u := range secureURLs {
