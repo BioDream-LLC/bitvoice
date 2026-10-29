@@ -228,7 +228,9 @@ try {
     New-NetFirewallRule -DisplayName 'BitVoice' -Direction Inbound -Program $program -Action Allow -Profile Private, Domain | Out-Null
     # ProgramData lets every user of this computer read what is in it: BitVoice's database and keys
     # are for SYSTEM and administrators only.
-    & icacls.exe $Data /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' /T /Q | Out-Null
+    # On the folder alone: what is in it inherits. (/T would give every file the folder's entries, which
+    # a file cannot use, and leave it readable by nobody, BitVoice included.)
+    & icacls.exe $Data /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' /Q | Out-Null
     if ($LASTEXITCODE -ne 0) { Fail "could not limit $Data to administrators" }
     # For everyone: the Start menu opens the web interface (BitVoice itself runs as SYSTEM).
     $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'BitVoice.lnk'))
