@@ -4,16 +4,20 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- The camera is for scanning the pairing code; a device without one pairs by link. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
     <application
         android:name=".BitVoiceApp"
         android:label="BitVoice"
-        android:icon="@drawable/ic_phone"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@style/Theme.BitVoice"
         android:networkSecurityConfig="@xml/network_security_config"
         android:usesCleartextTraffic="false">
@@ -50,5 +54,9 @@
             </intent-filter>
         </service>
         <receiver android:name=".CallActions" android:exported="false" />
+        <service
+            android:name=".CallForeground"
+            android:exported="false"
+            android:foregroundServiceType="phoneCall|microphone" />
     </application>
 </manifest>

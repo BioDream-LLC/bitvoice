@@ -44,6 +44,8 @@ var pages = []page{
 		"NG911 call handling, a P25 radio console and NG911 Core Services on the same engine. Not certified or run on live systems yet; design partners wanted.", "0.6"},
 	{"download.html", "/download/", "download", "Download BitVoice",
 		"Download BitVoice for Linux, macOS and Windows, on Intel and Arm. One file, nothing to install, signed releases, free under Apache 2.0.", "0.9"},
+	{"privacy.html", "/privacy/", "privacy", "Privacy: the BitVoice apps",
+		"What the BitVoice phone apps for Android and iPhone collect, where it goes, and how to remove it. No advertising, analytics or tracking.", "0.3"},
 }
 
 func main() {

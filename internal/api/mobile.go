@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -151,7 +152,7 @@ func (s *Server) mobileRoutes() {
 		if server == "" {
 			// HTTPS only: BitVoice serves nothing else, and behind a proxy that ends TLS the apps still
 			// reach it over https.
-			server = "https://" + r.Host
+			server = "https://" + s.phoneReachable(r.Host)
 		}
 		code := token(16)
 		st := &s.mobile
@@ -256,4 +257,30 @@ func (s *Server) mobileRoutes() {
 		_ = s.Store.DeleteDevice(in.Device)
 		writeJSON(w, 200, map[string]bool{"ok": true})
 	})
+}
+
+// phoneReachable is host (host:port, as the browser reached BitVoice) for a phone to use. On this
+// computer, at 127.0.0.1 or localhost, that address means the phone itself: the public address
+// (Settings) or this computer's first network address takes its place, on the same port.
+func (s *Server) phoneReachable(host string) string {
+	h, port, err := net.SplitHostPort(host)
+	if err != nil {
+		h, port = host, ""
+	}
+	if ip := net.ParseIP(h); h != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		return host
+	}
+	alt := s.publicAddress()
+	if alt == "" {
+		if a := localAddresses(); len(a) > 0 {
+			alt = a[0]
+		}
+	}
+	if alt == "" {
+		return host
+	}
+	if port == "" || port == "443" {
+		return alt
+	}
+	return net.JoinHostPort(alt, port)
 }

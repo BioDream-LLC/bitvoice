@@ -43,11 +43,36 @@ class MainActivity : AppCompatActivity() {
         if (missing.isNotEmpty()) requestPermissions(missing.toTypedArray(), 1)
         show()
         intent?.data?.toString()?.let { if (Vault.load(this) == null) pair(it) }
+        answerFrom(intent)
+        askFullScreen()
+    }
+
+    /** Answer on the ringing notification opens the app with the call to answer. */
+    private fun answerFrom(i: Intent?) {
+        i?.getStringExtra("answer")?.let { Calls.answer(it) }
+    }
+
+    /**
+     * From Android 14 a call may ring over the lock screen only with the user's leave (Google Play gives it
+     * to calling apps on install; a phone set up otherwise may not have it). Asked once, after pairing.
+     */
+    private fun askFullScreen() {
+        if (Build.VERSION.SDK_INT < 34 || Vault.load(this) == null) return
+        val nm = getSystemService(android.app.NotificationManager::class.java)
+        val prefs = getSharedPreferences("bitvoice", MODE_PRIVATE)
+        if (nm.canUseFullScreenIntent() || prefs.getBoolean("askedFullScreen", false)) return
+        prefs.edit().putBoolean("askedFullScreen", true).apply()
+        AlertDialog.Builder(this).setMessage("Let BitVoice show calls over the lock screen, so a call rings like a phone call?")
+            .setPositiveButton("Settings") { _, _ ->
+                runCatching { startActivity(Intent(android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, android.net.Uri.parse("package:$packageName"))) }
+            }
+            .setNegativeButton("Not now", null).show()
     }
 
     override fun onNewIntent(i: Intent) {
         super.onNewIntent(i)
         i.data?.toString()?.let { if (Vault.load(this) == null) pair(it) }
+        answerFrom(i)
         // A push woke the app: make sure the page is still connected.
         if (i.getBooleanExtra("wake", false)) web?.evaluateJavascript("document.visibilityState") { v -> if (v == null) web?.reload() }
     }
@@ -57,30 +82,57 @@ class MainActivity : AppCompatActivity() {
         val v = if (p == null) pairScreen() else phoneScreen(p)
         // From Android 15 apps are drawn edge to edge: keep the content clear of the status and
         // navigation bars (they covered the extension and the Unpair button).
+        // The bars' space is added to the screen's own padding, not put in its place.
+        val (l, t, r, bt) = listOf(v.paddingLeft, v.paddingTop, v.paddingRight, v.paddingBottom)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(v) { view, insets ->
             val b = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars() or androidx.core.view.WindowInsetsCompat.Type.displayCutout())
-            view.setPadding(b.left, b.top, b.right, b.bottom)
+            view.setPadding(l + b.left, t + b.top, r + b.right, bt + b.bottom)
             insets
         }
         setContentView(v)
     }
 
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
+    /** A button in the web interface's style: rounded, filled (primary) or outlined. */
+    private fun button(label: String, primary: Boolean, onClick: () -> Unit) = Button(this).apply {
+        text = label; isAllCaps = false; textSize = 16f; stateListAnimator = null
+        setTextColor(if (primary) Color.parseColor("#ECFDF5") else Color.parseColor("#E2E8F0"))
+        background = android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = dp(12).toFloat()
+            setColor(Color.parseColor(if (primary) "#059669" else "#1E293B"))
+            if (!primary) setStroke(dp(1), Color.parseColor("#334155"))
+        }
+        setPadding(dp(16), dp(14), dp(16), dp(14))
+        setOnClickListener { onClick() }
+    }
+
     private fun pairScreen(): LinearLayout {
         val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(48, 48, 48, 48); setBackgroundColor(Color.BLACK)
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(dp(28), dp(28), dp(28), dp(28))
+            setBackgroundColor(Color.parseColor("#050816"))
         }
-        box.addView(TextView(this).apply { text = "BitVoice"; textSize = 32f; setTextColor(Color.WHITE); gravity = Gravity.CENTER })
+        val gap = { h: Int -> LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(h) } }
+        box.addView(android.widget.ImageView(this).apply {
+            setImageResource(R.drawable.ic_launcher_foreground)
+            background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = dp(24).toFloat(); setColor(Color.parseColor("#0B1220")) }
+        }, LinearLayout.LayoutParams(dp(96), dp(96)))
+        box.addView(TextView(this).apply { text = "BitVoice"; textSize = 30f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+            typeface = android.graphics.Typeface.DEFAULT_BOLD }, gap(16))
         box.addView(TextView(this).apply {
-            text = "Ask your administrator to open your extension in BitVoice and press Add a phone, then scan the code."
-            setTextColor(Color.LTGRAY); gravity = Gravity.CENTER; setPadding(0, 24, 0, 24)
-        })
-        box.addView(Button(this).apply {
-            text = "Scan the code"
-            setOnClickListener { scan.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setPrompt("Scan the BitVoice code").setBeepEnabled(false)) }
-        }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-        val link = EditText(this).apply { hint = "or paste the pairing link"; setTextColor(Color.WHITE); setHintTextColor(Color.GRAY) }
-        box.addView(link, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-        box.addView(Button(this).apply { text = "Pair"; setOnClickListener { pair(link.text.toString()) } })
+            text = "Your office phone, on your phone. Ask your administrator to open your extension in BitVoice and press Add a phone, then scan the code it shows."
+            textSize = 15f; setTextColor(Color.parseColor("#94A3B8")); gravity = Gravity.CENTER; setLineSpacing(0f, 1.2f)
+        }, gap(12))
+        box.addView(button("Scan the code", true) {
+            scan.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setPrompt("Scan the BitVoice code").setBeepEnabled(false))
+        }, gap(32))
+        val link = EditText(this).apply {
+            hint = "or paste the pairing link"; textSize = 15f; setTextColor(Color.WHITE); setHintTextColor(Color.parseColor("#64748B")); isSingleLine = true
+            background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = dp(12).toFloat(); setColor(Color.parseColor("#0B1220")); setStroke(dp(1), Color.parseColor("#334155")) }
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+        }
+        box.addView(link, gap(24))
+        box.addView(button("Pair", false) { pair(link.text.toString()) }, gap(12))
         return box
     }
 
@@ -93,7 +145,7 @@ class MainActivity : AppCompatActivity() {
                 if (FirebaseApp.getApps(this).isNotEmpty()) {
                     FirebaseMessaging.getInstance().token.addOnSuccessListener { BitVoiceApp.sendToken(this, it) }
                 }
-                runOnUiThread { show() }
+                runOnUiThread { show(); askFullScreen() }
             } catch (e: Exception) {
                 runOnUiThread { toast(e.message ?: "Pairing failed") }
             }
@@ -104,18 +156,16 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun phoneScreen(p: Pairing): LinearLayout {
-        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.BLACK) }
-        val bar = LinearLayout(this).apply { setPadding(32, 24, 32, 16); gravity = Gravity.CENTER_VERTICAL }
-        bar.addView(TextView(this).apply { text = "Extension ${p.extension}  ${p.name}"; setTextColor(Color.WHITE); textSize = 16f },
-            LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-        bar.addView(Button(this).apply {
-            text = "Unpair"
-            setOnClickListener {
-                AlertDialog.Builder(this@MainActivity).setMessage("Unpair this phone? It stops ringing for extension ${p.extension}.")
-                    .setPositiveButton("Unpair") { _, _ -> thread { BitVoiceApi.unpair(p); Vault.clear(this@MainActivity); runOnUiThread { show() } } }
-                    .setNegativeButton("Cancel", null).show()
-            }
-        })
+        // The phone page shows the extension itself: the bar holds only the app's own action.
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.parseColor("#050816")) }
+        val bar = LinearLayout(this).apply { setPadding(dp(16), dp(8), dp(12), dp(4)); gravity = Gravity.CENTER_VERTICAL }
+        bar.addView(TextView(this).apply { text = "BitVoice"; setTextColor(Color.parseColor("#7DD3FC")); textSize = 17f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+        bar.addView(button("Unpair", false) {
+            AlertDialog.Builder(this@MainActivity).setMessage("Unpair this phone? It stops ringing for extension ${p.extension}.")
+                .setPositiveButton("Unpair") { _, _ -> thread { BitVoiceApi.unpair(p); Vault.clear(this@MainActivity); runOnUiThread { show() } } }
+                .setNegativeButton("Cancel", null).show()
+        }.apply { textSize = 14f; setPadding(dp(14), dp(6), dp(14), dp(6)); minHeight = 0; minimumHeight = 0 })
         box.addView(bar)
         val home = android.net.Uri.parse(p.server)
         val w = WebView(this).apply {

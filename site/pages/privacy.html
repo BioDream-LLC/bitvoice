@@ -1,0 +1,53 @@
+<section class="hero small"><div class="wrap">
+  <p class="eyebrow">Privacy</p>
+  <h1>Privacy: the BitVoice apps</h1>
+  <p class="lede">What the BitVoice phone apps for Android and iPhone collect, where it goes, and how to remove it.
+    In short: the app talks only to the BitVoice phone system it was paired with, and to Google or Apple to be
+    woken for calls. BioDream collects nothing about you through it.</p>
+</div></section>
+
+<section class="band"><div class="wrap prose-lite">
+  <h2>Who runs what</h2>
+  <p>BitVoice is a phone system that an organisation runs itself, or has someone run for it. The app is an extension of
+    that phone system: your employer or whoever runs your BitVoice decides what it records and keeps, under their own
+    privacy policy. BioDream LLC makes the app and the software; it does not run your phone system unless your
+    organisation has chosen BioDream to host it.</p>
+
+  <h2>What the app sends, and to whom</h2>
+  <table>
+    <thead><tr><th>What</th><th>Sent to</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>The pairing code, and the phone's model name (such as "Pixel 8")</td><td>Your BitVoice server</td><td>To pair the phone with your extension and show the administrator which phone it is</td></tr>
+      <tr><td>A device secret made when you pair</td><td>Your BitVoice server</td><td>To sign in as your extension without a password. It is kept on the phone encrypted with a key held by Android Keystore (or the iPhone's Keychain)</td></tr>
+      <tr><td>Your voice, and your camera when you choose video</td><td>Your BitVoice server, encrypted (SRTP)</td><td>To make calls. Whether calls are recorded is set by whoever runs your BitVoice</td></tr>
+      <tr><td>A push token from Google (Firebase Cloud Messaging) or Apple</td><td>Your BitVoice server</td><td>So it can wake the app for a call</td></tr>
+      <tr><td>For each call that wakes the app: a call ID, and the caller's number and name</td><td>Google or Apple's push service, through the push relay your BitVoice uses (BioDream's, or its own)</td><td>To ring the phone and show who is calling. BioDream's relay passes these on and does not keep them</td></tr>
+    </tbody>
+  </table>
+  <p>The app has no advertising, no analytics and no tracking, and does not read your contacts, location, photos or
+    other apps. It uses the camera only to scan the pairing code and, if you choose, for video calls.</p>
+
+  <h2>Permissions</h2>
+  <ul>
+    <li><b>Microphone</b>: to talk on calls.</li>
+    <li><b>Camera</b>: to scan the pairing code, and for video if you choose it.</li>
+    <li><b>Notifications</b> and <b>full-screen calls</b>: to ring and show incoming calls, over the lock screen.</li>
+    <li><b>Phone calls (self-managed)</b>: to put BitVoice calls on the phone's own call system, so they behave like
+      phone calls with headsets, cars and other calls.</li>
+  </ul>
+
+  <h2>How long it is kept, and removing it</h2>
+  <p>On the phone, the pairing stays until you press <b>Unpair</b> or uninstall the app; both delete it. Unpairing also
+    tells your BitVoice server to forget the phone and its push token. An administrator can remove the phone from your
+    extension at any time. Call history, recordings and voicemail live on your BitVoice server and are kept as whoever
+    runs it decides; ask them to see or delete them.</p>
+
+  <h2>Children</h2>
+  <p>The app is for people whose organisation gave them a BitVoice extension. It is not meant for children.</p>
+
+  <h2>Changes and contact</h2>
+  <p>If this policy changes, this page changes, with the date below. Questions:
+    <a href="https://biodream.io/support/">BioDream support</a>, or
+    <a href="https://github.com/BioDream-LLC/bitvoice/issues/new">a public issue</a>.</p>
+  <p>BioDream LLC, United States. Last changed 28 October 2026.</p>
+</div></section>

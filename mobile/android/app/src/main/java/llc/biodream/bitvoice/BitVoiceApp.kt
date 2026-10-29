@@ -28,6 +28,9 @@ class BitVoiceApp : Application() {
         nm.createNotificationChannel(NotificationChannel(CHANNEL, "Incoming calls", NotificationManager.IMPORTANCE_HIGH).apply {
             description = "Rings for calls to your extension"
         })
+        nm.createNotificationChannel(NotificationChannel(ONGOING_CHANNEL, "Calls in progress", NotificationManager.IMPORTANCE_LOW).apply {
+            description = "Shows the call you are on, with Hang up"
+        })
         val tm = getSystemService(TelecomManager::class.java)
         tm.registerPhoneAccount(PhoneAccount.builder(account(this), "BitVoice")
             .setCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED).build())
@@ -46,6 +49,7 @@ class BitVoiceApp : Application() {
 
     companion object {
         const val CHANNEL = "calls"
+        const val ONGOING_CHANNEL = "ongoing"
 
         fun account(ctx: Context) = PhoneAccountHandle(ComponentName(ctx, CallService::class.java), "bitvoice")
 

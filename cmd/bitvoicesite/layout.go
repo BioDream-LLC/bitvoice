@@ -127,7 +127,7 @@ func footer() string {
 <div><b>Product</b><a href="/features/">Features</a><a href="/technology/">Technology</a><a href="/technology/#contact-centre">Contact centres</a><a href="/technology/#developers">Developers</a><a href="/public-safety/">Public safety (lab)</a></div>
 <div><b>Moving</b><a href="/freepbx-alternative/">Leaving FreePBX</a><a href="/technology/migration/">Bringing your settings</a><a href="/technology/asterisk-compat/">Asterisk compatibility</a><a href="/technology/hosting/">Hosting organisations</a></div>
 <div><b>Evidence</b><a href="/proof/">How it is tested</a><a href="/proof/#maturity">How mature each part is</a><a href="https://demo.bitvoice.org">Public demo</a><a href="https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml">Continuous integration</a></div>
-<div><b>Help</b><a href="/manual/">Manual</a><a href="/manual/bitvoice-manual.pdf">Manual (PDF)</a><a href="/download/">Download</a><a href="https://github.com/BioDream-LLC/bitvoice">GitHub</a><a href="https://github.com/BioDream-LLC/bitvoice/issues/new">Report a bug</a></div>
+<div><b>Help</b><a href="/manual/">Manual</a><a href="/manual/bitvoice-manual.pdf">Manual (PDF)</a><a href="/download/">Download</a><a href="https://github.com/BioDream-LLC/bitvoice">GitHub</a><a href="https://github.com/BioDream-LLC/bitvoice/issues/new">Report a bug</a><a href="/privacy/">Privacy (apps)</a></div>
 <div class="langs"><b>The manual in</b>` + langs.String() + `</div>
 </div>
 <div class="maker"><a href="https://biodream.io" aria-label="BioDream LLC"><img src="/assets/biodream-wordmark.png" alt="BioDream" width="88" height="60"></a>

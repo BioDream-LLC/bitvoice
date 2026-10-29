@@ -7,7 +7,7 @@ phone's call screen. The manual's "Mobile apps" chapter covers pairing and push.
 ## Building
 
 - iOS: `xcodegen generate` in `ios/` after editing `project.yml`, then open `BitVoice.xcodeproj` (Xcode 16 or later).
-- Android: `./gradlew assembleDebug` in `android/` (JDK 17, Android SDK 35).
+- Android: `./gradlew assembleDebug` in `android/` (JDK 17, Android SDK 36). Releases for Google Play: `android/store/README.md`.
 
 ## Testing against a real server
 

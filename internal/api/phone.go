@@ -96,6 +96,7 @@ func randomID() string {
 type browserPhone struct {
 	phone    *webphone.Phone
 	ext      string
+	device   string // the paired app that opened it, if one did
 	lastSeen time.Time
 	mu       sync.Mutex
 	// sessions are the calls' WebRTC sessions, for an ICE restart when the browser's network changes.
@@ -139,7 +140,7 @@ func (s *Server) openPhone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cfg, _ := s.Store.Config()
-	byDevice := false
+	byDevice, device := false, ""
 	if in.Device != "" {
 		d, ok := s.Store.CheckDevice(in.Device, in.Secret)
 		if !ok {
@@ -147,7 +148,7 @@ func (s *Server) openPhone(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusUnauthorized, "this phone is no longer paired")
 			return
 		}
-		in.Extension, byDevice = d.Extension, true
+		in.Extension, byDevice, device = d.Extension, true, d.ID
 		_, _ = s.Store.UpdateDevice(d.ID, func(x *store.Device) { x.LastSeen = time.Now().UTC() })
 	}
 	x := cfg.FindExtension(in.Extension)
@@ -176,7 +177,18 @@ func (s *Server) openPhone(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	bp := &browserPhone{phone: p, ext: x.Number, lastSeen: time.Now()}
+	bp := &browserPhone{phone: p, ext: x.Number, device: device, lastSeen: time.Now()}
+	if device != "" {
+		// An app opens one phone at a time: one opened before (by the app before Android stopped it)
+		// goes now, or calls would ring there too for the minute until it is reaped.
+		phones.Range(func(k, v any) bool {
+			if old := v.(*browserPhone); old.device == device {
+				phones.Delete(k)
+				old.phone.Close()
+			}
+			return true
+		})
+	}
 	phones.Store(id, bp)
 	go s.reapPhone(id, bp)
 	s.audit(r, "extension "+x.Number, "phone.open", "browser phone")

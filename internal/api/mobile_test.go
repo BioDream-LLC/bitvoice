@@ -92,8 +92,17 @@ func TestMobilePairingAndPush(t *testing.T) {
 	}
 	mu.Unlock()
 	// The app signs in to the phone with its device credentials.
-	if code, out := app.do("POST", "/api/phone", map[string]string{"device": dev["device"].(string), "secret": dev["secret"].(string)}); code != 200 || out["extension"] != "101" {
-		t.Fatalf("phone sign-in %d %v", code, out)
+	code, first := app.do("POST", "/api/phone", map[string]string{"device": dev["device"].(string), "secret": dev["secret"].(string)})
+	if code != 200 || first["extension"] != "101" {
+		t.Fatalf("phone sign-in %d %v", code, first)
+	}
+	// The app started again (Android stopped it): its new phone replaces the old one at once, so a call
+	// does not ring the old one too.
+	if code, _ := app.do("POST", "/api/phone", map[string]string{"device": dev["device"].(string), "secret": dev["secret"].(string)}); code != 200 {
+		t.Fatal("second sign-in")
+	}
+	if _, ok := phones.Load(first["id"].(string)); ok {
+		t.Fatal("the app's earlier phone is still open")
 	}
 	code, list := admin.do("GET", "/api/extensions/101/devices", nil)
 	items := list["items"].([]any)
@@ -105,5 +114,29 @@ func TestMobilePairingAndPush(t *testing.T) {
 	}
 	if code, _ := app.do("POST", "/api/phone", map[string]string{"device": dev["device"].(string), "secret": dev["secret"].(string)}); code != 401 {
 		t.Fatal("an unpaired device signed in")
+	}
+}
+
+// A pairing made at 127.0.0.1 (the administrator on the BitVoice computer itself) names an address the
+// phone can reach: the public address, on the same port; any other address is kept as it is.
+func TestPhoneReachable(t *testing.T) {
+	s, _ := newServer(t)
+	_, rev := s.Store.Config()
+	if _, _, err := s.Store.Update("test", "public", rev, func(c *config.Config) error {
+		c.System.PublicAddress = "pbx.example.com"
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for in, want := range map[string]string{
+		"127.0.0.1:8443":    "pbx.example.com:8443",
+		"localhost":         "pbx.example.com",
+		"[::1]:443":         "pbx.example.com",
+		"192.168.1.10:8443": "192.168.1.10:8443",
+		"pbx.example.org":   "pbx.example.org",
+	} {
+		if got := s.phoneReachable(in); got != want {
+			t.Errorf("%s: %s, want %s", in, got, want)
+		}
 	}
 }

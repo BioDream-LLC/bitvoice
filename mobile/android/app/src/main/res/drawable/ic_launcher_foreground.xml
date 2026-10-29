@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The BitVoice logo (web/public/favicon.svg): headphones and a pulse, on the adaptive icon's 108 grid,
+     inside the 66-unit safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <group android:scaleX="2.4" android:scaleY="2.4" android:translateX="15.6" android:translateY="15.6">
+        <path android:pathData="M7,17c0,-5 4,-9 9,-9s9,4 9,9" android:strokeWidth="2.5" android:strokeLineCap="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient android:type="linear" android:startX="5" android:startY="8" android:endX="27" android:endY="24"
+                    android:startColor="#38BDF8" android:endColor="#A78BFA" />
+            </aapt:attr>
+        </path>
+        <path android:pathData="M7,16h1a2,2 0,0 1,2 2v4a2,2 0,0 1,-2 2h-1a2,2 0,0 1,-2 -2v-4a2,2 0,0 1,2 -2z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="linear" android:startX="5" android:startY="8" android:endX="27" android:endY="24"
+                    android:startColor="#38BDF8" android:endColor="#A78BFA" />
+            </aapt:attr>
+        </path>
+        <path android:pathData="M24,16h1a2,2 0,0 1,2 2v4a2,2 0,0 1,-2 2h-1a2,2 0,0 1,-2 -2v-4a2,2 0,0 1,2 -2z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="linear" android:startX="5" android:startY="8" android:endX="27" android:endY="24"
+                    android:startColor="#38BDF8" android:endColor="#A78BFA" />
+            </aapt:attr>
+        </path>
+        <path android:pathData="M13,20h1.5l1.5,-4 2,8 1.5,-4H21" android:strokeColor="#34D399" android:strokeWidth="1.6"
+            android:strokeLineCap="round" android:strokeLineJoin="round" />
+    </group>
+</vector>
