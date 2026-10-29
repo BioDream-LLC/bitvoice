@@ -176,7 +176,7 @@ jobs:
           if ((Invoke-RestMethod -SkipCertificateCheck https://127.0.0.1:8443/api/health/live).status -ne 'ok') { throw 'not running after the upgrade' }
           # The files already there stay readable (the log, the database).
           $null = Get-Content "$env:ProgramData\BitVoice\bitvoice.log" -TotalCount 1
-          if ((icacls "$env:ProgramData\BitVoice\bitvoice.db") -notmatch 'NT AUTHORITY\\SYSTEM:\(I\)\(F\)') { throw 'the database lost its permissions' }
+          if ((icacls "$env:ProgramData\BitVoice\bitvoice.db" | Out-String) -notmatch 'NT AUTHORITY\\SYSTEM:\(I\)\(F\)') { throw 'the database lost its permissions' }
           & .\deploy\install.ps1 -Purge
           if (Test-Path "$env:ProgramFiles\BitVoice") { throw 'not removed' }
           if (Test-Path HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\BitVoice) { throw 'still in Installed apps' }
