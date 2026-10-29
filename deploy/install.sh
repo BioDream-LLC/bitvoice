@@ -4,7 +4,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/BioDream-LLC/bitvoice/main/deploy/install.sh | sh
 #
 # It downloads the latest release for this computer from GitHub, checks it against the release's
-# SHA256SUMS and BioDream's release signature (ed25519, with OpenSSL 3), and installs it:
+# SHA256SUMS and BioDream's release signature (ed25519, with OpenSSL 3 or OpenSSH's ssh-keygen), and installs it:
 #   Linux: /usr/local/bin/bitvoice, a "bitvoice" system user, data in /var/lib/bitvoice, the systemd
 #          service bitvoice (web interface on port 443), and the firewall opened when ufw or firewalld runs.
 #   macOS: ~/Applications/BitVoice/bitvoice and a launchd agent (web interface on port 8443, data in
@@ -97,21 +97,36 @@ sha256() {
   else openssl dgst -sha256 -r "$1" | cut -d' ' -f1; fi
 }
 
-# The program's signature: base64 of an ed25519 signature over the file. OpenSSL 3 checks it with the
-# key as a PEM public key (the 12-byte ed25519 SubjectPublicKeyInfo prefix is MCowBQYDK2VwAyEA in base64).
-verify_signature() { # program sigfile
-  if ! command -v openssl >/dev/null 2>&1 || ! openssl version 2>/dev/null | grep -Eq '^OpenSSL ([3-9]|[1-9][0-9])\.'; then
-    [ "${BITVOICE_REQUIRE_SIGNATURE:-}" = 1 ] && fail "OpenSSL 3 is needed to check the release signature"
-    say "  (OpenSSL 3 is not here, so the signature is not checked; the SHA-256 sum was.)"
-    return 0
-  fi
-  [ -f "$2" ] || fail "$(basename "$1") has no signature beside it: this is not a BioDream release"
-  printf -- '-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA%s\n-----END PUBLIC KEY-----\n' "$RELEASE_KEY" > "$work/key.pem"
-  openssl base64 -d -A -in "$2" -out "$work/sig.bin" 2>/dev/null || fail "$(basename "$2") is damaged"
-  if openssl pkeyutl -verify -pubin -inkey "$work/key.pem" -rawin -in "$1" -sigfile "$work/sig.bin" >/dev/null 2>&1; then
+# The program's signature, with BioDream's ed25519 key: with OpenSSL 3 when it is here (the .sig beside
+# the program: base64 of the signature, the key as a PEM public key whose 12-byte prefix is
+# MCowBQYDK2VwAyEA in base64), or else with OpenSSH's ssh-keygen (8.1 and later: macOS, Ubuntu 20.04,
+# which have no OpenSSL 3) and the same key's OpenSSH signature (.sshsig, from v0.1.14 on).
+openssl3() { command -v openssl >/dev/null 2>&1 && openssl version 2>/dev/null | grep -Eq '^OpenSSL ([3-9]|[1-9][0-9])\.'; }
+sshsig_ok() { command -v ssh-keygen >/dev/null 2>&1 && ssh-keygen -Y verify 2>&1 | grep -q 'namespace'; }
+at_least() { # version minimum: both like v0.1.14
+  [ "$(printf '%s\n%s\n' "${1#v}" "${2#v}" | sort -t. -k1,1n -k2,2n -k3,3n | head -n 1)" = "${2#v}" ]
+}
+unbase64() { base64 -d 2>/dev/null || base64 -D; } # GNU and BSD
+verify_signature() { # program (its .sig and .sshsig are beside it)
+  if openssl3; then
+    [ -f "$1.sig" ] || fail "$(basename "$1") has no signature beside it: this is not a BioDream release"
+    printf -- '-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA%s\n-----END PUBLIC KEY-----\n' "$RELEASE_KEY" > "$work/key.pem"
+    openssl base64 -d -A -in "$1.sig" -out "$work/sig.bin" 2>/dev/null || fail "$(basename "$1").sig is damaged"
+    openssl pkeyutl -verify -pubin -inkey "$work/key.pem" -rawin -in "$1" -sigfile "$work/sig.bin" >/dev/null 2>&1 ||
+      fail "the signature of $(basename "$1") does not match $KEY_NAME: not installed"
     say "  Signature checked: signed by $KEY_NAME."
+  elif sshsig_ok && [ -f "$1.sshsig" ]; then
+    # The key as OpenSSH writes it: string "ssh-ed25519", string key (32 bytes).
+    blob=$({ printf '\000\000\000\013ssh-ed25519\000\000\000\040'; printf '%s' "$RELEASE_KEY" | unbase64; } | base64 | tr -d '\n')
+    printf 'biodream ssh-ed25519 %s\n' "$blob" > "$work/signers"
+    ssh-keygen -Y verify -f "$work/signers" -I biodream -n file -s "$1.sshsig" < "$1" >/dev/null 2>&1 ||
+      fail "the signature of $(basename "$1") does not match $KEY_NAME: not installed"
+    say "  Signature checked (with ssh-keygen): signed by $KEY_NAME."
+  elif sshsig_ok && at_least "$VERSION" v0.1.14; then
+    fail "$(basename "$1") has no OpenSSH signature (.sshsig) beside it: this is not a BioDream release"
   else
-    fail "the signature of $(basename "$1") does not match $KEY_NAME: not installed"
+    [ "${BITVOICE_REQUIRE_SIGNATURE:-}" = 1 ] && fail "the release signature cannot be checked here: it needs OpenSSL 3, or ssh-keygen and a release from v0.1.14 on"
+    say "  (The signature cannot be checked here, so it is not; the SHA-256 sum was.)"
   fi
 }
 
@@ -174,9 +189,9 @@ want=$(awk -v f="$name.tar.gz" '$2 == f || $2 == "*" f { print $1 }' "$work/SHA2
 say "  SHA-256 checked."
 tar -xzf "$work/$name.tar.gz" -C "$work"
 [ -x "$work/$name/bitvoice" ] || fail "the archive holds no bitvoice program"
-verify_signature "$work/$name/bitvoice" "$work/$name/bitvoice.sig"
+verify_signature "$work/$name/bitvoice"
 for extra in bitvoice-dahdi whisper-server; do
-  [ -f "$work/$name/$extra" ] && verify_signature "$work/$name/$extra" "$work/$name/$extra.sig"
+  [ -f "$work/$name/$extra" ] && verify_signature "$work/$name/$extra"
 done
 
 wait_ready() { # url
