@@ -24,6 +24,8 @@ final class Calls: NSObject, ObservableObject {
     private var uuids: [String: UUID] = [:]
     /// Calls announced by a push before the page has heard of them, by BitVoice call ID.
     private var pending: Set<String> = []
+    /// Calls that reached "connected": a push timeout must not then report them as unanswered.
+    private var connected: Set<String> = []
     /// Set by the web view: runs JavaScript in the phone page.
     var run: ((String) -> Void)?
 
@@ -125,7 +127,16 @@ final class Calls: NSObject, ObservableObject {
             if direction == "out", let u = uuids[id] { provider.reportOutgoingCall(with: u, startedConnectingAt: Date()) }
         case "connected":
             if direction == "out", let u = uuids[id] { provider.reportOutgoingCall(with: u, connectedAt: Date()) }
+            // An incoming call answered in the page (not from the call screen): tell the system it is
+            // connected, so the call screen leaves the ringing state instead of still showing the call.
+            connected.insert(id)
+            if direction != "out", let u = uuids[id] {
+                let update = CXCallUpdate()
+                update.hasVideo = false
+                provider.reportCall(with: u, updated: update)
+            }
         case "ended":
+            connected.remove(id)
             if let u = uuids.removeValue(forKey: id) { provider.reportCall(with: u, endedAt: Date(), reason: .remoteEnded) }
         default:
             break
@@ -150,7 +161,11 @@ extension Calls {
 
 extension Calls: CXProviderDelegate {
     nonisolated func providerDidReset(_ provider: CXProvider) {
-        Task { @MainActor in self.uuids.removeAll() }
+        Task { @MainActor in
+            self.uuids.removeAll()
+            self.pending.removeAll()
+            self.connected.removeAll()
+        }
     }
 
     nonisolated func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
@@ -217,7 +232,7 @@ extension Calls: PKPushRegistryDelegate {
             completion()
             // The caller may give up before the phone page connects: then end the call screen too.
             DispatchQueue.main.asyncAfter(deadline: .now() + 35) {
-                if self.pending.remove(id) != nil, let u = self.uuids.removeValue(forKey: id) {
+                if self.pending.remove(id) != nil, !self.connected.contains(id), let u = self.uuids.removeValue(forKey: id) {
                     self.provider.reportCall(with: u, endedAt: Date(), reason: .unanswered)
                 }
             }

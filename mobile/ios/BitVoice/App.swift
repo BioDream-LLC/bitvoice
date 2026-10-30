@@ -47,7 +47,9 @@ struct Home: View {
             if !calls.status.isEmpty {
                 Text(calls.status).font(.footnote).foregroundStyle(.orange).padding(.horizontal).frame(maxWidth: .infinity, alignment: .leading)
             }
-            PhoneView(pairing: pairing).ignoresSafeArea(edges: .bottom)
+            // The phone page keeps clear of the status bar and the home indicator (as the Android app
+            // adds the system bars to its padding), so its Hang up bar is never under the indicator.
+            PhoneView(pairing: pairing)
         }
         .background(Color.black)
         .confirmationDialog("Unpair this phone? It stops ringing for extension \(pairing.extensionNumber).", isPresented: $confirm, titleVisibility: .visible) {
