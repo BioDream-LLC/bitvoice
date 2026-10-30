@@ -1123,6 +1123,65 @@ test("a video room with everyone's video (SFU, simulcast)", async ({ page, brows
   for (const p of others) await p.context().close()
 })
 
+// Sharing a screen in a video room: one browser shares (Chromium's fake screen), the other sees it big,
+// cannot share a second one, and the picture goes when sharing stops. The room is H.264, the default,
+// so the cameras are checked in it too (the other test's room is VP8).
+test('a video room: sharing a screen', async ({ page, browser }) => {
+  test.setTimeout(120_000)
+  await signIn(page)
+  await page.goto('/#/conferences')
+  await page.getByRole('button', { name: 'Add conference room' }).click()
+  await page.getByLabel('Name', { exact: true }).fill('Screen review')
+  const number = await page.getByLabel('Number', { exact: true }).inputValue()
+  await page.getByLabel('Video', { exact: true }).selectOption('sfu')
+  await page.getByLabel('Video codec').selectOption('H264')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByRole('button', { name: new RegExp(`^${number} Screen review`) })).toBeVisible()
+  await page.goto(`/#/video-room/${number}`)
+  const ctx = await browser.newContext({ ignoreHTTPSErrors: true, permissions: ['camera', 'microphone'] })
+  const viewer = await ctx.newPage()
+  await signIn(viewer)
+  await viewer.goto(`/#/video-room/${number}`)
+  for (const p of [page, viewer]) await p.getByRole('button', { name: 'Join with my camera' }).click()
+  for (const p of [page, viewer]) {
+    await expect(p.getByRole('button', { name: 'Leave' })).toBeVisible()
+    await expect.poll(() => p.locator('video[data-kind="camera"]').evaluate((v: HTMLVideoElement) => v.videoWidth), { timeout: 30_000 }).toBeGreaterThan(0)
+  }
+
+  await page.getByRole('button', { name: 'Share my screen' }).click()
+  await expect(page.getByRole('button', { name: 'Stop sharing' })).toBeVisible()
+  await expect(page.getByText('You are sharing your screen')).toBeVisible()
+  await expect(page.getByLabel('Your shared screen')).toBeVisible()
+  // The viewer gets the screen as the big picture, with pictures flowing.
+  const screen = viewer.locator('video[data-kind="screen"]')
+  await expect(screen).toHaveCount(1, { timeout: 15_000 })
+  await expect.poll(() => screen.evaluate((v: HTMLVideoElement) => v.videoWidth), { timeout: 30_000 }).toBeGreaterThan(0)
+  await expect(viewer.getByLabel(/'s screen$/)).toBeVisible()
+  await expect(viewer.locator('figure.md\\:col-span-3 video[data-kind="screen"]')).toHaveCount(1)
+  await expect(viewer.getByText(/is sharing their screen/)).toBeVisible()
+  // One screen at a time: the viewer's button waits, and the API says why.
+  await expect(viewer.getByRole('button', { name: 'Share my screen' })).toBeDisabled()
+  const room = await viewer.evaluate(async (n) => (await (await fetch(`./api/video-rooms/${n}`)).json()), number)
+  expect(room.publishers.map((p: { kind: string }) => p.kind).sort()).toEqual(['camera', 'camera', 'screen'])
+  const second = await viewer.evaluate(async (n) => {
+    const pc = new RTCPeerConnection()
+    pc.addTransceiver('video', { direction: 'sendonly' })
+    await pc.setLocalDescription(await pc.createOffer())
+    const r = await fetch(`./api/video-rooms/${n}/publish`, { method: 'POST', headers: { 'X-BitVoice': '1', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sdp: pc.localDescription!.sdp, kind: 'screen' }) })
+    pc.close()
+    return { status: r.status, message: (await r.json()).message }
+  }, number)
+  expect(second.status).toBe(409)
+  expect(second.message).toContain('one screen at a time')
+
+  // Stopping takes the screen out of the viewer's room, and the viewer may share.
+  await page.getByRole('button', { name: 'Stop sharing' }).click()
+  await expect(screen).toHaveCount(0, { timeout: 15_000 })
+  await expect(viewer.getByRole('button', { name: 'Share my screen' })).toBeEnabled()
+  await ctx.close()
+})
+
 // Without a language model, a recorded call's summary is the facts it said, read by rules, each
 // shown with the sentence it came from.
 test('call facts and summary without a language model', async ({ page }) => {

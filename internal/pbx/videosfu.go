@@ -36,6 +36,7 @@ type sfuRoom struct {
 
 type sfuPub struct {
 	id, name string
+	kind     string // "camera" or "screen" (a shared screen)
 	ep       *media.Endpoint
 	sess     *webrtc.Session
 	codec    webrtc.VideoCodec
@@ -84,10 +85,11 @@ type layerSeen struct {
 	w, h int
 }
 
-// SFUPublisher is one camera in a room, as the API lists it.
+// SFUPublisher is one camera or shared screen in a room, as the API lists it.
 type SFUPublisher struct {
 	ID     string    `json:"id"`
 	Name   string    `json:"name"`
+	Kind   string    `json:"kind"` // camera, or screen (someone's shared screen)
 	Codec  string    `json:"codec"`
 	Layers []string  `json:"layers,omitempty"` // simulcast RIDs, best first
 	Live   bool      `json:"live"`
@@ -106,6 +108,8 @@ var (
 	ErrNoSFURoom = errors.New("there is no video room of that number (a conference room with Video set to everyone's video)")
 	ErrSFUFull   = errors.New("the video room is full")
 	ErrSFUGone   = errors.New("that camera has left the room")
+	// ErrSFUScreenTaken: a room shows one shared screen at a time.
+	ErrSFUScreenTaken = errors.New("someone is already sharing their screen in this room: one screen at a time")
 )
 
 func (e *Engine) sfuRoomCfg(number string) (*config.Conference, error) {
@@ -129,10 +133,18 @@ func (h *sfuHub) room(number string) *sfuRoom {
 }
 
 // SFUPublish takes a browser's camera offer for a room (video only, simulcast if it offers it).
-func (e *Engine) SFUPublish(number, name string, offer []byte, host string, ice webrtc.ICEOptions) (answer []byte, id string, err error) {
+// kind is "camera" (or empty) or "screen": a shared screen, one per room at a time, beside the
+// cameras (it does not count toward their limit).
+func (e *Engine) SFUPublish(number, name, kind string, offer []byte, host string, ice webrtc.ICEOptions) (answer []byte, id string, err error) {
 	cfg, err := e.sfuRoomCfg(number)
 	if err != nil {
 		return nil, "", err
+	}
+	if kind == "" {
+		kind = "camera"
+	}
+	if kind != "camera" && kind != "screen" {
+		return nil, "", errors.New("kind is camera or screen")
 	}
 	limit := cfg.MaxMembers
 	if limit <= 0 {
@@ -140,10 +152,10 @@ func (e *Engine) SFUPublish(number, name string, offer []byte, host string, ice 
 	}
 	limit = min(limit, 16) // every viewer receives every camera: a room of more is too much for browsers
 	e.sfu.mu.Lock()
-	full := len(e.sfu.room(number).pubs) >= limit
+	err = e.sfu.room(number).roomFor(kind, limit)
 	e.sfu.mu.Unlock()
-	if full {
-		return nil, "", ErrSFUFull
+	if err != nil {
+		return nil, "", err
 	}
 	off, err := sdp.Parse(offer)
 	if err != nil {
@@ -162,18 +174,25 @@ func (e *Engine) SFUPublish(number, name string, offer []byte, host string, ice 
 		ep.Close()
 		return nil, "", err
 	}
-	p := &sfuPub{id: newToken(), name: name, ep: ep, sess: sess, codec: vc, sc: sess.Simulcast(), since: time.Now(),
+	p := &sfuPub{id: newToken(), name: name, kind: kind, ep: ep, sess: sess, codec: vc, sc: sess.Simulcast(), since: time.Now(),
 		layers: map[string]uint32{}, ssrcs: map[uint32]string{}, subs: map[string]*sfuSub{}}
-	p.stop = ep.Listen(func(pkt []byte) { e.sfuPacket(p, pkt) })
-	ep.Start()
 	e.sfu.mu.Lock()
+	// Checked again as it goes in: two people pressing "Share my screen" at once get one screen.
+	if err := e.sfu.room(number).roomFor(kind, limit); err != nil {
+		e.sfu.mu.Unlock()
+		sess.Close()
+		ep.Close()
+		return nil, "", err
+	}
 	e.sfu.room(number).pubs[p.id] = p
 	e.sfu.mu.Unlock()
+	p.stop = ep.Listen(func(pkt []byte) { e.sfuPacket(p, pkt) })
+	ep.Start()
 	go e.sfuWatch(number, p)
 	if len(p.sc.RIDs) > 0 {
 		go p.sendREMB()
 	}
-	e.Log.Info("video room: a camera joined", "room", number, "codec", vc.Name, "layers", len(p.sc.RIDs))
+	e.Log.Info("video room: a "+kind+" joined", "room", number, "codec", vc.Name, "layers", len(p.sc.RIDs))
 	e.sfuChanged(number)
 	return withBandwidth(ans.Bytes(), max(e.VideoKbps(), 1500)), p.id, nil
 }
@@ -196,7 +215,12 @@ func (e *Engine) sfuWatch(number string, p *sfuPub) {
 			return
 		}
 		last := p.last.Load()
-		if last == 0 && time.Since(p.since) > 20*time.Second || last != 0 && time.Since(time.UnixMilli(last)) > 15*time.Second {
+		// A shared screen that does not change may send almost nothing for a while: it gets longer.
+		quiet := 15 * time.Second
+		if p.kind == "screen" {
+			quiet = time.Minute
+		}
+		if last == 0 && time.Since(p.since) > 20*time.Second || last != 0 && time.Since(time.UnixMilli(last)) > quiet {
 			e.SFULeave(number, p.id)
 			return
 		}
@@ -488,6 +512,7 @@ func (e *Engine) sfuPacket(p *sfuPub, pkt []byte) {
 // forward sends one packet to a viewer if it is of the layer the viewer gets now, switching layers
 // at a keyframe of the new one, with one SSRC and continuous sequence numbers and timestamps.
 func (s *sfuSub) forward(p *sfuPub, pkt []byte, ssrc uint32, key bool) {
+	pkt = withoutExtensions(pkt)
 	p.mu.Lock()
 	want := p.layerSSRC(s.wantLayer())
 	p.mu.Unlock()
@@ -496,7 +521,7 @@ func (s *sfuSub) forward(p *sfuPub, pkt []byte, ssrc uint32, key bool) {
 		s.next = want
 	}
 	vp8 := p.codec.Name == "VP8"
-	var picAt, tl0At int
+	picAt, tl0At := -1, -1 // VP8's picture numbers; H.264 has none (0 would rewrite the RTP header)
 	var long bool
 	if vp8 {
 		picAt, long, tl0At = vp8Fields(pkt)
@@ -757,7 +782,7 @@ func (e *Engine) SFULeave(number, id string) bool {
 		p.stop()
 		p.sess.Close()
 		p.ep.Close()
-		e.Log.Info("video room: a camera left", "room", number)
+		e.Log.Info("video room: a "+p.kind+" left", "room", number)
 	}
 	e.sfuChanged(number)
 	return true
@@ -780,7 +805,7 @@ func (e *Engine) sfuRoomLocked(number string) SFURoom {
 		p.mu.Lock()
 		views := len(p.subs)
 		p.mu.Unlock()
-		out.Publishers = append(out.Publishers, SFUPublisher{ID: p.id, Name: p.name, Codec: p.codec.Name, Layers: p.sc.RIDs,
+		out.Publishers = append(out.Publishers, SFUPublisher{ID: p.id, Name: p.name, Kind: p.kind, Codec: p.codec.Name, Layers: p.sc.RIDs,
 			Live: p.last.Load() != 0 && time.Since(time.UnixMilli(p.last.Load())) < 3*time.Second, Since: p.since.UTC(), Views: views})
 	}
 	sort.Slice(out.Publishers, func(i, j int) bool { return out.Publishers[i].Since.Before(out.Publishers[j].Since) })
@@ -793,4 +818,44 @@ func (e *Engine) sfuChanged(number string) {
 	r := e.sfuRoomLocked(number)
 	e.sfu.mu.Unlock()
 	e.publish("sfu.changed", r)
+}
+
+// roomFor says whether a room takes one more camera (limit) or a shared screen (one at a time).
+// Called with the hub locked.
+func (r *sfuRoom) roomFor(kind string, limit int) error {
+	cams := 0
+	for _, p := range r.pubs {
+		if p.kind == "screen" {
+			if kind == "screen" {
+				return ErrSFUScreenTaken
+			}
+			continue
+		}
+		cams++
+	}
+	if kind == "camera" && cams >= limit {
+		return ErrSFUFull
+	}
+	return nil
+}
+
+// withoutExtensions is an RTP packet without its header extensions: a viewer's answer agrees on
+// none, and the publisher's numbers belong to the publisher's session. Returns pkt itself when it
+// has none.
+func withoutExtensions(pkt []byte) []byte {
+	if len(pkt) < 12 || pkt[0]&0x10 == 0 {
+		return pkt
+	}
+	at := 12 + 4*int(pkt[0]&0x0f)
+	if len(pkt) < at+4 {
+		return pkt
+	}
+	end := at + 4 + 4*int(binary.BigEndian.Uint16(pkt[at+2:]))
+	if end > len(pkt) {
+		return pkt
+	}
+	out := make([]byte, 0, len(pkt)-(end-at))
+	out = append(out, pkt[:at]...)
+	out[0] &^= 0x10
+	return append(out, pkt[end:]...)
 }

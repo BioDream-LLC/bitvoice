@@ -1,6 +1,7 @@
 package pbx
 
 import (
+	"bytes"
 	"encoding/binary"
 	"net"
 	"net/netip"
@@ -202,5 +203,98 @@ func TestREMB(t *testing.T) {
 	exp, mant := int(b[17]>>2), uint64(b[17]&3)<<16|uint64(binary.BigEndian.Uint16(b[18:]))
 	if got := mant << exp; got > 2_500_000 || got < 2_490_000 {
 		t.Fatalf("rate %d", got)
+	}
+}
+
+// A room takes cameras up to its limit and one shared screen beside them, never two.
+func TestSFURoomFor(t *testing.T) {
+	r := &sfuRoom{pubs: map[string]*sfuPub{}}
+	if err := r.roomFor("screen", 2); err != nil {
+		t.Fatal("an empty room refused a screen:", err)
+	}
+	r.pubs["a"] = &sfuPub{kind: "camera"}
+	r.pubs["b"] = &sfuPub{kind: "camera"}
+	if err := r.roomFor("camera", 2); err != ErrSFUFull {
+		t.Fatalf("a third camera in a room of two: %v", err)
+	}
+	if err := r.roomFor("screen", 2); err != nil {
+		t.Fatalf("a full room of cameras refused a screen: %v", err)
+	}
+	r.pubs["s"] = &sfuPub{kind: "screen"}
+	if err := r.roomFor("screen", 2); err != ErrSFUScreenTaken {
+		t.Fatalf("a second screen: %v", err)
+	}
+	delete(r.pubs, "b")
+	if err := r.roomFor("camera", 2); err != nil {
+		t.Fatalf("the shared screen took a camera's place: %v", err)
+	}
+}
+
+// Forwarded packets lose the publisher's header extensions (the viewer agreed on none) and keep
+// everything else: CSRCs, payload, padding.
+func TestWithoutExtensions(t *testing.T) {
+	plain := []byte{0x80, 96, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0xaa, 0xbb}
+	if got := withoutExtensions(plain); &got[0] != &plain[0] {
+		t.Fatal("a packet without extensions was copied")
+	}
+	// One CSRC, a two-byte-header extension block of two words, then the payload.
+	ext := []byte{0x91, 96, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 9, 0x10, 0x00, 0, 2, 1, 4, 1, 2, 3, 4, 0, 0, 0xaa, 0xbb}
+	got := withoutExtensions(ext)
+	want := []byte{0x81, 96, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 9, 0xaa, 0xbb}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("%x, want %x", got, want)
+	}
+	// A length that runs past the packet: left alone, never cut wrongly.
+	bad := []byte{0x90, 96, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0xbe, 0xde, 0, 9, 1}
+	if !bytes.Equal(withoutExtensions(bad), bad) {
+		t.Fatal("a broken packet was changed")
+	}
+}
+
+// An H.264 packet goes out with its RTP header whole across a switch of layers: only the sequence
+// number, timestamp, SSRC and payload type change (VP8's picture numbers are not looked for in it).
+func TestSFUH264Header(t *testing.T) {
+	sink, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sink.Close()
+	pool := &media.Pool{Host: "127.0.0.1", Min: 35400, Max: 35500}
+	ep, err := pool.Allocate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ep.Close()
+	ep.Latch(netip.MustParseAddrPort(sink.LocalAddr().String()))
+	pub := &sfuPub{codec: webrtc.VideoCodec{Name: "H264", PT: 102}, sc: webrtc.Simulcast{RIDs: []string{"h", "l"}, RIDExt: 4},
+		layers: map[string]uint32{}, ssrcs: map[uint32]string{}, subs: map[string]*sfuSub{}}
+	sub := &sfuSub{id: "s", pub: pub, ep: ep, pt: 109, want: "high"}
+	pub.subs["s"] = sub
+	e := &Engine{}
+	idr := []byte{0x7c, 0x85, 1, 2, 3} // FU-A, first fragment of an IDR
+	slice := []byte{0x61, 0xe0, 4, 5}  // a non-IDR slice
+	got := func() []byte {
+		sink.SetReadDeadline(time.Now().Add(2 * time.Second))
+		b := make([]byte, 1500)
+		n, _, err := sink.ReadFromUDP(b)
+		if err != nil {
+			t.Fatal("nothing forwarded")
+		}
+		return b[:n]
+	}
+	e.sfuPacket(pub, rtpWith(102, 0x2222, 900, 1000, "l", idr))
+	first := got()
+	e.sfuPacket(pub, rtpWith(102, 0x1111, 40, 5000, "h", idr)) // the high layer: switch here
+	for _, b := range [][]byte{first, got()} {
+		if b[0] != 0x80 || b[1] != 109 {
+			t.Fatalf("header %x %x, want 80 6d (version 2, no extension; the viewer's payload type)", b[0], b[1])
+		}
+		if !bytes.Equal(b[12:], idr) {
+			t.Fatalf("payload %x", b[12:])
+		}
+	}
+	e.sfuPacket(pub, rtpWith(102, 0x1111, 41, 8000, "", slice))
+	if b := got(); b[0] != 0x80 || !bytes.Equal(b[12:], slice) {
+		t.Fatalf("after the switch: %x", b)
 	}
 }
