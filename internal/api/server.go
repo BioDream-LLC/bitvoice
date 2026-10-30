@@ -121,6 +121,7 @@ type Server struct {
 	logins        map[string][]time.Time // failed logins per address, for throttling
 	registrations map[string][]time.Time // OAuth client registrations per address (MCP sign-in)
 	oauth         oauthCodes             // OAuth codes waiting to be exchanged
+	ws            workspaceState         // Microsoft 365 or Google Workspace
 	sso           ssoState
 	upWait        upgradeWait
 	load          loadState

@@ -67,11 +67,19 @@ func (s *Server) readCalendars(ctx context.Context) {
 	cfg := s.config()
 	loc := cfg.System.Location()
 	now := time.Now()
+	// Extensions without a calendar address of their own, whose person is in Microsoft 365 or
+	// Google Workspace (by email), are read from there.
+	fromService := s.workspaceBusy(ctx, cfg, now)
 	for _, x := range cfg.Extensions {
 		if x.Calendar.Secret == "" {
-			if s.Engine != nil {
-				s.Engine.ClearAway(x.Number, "calendar")
+			if s.Engine == nil {
+				continue
 			}
+			if busy, ok := fromService[x.Number]; ok {
+				s.applyCalendar(x, busy, now)
+				continue
+			}
+			s.Engine.ClearAway(x.Number, "calendar")
 			continue
 		}
 		body, err := fetchCalendar(ctx, x.Calendar.Secret)

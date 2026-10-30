@@ -136,6 +136,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | Everyone's-video rooms (SFU, simulcast) and screen sharing | Checked against a reference | Three Chromium browsers in one room, each sending three sizes (VP8 simulcast) and receiving the two others; sizes switched at keyframes as tiles grow and shrink. Cameras and a shared screen (Chromium's own screen capture) in an H.264 room. Not yet tried with Firefox or Safari, over the internet, or with more than three cameras; H.264 simulcast picks layers by the browser's order only. |
 | AGI and FastAGI (Asterisk Gateway Interface) | Checked against a reference | every command's answer compared with Asterisk 20.6's over FastAGI; a FastAGI server written with pyst2 running a call; EAGI audio to a program. Not tried with a production IVR |
 | AI assistants over MCP | Checked against a reference | the official MCP TypeScript SDK (1.32.2) as the client: tools listed and called with an API token over Streamable HTTP (protocol 2025-11-25), and its OAuth sign-in end to end (discovery, registration, PKCE, token, refresh); the consent page in Chromium; the stdio bridge against a test server. Not yet tried with Claude, ChatGPT or another assistant itself, which needs a server reachable from the internet with a trusted certificate. |
+| Microsoft 365 and Google Workspace (contacts and calendars) | Software-tested | against stand-ins of Microsoft Graph (users, organisation contacts, calendar getSchedule, the client-credentials token) and of Google's People API, Calendar freeBusy and JWT-bearer token, written from their published references; the stand-ins check what BitVoice sends (the JWT's signature and claims, paging, request bodies). Not yet tried with a real Microsoft 365 tenant or Google Workspace domain. |
 | H.323 trunks | Checked against a reference | H323Plus 1.28 (its simph323 playing and recording WAV files) on EC2: calls both ways with Fast Connect and G.711, each end hearing the other's tone, MOS 4.39; call set-up also with Asterisk's chan_ooh323 (whose own sound is broken in Asterisk 22) |
 | SIP over WebSocket | Checked against a reference | JsSIP and SIP.js |
 | Codecs: GSM, G.726, iLBC, MP3 hold music | Checked against a reference | ffmpeg, the RFC 3951 reference program and minimp3, sample for sample |
@@ -1060,7 +1061,13 @@ In the extension, **Calendar and do not disturb**, paste the calendar's private 
 
 **Do not disturb now** stops the extension ringing until switched off, whatever the calendar says. The extensions list shows who is away and until when.
 
-The private address works like a password: anyone with it can read that calendar, so it is kept with the other secrets.`,
+The private address works like a password: anyone with it can read that calendar, so it is kept with the other secrets.
+
+## Every calendar at once: Microsoft 365 and Google Workspace
+Rather than a private address per extension, BitVoice can read every person's calendar from Microsoft 365 or Google Workspace: set it up once in [Settings](#/settings), **Microsoft 365 and Google Workspace** (see [Contacts](#contacts) for the steps), with **Calendars say who is away** on. Each extension is matched to its person by its **email**; one with a private address of its own uses that instead. The extension's settings here (**Meetings count as busy**, **While busy, calls**) apply as with a private address.
+- **Microsoft 365** tells meetings from time off: a meeting marked out of office counts as time off; tentative meetings, and time marked free or working elsewhere, never stop the phone ringing. A private meeting is shown as "In a meeting", without its title.
+- **Google Workspace** gives busy times without saying why, so they always count as meetings.
+- The calendars are read every five minutes, and at once when the settings change. An extension whose email the service does not know says so in its calendar section.`,
   },
   {
     id: 'insight', title: 'Call insight for supervisors', route: '/quality', keys: 'insight coaching notes supervisor notes sentiment mood talk time talk ratio interruptions supervisor quality monitoring contact centre',
@@ -1210,7 +1217,7 @@ From then on, calls to your extension ring this desk as well as your other phone
 On [Phones](#/phones), **Hot desks** shows who is signed in where; administrators can sign someone in (without their PIN) or out. The codes, and a time each day when everyone is signed out, are in Settings. Sign-ins are kept across restarts.`,
   },
   {
-    id: 'contacts', title: 'Contacts on every phone', route: '/contacts', keys: 'contacts directory phonebook address book csv import export yealink polycom grandstream snom caller name',
+    id: 'contacts', title: 'Contacts on every phone', route: '/contacts', keys: 'contacts directory phonebook address book csv import export yealink polycom grandstream snom caller name microsoft 365 office 365 entra azure ad graph google workspace gmail people directory sync',
     body: `**Contacts** is the company directory: the suppliers, clients and other offices people call. Every phone lists it beside the extensions, and when one of these numbers rings in, phones and the caller card show the contact's name (when the provider sent none). A number matches however it is written: +1 212 555 0100 and 2125550100 are the same line.
 
 ::figure contacts
@@ -1226,7 +1233,26 @@ Phones set up by [Phones](#/phones) (provisioning) get the directory with no mor
 - **Snom**: the list is written into the phone's settings, so it updates when the phone next checks them.
 
 ## In the browser phone
-**Contacts** under the keypad finds a name or number and puts it ready to call.`,
+**Contacts** under the keypad finds a name or number and puts it ready to call.
+
+## From Microsoft 365 or Google Workspace
+BitVoice can keep Contacts in step with your organisation's directory: everyone in it who has a phone number, and its shared contacts (Exchange's organisation contacts, or Google's shared domain contacts). In [Settings](#/settings), **Microsoft 365 and Google Workspace**, choose the service, give what it needs, and press **Check now**: it signs in, counts the people, and says which extensions match a person by email. Save, and Contacts fill within half a minute; then every half hour, or at once with **Sync contacts now**.
+
+**Microsoft 365** (an app registration; you need to be able to grant admin consent):
+1. In the Entra admin centre, **App registrations**, **New registration**: name it BitVoice, single tenant, no redirect address.
+2. **API permissions**, **Add a permission**, **Microsoft Graph**, **Application permissions**: \`User.Read.All\`, \`OrgContact.Read.All\` and \`Calendars.ReadBasic\`. Then **Grant admin consent**.
+3. **Certificates & secrets**, **New client secret**: copy its value (shown once).
+4. In BitVoice: the directory (tenant) ID, the application (client) ID and the secret. A secret expires (Microsoft offers up to two years): when it does, the card says the secret was refused; make a new one and paste it.
+
+**Google Workspace** (a service account; you need to be a super administrator):
+1. In Google Cloud, in one of your projects: switch on the **People API** and the **Google Calendar API**, make a **service account**, and add a **key** (JSON) to it.
+2. In the Google Admin console, **Security**, **Access and data control**, **API controls**, **Domain-wide delegation**, **Add new**: the service account's client ID, with the scopes \`https://www.googleapis.com/auth/directory.readonly,https://www.googleapis.com/auth/calendar.freebusy\`.
+3. In BitVoice: the key file, and the email of an administrator for the service account to act as.
+
+What comes in:
+- A person's work numbers and mobile, name, email, and their job title and department as the contact's notes; the organisation's name as their company. People without a number are left out (a contact needs one); accounts that are switched off are left out.
+- Contacts from the service are marked with its name, and are changed there: changing or removing one here is refused, as the next sync would undo it. Contacts made here, or imported from a spreadsheet, are left alone.
+- BitVoice only reads. Its access is the read-only permissions above, and the secret or key is kept with the other secrets: viewers never see it, and exports for Git leave it out.`,
   },
   {
     id: 'costs', title: 'Costs and budgets', route: '/costs', keys: 'cost costs spend money budget rates prices toll fraud billing department alarm',
@@ -2454,6 +2480,7 @@ Programs (Terraform, scripts) use API tokens instead of a password: made on this
 | Single sign-on | the identity provider ([Single sign-on](#sso)) |
 | Asterisk compatibility | AMI and ARI for programs written for Asterisk ([Asterisk compatibility](#compat)) |
 | AI assistants (MCP) | whether AI assistants such as Claude or ChatGPT may connect, and whether they may act ([AI assistants](#assistants)) |
+| Microsoft 365 and Google Workspace | people and shared contacts into Contacts, and calendars for who is away ([Contacts](#contacts), [Calendars](#calendar)) |
 | Mobile apps | the push service that wakes the apps |
 | Email | the mail server voicemail, faxes and alerts go through |
 | Key vaults | secrets kept in AWS Secrets Manager or Azure Key Vault |

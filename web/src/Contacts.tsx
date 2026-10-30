@@ -2,6 +2,7 @@ import { createColumnHelper } from '@tanstack/react-table'
 import { BookUser, Download, Phone, Plus, Trash2, Upload } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { providerName } from './Workspace'
 import { useAddContactMutation, useDeleteContactMutation, useDirectoryQuery, useSaveContactMutation, type ApiErrorBody, type DirContact, type DirNumber } from './api'
 import { attempt, DeleteButton, Drawer, Table, useIsAdmin } from './Editor'
 import { useOpenParam } from './useOpenParam'
@@ -25,7 +26,8 @@ export function Contacts() {
     return (data?.items ?? []).filter((c) => !w || `${c.name} ${c.company ?? ''} ${c.email ?? ''}`.toLowerCase().includes(w) || (digits.length > 2 && c.numbers.some((n) => n.number.replace(/\D/g, '').includes(digits))))
   }, [data, q])
   const columns = [
-    col.accessor('name', { header: 'Name', cell: (c) => <span className="inline-flex items-center gap-2 font-medium text-slate-100"><BookUser size={14} className="text-teal-300" aria-hidden />{c.getValue()}</span> }),
+    col.accessor('name', { header: 'Name', cell: (c) => <span className="inline-flex items-center gap-2 font-medium text-slate-100"><BookUser size={14} className="text-teal-300" aria-hidden />{c.getValue()}
+      {c.row.original.source && <span className="rounded bg-sky-500/15 px-1.5 text-xs font-normal text-sky-200" title={`Kept in step with ${providerName(c.row.original.source)}: change it there`}>{providerName(c.row.original.source)}</span>}</span> }),
     col.accessor('company', { header: 'Company', cell: (c) => <span className="text-sm text-slate-300">{c.getValue()}</span> }),
     col.accessor('numbers', { header: 'Numbers', enableSorting: false, cell: (c) => (
       <span className="flex flex-wrap gap-x-3 font-mono text-xs">{c.getValue().map((n, i) => <span key={i} className={kindColour[n.kind]}>{n.number} <span className="font-sans text-slate-500">{n.kind}</span></span>)}</span>
@@ -41,7 +43,7 @@ export function Contacts() {
         {admin && <button className="btn btn-primary" onClick={() => setEdit({ ...blank, numbers: [{ kind: 'work', number: '' }] })}><Plus size={15} aria-hidden /> Add contact</button>}
       </div>}>
       <input type="search" className="input mb-4 max-w-sm" aria-label="Find a contact" placeholder="Find by name, company or number" value={q} onChange={(e) => setQ(e.target.value)} />
-      <Table data={rows} columns={columns} onRow={(r) => admin && setEdit(r)}
+      <Table data={rows} columns={columns} onRow={(r) => { if (!admin) return; if (r.source) { toast.info(`${r.name} is kept in step with ${providerName(r.source)}: change it there`); return } setEdit(r) }}
         empty={<Empty icon={BookUser} title={q ? 'Nobody matches' : 'No contacts yet'}>{q ? 'Try part of the name or number.' : 'Add the people you call most, or import a spreadsheet (CSV) with name and phone columns.'}</Empty>} />
       {edit && <ContactEditor contact={edit} onClose={() => setEdit(null)} />}
     </Page>

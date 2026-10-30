@@ -162,6 +162,9 @@ type System struct {
 	// MCP lets AI assistants (Claude, ChatGPT, Gemini, Cursor ...) use BitVoice through the Model
 	// Context Protocol, with an API token.
 	MCP MCP `json:"mcp"`
+	// Workspace links BitVoice to Microsoft 365 or Google Workspace: their people and shared
+	// contacts into the directory, and their calendars' busy times into who is away.
+	Workspace Workspace `json:"workspace"`
 	// SSO signs people in to the web interface through an OpenID Connect identity provider.
 	SSO SSO `json:"sso"`
 	// LDAP reads the company directory (LDAP, Active Directory): extensions, ring groups, sign-in.
@@ -1651,6 +1654,7 @@ func (c *Config) Validate() error {
 	c.validateCompat(&p)
 	c.validateSSO(&p)
 	c.validateLDAP(&p)
+	c.validateWorkspace(&p)
 	c.validateICE(&p)
 	c.validateCRM(&p)
 	c.validateMetrics(&p)

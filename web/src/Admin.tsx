@@ -15,6 +15,7 @@ import {
 } from './api'
 import { CompatSettings } from './Compat'
 import { MCPSettings } from './Assistants'
+import { WorkspaceSettings } from './Workspace'
 import { SSOSettings } from './SSO'
 import { LDAPSettingsCard } from './LDAP'
 import { NATSettings } from './NAT'
@@ -385,6 +386,7 @@ export function Settings() {
         <CertificateSettings />
         <MetricsSettings value={sys.metrics} onChange={(v) => setS((s0) => ({ ...s0, system: { ...s0.system, metrics: { ...s0.system.metrics, ...v } } }))} error={p} />
         <SSOSettings value={sys.sso} onChange={(v) => setS((s0) => ({ ...s0, system: { ...s0.system, sso: { ...s0.system.sso, ...v } } }))} error={p} />
+        <WorkspaceSettings value={sys.workspace} onChange={(v) => setS((s0) => ({ ...s0, system: { ...s0.system, workspace: { ...s0.system.workspace, ...v } } }))} error={p} />
         <LDAPSettingsCard value={sys.ldap} onChange={(v) => setS((s0) => ({ ...s0, system: { ...s0.system, ldap: { ...s0.system.ldap, ...v } } }))} error={p} admin={admin} />
         <MCPSettings value={sys.mcp} onChange={(v) => setS((s0) => ({ ...s0, system: { ...s0.system, mcp: { ...s0.system.mcp, ...v } } }))} />
         <CompatSettings value={sys.compat} onChange={(v) => setS((s0) => ({ ...s0, system: { ...s0.system, compat: { ...s0.system.compat, ...v } } }))} error={p} admin={admin} />

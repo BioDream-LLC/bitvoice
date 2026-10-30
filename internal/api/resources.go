@@ -460,6 +460,12 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request, u store.Use
 		if in.System.SSO.ClientSecret == "" && in.System.SSO.ClientID == c.System.SSO.ClientID {
 			in.System.SSO.ClientSecret = c.System.SSO.ClientSecret
 		}
+		if in.System.Workspace.ClientSecret == "" && in.System.Workspace.ClientID == c.System.Workspace.ClientID {
+			in.System.Workspace.ClientSecret = c.System.Workspace.ClientSecret
+		}
+		if in.System.Workspace.ServiceAccountKey == "" && in.System.Workspace.AdminEmail == c.System.Workspace.AdminEmail {
+			in.System.Workspace.ServiceAccountKey = c.System.Workspace.ServiceAccountKey
+		}
 		for i, t := range in.System.ICE.TURN {
 			for _, old := range c.System.ICE.TURN {
 				if t.Password == "" && old.Server == t.Server && old.Username == t.Username {

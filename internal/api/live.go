@@ -136,6 +136,7 @@ func (s *Server) liveRoutes() {
 	s.callLinkRoutes()
 	s.insightRoutes()
 	s.awayRoutes()
+	s.workspaceRoutes()
 	s.reputationRoutes()
 	s.certificateRoutes()
 	s.databaseRoutes()

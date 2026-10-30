@@ -1,7 +1,8 @@
 import { BellOff, CalendarCheck } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { errorOf, useAwayQuery, useCheckCalendarMutation, useSetAwayMutation, type Extension } from './api'
+import { errorOf, useAwayQuery, useCheckCalendarMutation, useSetAwayMutation, useSettingsQuery, useWorkspaceStatusQuery, type Extension } from './api'
+import { providerName } from './Workspace'
 import { Field, Toggle, relTime } from './ui'
 
 /** AwayBadge shows that an extension is not ringing now, and why. */
@@ -25,6 +26,10 @@ export function CalendarFields({ x, set, p, isNew }: { x: Extension; set: (c: Ex
   const away = data?.items.find((a) => a.ext === x.number)
   const problem = data?.problems?.[x.number]
   const [found, setFound] = useState<string | null>(null)
+  const { data: settings } = useSettingsQuery()
+  const ws = settings?.system.workspace
+  const fromService = !!ws?.provider && ws.calendars && !!x.email && !c.secret
+  const { data: wsStatus } = useWorkspaceStatusQuery(undefined, { skip: !fromService })
   const tryIt = async () => {
     try {
       const r = await check({ secret: c.secret, ignoreMeetings: c.ignoreMeetings }).unwrap()
@@ -47,6 +52,7 @@ export function CalendarFields({ x, set, p, isNew }: { x: Extension; set: (c: Ex
           <button type="button" className="btn" disabled={!c.secret || isLoading} onClick={tryIt}>Check</button>
         </div>
       </Field>
+      {fromService && <p className="text-sm text-sky-200">Read from {providerName(ws?.provider)}, as {x.email}{wsStatus?.problems?.[x.number] ? <span className="text-amber-300">: {wsStatus.problems[x.number]}</span> : ''}. A private address here is used instead.</p>}
       {found && <p role="status" className="text-sm text-emerald-300">{found}</p>}
       {problem && <p className="text-sm text-amber-300">{problem}</p>}
       <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={!c.ignoreMeetings} onChange={(v) => set({ ...c, ignoreMeetings: !v })} label="Meetings count as busy" /> Meetings count as busy <span className="text-xs text-slate-500">(time off always does; events marked free never do)</span></label>

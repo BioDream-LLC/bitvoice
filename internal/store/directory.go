@@ -19,6 +19,10 @@ type DirContact struct {
 	Email   string        `json:"email,omitempty"`
 	Notes   string        `json:"notes,omitempty"`
 	Updated time.Time     `json:"updated"`
+	// Source is where a contact comes from, kept in step from there (microsoft365 or google);
+	// empty for one made here. SourceID is its id there.
+	Source   string `json:"source,omitempty"`
+	SourceID string `json:"sourceId,omitempty"`
 }
 
 // PhoneNumber is one of a contact's numbers.
@@ -101,4 +105,55 @@ func (s *Store) ImportContacts(in []DirContact, replace bool) (added, updated in
 		added++
 	}
 	return added, updated, s.writeDoc(s.dirPath(), cs)
+}
+
+// SyncContacts makes the contacts from source exactly in: those it no longer has go, those it still
+// has keep their id here, new ones are added. Contacts made here, or from elsewhere, are untouched.
+func (s *Store) SyncContacts(source string, in []DirContact) (added, updated, removed int, err error) {
+	s.dirMu.Lock()
+	defer s.dirMu.Unlock()
+	cs := s.loadDirectory()
+	old := map[string]DirContact{}
+	keep := cs[:0]
+	for _, c := range cs {
+		if c.Source == source {
+			old[c.SourceID] = c
+			continue
+		}
+		keep = append(keep, c)
+	}
+	now := time.Now().UTC()
+	seen := map[string]bool{}
+	for _, c := range in {
+		if seen[c.SourceID] {
+			continue
+		}
+		seen[c.SourceID] = true
+		c.Source = source
+		if o, ok := old[c.SourceID]; ok {
+			c.ID, c.Updated = o.ID, o.Updated
+			if !sameContact(o, c) {
+				c.Updated = now
+				updated++
+			}
+		} else {
+			c.ID, c.Updated = config.NewID(), now
+			added++
+		}
+		keep = append(keep, c)
+	}
+	removed = len(old) - (len(seen) - added)
+	return added, updated, removed, s.writeDoc(s.dirPath(), keep)
+}
+
+func sameContact(a, b DirContact) bool {
+	if a.Name != b.Name || a.Company != b.Company || a.Email != b.Email || a.Notes != b.Notes || len(a.Numbers) != len(b.Numbers) {
+		return false
+	}
+	for i := range a.Numbers {
+		if a.Numbers[i] != b.Numbers[i] {
+			return false
+		}
+	}
+	return true
 }

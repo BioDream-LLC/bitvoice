@@ -1387,3 +1387,73 @@ test('AI assistants (MCP): switch on, sign an assistant in, revoke it', async ({
     }).catch(() => {})
   }
 })
+
+// Microsoft 365: the settings card signs in (to a Graph stand-in shaped as Microsoft documents it),
+// the people with a number land in Contacts marked as Microsoft 365's, and an extension whose
+// person is in a meeting stops ringing, with the meeting's title.
+test('Microsoft 365: people into Contacts, calendars say who is away', async ({ page }) => {
+  test.setTimeout(150_000)
+  const { createServer } = await import('node:http')
+  const t = (d: Date) => d.toISOString().replace('Z', '0000')
+  const graph = createServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json')
+    const u = new URL(req.url!, 'http://x')
+    if (u.pathname.endsWith('/oauth2/v2.0/token')) return res.end('{"access_token":"tok","expires_in":3600}')
+    if (req.headers.authorization !== 'Bearer tok') { res.statusCode = 401; return res.end('{"error":{"code":"InvalidAuthenticationToken","message":"no"}}') }
+    if (u.pathname === '/v1.0/users') return res.end(JSON.stringify({ value: [
+      { id: 'u1', displayName: 'Adele Vance', mail: 'adele@contoso.example', businessPhones: ['+1 425 555 0109'], department: 'Retail', jobTitle: 'Manager', accountEnabled: true },
+      { id: 'u2', displayName: 'Megan Bowen', mail: 'megan@contoso.example', businessPhones: [], mobilePhone: '+1 425 555 0110', accountEnabled: true }] }))
+    if (u.pathname === '/v1.0/contacts') return res.end(JSON.stringify({ value: [{ id: 'c1', displayName: 'Fabrikam Support', companyName: 'Fabrikam', phones: [{ type: 'business', number: '+1 800 555 0100' }] }] }))
+    if (u.pathname.endsWith('/calendar/getSchedule')) {
+      const now = Date.now()
+      return res.end(JSON.stringify({ value: [{ scheduleId: 'adele@contoso.example', scheduleItems: [{ status: 'busy', subject: 'Store visit', isPrivate: false,
+        start: { dateTime: t(new Date(now - 600_000)), timeZone: 'UTC' }, end: { dateTime: t(new Date(now + 3_600_000)), timeZone: 'UTC' } }] }] }))
+    }
+    res.statusCode = 404; res.end('{}')
+  })
+  await new Promise<void>((r) => graph.listen(18396, '127.0.0.1', r))
+  const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
+  try {
+    await signIn(page)
+    const ext = await page.evaluate(async (H) => {
+      const x = (await (await fetch('./api/extensions')).json()).items[0]
+      await fetch(`./api/extensions/${x.id}`, { method: 'PUT', headers: H, body: JSON.stringify({ ...x, email: 'adele@contoso.example', calendar: { ...x.calendar, secret: '' } }) })
+      return x.number as string
+    }, H)
+    await page.goto('/#/settings')
+    await page.reload() // the change above went round the page's cache
+    const card = page.locator('section', { has: page.getByRole('heading', { name: 'Microsoft 365 and Google Workspace' }) })
+    await card.getByLabel('Read from').selectOption('microsoft365')
+    await expect(card.getByText('Calendars.ReadBasic')).toBeVisible()
+    await expect(card.getByRole('switch', { name: 'People and shared contacts into Contacts' })).toBeChecked()
+    await expect(card.getByRole('switch', { name: 'Calendars say who is away' })).toBeChecked()
+    await card.getByLabel('Directory (tenant) ID').fill('contoso.onmicrosoft.com')
+    await card.getByLabel('Application (client) ID').fill('11111111-2222-3333-4444-555555555555')
+    await card.getByLabel('Client secret').fill('a-client-secret')
+    await card.getByRole('button', { name: 'Check now' }).click()
+    await expect(card.getByText('Signed in to Microsoft 365: 2 people and 1 shared contacts; 3 have a phone number')).toBeVisible()
+    await expect(card.getByText(`1 extension match a person by email (${ext})`)).toBeVisible()
+    await page.getByRole('button', { name: 'Save' }).first().click()
+    await expect(page.getByText('Settings saved').first()).toBeVisible()
+    await expect(card.getByText('Contacts in step')).toBeVisible({ timeout: 90_000 })
+
+    await page.goto('/#/contacts')
+    const adele = page.getByRole('row').filter({ hasText: 'Adele Vance' })
+    await expect(adele.getByText('Microsoft 365')).toBeVisible()
+    await expect(page.getByRole('row').filter({ hasText: 'Fabrikam Support' })).toBeVisible()
+    await adele.click()
+    await expect(page.getByText('Adele Vance is kept in step with Microsoft 365: change it there')).toBeVisible()
+
+    // The extension's calendar is read from Microsoft 365: she is in a meeting, so it does not ring.
+    await expect.poll(async () => page.evaluate(async (n) => ((await (await fetch('./api/away')).json()).items as { ext: string; reason: string }[]).find((a) => a.ext === n)?.reason ?? '', ext), { timeout: 60_000 }).toBe('Store visit')
+    await page.goto(`/#/extensions?open=${ext}`)
+    await expect(page.getByText('Read from Microsoft 365, as adele@contoso.example')).toBeVisible()
+  } finally {
+    graph.close()
+    await page.evaluate(async (H) => {
+      const st = await (await fetch('./api/settings')).json()
+      st.system.workspace = { ...st.system.workspace, provider: '' }
+      await fetch('./api/settings', { method: 'PUT', headers: H, body: JSON.stringify(st) })
+    }, H).catch(() => {})
+  }
+})

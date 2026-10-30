@@ -150,7 +150,7 @@ func (s *Server) directoryRoutes() {
 			writeErr(w, err)
 			return
 		}
-		c.ID = ""
+		c.ID, c.Source, c.SourceID = "", "", ""
 		if p := checkContact(&c, ""); len(p) > 0 {
 			writeErr(w, p)
 			return
@@ -171,6 +171,10 @@ func (s *Server) directoryRoutes() {
 			return
 		}
 		c.ID = r.PathValue("id")
+		if s.refuseSynced(w, c.ID) {
+			return
+		}
+		c.Source, c.SourceID = "", ""
 		if p := checkContact(&c, ""); len(p) > 0 {
 			writeErr(w, p)
 			return
@@ -188,6 +192,9 @@ func (s *Server) directoryRoutes() {
 		writeJSON(w, 200, out)
 	})
 	s.handle("DELETE /api/directory/{id}", true, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		if s.refuseSynced(w, r.PathValue("id")) {
+			return
+		}
 		if err := s.Store.DeleteContact(r.PathValue("id")); errors.Is(err, store.ErrNoContact) {
 			writeError(w, 404, "no such contact")
 			return
@@ -299,4 +306,20 @@ func (s *Server) directoryRoutes() {
 		s.Bus.Publish("directory.changed", nil)
 		writeJSON(w, 200, map[string]any{"added": added, "updated": updated})
 	})
+}
+
+// refuseSynced answers 409 for a contact kept in step with Microsoft 365 or Google Workspace: a
+// change here would be undone at the next sync, so it is made there.
+func (s *Server) refuseSynced(w http.ResponseWriter, id string) bool {
+	for _, c := range s.Store.Directory() {
+		if c.ID == id && c.Source != "" {
+			from := map[string]string{"microsoft365": "Microsoft 365", "google": "Google Workspace"}[c.Source]
+			if from == "" {
+				from = c.Source
+			}
+			writeError(w, http.StatusConflict, c.Name+" is kept in step with "+from+": change it there")
+			return true
+		}
+	}
+	return false
 }

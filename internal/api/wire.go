@@ -84,6 +84,7 @@ func (s *Server) RunBackground(ctx context.Context, main bool) {
 	go s.RunMetrics(ctx)
 	go s.RunCosts(ctx)
 	go s.RunCalendars(ctx)
+	go s.RunWorkspace(ctx)
 	if main {
 		go s.RunSharedAddress(ctx)
 	}

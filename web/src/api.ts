@@ -281,6 +281,7 @@ export interface SystemSettings {
   ldap: LDAPSettings
   sso: { enabled: boolean; label: string; issuer: string; clientId: string; clientSecret: string; redirectUrl: string; groupsClaim: string; adminGroups: string[]; viewerGroups: string[]; passwordSignIn: boolean }
   mcp: { enabled: boolean; act: boolean }
+  workspace: Workspace
   compat: { ami: boolean; amiListen: string; ari: boolean; users: { username: string; secret: string; write: boolean }[]; apps?: { name: string; number?: string; fallback: Destination }[]; agi?: AGIScript[]; agiKeepDays?: number }
   archive: {
     target: '' | 's3' | 'azure'; recordings: boolean; voicemail: boolean
@@ -347,6 +348,9 @@ export interface User { username: string; name: string; role: Role; created: str
 export interface TraceEntry { at: string; dir: 'in' | 'out'; peer: string; callId: string; summary: string; message: string }
 export interface MobileDevice { id: string; extension: string; name: string; platform: 'ios' | 'android'; canWake: boolean; created: string; lastSeen?: string; lastPush?: string; pushError?: string }
 export interface Change { path: string; before: string; after: string }
+export interface Workspace { provider: '' | 'microsoft365' | 'google'; tenantId: string; clientId: string; clientSecret: string; serviceAccountKey: string; adminEmail: string; contacts: boolean; calendars: boolean }
+export interface WorkspaceStatus { provider: string; synced?: string; total: number; added: number; updated: number; removed: number; error?: string; calendarsRead?: string; matched: number; calendarError?: string; problems?: Record<string, string> }
+export interface WorkspaceCheck { people: number; shared: number; withNumbers: number; matched: string[]; unmatched: string[]; busyTimes?: number; calendarError?: string; calendarProblems?: Record<string, string> }
 export interface MCPInfo { address: string; versions: string[]; tools: { name: string; title: string; description: string; act: boolean }[] }
 export interface OAuthRequest { client: string; returnsTo: string; role: 'admin' | 'viewer'; act: boolean; enabled: boolean }
 export interface ApiToken { id: string; name: string; role: 'admin' | 'viewer'; prefix: string; created: string; by: string; lastUsed?: string; expires?: string; onBehalf?: boolean; mcpOnly?: boolean; client?: string; refreshExpires?: string }
@@ -357,7 +361,7 @@ export interface Costs { currency: string; budgets: Budget[] | null; hourlyLimit
 export interface CostLine { key: string; name: string; calls: number; minutes: number; cost: number }
 export interface CostReport { month: string; currency: string; total: number; calls: number; unpriced: number; departments: CostLine[]; people: CostLine[]; trunks: CostLine[]; days: CostLine[]; top: CDR[]; budgets: (Budget & { spent: number; percent: number })[] }
 export interface DirNumber { kind: 'work' | 'mobile' | 'home' | 'other'; number: string }
-export interface DirContact { id: string; name: string; company?: string; numbers: DirNumber[]; email?: string; notes?: string; updated?: string }
+export interface DirContact { id: string; name: string; company?: string; numbers: DirNumber[]; email?: string; notes?: string; updated?: string; source?: string; sourceId?: string }
 export interface HotDesk { desk: string; deskName: string; user: string; userName: string; since: string }
 export interface ConsentRule { prefix: string; name: string; action: 'announce' | 'beep' | 'off' | 'never' }
 export interface CallLink { id: string; name: string; slug: string; enabled: boolean; title: string; intro: string; askName: boolean; destination: Destination; maxCalls: number }
@@ -484,7 +488,7 @@ const baseQuery = fetchBaseQuery({
 })
 
 const tags = ['Me', 'Extensions', 'RingGroups', 'Trunks', 'Inbound', 'Outbound', 'Settings', 'Users', 'Calls',
-  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail', 'Tenants', 'System', 'Prompts', 'Music', 'Directories', 'DialIns', 'Inbox', 'AudioStreams', 'Campaigns', 'Dialer', 'DNC', 'Toggles', 'ToggleState', 'PINSets', 'Lookups', 'Hotel', 'WakeUps', 'Chat', 'Core', 'PlanCheck', 'Fraud', 'Speech', 'AGI'] as const
+  'Registrations', 'TrunkStatus', 'Stats', 'CDR', 'Health', 'History', 'Bans', 'Audit', 'Trace', 'Setup', 'Voicemail', 'Queues', 'QueueStatus', 'Devices', 'Schedules', 'Menus', 'Scripts', 'PageGroups', 'Upgrade', 'LoadTest', 'Holds', 'Mobile', 'Tokens', 'GitOps', 'Sites', 'Receptionists', 'Callbacks', 'Transcripts', 'Quality', 'Costs', 'Directory', 'HotDesks', 'Texts', 'Timeline', 'Away', 'Reputation', 'Certificate', 'Database', 'Servers', 'FaxBoxes', 'Faxes', 'Conferences', 'ConferenceLive', 'Diverts', 'Myself', 'MyVoicemail', 'Tenants', 'System', 'Prompts', 'Music', 'Directories', 'DialIns', 'Inbox', 'AudioStreams', 'Campaigns', 'Dialer', 'DNC', 'Toggles', 'ToggleState', 'PINSets', 'Lookups', 'Hotel', 'WakeUps', 'Chat', 'Core', 'PlanCheck', 'Fraud', 'Speech', 'AGI', 'Workspace'] as const
 
 export const api = createApi({
   reducerPath: 'api',
@@ -772,7 +776,7 @@ export const api = createApi({
 
       settings: b.query<Settings, void>({ query: () => 'settings', providesTags: ['Settings'] }),
       saveSettings: b.mutation<Settings, Settings>({
-        query: (body) => ({ url: 'settings', method: 'PUT', body }), invalidatesTags: ['Settings', 'History', 'Health', 'Costs', 'HotDesks', 'System'] }),
+        query: (body) => ({ url: 'settings', method: 'PUT', body }), invalidatesTags: ['Settings', 'History', 'Health', 'Costs', 'HotDesks', 'System', 'Workspace'] }),
 
       users: b.query<List<User>, void>({ query: () => 'users', providesTags: ['Users'] }),
       saveUser: b.mutation<User, { username: string; name: string; role: Role; password: string; existing: boolean }>({
@@ -806,6 +810,9 @@ export const api = createApi({
       trace: b.query<List<TraceEntry>, string>({ query: (q) => ({ url: 'sip-trace', params: { q } }), providesTags: ['Trace'] }),
       system: b.query<SystemInfo, void>({ query: () => 'system', providesTags: ['System'] }),
       mcpInfo: b.query<MCPInfo, void>({ query: () => 'mcp' }),
+      workspaceStatus: b.query<WorkspaceStatus, void>({ query: () => 'workspace', providesTags: ['Workspace'] }),
+      checkWorkspace: b.mutation<WorkspaceCheck, Workspace>({ query: (body) => ({ url: 'workspace/check', method: 'POST', body }) }),
+      syncWorkspace: b.mutation<WorkspaceStatus, void>({ query: () => ({ url: 'workspace/sync', method: 'POST' }), invalidatesTags: ['Workspace', 'Directory', 'Audit'] }),
       oauthRequest: b.query<OAuthRequest, { client_id: string; redirect_uri: string }>({ query: (q) => `oauth/request?${new URLSearchParams(q)}` }),
       approveAssistant: b.mutation<{ redirect: string }, { client_id: string; redirect_uri: string; state: string; code_challenge: string; allow: boolean; readOnly: boolean }>({ query: (body) => ({ url: 'oauth/approve', method: 'POST', body }), invalidatesTags: ['Tokens', 'Audit'] }),
       mobileDevices: b.query<List<MobileDevice>, string>({ query: (ext) => `extensions/${ext}/devices`, providesTags: ['Mobile'] }),
@@ -977,7 +984,7 @@ export const {
   useOutboundRoutesQuery, useCreateOutboundMutation, useUpdateOutboundMutation, useDeleteOutboundMutation, useReorderOutboundMutation,
   useSettingsQuery, useSaveSettingsMutation, useUsersQuery, useSaveUserMutation, useDeleteUserMutation, useChangePasswordMutation,
   useCallsQuery, useHangupMutation, useRegistrationsQuery, useStatsQuery, useCdrQuery, useHealthQuery, useSpeechQuery, useHistoryQuery,
-  useMcpInfoQuery, useOauthRequestQuery, useApproveAssistantMutation,
+  useMcpInfoQuery, useOauthRequestQuery, useApproveAssistantMutation, useWorkspaceStatusQuery, useCheckWorkspaceMutation, useSyncWorkspaceMutation,
   useRestoreMutation, useImportConfigMutation, useBansQuery, useUnbanMutation, useAuditQuery, useTraceQuery, useSystemQuery, useOpenDoorMutation, useEmergencyModeMutation, useReceptionistsQuery, useCallbacksQuery, useCallerQuery, useSimulateMutation, useMetricsTestMutation, useAwayQuery, useReputationQuery, useCertificateQuery, useInstallCertificateMutation, useDatabaseQuery, useServersQuery, useServersDnsQuery, useSetServerMutation, useForgetServerMutation, useTestDatabaseMutation, useMoveDatabaseMutation, useSetAwayMutation, useCheckCalendarMutation, useMakeInsightMutation, useAddCoachingMutation, useDeleteCoachingMutation, useInsightQuery, useTimelineQuery, useAddNoteMutation, useDeleteNoteMutation, useConversationsQuery, useThreadQuery, useSendTextMutation, useMarkReadMutation, usePutNoticeMutation, useDeleteNoticeMutation, useHotDesksQuery, useHotDeskSignInMutation, useHotDeskSignOutMutation, useDirectoryQuery, useAddContactMutation, useSaveContactMutation, useDeleteContactMutation, useCostsQuery, usePriceMutation, useQualityQuery, useCrmTestMutation, useTranscriptQuery, useMakeTranscriptMutation, useSearchTranscriptsQuery, useAddCallbackMutation, useSetCallbackMutation, useDeleteCallbackMutation, useRingBackMutation, useCreateReceptionistMutation, useUpdateReceptionistMutation, useDeleteReceptionistMutation, useAskMutation, useApplyAskMutation, usePlanCheckQuery, useRevisionCheckQuery, useRulebooksQuery, useFraudDecisionsQuery, useCheckVaultMutation, useSitesQuery, useCreateSiteMutation, useUpdateSiteMutation, useDeleteSiteMutation, useRemoteAddressQuery, useCompatibilityQuery, useSetAgentMutation, useSuperviseMutation, useSetSupervisionMutation, useTokensQuery, useAddTokenMutation, useRevokeTokenMutation, useGitOpsQuery, useSyncGitOpsMutation, useMobileDevicesQuery, usePairMobileMutation, useUnpairMobileMutation, useHoldsQuery, useAddHoldMutation, useUpdateHoldMutation, useReleaseHoldMutation, usePauseRecordingMutation, useLoadTestQuery, useStartLoadTestMutation, useStopLoadTestMutation, useUpgradeQuery, useUploadUpgradeMutation, useApplyUpgradeMutation, useRollbackUpgradeMutation, useCancelUpgradeMutation,
   useScriptsQuery, useCreateScriptMutation, useUpdateScriptMutation, useDeleteScriptMutation, useTestScriptMutation,
   useMenusQuery, useCreateMenuMutation, useUpdateMenuMutation, useDeleteMenuMutation, useSavePromptMutation, useResetPromptMutation,

@@ -26,6 +26,8 @@ export default defineConfig({
     ignoreHTTPSErrors: true,
     reuseExistingServer: false,
     // No whisper-server for the test server, even where one is installed: its state is shown, nothing is fetched.
-    env: { BITVOICE_META_GRAPH: 'http://127.0.0.1:18399', BITVOICE_WHISPER_SERVER: '/nonexistent/whisper-server' },
+    env: { BITVOICE_META_GRAPH: 'http://127.0.0.1:18399', BITVOICE_WHISPER_SERVER: '/nonexistent/whisper-server',
+      // A Microsoft Graph stand-in the Microsoft 365 test starts.
+      BITVOICE_GRAPH_LOGIN: 'http://127.0.0.1:18396', BITVOICE_GRAPH_URL: 'http://127.0.0.1:18396' },
   },
 })
