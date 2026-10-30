@@ -97,6 +97,8 @@ type Call struct {
 	answered bool
 	ended    bool
 	finished bool
+	held     bool
+	pt       int // the browser side's payload type, for a re-INVITE on hold
 	cleanup  func()
 }
 
@@ -280,17 +282,12 @@ func (p *Phone) Dial(number string, browser *media.Endpoint, pt, eventPT int) (*
 	if err != nil {
 		return nil, err
 	}
-	number = strings.Map(func(r rune) rune {
-		if r >= '0' && r <= '9' || r == '*' || r == '#' || r == '+' {
-			return r
-		}
-		return -1
-	}, number)
+	number = cleanDialled(number)
 	if number == "" {
 		ep.Close()
 		return nil, errors.New("enter a number to call")
 	}
-	c := &Call{p: p, ID: sip.NewCallID(), browser: browser, sipSide: ep}
+	c := &Call{p: p, ID: sip.NewCallID(), browser: browser, sipSide: ep, pt: pt}
 	c.dialog.localURI = p.aor() + ";tag=" + sip.NewTag()
 	c.dialog.remoteURI = "<sip:" + number + "@127.0.0.1>"
 	c.dialog.seq = 1
@@ -454,6 +451,106 @@ func (c *Call) Hangup() {
 	c.finish("ended", "you hung up")
 }
 
+// Transfer hands the other party to a number (a blind transfer) through a SIP REFER, as a desk phone
+// would; the engine rings the number for the party who stays and releases this phone. A transfer to the
+// park number parks the call. The attended case (transfer to a call this phone already has on hold) is
+// Replaces: pass "<sip:...;Replaces=call-id;to-tag=...;from-tag=...>" as number.
+func (c *Call) Transfer(number string) error {
+	c.p.mu.Lock()
+	answered, ended := c.answered, c.ended
+	c.p.mu.Unlock()
+	if !answered || ended {
+		return errors.New("only a connected call can be transferred")
+	}
+	referTo := number
+	if !strings.HasPrefix(number, "<") {
+		n := cleanDialled(number)
+		if n == "" {
+			return errors.New("enter a number to transfer to")
+		}
+		referTo = "<sip:" + n + "@127.0.0.1>"
+	}
+	m := c.request("REFER")
+	m.Set("Refer-To", referTo)
+	m.Set("Referred-By", c.p.aor())
+	r := final(c.p.g.stack.Request(m, c.p.g.engine))
+	if r == nil || r.StatusCode >= 300 {
+		return fmt.Errorf("BitVoice would not transfer the call (%s)", func() string {
+			if r == nil {
+				return "no answer"
+			}
+			return reasonOf(r)
+		}())
+	}
+	return nil
+}
+
+// Hold and Unhold put the other party on hold (hearing hold music, where it is set) and take them back,
+// by re-INVITEing with the media direction changed, as a desk phone does.
+func (c *Call) Hold() error   { return c.reinvite(true) }
+func (c *Call) Unhold() error { return c.reinvite(false) }
+
+func (c *Call) reinvite(hold bool) error {
+	c.p.mu.Lock()
+	if !c.answered || c.ended {
+		c.p.mu.Unlock()
+		return errors.New("only a connected call can be held")
+	}
+	if c.held == hold {
+		c.p.mu.Unlock()
+		return nil
+	}
+	pt, ep := c.pt, c.sipSide
+	c.p.mu.Unlock()
+	offer := offerFor(ep, pt)
+	dir := "a=sendrecv"
+	if hold {
+		dir = "a=sendonly"
+	}
+	if a := offer.Audio(); a != nil {
+		kept := a.Lines[:0]
+		for _, l := range a.Lines {
+			if l.Value == "sendrecv" || l.Value == "sendonly" || l.Value == "recvonly" || l.Value == "inactive" {
+				continue
+			}
+			kept = append(kept, l)
+		}
+		a.Lines = append(kept, sdp.Line{Type: 'a', Value: strings.TrimPrefix(dir, "a=")})
+	}
+	m := c.request(sip.INVITE)
+	m.Set("Content-Type", "application/sdp")
+	m.Body = offer.Bytes()
+	r := final(c.p.g.stack.Request(m, c.p.g.engine))
+	if r == nil || r.StatusCode >= 300 {
+		return errors.New("BitVoice would not change the call")
+	}
+	n, _ := r.CSeq()
+	ack := c.request(sip.ACK)
+	ack.Set("CSeq", strconv.FormatUint(uint64(n), 10)+" ACK")
+	_ = c.p.g.stack.Stateless(ack, c.p.g.engine)
+	c.p.mu.Lock()
+	c.held = hold
+	c.p.mu.Unlock()
+	return nil
+}
+
+// Held reports whether the other party is on hold.
+func (c *Call) Held() bool {
+	c.p.mu.Lock()
+	defer c.p.mu.Unlock()
+	return c.held
+}
+
+// cleanDialled keeps only the characters of a dialable number.
+func cleanDialled(number string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' || r == '*' || r == '#' || r == '+' {
+			return r
+		}
+		return -1
+	}, number)
+}
+
 func (c *Call) finish(typ, reason string) {
 	c.p.mu.Lock()
 	if c.finished {
@@ -590,6 +687,7 @@ func (c *Call) Answer(browser *media.Endpoint, pt, eventPT int) error {
 	}
 	c.answered = true
 	c.browser = browser
+	c.pt = pt
 	c.p.mu.Unlock()
 	ep, err := c.p.g.media.NewMediaEndpoint()
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -428,6 +429,151 @@ func (s *Server) browserPhoneRoutes() {
 			}
 			w.WriteHeader(http.StatusNoContent)
 		}
+	})
+	// Transfer the other party to a number (blind), as a desk phone does with REFER. To the park
+	// number, it parks the call.
+	s.mux.HandleFunc("POST /api/phone/{id}/calls/{call}/transfer", func(w http.ResponseWriter, r *http.Request) {
+		bp := phoneOf(w, r)
+		if bp == nil {
+			return
+		}
+		var in struct {
+			To string `json:"to"`
+		}
+		if err := readJSON(r, &in); err != nil {
+			writeErr(w, err)
+			return
+		}
+		c := bp.phone.Find(r.PathValue("call"))
+		if c == nil {
+			writeError(w, http.StatusNotFound, "that call has ended")
+			return
+		}
+		if err := c.Transfer(in.To); err != nil {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	// Hold and take the other party back, by re-INVITEing (they hear hold music where it is set).
+	hold := func(on bool) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			bp := phoneOf(w, r)
+			if bp == nil {
+				return
+			}
+			c := bp.phone.Find(r.PathValue("call"))
+			if c == nil {
+				writeError(w, http.StatusNotFound, "that call has ended")
+				return
+			}
+			var err error
+			if on {
+				err = c.Hold()
+			} else {
+				err = c.Unhold()
+			}
+			if err != nil {
+				writeError(w, http.StatusConflict, err.Error())
+				return
+			}
+			writeJSON(w, 200, map[string]bool{"held": c.Held()})
+		}
+	}
+	s.mux.HandleFunc("POST /api/phone/{id}/calls/{call}/hold", hold(true))
+	s.mux.HandleFunc("POST /api/phone/{id}/calls/{call}/unhold", hold(false))
+	// This extension's voicemail, its recent calls, and whom to pick up for (presence).
+	s.mux.HandleFunc("GET /api/phone/{id}/voicemail", func(w http.ResponseWriter, r *http.Request) {
+		bp := phoneOf(w, r)
+		if bp == nil {
+			return
+		}
+		list, err := s.Store.Voicemails(bp.ext)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"items": nonNil(list)})
+	})
+	s.mux.HandleFunc("GET /api/phone/{id}/voicemail/{msg}/audio", func(w http.ResponseWriter, r *http.Request) {
+		bp := phoneOf(w, r)
+		if bp == nil {
+			return
+		}
+		b, err := s.Store.VoicemailAudio(bp.ext, r.PathValue("msg"))
+		if err != nil {
+			writeError(w, http.StatusNotFound, "no such message")
+			return
+		}
+		serveWAV(w, r, "voicemail-"+r.PathValue("msg")+".wav", b)
+	})
+	s.mux.HandleFunc("POST /api/phone/{id}/voicemail/{msg}/heard", func(w http.ResponseWriter, r *http.Request) {
+		bp := phoneOf(w, r)
+		if bp == nil {
+			return
+		}
+		if _, err := s.Store.SetHeard(bp.ext, r.PathValue("msg"), true); err != nil {
+			writeError(w, http.StatusNotFound, "no such message")
+			return
+		}
+		s.Engine.MailboxChanged(bp.ext)
+		w.WriteHeader(http.StatusNoContent)
+	})
+	s.mux.HandleFunc("DELETE /api/phone/{id}/voicemail/{msg}", func(w http.ResponseWriter, r *http.Request) {
+		bp := phoneOf(w, r)
+		if bp == nil {
+			return
+		}
+		if err := s.Store.DeleteVoicemail(bp.ext, r.PathValue("msg")); err != nil {
+			if errors.Is(err, store.ErrHeld) {
+				writeErr(w, err)
+				return
+			}
+			writeError(w, http.StatusNotFound, "no such message")
+			return
+		}
+		s.Engine.MailboxChanged(bp.ext)
+		w.WriteHeader(http.StatusNoContent)
+	})
+	// Recent calls to and from this extension, newest first, for tap-to-call.
+	s.mux.HandleFunc("GET /api/phone/{id}/recents", func(w http.ResponseWriter, r *http.Request) {
+		bp := phoneOf(w, r)
+		if bp == nil {
+			return
+		}
+		rows, err := s.Store.CDRsFor(bp.ext, 60)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		type recent struct {
+			Number    string    `json:"number"`
+			Name      string    `json:"name,omitempty"`
+			Direction string    `json:"direction"` // in or out, from this extension's view
+			When      time.Time `json:"when"`
+			Missed    bool      `json:"missed"`
+			Seconds   int       `json:"seconds"`
+		}
+		out := []recent{}
+		for _, c := range rows {
+			rec := recent{When: c.Start, Seconds: c.Billsec}
+			if c.From == bp.ext { // this extension placed the call
+				rec.Direction, rec.Number, rec.Name = "out", c.To, c.ToName
+			} else {
+				rec.Direction, rec.Number, rec.Name = "in", c.From, c.FromName
+				rec.Missed = c.Answer.IsZero()
+			}
+			out = append(out, rec)
+		}
+		writeJSON(w, 200, map[string]any{"items": out})
+	})
+	// Who is free, busy or ringing, so the phone can show it and pick up for a colleague (BLF).
+	s.mux.HandleFunc("GET /api/phone/{id}/presence", func(w http.ResponseWriter, r *http.Request) {
+		bp := phoneOf(w, r)
+		if bp == nil {
+			return
+		}
+		writeJSON(w, 200, map[string]any{"items": s.phonePresence(bp.ext)})
 	})
 	s.mux.HandleFunc("DELETE /api/phone/{id}", func(w http.ResponseWriter, r *http.Request) {
 		if v, ok := phones.LoadAndDelete(r.PathValue("id")); ok {

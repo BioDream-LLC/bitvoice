@@ -14,6 +14,7 @@ export interface PhoneCall {
   since: number
   reason?: string
   muted?: boolean
+  held?: boolean // the other party is on hold
   reconnecting?: boolean // the network changed: ICE is restarting, the call carries on once it has
   briefing?: string // what the call is about, when it was passed on with a briefing
 }
@@ -289,6 +290,20 @@ export function usePhone() {
     update(id, { muted: on })
   }, [update])
 
+  // Hand the other party to a number (a blind transfer); BitVoice rings it and releases this phone.
+  const transfer = useCallback(async (id: string, to: string) => {
+    if (!phone || !to) return
+    await post(`./api/phone/${phone.id}/calls/${id}/transfer`, { to })
+    // The engine releases this leg; the call then ends here on its own.
+  }, [phone])
+
+  // Put the other party on hold (they hear hold music where it is set) and take them back.
+  const hold = useCallback(async (id: string, on: boolean) => {
+    if (!phone) return
+    await post(`./api/phone/${phone.id}/calls/${id}/${on ? 'hold' : 'unhold'}`, {})
+    update(id, { held: on })
+  }, [phone, update])
+
   useEffect(() => () => { ring.current.stop() }, [])
-  return { phone, calls, error, open, openDevice, close, dial, answer, hangup, dtmf, mute }
+  return { phone, calls, error, open, openDevice, close, dial, answer, hangup, dtmf, mute, transfer, hold }
 }

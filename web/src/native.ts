@@ -15,7 +15,7 @@ export interface NativeHost { device: string; secret: string; platform: 'ios' | 
 declare global {
   interface Window {
     bitvoiceNative?: NativeHost
-    bitvoice?: { answer: (id: string) => void; hangup: (id: string) => void; mute: (on: boolean) => void; dtmf: (k: string) => void }
+    bitvoice?: { answer: (id: string) => void; hangup: (id: string) => void; mute: (on: boolean) => void; dtmf: (k: string) => void; hold: (on: boolean) => void; transfer: (to: string) => void }
     webkit?: { messageHandlers?: Record<string, { postMessage: (m: unknown) => void }> }
   }
 }
@@ -58,6 +58,8 @@ export function useNativeBridge(api: ReturnType<typeof usePhone>) {
       hangup: (id) => { api.hangup(id) },
       mute: (on) => { const c = api.calls.find((x) => x.state === 'connected'); if (c) api.mute(c.id, on) },
       dtmf: (k) => { const c = api.calls.find((x) => x.state === 'connected'); if (c) api.dtmf(c.id, k) },
+      hold: (on) => { const c = api.calls.find((x) => x.state === 'connected'); if (c) api.hold(c.id, on) },
+      transfer: (to) => { const c = api.calls.find((x) => x.state === 'connected'); if (c) api.transfer(c.id, to) },
     }
     return () => { window.bitvoice = undefined }
   }, [host, api])

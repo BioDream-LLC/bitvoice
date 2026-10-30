@@ -107,9 +107,21 @@ class BitVoiceConnection(private val ctx: Context, val callId: String, private v
 
     init {
         connectionProperties = PROPERTY_SELF_MANAGED
+        connectionCapabilities = CAPABILITY_HOLD or CAPABILITY_SUPPORT_HOLD or CAPABILITY_MUTE
         audioModeIsVoip = true
         setAddress(android.net.Uri.fromParts("tel", from, null), android.telecom.TelecomManager.PRESENTATION_ALLOWED)
         setCallerDisplayName(name.ifEmpty { from }, android.telecom.TelecomManager.PRESENTATION_ALLOWED)
+    }
+
+    override fun onHold() {
+        // Hold from the call screen, passed to the phone page (which re-INVITEs BitVoice).
+        pageId?.let { Calls.run?.invoke("window.bitvoice && window.bitvoice.hold(true)") }
+        setOnHold()
+    }
+
+    override fun onUnhold() {
+        pageId?.let { Calls.run?.invoke("window.bitvoice && window.bitvoice.hold(false)") }
+        setActive()
     }
 
     override fun onShowIncomingCallUi() {

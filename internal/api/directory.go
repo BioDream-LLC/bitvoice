@@ -106,6 +106,34 @@ func (s *Server) NameFor(number string) string {
 }
 
 // phonebook is everything the phones list: extensions, then shared contacts.
+// phonePresence lists the other extensions a phone can watch and pick up for: their name, number and
+// whether they are free, on a call or ringing now (plus away). The phone's own extension is left out.
+func (s *Server) phonePresence(self string) []map[string]any {
+	cfg := s.config()
+	busy, ringing := s.Engine.BusyRinging()
+	away := map[string]bool{}
+	for _, a := range s.Engine.Aways() {
+		away[a.Ext] = true
+	}
+	out := []map[string]any{}
+	for _, x := range cfg.Extensions {
+		if !x.Enabled || x.Kind == "door" || x.Number == self {
+			continue
+		}
+		state := "free"
+		switch {
+		case ringing[x.Number]:
+			state = "ringing"
+		case busy[x.Number]:
+			state = "busy"
+		case away[x.Number]:
+			state = "away"
+		}
+		out = append(out, map[string]any{"name": x.Name, "number": x.Number, "state": state})
+	}
+	return out
+}
+
 func (s *Server) phonebook(cfg config.Config) []provision.Entry {
 	var out []provision.Entry
 	for _, x := range cfg.Extensions {

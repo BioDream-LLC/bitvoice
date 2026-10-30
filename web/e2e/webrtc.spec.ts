@@ -111,6 +111,80 @@ test('browser phone to browser phone through the engine', async ({ page }) => {
 // decodes A's Opus for B and encodes B's audio as Opus for A. What each browser receives is decoded
 // in the page (Opus with WebCodecs, which is Chromium's libopus; µ-law by its table) and must carry
 // the fake microphone's tone, not silence.
+test('a browser call is held and blind-transferred to a third extension', async ({ page }) => {
+  await signIn(page)
+  const result = await page.evaluate(async () => {
+    const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
+    const post = async (url: string, body: unknown) => {
+      const r = await fetch(url, { method: 'POST', headers: H, body: JSON.stringify(body) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(url + ': ' + (j.message ?? r.status))
+      return j
+    }
+    const need = async (n: string) => {
+      const have = (await (await fetch('./api/extensions')).json()).items as { number: string }[]
+      if (!have.some((x) => x.number === n)) {
+        await post('./api/extensions', { number: n, name: 'Transfer ' + n, enabled: true, outbound: true, voicemail: { enabled: false }, record: false, secureMedia: false })
+      }
+    }
+    await need('181'); await need('182'); await need('183')
+    const open = async (ext: string) => {
+      const p = await post('./api/phone', { extension: ext })
+      const events: { type: string; callId: string }[] = []
+      const es = new EventSource(`./api/phone/${p.id}/events`)
+      es.addEventListener('call', (e) => events.push(JSON.parse((e as MessageEvent).data)))
+      await new Promise((ok) => es.addEventListener('hello', ok, { once: true }))
+      return { id: p.id as string, events, es }
+    }
+    const [a, b, c] = [await open('181'), await open('182'), await open('183')]
+    const mic = await navigator.mediaDevices.getUserMedia({ audio: true })
+    const peer = async () => {
+      const pc = new RTCPeerConnection()
+      mic.getTracks().forEach((t) => pc.addTrack(t, mic))
+      await pc.setLocalDescription(await pc.createOffer())
+      return pc
+    }
+    const waitFor = (ph: { events: { type: string; callId: string }[] }, type: string, after = 0) =>
+      new Promise<string>((ok, no) => {
+        const t0 = Date.now()
+        const i = setInterval(() => {
+          const ev = ph.events.find((e, k) => e.type === type && k >= after)
+          if (ev) { clearInterval(i); ok(ev.callId) }
+          else if (Date.now() - t0 > 8000) { clearInterval(i); no(new Error('no ' + type)) }
+        }, 50)
+      })
+    // A (181) calls B (182); B answers.
+    const pcA = await peer()
+    const callA = await post(`./api/phone/${a.id}/calls`, { to: '182', sdp: pcA.localDescription!.sdp })
+    await pcA.setRemoteDescription({ type: 'answer', sdp: callA.sdp })
+    const atB = await waitFor(b, 'incoming')
+    const pcB = await peer()
+    await pcB.setRemoteDescription({ type: 'answer', sdp: (await post(`./api/phone/${b.id}/answer`, { callId: atB, sdp: pcB.localDescription!.sdp })).sdp })
+    await new Promise((ok) => setTimeout(ok, 1500))
+    // B holds A, then transfers A to C (183).
+    const held = await post(`./api/phone/${b.id}/calls/${atB}/hold`, {})
+    await post(`./api/phone/${b.id}/calls/${atB}/unhold`, {})
+    const bEventsBefore = c.events.length
+    await post(`./api/phone/${b.id}/calls/${atB}/transfer`, { to: '183' })
+    // C now rings; answer it and check A's call reconnects to C.
+    const atC = await waitFor(c, 'incoming', bEventsBefore)
+    const pcC = await peer()
+    await pcC.setRemoteDescription({ type: 'answer', sdp: (await post(`./api/phone/${c.id}/answer`, { callId: atC, sdp: pcC.localDescription!.sdp })).sdp })
+    await new Promise((ok) => setTimeout(ok, 2500))
+    const inbound = async (pc: RTCPeerConnection) => { let n = 0; (await pc.getStats()).forEach((s) => { if (s.type === 'inbound-rtp') n = (s as { packetsReceived?: number }).packetsReceived ?? 0 }); return n }
+    const res = { held: held.held as boolean, recvA: await inbound(pcA), recvC: await inbound(pcC), bEnded: b.events.some((e) => e.type === 'ended') }
+    await fetch(`./api/phone/${a.id}/calls/${callA.callId}`, { method: 'DELETE', headers: H })
+    await new Promise((ok) => setTimeout(ok, 500))
+    ;[a, b, c].forEach((p) => p.es.close()); pcA.close(); pcB.close(); pcC.close()
+    return res
+  })
+  console.log(JSON.stringify(result))
+  expect(result.held).toBe(true) // the hold took
+  expect(result.bEnded).toBe(true) // B dropped out once it transferred A away
+  expect(result.recvA).toBeGreaterThan(20) // A still hears audio, now from C
+  expect(result.recvC).toBeGreaterThan(20) // C hears A
+})
+
 test('Opus converted both ways against the browser', async ({ page }) => {
   await signIn(page)
   const result = await page.evaluate(async () => {

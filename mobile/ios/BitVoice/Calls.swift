@@ -90,7 +90,7 @@ final class Calls: NSObject, ObservableObject {
         update.localizedCallerName = name.isEmpty ? number : name
         update.hasVideo = false
         update.supportsDTMF = true
-        update.supportsHolding = false
+        update.supportsHolding = true
         provider.reportNewIncomingCall(with: u, update: update) { error in
             if let error { Calls.log.error("the call screen refused call \(id, privacy: .public): \(error.localizedDescription, privacy: .public)") }
             if error != nil { Task { @MainActor in self.uuids[id] = nil } }
@@ -197,6 +197,13 @@ extension Calls: CXProviderDelegate {
     nonisolated func provider(_ provider: CXProvider, perform action: CXSetMutedCallAction) {
         let on = action.isMuted
         Task { @MainActor in self.run?("window.bitvoice && window.bitvoice.mute(\(on))") }
+        action.fulfill()
+    }
+
+    nonisolated func provider(_ provider: CXProvider, perform action: CXSetHeldCallAction) {
+        // Hold or resume from the call screen, passed to the phone page (which re-INVITEs BitVoice).
+        let on = action.isOnHold
+        Task { @MainActor in self.run?("window.bitvoice && window.bitvoice.hold(\(on))") }
         action.fulfill()
     }
 

@@ -93,6 +93,10 @@ func (e *Engine) busyExtensions() (busy, ringing map[string]bool) {
 	return busy, ringing
 }
 
+// BusyRinging reports which extensions are on a call and which are being rung now, across the cluster,
+// for a busy-lamp display on the phones.
+func (e *Engine) BusyRinging() (busy, ringing map[string]bool) { return e.busyExtensions() }
+
 // localBusy is busyExtensions for this server's calls alone.
 func (e *Engine) localBusy() (busy, ringing map[string]bool) {
 	busy, ringing = map[string]bool{}, map[string]bool{}

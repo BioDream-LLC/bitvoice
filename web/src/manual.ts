@@ -154,7 +154,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | Hotel (FIAS) | Checked against a reference | every record BitVoice sends checked against Oracle's published FIAS 2.20.23 specification (link start, link records, postings, wake-up answers); own tests. Not yet against Opera itself |
 | Texting, WhatsApp, Messenger, web chat | Checked against a reference (Twilio, Telnyx, Bandwidth, Vonage, TextMagic, WhatsApp) | Texts through Twilio, Telnyx, Bandwidth, Vonage and TextMagic, and WhatsApp texts, templates and template lists, against mocks built from the providers' own published OpenAPI specifications (Stoplight Prism, refusing anything the specification does not allow; TextMagic's is the one its own client is generated from). Vonage's showed the key belongs in HTTP Basic, no longer in the form. SignalWire speaks Twilio's API; Plivo, Flowroute, VoIP.ms and Messenger publish no specification and are checked against stand-ins written from their documentation. No live account tried |
 | CRM caller cards, Azure Blob, Azure Key Vault | Checked against a reference | EspoCRM (a real open-source CRM, in Docker) for caller cards; Microsoft's Azurite emulator for Blob uploads (container SAS, refusals); Lowkey Vault for Key Vault with a managed identity. Not yet against Azure itself or a hosted CRM |
-| iPhone and Android apps | Field-tested (Android) | Android: a Google Pixel 8 (Android 16, Wi-Fi) with the signed release build against BitVoice on EC2 with a Let's Encrypt certificate: paired by link, rang with Android's call notification, answered from it, audio both ways, kept connected with the screen off and in the background (its ongoing-call notification, Hang up); without push it does not ring in the background. A Google Pixel 11 (Android 17) in AWS Device Farm: paired, rang, answered, called out; Opus, MOS 4.1. iPhone: the app (SwiftUI, CallKit, PushKit VoIP) builds against the current SDK (Xcode 27) and the server signs Apple VoIP pushes (APNs, ES256); the same real-device fixes as Android (the call screen leaves the ringing state when a call is answered in the page; content kept clear of the status bar and home indicator) and an App Store listing (ios/AppStore) are in. Not yet run on an iPhone or submitted: push, the system call screen and signing need our own Apple Developer account |
+| iPhone and Android apps | Field-tested (Android) | Android: a Google Pixel 8 (Android 16, Wi-Fi) with the signed release build against BitVoice on EC2 with a Let's Encrypt certificate: paired by link, rang with Android's call notification, answered from it, audio both ways, kept connected with the screen off and in the background (its ongoing-call notification, Hang up); without push it does not ring in the background. A Google Pixel 11 (Android 17) in AWS Device Farm: paired, rang, answered, called out; Opus, MOS 4.1. iPhone: the app (SwiftUI, CallKit, PushKit VoIP) builds against the current SDK (Xcode 27) and the server signs Apple VoIP pushes (APNs, ES256); the same real-device fixes as Android and an App Store listing (ios/AppStore) are in. Both apps are a full extension: transfer (blind, over REFER), hold and a second call, keypad and mute, with Recents, visual Voicemail (with transcripts), a Team busy-lamp and Contacts tabs; transfer and hold are driven through the real engine by a browser-phone e2e. Hold and transfer reach the native call screen (CallKit, Telecom). Not yet run on an iPhone or submitted: push, the system call screen and signing need our own Apple Developer account |
 | 911 profile, radio console, NG911 Core Services, caller video | Lab | NENA's schemas and sample data, Wireshark, spandsp, OpenSSL, ExifTool, ffmpeg, a NIST P25 capture (its IMBE voice frames unpacked as mbelib unpacks them: same pitch, harmonics, voicing and amplitudes); never on a live ESInet, P25 system or PSAP CAD, and not certified |
 | P25 Phase 2 half-rate voice (AMBE+2) | Not offered | patented until 2028 |
 | Ed448 signatures (NENA) | Not offered | not in Go's standard library, and BitVoice writes no cryptography of its own; Ed25519 is used |
@@ -423,7 +423,21 @@ Set **Address the apps use** to this server's https address as it is reached fro
 2. Scan the QR code in the app. The code works once, for ten minutes.
 
 ## When a call comes in
-BitVoice wakes the app; it connects, rings on the phone's own call screen, and is answered like any other phone of the extension: ring groups and queues ring it with the extension's other phones. The extension's page lists its paired phones, whether each **Can be woken for calls**, when it was last seen and last woken, and any push problem. **Unpair** stops a phone ringing at once, for a lost phone.`,
+BitVoice wakes the app; it connects, rings on the phone's own call screen, and is answered like any other phone of the extension: ring groups and queues ring it with the extension's other phones. The extension's page lists its paired phones, whether each **Can be woken for calls**, when it was last seen and last woken, and any push problem. **Unpair** stops a phone ringing at once, for a lost phone.
+
+## On a call
+The app is a full extension, not just a dialler:
+
+- **Transfer** a caller to another extension or an outside number (the call screen's own Transfer, or the app's button). To the park number, it parks the call.
+- **Hold** and take back, from the call screen or the app; held callers hear your hold music where it is set.
+- A **second call**: dial while the first is on hold, and switch between them.
+- **Keypad** tones (DTMF) during the call, and **Mute**.
+
+## The other tabs
+- **Recents**: calls to and from this extension, newest first, tap to call back (missed calls stand out).
+- **Voicemail**: each message with its [transcript](#voicemail) where the AI writes one, play it, call back or delete.
+- **Team**: who is free, on a call, ringing or away (a busy lamp), to call them or transfer the current call to them.
+- **Contacts**: the company directory, to find a name and call it.`,
   },
   {
     id: 'trunks', title: 'Trunks', route: '/trunks', keys: 'carrier provider sip trunk line register channels codecs iax2 h323 h.323 h225 fast connect gateway',
