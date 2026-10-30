@@ -63,7 +63,14 @@ struct PhoneView: UIViewRepresentable {
         // The page asks for the microphone; this app exists to make calls, and iOS has asked the person.
         func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin, initiatedByFrame frame: WKFrameInfo,
                      type: WKMediaCaptureType, decisionHandler: @escaping (WKPermissionDecision) -> Void) {
-            decisionHandler(origin.host == home?.host && type == .microphone ? .grant : .deny)
+            decisionHandler(origin.host == home?.host && (type == .microphone || type == .camera) ? .grant : .deny)
+        }
+
+        // window.open (a video room) loads in this same web view instead of a new window the app has none for.
+        func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for action: WKNavigationAction,
+                     windowFeatures: WKWindowFeatures) -> WKWebView? {
+            if let url = action.request.url, url.host == home?.host { webView.load(URLRequest(url: url)) }
+            return nil
         }
 
         // Only BitVoice's own pages load here; links elsewhere open in Safari.

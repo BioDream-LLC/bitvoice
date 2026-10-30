@@ -1,6 +1,6 @@
 import { clsx } from 'clsx'
 import { ArrowRightLeft, BookUser, Clock, Delete, LogOut, MessageSquareText, Mic, MicOff, Pause, Phone, PhoneIncoming, PhoneMissed, PhoneOff, PhoneOutgoing, Play, Trash2, Users, Video, Voicemail } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { type CallerCard } from './api'
 import { CallerCardView } from './Crm'
 import { formatDuration } from './ui'
@@ -18,7 +18,7 @@ export function Softphone({ phoneApi, extensions }: {
   const [number, setNumber] = useState('')
   const [ext, setExt] = useState(extensions?.[0]?.number ?? '')
   const [pw, setPw] = useState('')
-  const [tab, setTab] = useState<'keypad' | 'recents' | 'voicemail' | 'team'>('keypad')
+  const [tab, setTab] = useState<'keypad' | 'recents' | 'voicemail' | 'team' | 'chat'>('keypad')
   // A second call can be placed while the first is on hold.
   const live = calls.filter((c) => c.state !== 'ended')
   const active = live.find((c) => (c.state === 'connected' && !c.held) || c.state === 'calling' || c.state === 'ringing' || c.state === 'incoming')
@@ -56,7 +56,7 @@ export function Softphone({ phoneApi, extensions }: {
       ))}
 
       <div className="flex gap-1 rounded-lg bg-slate-900 p-1 text-sm" role="tablist" aria-label="Phone">
-        {([['keypad', 'Keypad', Phone], ['recents', 'Recents', Clock], ['voicemail', 'Voicemail', Voicemail], ['team', 'Team', Users]] as const).map(([k, title, Icon]) => (
+        {([['keypad', 'Keypad', Phone], ['recents', 'Recents', Clock], ['voicemail', 'Voicemail', Voicemail], ['team', 'Team', Users], ['chat', 'Chat', MessageSquareText]] as const).map(([k, title, Icon]) => (
           <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
             className={clsx('flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5', tab === k ? 'bg-slate-700 text-slate-100' : 'text-slate-400 hover:text-slate-200')}>
             <Icon size={14} aria-hidden /> <span className="hidden sm:inline">{title}</span>
@@ -90,6 +90,7 @@ export function Softphone({ phoneApi, extensions }: {
       {tab === 'voicemail' && <Voicemails phoneId={phone.id} onCall={(n) => { setTab('keypad'); dial(n) }} />}
       {tab === 'team' && <Team phoneId={phone.id} onCall={(n) => { setTab('keypad'); dial(n) }}
         onTransfer={active?.state === 'connected' ? (n) => transfer(active.id, n) : undefined} />}
+      {tab === 'chat' && <ChatTab phoneId={phone.id} onCall={(n) => { setTab('keypad'); dial(n) }} />}
     </div>
   )
 }
@@ -287,6 +288,92 @@ function Team({ phoneId, onCall, onTransfer }: { phoneId: string; onCall: (numbe
         </li>
       ))}
     </ul>
+  )
+}
+
+interface ChatMsg { id?: string; from: string; text: string; at: string }
+interface ChatPerson { extension: string; name: string; department?: string; state: string; reason?: string; status?: string; unread: number }
+interface ChatRoom { id: string; key: string; name: string; members: number; unread: number }
+
+/** Chat: the staff chat (colleagues' presence and direct messages, and rooms), inside the phone. */
+function ChatTab({ phoneId, onCall }: { phoneId: string; onCall: (number: string) => void }) {
+  const [overview, setOverview] = useState<{ me: string; people: ChatPerson[]; rooms: ChatRoom[] } | null>(null)
+  const [error, setError] = useState('')
+  const [open, setOpen] = useState<{ key: string; name: string } | null>(null)
+  const load = () => fetch(`./api/phone/${phoneId}/chat`, { headers: { 'X-BitVoice': '1' } })
+    .then((r) => r.json().then((j: { message?: string } & Record<string, unknown>) => ({ ok: r.ok, j }))).then(({ ok, j }) => { if (ok) setOverview(j as never); else setError(j.message ?? 'chat is off') }).catch(() => {})
+  useEffect(() => {
+    if (open) return
+    load()
+    const t = setInterval(load, 4000)
+    return () => clearInterval(t)
+  }, [phoneId, open]) // eslint-disable-line react-hooks/exhaustive-deps
+  if (error) return <p className="py-6 text-center text-sm text-amber-300">{error}</p>
+  if (open) return <ChatConversation phoneId={phoneId} conv={open} me={overview?.me ?? ''} onCall={onCall} onBack={() => setOpen(null)} />
+  if (overview === null) return <p className="py-6 text-center text-sm text-slate-500">Loading…</p>
+  const dot: Record<string, string> = { free: 'bg-emerald-400', busy: 'bg-rose-400', ringing: 'bg-amber-400', away: 'bg-slate-500', offline: 'bg-slate-700' }
+  return (
+    <div className="max-h-80 space-y-1 overflow-y-auto" aria-label="Chat">
+      {overview.rooms.map((rm) => (
+        <button key={rm.key} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-slate-800" onClick={() => setOpen({ key: rm.key, name: rm.name })}>
+          <Users size={15} className="text-slate-400" aria-hidden />
+          <span className="min-w-0 flex-1 truncate text-sm text-slate-200">{rm.name} <span className="text-xs text-slate-500">({rm.members})</span></span>
+          {rm.unread > 0 && <span className="rounded-full bg-sky-500 px-1.5 text-xs font-semibold text-white">{rm.unread}</span>}
+        </button>
+      ))}
+      {overview.people.map((p) => (
+        <button key={p.extension} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-slate-800"
+          onClick={() => setOpen({ key: 'd-' + [overview.me, p.extension].sort().join('-'), name: p.name })}>
+          <span className={clsx('h-2.5 w-2.5 rounded-full', dot[p.state] ?? 'bg-slate-500')} aria-hidden />
+          <span className="min-w-0 flex-1"><span className="block truncate text-sm text-slate-200">{p.name}</span>
+            {p.status && <span className="block truncate text-xs text-slate-500">{p.status}</span>}</span>
+          {p.unread > 0 && <span className="rounded-full bg-sky-500 px-1.5 text-xs font-semibold text-white">{p.unread}</span>}
+        </button>
+      ))}
+      {overview.rooms.length === 0 && overview.people.length === 0 && <p className="py-6 text-center text-sm text-slate-500">No colleagues.</p>}
+    </div>
+  )
+}
+
+/** One chat conversation inside the phone: its messages, with a box to send. */
+function ChatConversation({ phoneId, conv, me, onCall, onBack }: { phoneId: string; conv: { key: string; name: string }; me: string; onCall: (number: string) => void; onBack: () => void }) {
+  const [msgs, setMsgs] = useState<ChatMsg[]>([])
+  const [text, setText] = useState('')
+  const end = useRef<HTMLDivElement>(null)
+  const direct = conv.key.startsWith('d-')
+  const other = direct ? conv.key.slice(2).split('-').find((n) => n !== me) ?? '' : ''
+  const load = () => fetch(`./api/phone/${phoneId}/chat/${conv.key}`, { headers: { 'X-BitVoice': '1' } })
+    .then((r) => (r.ok ? r.json() : { items: [] })).then((j) => setMsgs(j.items)).catch(() => {})
+  useEffect(() => { load(); const t = setInterval(load, 3000); return () => clearInterval(t) }, [phoneId, conv.key]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { end.current?.scrollIntoView() }, [msgs])
+  const send = async () => {
+    const t = text.trim()
+    if (!t) return
+    setText('')
+    await fetch(`./api/phone/${phoneId}/chat/${conv.key}`, { method: 'POST', headers: { 'X-BitVoice': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ text: t }) }).catch(() => {})
+    load()
+  }
+  return (
+    <div className="flex h-80 flex-col">
+      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+        <button className="btn px-2 py-1" aria-label="Back to chats" onClick={onBack}>Back</button>
+        <span className="flex-1 truncate text-sm font-semibold text-slate-200">{conv.name}</span>
+        {direct && other && <button className="btn px-2 py-1" aria-label={`Call ${conv.name}`} onClick={() => onCall(other)}><Phone size={13} className="text-emerald-300" aria-hidden /></button>}
+      </div>
+      <ol className="flex-1 space-y-1.5 overflow-y-auto py-2 text-sm" aria-label="Messages">
+        {msgs.map((m, i) => (
+          <li key={m.id ?? i} className={clsx('max-w-[85%] rounded-lg px-2.5 py-1.5', m.from === me ? 'ml-auto bg-sky-600 text-white' : 'bg-slate-800 text-slate-200')}>
+            {!direct && m.from !== me && <span className="block text-xs font-semibold text-sky-300">{m.from}</span>}
+            {m.text}
+          </li>
+        ))}
+        <div ref={end} />
+      </ol>
+      <form className="flex gap-2 pt-1" onSubmit={(e) => { e.preventDefault(); send() }}>
+        <input className="input flex-1" aria-label="Message" placeholder="Type a message" value={text} onChange={(e) => setText(e.target.value)} />
+        <button className="btn border-sky-600 bg-sky-600 text-white" disabled={!text.trim()}>Send</button>
+      </form>
+    </div>
   )
 }
 

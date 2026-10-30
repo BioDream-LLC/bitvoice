@@ -5,6 +5,7 @@ import { useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useConferencesQuery } from './api'
 import { newPeer } from './ice'
+import { nativeVideoRoom } from './native'
 import { onServerEvent } from './store'
 import { Empty, Field, Page } from './ui'
 
@@ -103,7 +104,7 @@ export function VideoRoom() {
   }, [number, pin])
   useEffect(() => { load() }, [load])
   useEffect(() => onServerEvent((type, d) => { if (type === 'sfu.changed' && (d as RoomState).number === number) load() }), [number, load])
-  useEffect(() => () => { mine?.pc.close(); mine?.stream.getTracks().forEach((t) => t.stop()) }, [mine])
+  useEffect(() => () => { mine?.pc.close(); mine?.stream.getTracks().forEach((t) => t.stop()); if (mine) nativeVideoRoom(false, number) }, [mine, number])
   useEffect(() => () => { shared?.pc.close(); shared?.stream.getTracks().forEach((t) => t.stop()) }, [shared])
   useEffect(() => { if (ownScreen.current && shared) ownScreen.current.srcObject = shared.stream }, [shared])
 
@@ -124,6 +125,7 @@ export function VideoRoom() {
       setMine({ pc, id: j.id, stream })
       // The room's sound is its conference: the browser phone calls it.
       window.dispatchEvent(new CustomEvent('bitvoice:dial', { detail: number }))
+      nativeVideoRoom(true, number) // in a mobile app, show it as a video call on the call screen
     } catch (e) {
       toast.error(`The camera could not be used: ${(e as Error).message}`)
     }
@@ -170,6 +172,7 @@ export function VideoRoom() {
     mine.stream.getTracks().forEach((t) => t.stop())
     await fetch(`./api/video-rooms/${number}/${mine.id}`, { method: 'DELETE', headers: { ...H, 'X-Room-PIN': pin } }).catch(() => {})
     setMine(null)
+    nativeVideoRoom(false, number)
   }
   const others = (state?.publishers ?? []).filter((p) => p.id !== mine?.id && p.id !== shared?.id)
   const sharer = (state?.publishers ?? []).find((p) => p.kind === 'screen')

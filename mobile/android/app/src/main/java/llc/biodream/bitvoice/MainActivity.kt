@@ -172,14 +172,27 @@ class MainActivity : AppCompatActivity() {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false
+            settings.setSupportMultipleWindows(true) // a video room opens with window.open
+            settings.javaScriptCanOpenWindowsAutomatically = true
             setBackgroundColor(Color.BLACK)
             addJavascriptInterface(Bridge(), "bitvoiceAndroid")
             webChromeClient = object : WebChromeClient() {
-                // The page asks for the microphone; only BitVoice's own page gets it.
+                // The page asks for the microphone (and the camera, for video rooms); only BitVoice's page gets it.
                 override fun onPermissionRequest(r: PermissionRequest) {
-                    if (r.origin.host == home.host && PermissionRequest.RESOURCE_AUDIO_CAPTURE in r.resources) {
-                        r.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
+                    if (r.origin.host == home.host) {
+                        r.grant(r.resources.filter { it == PermissionRequest.RESOURCE_AUDIO_CAPTURE || it == PermissionRequest.RESOURCE_VIDEO_CAPTURE }.toTypedArray())
                     } else r.deny()
+                }
+
+                // window.open (a video room) loads in this same web view.
+                override fun onCreateWindow(view: WebView, dialog: Boolean, gesture: Boolean, msg: android.os.Message): Boolean {
+                    val t = WebView(view.context)
+                    t.webViewClient = object : WebViewClient() {
+                        override fun shouldOverrideUrlLoading(v: WebView, r: WebResourceRequest): Boolean { view.loadUrl(r.url.toString()); return true }
+                    }
+                    (msg.obj as WebView.WebViewTransport).webView = t
+                    msg.sendToTarget()
+                    return true
                 }
             }
             webViewClient = object : WebViewClient() {

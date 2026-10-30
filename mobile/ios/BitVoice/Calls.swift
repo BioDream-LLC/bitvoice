@@ -31,7 +31,7 @@ final class Calls: NSObject, ObservableObject {
 
     override init() {
         let cfg = CXProviderConfiguration()
-        cfg.supportsVideo = false
+        cfg.supportsVideo = true
         cfg.maximumCallsPerCallGroup = 1
         cfg.supportedHandleTypes = [.phoneNumber, .generic]
         cfg.includesCallsInRecents = true
@@ -105,6 +105,12 @@ final class Calls: NSObject, ObservableObject {
             status = (m["error"] as? String) ?? ""
             return
         }
+        if type == "videoroom" {
+            // A video room was joined or left in the app's web view: show it as a video call.
+            let room = m["room"] as? String ?? "video"
+            if (m["state"] as? String) == "joined" { reportVideoRoom(room) } else { endVideoRoom() }
+            return
+        }
         guard type == "call", let id = m["id"] as? String, let state = m["state"] as? String else { return }
         let number = m["number"] as? String ?? "", name = m["name"] as? String ?? ""
         let direction = m["direction"] as? String ?? "in"
@@ -146,6 +152,31 @@ final class Calls: NSObject, ObservableObject {
     /// Calls answered on the call screen before the page knew of them; answered when the page catches up.
     private var answeredEarly: Set<UUID> = []
 
+    /// The video room shown as an ongoing video call, if one is open.
+    private var videoRoomUUID: UUID?
+
+    private func reportVideoRoom(_ room: String) {
+        guard Calls.hasCallScreen, videoRoomUUID == nil else { return }
+        let u = UUID()
+        videoRoomUUID = u
+        let update = CXCallUpdate()
+        update.remoteHandle = CXHandle(type: .generic, value: "Video room \(room)")
+        update.localizedCallerName = "Video room \(room)"
+        update.hasVideo = true
+        update.supportsHolding = false
+        provider.reportNewIncomingCall(with: u, update: update) { [weak self] error in
+            guard error == nil else { self?.videoRoomUUID = nil; return }
+            // The person is already in the room in the app: mark it connected at once.
+            self?.provider.reportOutgoingCall(with: u, connectedAt: Date())
+        }
+    }
+
+    private func endVideoRoom() {
+        guard let u = videoRoomUUID else { return }
+        videoRoomUUID = nil
+        provider.reportCall(with: u, endedAt: Date(), reason: .remoteEnded)
+    }
+
     private func id(for u: UUID) -> String? { uuids.first(where: { $0.value == u })?.key }
 
     private func js(_ s: String) -> String {
@@ -182,7 +213,9 @@ extension Calls: CXProviderDelegate {
     nonisolated func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
         Calls.log.info("the call screen ended call \(action.callUUID.uuidString, privacy: .public)")
         Task { @MainActor in
-            if let id = self.id(for: action.callUUID) {
+            if action.callUUID == self.videoRoomUUID {
+                self.videoRoomUUID = nil // the room's own window keeps running; the call screen is just cleared
+            } else if let id = self.id(for: action.callUUID) {
                 self.run?("window.bitvoice && window.bitvoice.hangup(\(self.js(id)))")
                 self.uuids[id] = nil
             }

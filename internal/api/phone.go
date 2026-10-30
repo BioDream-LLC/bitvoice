@@ -263,6 +263,14 @@ func (s *Server) phoneEvents(w http.ResponseWriter, r *http.Request) {
 					fl.Flush()
 				}
 			}
+			// A chat message for this extension (the staff chat), so the app's Chat tab lights up.
+			if ev.Type == "chat.message" && s.forPortal(ev, bp.ext) {
+				if ce, ok := ev.Data.(ChatEvent); ok {
+					j, _ := json.Marshal(ce)
+					fmt.Fprintf(w, "event: chat\ndata: %s\n\n", j)
+					fl.Flush()
+				}
+			}
 		case ev := <-bp.phone.Events:
 			b, _ := json.Marshal(ev)
 			fmt.Fprintf(w, "event: call\ndata: %s\n\n", b)
@@ -602,6 +610,7 @@ func (s *Server) browserPhoneRoutes() {
 		}
 		writeJSON(w, 200, map[string]any{"items": s.phonePresence(bp.ext)})
 	})
+	s.phoneChatRoutes()
 	s.mux.HandleFunc("DELETE /api/phone/{id}", func(w http.ResponseWriter, r *http.Request) {
 		if v, ok := phones.LoadAndDelete(r.PathValue("id")); ok {
 			v.(*browserPhone).phone.Close()

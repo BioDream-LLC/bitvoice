@@ -26,6 +26,13 @@ export function nativeHost(): NativeHost | null {
   return n && n.device && n.secret ? n : null
 }
 
+/** Tell the host app a video room was joined or left, so it shows a video call on the phone's call
+ * screen (CallKit on iPhone, Telecom on Android) for as long as the room is open. */
+export function nativeVideoRoom(join: boolean, room: string) {
+  const n = nativeHost()
+  if (n) n.post(JSON.stringify({ type: 'videoroom', state: join ? 'joined' : 'left', room }))
+}
+
 export function useNativeBridge(api: ReturnType<typeof usePhone>) {
   const host = nativeHost()
   const told = useRef(new Map<string, string>())

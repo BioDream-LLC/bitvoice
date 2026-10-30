@@ -51,6 +51,14 @@ object Calls {
     /** A message from the phone page (see web/src/native.ts). */
     fun fromPage(ctx: Context, text: String) {
         val m = runCatching { org.json.JSONObject(text) }.getOrNull() ?: return
+        if (m.optString("type") == "videoroom") {
+            // A video room joined or left in the web view: keep the app and its audio alive while in it,
+            // with an ongoing-call notification, as the iPhone shows a video call on its call screen.
+            val room = m.optString("room").ifEmpty { "video" }
+            if (m.optString("state") == "joined") { active.add("video:$room"); CallForeground.start(ctx, "Video room $room", "video:$room") }
+            else if (active.remove("video:$room") && active.isEmpty()) CallForeground.stop(ctx)
+            return
+        }
         if (m.optString("type") != "call") return
         val id = m.optString("id")
         val pbx = m.optString("pbxCall")

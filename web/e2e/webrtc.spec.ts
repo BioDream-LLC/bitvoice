@@ -1345,3 +1345,40 @@ test('call facts and summary without a language model', async ({ page }) => {
   }
 })
 
+
+// Staff chat reaches a mobile app: a phone sends a direct message, and the colleague's phone stream
+// gets it. Each phone signs in with its extension, as the app does with its device credentials.
+test('the staff chat on the phone: a message reaches a colleague', async ({ page }) => {
+  await signIn(page)
+  const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
+  const got = await page.evaluate(async (H) => {
+    const send = async (method: string, url: string, body?: unknown) => {
+      const r = await fetch(url, { method, headers: H, body: body === undefined ? undefined : JSON.stringify(body) })
+      const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(url + ': ' + (j.message ?? r.status)); return j
+    }
+    const have = (await (await fetch('./api/extensions')).json()).items as { number: string }[]
+    if (have.length < 2) await send('POST', './api/extensions', { number: '177', name: 'Second browser', enabled: true, outbound: true, voicemail: { enabled: false }, record: false, secureMedia: false })
+    const all = (await (await fetch('./api/extensions')).json()).items as { number: string }[]
+    const [a, b] = [all[0].number, all[1].number]
+    const pa = await send('POST', './api/phone', { extension: a })
+    const pb = await send('POST', './api/phone', { extension: b })
+    // B watches its stream for a chat message.
+    let chat: { key: string; message: { from: string; text: string } } | null = null
+    const esB = new EventSource(`./api/phone/${pb.id}/events`)
+    esB.addEventListener('chat', (e) => { chat = JSON.parse((e as MessageEvent).data) })
+    await new Promise((ok) => esB.addEventListener('hello', ok, { once: true }))
+    // A's chat overview lists B; A sends B a direct message.
+    const over = await send('GET', `./api/phone/${pa.id}/chat`)
+    const key = 'd-' + [a, b].sort().join('-')
+    await send('POST', `./api/phone/${pa.id}/chat/${key}`, { text: 'Hello on the phone chat.' })
+    for (let i = 0; i < 40 && !chat; i++) await new Promise((ok) => setTimeout(ok, 100))
+    // B reads the conversation back through its own chat API.
+    const msgs = (await send('GET', `./api/phone/${pb.id}/chat/${key}`)).items as { from: string; text: string }[]
+    esB.close()
+    return { sawB: (over.people as { extension: string }[]).some((p) => p.extension === b), chat, lastText: msgs.at(-1)?.text }
+  }, H)
+  expect(got.sawB).toBe(true) // the colleague is in the chat overview
+  expect(got.chat, 'no chat message reached the colleague').not.toBeNull()
+  expect(got.chat!.message.text).toBe('Hello on the phone chat.')
+  expect(got.lastText).toBe('Hello on the phone chat.') // and is readable back
+})

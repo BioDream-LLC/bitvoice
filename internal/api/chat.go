@@ -250,3 +250,118 @@ func (s *Server) forPortal(ev events.Event, ext string) bool {
 	}
 	return false
 }
+
+// phoneChatRoutes give a mobile app the same staff chat as the portal, scoped to its extension: the
+// colleagues with presence and unread counts, a conversation's messages, and sending one. The chat
+// messages reach the app through its own event stream (phoneEvents forwards chat.message).
+func (s *Server) phoneChatRoutes() {
+	s.mux.HandleFunc("GET /api/phone/{id}/chat", func(w http.ResponseWriter, r *http.Request) {
+		bp := phoneOf(w, r)
+		if bp == nil {
+			return
+		}
+		cfg := s.config()
+		if cfg.System.Chat.Off {
+			writeError(w, http.StatusForbidden, "chat is switched off")
+			return
+		}
+		statuses := s.Store.ChatStatuses()
+		people := s.Engine.Colleagues(&cfg)
+		read := s.Store.ChatRead(bp.ext)
+		unread := func(key string) int {
+			ms, _ := s.Store.ChatMessages(key, read[key], 0)
+			n := 0
+			for _, m := range ms {
+				if m.From != bp.ext {
+					n++
+				}
+			}
+			return n
+		}
+		type person struct {
+			Extension, Name, Department, State, Reason, Status string
+			Unread                                             int
+		}
+		out := []map[string]any{}
+		for _, p := range people {
+			if p.Extension == bp.ext {
+				continue
+			}
+			out = append(out, map[string]any{"extension": p.Extension, "name": p.Name, "department": p.Department,
+				"state": p.State, "reason": p.Reason, "status": statuses[p.Extension], "unread": unread(store.DirectKey(bp.ext, p.Extension))})
+		}
+		rooms := []map[string]any{}
+		for _, rm := range cfg.System.Chat.Rooms {
+			if rm.InRoom(bp.ext) {
+				n := len(rm.Members)
+				if n == 0 {
+					n = len(people)
+				}
+				rooms = append(rooms, map[string]any{"id": rm.ID, "key": "r-" + rm.ID, "name": rm.Name, "members": n, "unread": unread("r-" + rm.ID)})
+			}
+		}
+		writeJSON(w, 200, map[string]any{"me": bp.ext, "status": statuses[bp.ext], "people": out, "rooms": rooms})
+	})
+	s.mux.HandleFunc("GET /api/phone/{id}/chat/{key}", func(w http.ResponseWriter, r *http.Request) {
+		bp := phoneOf(w, r)
+		if bp == nil {
+			return
+		}
+		cfg := s.config()
+		key := r.PathValue("key")
+		if _, ok := conversationFor(&cfg, bp.ext, key); !ok {
+			writeError(w, http.StatusNotFound, "no such conversation")
+			return
+		}
+		var since time.Time
+		if v := r.URL.Query().Get("since"); v != "" {
+			since, _ = time.Parse(time.RFC3339Nano, v)
+		}
+		ms, err := s.Store.ChatMessages(key, since, 200)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		if n := len(ms); n > 0 {
+			_ = s.Store.MarkChatRead(bp.ext, key, ms[n-1].At)
+		}
+		writeJSON(w, 200, map[string]any{"items": ms})
+	})
+	s.mux.HandleFunc("POST /api/phone/{id}/chat/{key}", func(w http.ResponseWriter, r *http.Request) {
+		bp := phoneOf(w, r)
+		if bp == nil {
+			return
+		}
+		cfg := s.config()
+		if cfg.System.Chat.Off {
+			writeError(w, http.StatusForbidden, "chat is switched off")
+			return
+		}
+		key := r.PathValue("key")
+		to, ok := conversationFor(&cfg, bp.ext, key)
+		if !ok {
+			writeError(w, http.StatusNotFound, "no such conversation")
+			return
+		}
+		var in struct {
+			Text string `json:"text"`
+		}
+		if err := readJSON(r, &in); err != nil {
+			writeError(w, http.StatusBadRequest, "send the message as text")
+			return
+		}
+		in.Text = strings.TrimSpace(in.Text)
+		if in.Text == "" || utf8.RuneCountInString(in.Text) > 4000 || !utf8.ValidString(in.Text) {
+			writeErr(w, config.Problems{{Field: "text", Message: "write a message of up to 4000 characters"}})
+			return
+		}
+		m, err := s.Store.AddChatMessage(key, store.ChatMessage{From: bp.ext, Text: in.Text}, cfg.System.Chat.KeepDays)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		_ = s.Store.MarkChatRead(bp.ext, key, m.At)
+		s.Bus.Publish("chat.message", ChatEvent{Key: key, Message: m, To: to})
+		writeJSON(w, 201, m)
+	})
+}
