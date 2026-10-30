@@ -17,6 +17,7 @@ export interface PhoneCall {
   held?: boolean // the other party is on hold
   reconnecting?: boolean // the network changed: ICE is restarting, the call carries on once it has
   briefing?: string // what the call is about, when it was passed on with a briefing
+  transcript?: { speaker: string; side: string; text: string; second: number }[] // live, when AI writes it out
 }
 
 const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
@@ -181,6 +182,13 @@ export function usePhone() {
     es.addEventListener('briefing', (e) => {
       const b = JSON.parse((e as MessageEvent).data) as { callId: string; summary: string }
       setCalls((cs) => cs.map((c) => (c.pbxCall === b.callId ? { ...c, briefing: b.summary } : c)))
+    })
+    es.addEventListener('transcript', (e) => {
+      const t = JSON.parse((e as MessageEvent).data) as { call: string; lines: { speaker: string; side: string; text: string; second: number }[] }
+      // The engine call ID is the browser call's own id (outbound) or its pbxCall (inbound).
+      setCalls((cs) => cs.map((c) => (c.id === t.call || c.pbxCall === t.call
+        ? { ...c, transcript: [...(c.transcript ?? []), ...t.lines].sort((a, b) => a.second - b.second).slice(-200) }
+        : c)))
     })
     let checking = false
     es.onerror = () => {

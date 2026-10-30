@@ -1,5 +1,5 @@
 import { clsx } from 'clsx'
-import { ArrowRightLeft, BookUser, Clock, Delete, LogOut, Mic, MicOff, Pause, Phone, PhoneIncoming, PhoneMissed, PhoneOff, PhoneOutgoing, Play, Trash2, Users, Voicemail } from 'lucide-react'
+import { ArrowRightLeft, BookUser, Clock, Delete, LogOut, MessageSquareText, Mic, MicOff, Pause, Phone, PhoneIncoming, PhoneMissed, PhoneOff, PhoneOutgoing, Play, Trash2, Users, Video, Voicemail } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { type CallerCard } from './api'
 import { CallerCardView } from './Crm'
@@ -83,6 +83,7 @@ export function Softphone({ phoneApi, extensions }: {
             </button>
           )}
           {!active && <Directory phoneId={phone.id} onPick={(n) => setNumber(n)} />}
+          {!active && <VideoRoomButton />}
         </>
       )}
       {tab === 'recents' && <Recents phoneId={phone.id} onCall={(n) => { setTab('keypad'); setNumber(n); if (!active) dial(n) }} />}
@@ -175,6 +176,16 @@ function CallCard({ c, phoneId, answer, hangup, mute, hold, transfer, canTransfe
             onChange={(e) => setTo(e.target.value.replace(/[^\d*#+]/g, ''))} />
           <button className="btn border-sky-600 bg-sky-600 text-white" disabled={!to}>Transfer</button>
         </form>
+      )}
+      {c.transcript && c.transcript.length > 0 && (
+        <section aria-label="Live transcript" className="mt-2 rounded-lg border border-slate-800 p-2">
+          <h4 className="flex items-center gap-1.5 text-xs font-semibold text-slate-300"><MessageSquareText size={12} className="text-sky-300" aria-hidden /> Live transcript <span className="font-normal text-slate-500">written by AI</span></h4>
+          <ol className="mt-1 max-h-40 space-y-0.5 overflow-y-auto text-xs">
+            {c.transcript.map((l, i) => (
+              <li key={i}><span className={clsx('font-semibold', l.side === 'caller' ? 'text-amber-300' : 'text-sky-300')}>{l.speaker}:</span> <span className="text-slate-200">{l.text}</span></li>
+            ))}
+          </ol>
+        </section>
       )}
       {c.direction === 'in' && c.state !== 'ended' && phoneId && <div className="mt-2"><PhoneCaller phoneId={phoneId} number={c.number} /></div>}
     </div>
@@ -276,6 +287,20 @@ function Team({ phoneId, onCall, onTransfer }: { phoneId: string; onCall: (numbe
         </li>
       ))}
     </ul>
+  )
+}
+
+/** A video call: open a BitVoice SFU video room (its cameras and screen sharing) in its own window, so
+ * the phone keeps running. The room is a conference number set to a video room in Conferences. */
+function VideoRoomButton() {
+  const [open, setOpen] = useState(false)
+  const [room, setRoom] = useState('')
+  if (!open) return <button className="btn w-full justify-center" onClick={() => setOpen(true)}><Video size={15} className="text-fuchsia-300" aria-hidden /> Join a video room</button>
+  return (
+    <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (room) { window.open(`#/video-room/${encodeURIComponent(room)}`, '_blank', 'noopener'); setOpen(false); setRoom('') } }}>
+      <input className="input flex-1 font-mono" aria-label="Video room number" placeholder="Room number" inputMode="numeric" autoFocus value={room} onChange={(e) => setRoom(e.target.value.replace(/\D/g, ''))} />
+      <button className="btn border-fuchsia-600 bg-fuchsia-600 text-white" disabled={!room}><Video size={14} aria-hidden /> Join</button>
+    </form>
   )
 }
 

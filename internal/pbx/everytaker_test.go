@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -252,6 +253,72 @@ func TestLiveTranscript911RealWhisper(t *testing.T) {
 		t.Fatal(err)
 	}
 	liveTranscript911(t, config.AI{Enabled: true, TranscribeURL: u, LiveTranscripts: true}, pcm, os.Getenv("BITVOICE_TEST_WHISPER_SAYS"))
+}
+
+// With live call transcripts on, an ordinary answered extension-to-extension call is written out as the
+// parties speak, named by their leg, and comes as a call.transcript event listing both extensions.
+func TestLiveTranscriptOrdinaryCall(t *testing.T) {
+	ai, _ := fakeAIWith(t, "", "Hello from the caller.")
+	cfg := testConfig()
+	cfg.System.AI = config.AI{Enabled: true, BaseURL: ai.URL, Model: "m", LiveCallTranscripts: true}
+	e, _ := startEngine(t, cfg)
+	ps := registered(t, e, "100", "101")
+	a, b := ps[0], ps[1]
+	events := e.Bus.Subscribe()
+	defer e.Bus.Unsubscribe(events)
+	var d *dialog
+	dialed := make(chan int, 1)
+	go func() { dg, code := a.dial("101"); d = dg; dialed <- code }()
+	ring := b.waitRing(patient(5 * time.Second))
+	if ring == nil {
+		t.Fatal("101 did not ring")
+	}
+	b.answer(ring)
+	if code := <-dialed; code != 200 {
+		t.Fatalf("dial got %d", code)
+	}
+	// The caller (100) sends a second of speech-like sound, then quiet, so the pause ends the piece.
+	to := d.media
+	n := 0
+	go func() {
+		for i := 1; i <= 200; i++ {
+			buf := make([]byte, 160)
+			loud := i <= 50
+			for k := range buf {
+				v := 0.0
+				if loud {
+					v = 9000 * math.Sin(float64(n)*2*math.Pi*300/8000) * (0.6 + 0.4*math.Sin(float64(n)*2*math.Pi*3/8000))
+				}
+				buf[k] = media.LinearToUlaw(int16(v))
+				n++
+			}
+			a.rtp.WriteToUDPAddrPort(rtpPacket(uint16(i), buf), to)
+			time.Sleep(20 * time.Millisecond)
+		}
+	}()
+	deadline := time.After(patient(15 * time.Second))
+	for {
+		select {
+		case ev := <-events.C:
+			if ev.Type != "call.transcript" {
+				continue
+			}
+			m := ev.Data.(map[string]any)
+			lines := m["lines"].([]TranscriptLine)
+			parties, _ := m["parties"].([]string)
+			if len(lines) != 1 || lines[0].Side != "caller" || !strings.Contains(strings.ToLower(lines[0].Text), "hello from the caller") {
+				t.Fatalf("lines %+v", lines)
+			}
+			if !slices.Contains(parties, "100") || !slices.Contains(parties, "101") {
+				t.Fatalf("parties %v, want both 100 and 101", parties)
+			}
+			t.Logf("live transcript: %q on %v", lines[0].Text, parties)
+			hangupAll(e)
+			return
+		case <-deadline:
+			t.Fatal("no live transcript came")
+		}
+	}
 }
 
 // liveTranscript911 places an answered 911 call whose caller says speech (8 kHz; nil: a second of a

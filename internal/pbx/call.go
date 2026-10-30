@@ -78,6 +78,7 @@ type Call struct {
 	takenAt            time.Time
 	cancelled          chan struct{}
 	cnlOnce            sync.Once
+	liveOnce           sync.Once
 	results            chan forkResult
 
 	direction, from, fromName, to, toName, trunk string

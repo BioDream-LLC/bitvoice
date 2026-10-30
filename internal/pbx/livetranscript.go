@@ -46,11 +46,19 @@ func (s *liveSide) attach(l *Leg, name string) {
 	s.remove = l.ep.Listen(s.capt.Packet)
 }
 
-// liveTranscript runs for an answered 911 call when live transcripts are on, until the call ends.
+// liveTranscript runs for an answered call when live transcripts are on, until the call ends. For 911
+// calls it is the AI.LiveTranscripts setting; for ordinary calls, AI.LiveCallTranscripts.
 func (c *Call) liveTranscript() {
 	cfg := c.e.Config()
 	a := cfg.System.AI
-	if !a.Enabled || !a.LiveTranscripts {
+	c.mu.Lock()
+	is911 := c.i3 != nil || c.esinet
+	c.mu.Unlock()
+	on := a.LiveTranscripts
+	if !is911 {
+		on = a.LiveCallTranscripts
+	}
+	if !a.Enabled || !on {
 		return
 	}
 	client := c.e.Speech.Client(a, c.e.AIAllow)
@@ -64,6 +72,18 @@ func (c *Call) liveTranscript() {
 			}
 		}
 	}()
+	// The extensions on the call, so a phone showing the transcript knows the line is its own.
+	parties := func() []string {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		var ps []string
+		for _, l := range []*Leg{c.caller, c.callee} {
+			if l != nil && l.Ext != "" {
+				ps = append(ps, l.Ext)
+			}
+		}
+		return ps
+	}
 	var wg sync.WaitGroup
 	gate := make(chan struct{}, 2) // pieces written out at once, for this call
 	var warned sync.Once
@@ -84,7 +104,7 @@ func (c *Call) liveTranscript() {
 			if text = strings.TrimSpace(text); text == "" {
 				return
 			}
-			c.e.publish("call.transcript", map[string]any{"call": c.ID,
+			c.e.publish("call.transcript", map[string]any{"call": c.ID, "parties": parties(),
 				"lines": []TranscriptLine{{Speaker: speaker, Side: side, Text: text, Second: float64(at) / float64(rate)}}})
 		}()
 	}
@@ -119,12 +139,16 @@ func (c *Call) liveTranscript() {
 		c.mu.Unlock()
 		if !ended {
 			if cl != nil && caller.leg != cl {
-				caller.attach(cl, "Caller")
+				name := "Caller"
+				if !is911 {
+					name = firstNonEmptyStr(cl.Name, cl.Number, "Caller")
+				}
+				caller.attach(cl, name)
 			}
 			if ce != nil && taker.leg != ce { // a transfer: whoever has the call now
 				name := takerName
-				if taker.leg != nil {
-					name = firstNonEmptyStr(ce.Name, ce.Number, "Call-taker")
+				if taker.leg != nil || !is911 {
+					name = firstNonEmptyStr(ce.Name, ce.Number, takerName)
 				}
 				taker.attach(ce, name)
 			}

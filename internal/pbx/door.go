@@ -53,6 +53,13 @@ func (c *Call) bridged() {
 	c.consentNotice()
 	c.keepForBrief()
 	c.emergencyAnswered(b)
+	// Live transcript for an ordinary call (911 starts its own in emergencyAnswered), once per call.
+	c.mu.Lock()
+	is911, textOnly := c.i3 != nil || c.esinet, c.textOnly
+	c.mu.Unlock()
+	if !is911 && !textOnly {
+		c.liveOnce.Do(func() { go c.liveTranscript() })
+	}
 	clean := c.e.Config().System.Audio.Calls
 	for _, l := range []*Leg{a, b} {
 		if l.ep == nil {

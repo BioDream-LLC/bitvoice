@@ -255,6 +255,14 @@ func (s *Server) phoneEvents(w http.ResponseWriter, r *http.Request) {
 				fmt.Fprintf(w, "event: briefing\ndata: %s\n\n", j)
 				fl.Flush()
 			}
+			// A live transcript line for a call this extension is on (AI, live call transcripts).
+			if ev.Type == "call.transcript" {
+				if m, ok := ev.Data.(map[string]any); ok && partyIs(m["parties"], bp.ext) {
+					j, _ := json.Marshal(m)
+					fmt.Fprintf(w, "event: transcript\ndata: %s\n\n", j)
+					fl.Flush()
+				}
+			}
 		case ev := <-bp.phone.Events:
 			b, _ := json.Marshal(ev)
 			fmt.Fprintf(w, "event: call\ndata: %s\n\n", b)
@@ -348,6 +356,25 @@ func (s *Server) phoneAnswer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]string{"sdp": string(ans.Bytes())})
+}
+
+// partyIs reports whether ext is in a call.transcript event's "parties" list (the extensions on the call).
+func partyIs(v any, ext string) bool {
+	switch ps := v.(type) {
+	case []string:
+		for _, p := range ps {
+			if p == ext {
+				return true
+			}
+		}
+	case []any:
+		for _, p := range ps {
+			if s, ok := p.(string); ok && s == ext {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (s *Server) browserPhoneRoutes() {

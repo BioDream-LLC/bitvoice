@@ -288,6 +288,9 @@ type AI struct {
 	// LiveTranscripts writes out answered 911 calls as they are spoken, each side apart, for the 911
 	// screen and CAD (call.transcript events). The calls' audio goes to the AI service while they last.
 	LiveTranscripts bool `json:"liveTranscripts,omitempty"`
+	// LiveCallTranscripts does the same for ordinary answered calls (not only 911), shown on the phone
+	// page as the call goes. The calls' audio goes to the speech-to-text or AI service while they last.
+	LiveCallTranscripts bool `json:"liveCallTranscripts,omitempty"`
 	// TranscribeURL, when set, writes speech down with a speech-to-text service instead of a model:
 	// whisper.cpp's whisper-server on this computer or the building's network
 	// (http://127.0.0.1:8178/inference), so callers' audio need not leave the building and nothing is
