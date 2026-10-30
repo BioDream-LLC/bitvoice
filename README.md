@@ -454,7 +454,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | Desk phones over SIP | Field-tested | Asterisk as a desk phone across the internet. Real Yealink, Poly or Grandstream handsets not tried yet |
 | Browser phone (WebRTC) | Field-tested | from outside to EC2; Chromium browser tests with sound both ways |
 | Two servers, one PostgreSQL, failover | Field-tested | kill -9 and planned stop on EC2: the call carries on, the provider line moves |
-| One-command install | Field-tested | Ubuntu 24.04 (x86, Arm), Debian 12, Amazon Linux 2023, Windows Server 2022, Windows 11 (for one person, without administrator, in PowerShell 5.1 and 7), macOS; back after a reboot |
+| One-command install | Field-tested | Ubuntu 24.04 (x86, Arm), Debian 12, Amazon Linux 2023, Windows Server 2022, Windows 11 (as administrator and not, in PowerShell 5.1 and 7), Ubuntu 20.04 and Fedora 42 in containers, macOS 26 on Apple silicon for one person (the install with sudo, for the whole Mac, not tried yet); back after a reboot |
 | Capacity | Field-tested | 2,000 calls at once, no loss, MOS 4.41, on a 16-vCPU c7i.4xlarge (about 10 vCPUs busy); 200 at once on c7g.large, c7i.large, t4g.small, an M4 and the Lightsail nano. At 2,000: jitter 4.0 ms for 95% of calls, longest gap between packets 74 ms, longest garbage-collection pause 4.2 ms |
 | FreePBX migration (Import) | Field-tested | a real FreePBX 17.0.33 backup (70 MB) imported whole; others from FreePBX's own formats |
 | AI transcripts, summaries, receptionist | Field-tested | a real model through OpenRouter |

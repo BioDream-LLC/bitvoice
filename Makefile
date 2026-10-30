@@ -75,6 +75,7 @@ release:
 			cp $$w/$$wexe $(DIST)/$$name/ && chmod 0755 $(DIST)/$$name/$$wexe && cp $$w/whisper.cpp-LICENSE $(DIST)/$$name/; \
 			$(DIST)/.bvsign -key "$(SIGNING_KEY)" $(DIST)/$$name/$$wexe > /dev/null; fi; \
 		cp LICENSE NOTICE docs/manual/bitvoice-manual.pdf $(DIST)/$$name/; \
+		[ $$os = darwin ] && cp deploy/macos/BitVoice.icns $(DIST)/$$name/; \
 		if [ $$os = windows ]; then (cd $(DIST) && TZ=UTC zip -qrX $$name.zip $$name); \
 		else COPYFILE_DISABLE=1 tar -C $(DIST) $(TAR_ROOT) -czf $(DIST)/$$name.tar.gz $$name; fi; \
 		echo "built $$name"; done

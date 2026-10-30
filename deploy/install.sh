@@ -7,8 +7,11 @@
 # SHA256SUMS and BioDream's release signature (ed25519, with OpenSSL 3 or OpenSSH's ssh-keygen), and installs it:
 #   Linux: /usr/local/bin/bitvoice, a "bitvoice" system user, data in /var/lib/bitvoice, the systemd
 #          service bitvoice (web interface on port 443), and the firewall opened when ufw or firewalld runs.
-#   macOS: ~/Applications/BitVoice/bitvoice and a launchd agent (web interface on port 8443, data in
-#          ~/Library/Application Support/BitVoice); it runs while you are signed in.
+#   macOS: BitVoice.app in ~/Applications (Launchpad and Spotlight open its web interface) and a launchd
+#          agent: web interface on port 8443, data in ~/Library/Application Support/BitVoice, logs in
+#          ~/Library/Logs/BitVoice; it runs while you are signed in. With sudo, for a Mac that answers calls
+#          with nobody signed in: /Applications/BitVoice.app and a launchd daemon that starts with the Mac,
+#          as the hidden user _bitvoice, web interface on port 443, data in /Library/Application Support/BitVoice.
 # Run it again to upgrade. Options (after "sh -s --" when piped):
 #   --version vX.Y.Z   that release instead of the latest
 #   --uninstall        remove the program and the service; the data stays (--purge removes it too)
@@ -35,8 +38,9 @@ PURGE=0
 
 say() { printf '%s\n' "$*"; }
 fetch() { # url file
-  if command -v curl >/dev/null 2>&1; then curl -fsSL --proto '=https' --tlsv1.2 "$1" -o "$2"
-  elif command -v wget >/dev/null 2>&1; then wget -q --https-only -O "$2" "$1"
+  # Never wait forever: give up on a server that does not answer in 30 s or sends under 1 KB/s for a minute.
+  if command -v curl >/dev/null 2>&1; then curl -fsSL --proto '=https' --tlsv1.2 --connect-timeout 30 -y 60 -Y 1024 "$1" -o "$2"
+  elif command -v wget >/dev/null 2>&1; then wget -q --https-only -T 60 -t 2 -O "$2" "$1"
   else fail "needs curl or wget"; fi
 }
 fail() { printf 'BitVoice install: %s\n' "$*" >&2; exit 1; }
@@ -49,7 +53,7 @@ while [ $# -gt 0 ]; do
     --purge) ACTION=uninstall; PURGE=1 ;;
     --no-service) SERVICE=0 ;;
     --no-firewall) FIREWALL=0 ;;
-    -h|--help) sed -n '2,19p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,20p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) fail "unknown option $1 (try --help)" ;;
   esac
   shift
@@ -91,6 +95,25 @@ if [ "$os" = linux ] && [ "$(id -u)" -ne 0 ]; then
   fail "run this as root (or install sudo)"
 fi
 
+# macOS: the signed-in user's BitVoice, or with sudo (root) the Mac's own, which starts with the Mac.
+MAC_SYSTEM=0
+[ "$os" = darwin ] && [ "$(id -u)" -eq 0 ] && MAC_SYSTEM=1
+mac_paths() {
+  if [ "$MAC_SYSTEM" = 1 ]; then
+    app=/Applications/BitVoice.app
+    data=${DATA_MAC:-"/Library/Application Support/BitVoice"}
+    logs=/Library/Logs/BitVoice
+    plist=/Library/LaunchDaemons/org.bitvoice.bitvoice.plist
+    https=${BITVOICE_HTTPS:-:443}
+  else
+    app="$HOME/Applications/BitVoice.app"
+    data=${DATA_MAC:-"$HOME/Library/Application Support/BitVoice"}
+    logs="$HOME/Library/Logs/BitVoice"
+    plist="$HOME/Library/LaunchAgents/org.bitvoice.bitvoice.plist"
+    https=$HTTPS_MAC
+  fi
+}
+
 sha256() {
   if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
   elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1
@@ -114,19 +137,19 @@ verify_signature() { # program (its .sig and .sshsig are beside it)
     openssl base64 -d -A -in "$1.sig" -out "$work/sig.bin" 2>/dev/null || fail "$(basename "$1").sig is damaged"
     openssl pkeyutl -verify -pubin -inkey "$work/key.pem" -rawin -in "$1" -sigfile "$work/sig.bin" >/dev/null 2>&1 ||
       fail "the signature of $(basename "$1") does not match $KEY_NAME: not installed"
-    say "  Signature checked: signed by $KEY_NAME."
+    say "  Signature of $(basename "$1") checked: signed by $KEY_NAME."
   elif sshsig_ok && [ -f "$1.sshsig" ]; then
     # The key as OpenSSH writes it: string "ssh-ed25519", string key (32 bytes).
     blob=$({ printf '\000\000\000\013ssh-ed25519\000\000\000\040'; printf '%s' "$RELEASE_KEY" | unbase64; } | base64 | tr -d '\n')
     printf 'biodream ssh-ed25519 %s\n' "$blob" > "$work/signers"
     ssh-keygen -Y verify -f "$work/signers" -I biodream -n file -s "$1.sshsig" < "$1" >/dev/null 2>&1 ||
       fail "the signature of $(basename "$1") does not match $KEY_NAME: not installed"
-    say "  Signature checked (with ssh-keygen): signed by $KEY_NAME."
+    say "  Signature of $(basename "$1") checked (with ssh-keygen): signed by $KEY_NAME."
   elif sshsig_ok && at_least "$VERSION" v0.1.14; then
     fail "$(basename "$1") has no OpenSSH signature (.sshsig) beside it: this is not a BioDream release"
   else
     [ "${BITVOICE_REQUIRE_SIGNATURE:-}" = 1 ] && fail "the release signature cannot be checked here: it needs OpenSSL 3, or ssh-keygen and a release from v0.1.14 on"
-    say "  (The signature cannot be checked here, so it is not; the SHA-256 sum was.)"
+    say "  (The signature of $(basename "$1") cannot be checked here, so it is not; the SHA-256 sum was.)"
   fi
 }
 
@@ -147,15 +170,25 @@ if [ "$ACTION" = uninstall ]; then
       say "BitVoice is removed. Its data stays in /var/lib/bitvoice (--purge removes it)."
     fi
   else
-    plist="$HOME/Library/LaunchAgents/org.bitvoice.bitvoice.plist"
-    launchctl bootout "gui/$(id -u)" "$plist" >/dev/null 2>&1 || launchctl unload "$plist" >/dev/null 2>&1 || true
+    mac_paths
+    if [ "$MAC_SYSTEM" = 1 ]; then
+      launchctl bootout system/org.bitvoice.bitvoice >/dev/null 2>&1 || true
+      [ -x "$app/Contents/MacOS/bitvoice" ] && /usr/libexec/ApplicationFirewall/socketfilterfw --remove "$app/Contents/MacOS/bitvoice" >/dev/null 2>&1 || true
+    else
+      launchctl bootout "gui/$(id -u)/org.bitvoice.bitvoice" >/dev/null 2>&1 || true
+    fi
     rm -f "$plist"
-    rm -rf "$HOME/Applications/BitVoice"
+    rm -rf "$app" "$HOME/Applications/BitVoice" # (and the folder releases before v0.1.14 used)
     if [ "$PURGE" = 1 ]; then
-      rm -rf "$HOME/Library/Application Support/BitVoice"
+      rm -rf "$data" "$logs"
+      [ "$MAC_SYSTEM" = 1 ] || rm -f "$HOME/Library/Logs/BitVoice.log"
+      if [ "$MAC_SYSTEM" = 1 ]; then
+        dscl . -delete /Users/_bitvoice >/dev/null 2>&1 || true
+        dscl . -delete /Groups/_bitvoice >/dev/null 2>&1 || true
+      fi
       say "BitVoice and its data are removed."
     else
-      say "BitVoice is removed. Its data stays in ~/Library/Application Support/BitVoice (--purge removes it)."
+      say "BitVoice is removed. Its data stays in $data (--purge removes it)."
     fi
   fi
   exit 0
@@ -198,9 +231,9 @@ wait_ready() { # url
   i=0
   while [ $i -lt 60 ]; do
     if command -v curl >/dev/null 2>&1; then
-      curl -fsk "$1/api/health/live" >/dev/null 2>&1 && return 0
+      curl -fsk -m 3 "$1/api/health/live" >/dev/null 2>&1 && return 0
     else
-      wget -q --no-check-certificate -O /dev/null "$1/api/health/live" 2>/dev/null && return 0
+      wget -q -T 3 -t 1 --no-check-certificate -O /dev/null "$1/api/health/live" 2>/dev/null && return 0
     fi
     i=$((i + 1)); sleep 1
   done
@@ -298,58 +331,190 @@ UNIT
   exit 0
 fi
 
-# --- macOS: for the signed-in user -------------------------------------------------------------
-dir="$HOME/Applications/BitVoice"
-mkdir -p "$dir"
-cp "$work/$name/bitvoice" "$dir/bitvoice.new" && chmod 0755 "$dir/bitvoice.new" && mv -f "$dir/bitvoice.new" "$dir/bitvoice"
-cp "$work/$name/bitvoice.sig" "$work/$name/LICENSE" "$work/$name/NOTICE" "$dir/" 2>/dev/null || true
-[ -f "$work/$name/bitvoice-manual.pdf" ] && cp "$work/$name/bitvoice-manual.pdf" "$dir/"
-xattr -d com.apple.quarantine "$dir/bitvoice" 2>/dev/null || true
-if [ -f "$work/$name/whisper-server" ]; then
-  cp "$work/$name/whisper-server" "$dir/whisper-server.new" && chmod 0755 "$dir/whisper-server.new" && mv -f "$dir/whisper-server.new" "$dir/whisper-server"
-  cp "$work/$name/whisper-server.sig" "$work/$name/whisper.cpp-LICENSE" "$dir/" 2>/dev/null || true
-  xattr -d com.apple.quarantine "$dir/whisper-server" 2>/dev/null || true
+# --- macOS ------------------------------------------------------------------------------------
+mac_paths
+port=$(port_of "$https")
+[ "$port" = 443 ] && url="https://127.0.0.1" || url="https://127.0.0.1:$port"
+# One BitVoice per Mac from this installer: the user's and the Mac's own would both answer phones.
+if [ "$MAC_SYSTEM" = 1 ]; then
+  for f in /Users/*/Library/LaunchAgents/org.bitvoice.bitvoice.plist; do
+    [ -f "$f" ] && fail "$(echo "$f" | cut -d/ -f3) has BitVoice installed for themselves: remove it first (sh install.sh --uninstall, without sudo)"
+  done
+elif [ -f /Library/LaunchDaemons/org.bitvoice.bitvoice.plist ]; then
+  fail "BitVoice is installed for this whole Mac (with sudo): upgrade or remove it with sudo"
 fi
-say "  Program: $dir/bitvoice"
+if [ "$MAC_SYSTEM" = 1 ]; then domain=system; else domain="gui/$(id -u)"; fi
+# Stop the BitVoice being upgraded, then make sure nothing else holds its web port.
+had=0; [ -f "$plist" ] && had=1
+launchctl bootout "$domain/org.bitvoice.bitvoice" >/dev/null 2>&1 || true
+held() { # anything listening on the port, on any address (lsof -b: never waits on the kernel)
+  [ -n "$(lsof -b -nP -iTCP:"$port" -sTCP:LISTEN -t </dev/null 2>/dev/null)" ] || nc -z -G 2 127.0.0.1 "$port" </dev/null >/dev/null 2>&1
+}
+i=0; while [ $i -lt 20 ] && held; do sleep 0.5; i=$((i + 1)); done
+if held; then
+  who=$(lsof -b -nP -iTCP:"$port" -sTCP:LISTEN </dev/null 2>/dev/null | awk 'NR == 2 {print $1 " (process " $2 ")"}')
+  [ "$had" = 1 ] && launchctl bootstrap "$domain" "$plist" >/dev/null 2>&1
+  fail "port $port is in use by ${who:-another program}: stop it, or choose another port with BITVOICE_HTTPS=:8444"
+fi
+
+# The app: Launchpad and Spotlight find it, and opening it opens the web interface. The program and
+# whisper-server live inside it.
+new="$app.new"
+rm -rf "$new"
+mkdir -p "$new/Contents/MacOS" "$new/Contents/Resources"
+cp "$work/$name/bitvoice" "$new/Contents/MacOS/bitvoice" && chmod 0755 "$new/Contents/MacOS/bitvoice"
+for f in bitvoice.sig bitvoice.sshsig LICENSE NOTICE bitvoice-manual.pdf; do
+  [ -f "$work/$name/$f" ] && cp "$work/$name/$f" "$new/Contents/Resources/"
+done
+[ -f "$work/$name/BitVoice.icns" ] && cp "$work/$name/BitVoice.icns" "$new/Contents/Resources/"
+if [ -f "$work/$name/whisper-server" ]; then
+  cp "$work/$name/whisper-server" "$new/Contents/MacOS/whisper-server" && chmod 0755 "$new/Contents/MacOS/whisper-server"
+  for f in whisper-server.sig whisper-server.sshsig whisper.cpp-LICENSE; do
+    [ -f "$work/$name/$f" ] && cp "$work/$name/$f" "$new/Contents/Resources/"
+  done
+fi
+cat > "$new/Contents/Info.plist" <<INFO
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key><string>org.bitvoice.BitVoice</string>
+  <key>CFBundleName</key><string>BitVoice</string>
+  <key>CFBundleDisplayName</key><string>BitVoice</string>
+  <key>CFBundleExecutable</key><string>launch</string>
+  <key>CFBundleIconFile</key><string>BitVoice</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>${VERSION#v}</string>
+  <key>CFBundleVersion</key><string>${VERSION#v}</string>
+  <key>LSMinimumSystemVersion</key><string>11.0</string>
+  <key>LSUIElement</key><true/>
+  <key>NSHumanReadableCopyright</key><string>BioDream LLC. Apache License 2.0.</string>
+</dict>
+</plist>
+INFO
+# Opening the app: start BitVoice if it was stopped (the signed-in user's), wait for it, open the page.
+# (Named launch: Mac disks ignore case, so "BitVoice" would be the program "bitvoice" itself.)
+cat > "$new/Contents/MacOS/launch" <<OPEN
+#!/bin/sh
+# Opens BitVoice's web interface (written by install.sh).
+up() { /usr/bin/curl -fsk -m 2 "$url/api/health/live" >/dev/null 2>&1; }
+if ! up && [ "$MAC_SYSTEM" = 0 ] && [ -f "$plist" ]; then
+  /bin/launchctl bootstrap "gui/\$(id -u)" "$plist" >/dev/null 2>&1 || /bin/launchctl kickstart "gui/\$(id -u)/org.bitvoice.bitvoice" >/dev/null 2>&1
+  i=0; while [ \$i -lt 30 ] && ! up; do sleep 1; i=\$((i + 1)); done
+fi
+if up; then exec /usr/bin/open "$url"; fi
+/usr/bin/osascript -e 'display alert "BitVoice is not running" message "Its log is in $logs." as critical' >/dev/null 2>&1
+OPEN
+chmod 0755 "$new/Contents/MacOS/launch"
+xattr -dr com.apple.quarantine "$new" 2>/dev/null || true
+rm -rf "$app" "$HOME/Applications/BitVoice" # (and the folder releases before v0.1.14 used)
+mv "$new" "$app"
+prog="$app/Contents/MacOS/bitvoice"
+# Tell Launchpad and Spotlight about it now (in the background: it may take a while, never the install).
+(/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$app" </dev/null >/dev/null 2>&1 &)
+say "  Program: $app"
 if [ "$SERVICE" = 0 ]; then
-  say "Installed. Start it with: \"$dir/bitvoice\""
+  say "Installed. Start it with: \"$prog\""
   exit 0
 fi
-plist="$HOME/Library/LaunchAgents/org.bitvoice.bitvoice.plist"
-mkdir -p "$HOME/Library/LaunchAgents" "$HOME/Library/Logs"
-launchctl bootout "gui/$(id -u)" "$plist" >/dev/null 2>&1 || true
+
+mkdir -p "$data" "$logs" "$(dirname "$plist")"
+if [ "$MAC_SYSTEM" = 1 ]; then
+  # A hidden user of its own, as Apple's own services have.
+  if ! dscl . -read /Users/_bitvoice >/dev/null 2>&1; then
+    id=300
+    while dscl . -search /Users UniqueID $id 2>/dev/null | grep -q . || dscl . -search /Groups PrimaryGroupID $id 2>/dev/null | grep -q .; do id=$((id + 1)); done
+    dscl . -create /Groups/_bitvoice PrimaryGroupID $id
+    dscl . -create /Groups/_bitvoice RealName "BitVoice"
+    dscl . -create /Groups/_bitvoice Password '*'
+    dscl . -create /Users/_bitvoice UniqueID $id
+    dscl . -create /Users/_bitvoice PrimaryGroupID $id
+    dscl . -create /Users/_bitvoice RealName "BitVoice"
+    dscl . -create /Users/_bitvoice NFSHomeDirectory /var/empty
+    dscl . -create /Users/_bitvoice UserShell /usr/bin/false
+    dscl . -create /Users/_bitvoice Password '*'
+    dscl . -create /Users/_bitvoice IsHidden 1
+  fi
+  chown -R _bitvoice:_bitvoice "$data" "$logs"
+fi
+chmod 0700 "$data"
+# Its own log, kept under 10 MB (-log, from v0.1.14 on); launchd's file then catches only a failed start.
+if [ -n "$VERSION" ] && at_least "$VERSION" v0.1.14; then
+  logargs="    <string>-log</string>
+    <string>$logs/bitvoice.log</string>"
+  out="$logs/launchd.log"
+else
+  logargs=""
+  out="$logs/bitvoice.log"
+fi
+# The service runs the program kept awake by caffeinate: a sleeping Mac answers no calls.
+user=""
+[ "$MAC_SYSTEM" = 1 ] && user="  <key>UserName</key><string>_bitvoice</string>
+  <key>GroupName</key><string>_bitvoice</string>"
 cat > "$plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>Label</key><string>org.bitvoice.bitvoice</string>
+  <key>AssociatedBundleIdentifiers</key><string>org.bitvoice.BitVoice</string>
+$user
   <key>ProgramArguments</key>
   <array>
     <string>/usr/bin/caffeinate</string>
     <string>-i</string>
     <string>-s</string>
-    <string>$dir/bitvoice</string>$( [ -n "$DATA_MAC" ] && printf '\n    <string>-data</string>\n    <string>%s</string>' "$DATA_MAC")
+    <string>$prog</string>
+    <string>-data</string>
+    <string>$data</string>
+$logargs
     <string>-no-browser</string>
     <string>-https</string>
-    <string>$HTTPS_MAC</string>
+    <string>$https</string>
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
-  <key>StandardOutPath</key><string>$HOME/Library/Logs/BitVoice.log</string>
-  <key>StandardErrorPath</key><string>$HOME/Library/Logs/BitVoice.log</string>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>StandardOutPath</key><string>$out</string>
+  <key>StandardErrorPath</key><string>$out</string>
 </dict>
 </plist>
 PLIST
-launchctl bootstrap "gui/$(id -u)" "$plist" 2>/dev/null || launchctl load "$plist"
-say "  Starts when you sign in (launchd agent org.bitvoice.bitvoice; log: ~/Library/Logs/BitVoice.log)."
-say "  Keeps the Mac awake while it runs (caffeinate): a sleeping Mac answers no calls."
-port=$(port_of "$HTTPS_MAC")
-if ! wait_ready "https://127.0.0.1:$port"; then
-  tail -n 30 "$HOME/Library/Logs/BitVoice.log" 2>/dev/null || true
+[ "$MAC_SYSTEM" = 1 ] && chown root:wheel "$plist" && chmod 0644 "$plist"
+launchctl bootstrap "$domain" "$plist" 2>/dev/null || launchctl load "$plist"
+if [ "$MAC_SYSTEM" = 1 ]; then
+  say "  Starts with the Mac, before anyone signs in (launchd daemon org.bitvoice.bitvoice, as the hidden user _bitvoice)."
+else
+  say "  Starts when you sign in (launchd agent org.bitvoice.bitvoice). Open BitVoice from Launchpad or Spotlight."
+fi
+say "  Logs: $logs. Keeps the Mac awake while it runs (caffeinate): a sleeping Mac answers no calls."
+# The Mac's firewall, when it is on, asks whether BitVoice may accept connections, as user or not.
+fw=/usr/libexec/ApplicationFirewall/socketfilterfw
+if [ "$FIREWALL" = 1 ] && "$fw" --getglobalstate 2>/dev/null | grep -q 'enabled'; then
+  if [ "$MAC_SYSTEM" = 1 ]; then
+    "$fw" --add "$prog" >/dev/null 2>&1 && "$fw" --unblockapp "$prog" >/dev/null 2>&1
+    say "  Firewall: BitVoice may accept incoming connections."
+  else
+    say "  The Mac's firewall is on: when it asks whether BitVoice may accept incoming connections, allow it,"
+    say "  so phones can connect (it asks again after an upgrade)."
+  fi
+fi
+if ! wait_ready "$url"; then
+  tail -n 30 "$logs/bitvoice.log" "$logs/launchd.log" 2>/dev/null || true
   fail "BitVoice did not start: see the log above"
 fi
+addr=$(ipconfig getifaddr "$(route -n get default 2>/dev/null | awk '/interface:/{print $2}')" 2>/dev/null)
 say ""
-say "BitVoice $VERSION is running: open https://127.0.0.1:$port"
+say "BitVoice $VERSION is running: open $url on this Mac."
+if [ -n "$addr" ]; then
+  [ "$port" = 443 ] && say "  From another computer or phone: https://$addr" || say "  From another computer or phone: https://$addr:$port"
+fi
 say "  The browser warns once about BitVoice's own certificate until you give it yours (Settings, Certificate)."
-say "  macOS asks once whether BitVoice may accept incoming connections: allow it, so phones can connect."
+# At the Mac (not over SSH): open it in the browser the first time.
+if [ "$had" = 0 ] && [ -z "${SSH_CONNECTION:-}" ] && [ -z "${BITVOICE_NO_BROWSER:-}" ]; then
+  if [ "$MAC_SYSTEM" = 1 ] && [ -n "${SUDO_USER:-}" ]; then
+    launchctl asuser "$(id -u "$SUDO_USER")" sudo -u "$SUDO_USER" open "$url" >/dev/null 2>&1 || true
+  elif [ "$MAC_SYSTEM" = 0 ]; then
+    open "$url" >/dev/null 2>&1 || true
+  fi
+fi

@@ -124,6 +124,18 @@ jobs:
             export BITVOICE_DATA="$RUNNER_TEMP/bvdata"
             sh deploy/install.sh
             curl -fsk https://127.0.0.1:8443/api/health/live
+            # The app: its icon, a valid Info.plist; opened while BitVoice is stopped, it starts it.
+            app="$HOME/Applications/BitVoice.app"
+            test -f "$app/Contents/Resources/BitVoice.icns"
+            plutil -lint "$app/Contents/Info.plist" "$HOME/Library/LaunchAgents/org.bitvoice.bitvoice.plist"
+            sleep 2; grep -q . "$HOME/Library/Logs/BitVoice/bitvoice.log"
+            launchctl bootout "gui/$(id -u)/org.bitvoice.bitvoice"; sleep 2
+            ! curl -fsk -m 3 https://127.0.0.1:8443/api/health/live
+            "$app/Contents/MacOS/launch" </dev/null || true
+            curl -fsk -m 5 https://127.0.0.1:8443/api/health/live
+            # A second start on the same data finds the first.
+            ( "$app/Contents/MacOS/bitvoice" -data "$BITVOICE_DATA" -no-browser -https :8555 > again.txt 2>&1 & q=$!; sleep 8; kill $q 2>/dev/null || true )
+            grep -q 'already running' again.txt
           fi
           # A program changed after signing is refused, even with a matching SHA256SUMS.
           name=$(cd "$BITVOICE_FROM" && ls *.tar.gz | sed 's/\.tar\.gz$//')
@@ -138,6 +150,25 @@ jobs:
             [ ! -e /usr/local/bin/bitvoice ] && [ ! -e /var/lib/bitvoice ]
           else
             ! curl -fsk -m 3 https://127.0.0.1:8443/api/health/live
+            [ ! -e "$HOME/Applications/BitVoice.app" ] && [ ! -e "$HOME/Library/Logs/BitVoice" ]
+            # For the whole Mac (sudo): starts with the Mac, as the hidden user _bitvoice, on port 443.
+            unset BITVOICE_DATA
+            sudo BITVOICE_FROM="$BITVOICE_FROM" BITVOICE_RELEASE_KEY="$BITVOICE_RELEASE_KEY" BITVOICE_REQUIRE_SIGNATURE=1 sh deploy/install.sh
+            curl -fsk https://127.0.0.1/api/health/live
+            [ "$(ps -o user= -p "$(pgrep -x bitvoice)")" = _bitvoice ]
+            [ "$(stat -f '%Su %Lp' '/Library/Application Support/BitVoice')" = '_bitvoice 700' ]
+            [ "$(stat -f '%Su:%Sg' /Library/LaunchDaemons/org.bitvoice.bitvoice.plist)" = root:wheel ]
+            test -d /Applications/BitVoice.app
+            # While it is there, an install for one user is refused.
+            if sh deploy/install.sh 2> err.txt; then echo "a user install went in beside the Mac's own"; exit 1; fi
+            grep -q 'installed for this whole Mac' err.txt
+            sudo pkill -9 -x bitvoice; sleep 10; curl -fsk https://127.0.0.1/api/health/live   # back after a kill
+            sudo BITVOICE_FROM="$BITVOICE_FROM" BITVOICE_RELEASE_KEY="$BITVOICE_RELEASE_KEY" sh deploy/install.sh   # upgrade
+            curl -fsk https://127.0.0.1/api/health/live
+            sudo sh deploy/install.sh --purge
+            ! curl -fsk -m 3 https://127.0.0.1/api/health/live
+            [ ! -e /Applications/BitVoice.app ] && [ ! -e '/Library/Application Support/BitVoice' ] && [ ! -e /Library/LaunchDaemons/org.bitvoice.bitvoice.plist ]
+            ! dscl . -read /Users/_bitvoice >/dev/null 2>&1
           fi
       - name: install.ps1
         if: runner.os == 'Windows'
