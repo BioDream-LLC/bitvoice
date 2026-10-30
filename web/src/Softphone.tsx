@@ -83,7 +83,7 @@ export function Softphone({ phoneApi, extensions }: {
             </button>
           )}
           {!active && <Directory phoneId={phone.id} onPick={(n) => setNumber(n)} />}
-          {!active && <VideoRoomButton />}
+          {!active && <VideoRoomButton phoneId={phone.id} />}
         </>
       )}
       {tab === 'recents' && <Recents phoneId={phone.id} onCall={(n) => { setTab('keypad'); setNumber(n); if (!active) dial(n) }} />}
@@ -377,17 +377,46 @@ function ChatConversation({ phoneId, conv, me, onCall, onBack }: { phoneId: stri
   )
 }
 
-/** A video call: open a BitVoice SFU video room (its cameras and screen sharing) in its own window, so
- * the phone keeps running. The room is a conference number set to a video room in Conferences. */
-function VideoRoomButton() {
+/** A video call: pick a BitVoice SFU video room (its cameras and screen sharing) and open it in its own
+ * window, so the phone keeps running. Rooms are conference numbers set to a video room in Conferences. */
+function VideoRoomButton({ phoneId }: { phoneId: string }) {
   const [open, setOpen] = useState(false)
-  const [room, setRoom] = useState('')
+  const [rooms, setRooms] = useState<{ number: string; name: string; hasPin: boolean; inRoom: number }[] | null>(null)
+  const [other, setOther] = useState('')
+  useEffect(() => {
+    if (!open) return
+    let live = true
+    const load = () => fetch(`./api/phone/${phoneId}/video-rooms`, { headers: { 'X-BitVoice': '1' } }).then((r) => (r.ok ? r.json() : { items: [] })).then((j) => live && setRooms(j.items)).catch(() => {})
+    load()
+    const t = setInterval(load, 5000)
+    return () => { live = false; clearInterval(t) }
+  }, [open, phoneId])
+  const join = (n: string) => { window.open(`#/video-room/${encodeURIComponent(n)}`, '_blank', 'noopener'); setOpen(false) }
   if (!open) return <button className="btn w-full justify-center" onClick={() => setOpen(true)}><Video size={15} className="text-fuchsia-300" aria-hidden /> Join a video room</button>
   return (
-    <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (room) { window.open(`#/video-room/${encodeURIComponent(room)}`, '_blank', 'noopener'); setOpen(false); setRoom('') } }}>
-      <input className="input flex-1 font-mono" aria-label="Video room number" placeholder="Room number" inputMode="numeric" autoFocus value={room} onChange={(e) => setRoom(e.target.value.replace(/\D/g, ''))} />
-      <button className="btn border-fuchsia-600 bg-fuchsia-600 text-white" disabled={!room}><Video size={14} aria-hidden /> Join</button>
-    </form>
+    <div className="space-y-2" role="region" aria-label="Video rooms">
+      {rooms === null && <p className="text-sm text-slate-500">Loading…</p>}
+      {rooms && rooms.length > 0 && (
+        <ul className="max-h-48 space-y-1 overflow-y-auto">
+          {rooms.map((rm) => (
+            <li key={rm.number}>
+              <button className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-slate-800" onClick={() => join(rm.number)}>
+                <Video size={15} className="text-fuchsia-300" aria-hidden />
+                <span className="min-w-0 flex-1"><span className="block truncate text-sm text-slate-200">{rm.name || `Room ${rm.number}`}</span>
+                  <span className="block font-mono text-xs text-slate-500">{rm.number}{rm.hasPin && ' · PIN'}</span></span>
+                {rm.inRoom > 0 && <span className="rounded-full bg-fuchsia-600/30 px-1.5 text-xs text-fuchsia-200">{rm.inRoom} in</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {rooms && rooms.length === 0 && <p className="text-sm text-slate-500">No video rooms set up. Add one in Conferences, or enter a number.</p>}
+      <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (other) join(other) }}>
+        <input className="input flex-1 font-mono" aria-label="Video room number" placeholder="Room number" inputMode="numeric" value={other} onChange={(e) => setOther(e.target.value.replace(/\D/g, ''))} />
+        <button className="btn border-fuchsia-600 bg-fuchsia-600 text-white" disabled={!other}><Video size={14} aria-hidden /> Join</button>
+      </form>
+      <button className="btn w-full justify-center" onClick={() => setOpen(false)}>Close</button>
+    </div>
   )
 }
 

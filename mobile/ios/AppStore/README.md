@@ -106,6 +106,9 @@ BitVoice signs the push itself (Settings, Mobile apps, "Own apps") or sends it t
 Keep the `.p8` secret: with the relay it lives only on BioDream's push server, never on a customer's
 BitVoice. The same key serves every BitVoice; a customer running its own push gives its own key.
 
+The same key also sends **chat notifications** (a normal alert push on the plain topic, not a VoIP
+wake-up), so a closed app shows new staff-chat messages. No extra setup: it uses the same APNs key.
+
 ## Still open (needs the owner)
 
 - Apple Developer Program membership ($99/year) in BioDream's name: the App ID, the APNs key, signing.

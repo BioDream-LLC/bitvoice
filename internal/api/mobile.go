@@ -117,6 +117,77 @@ func (s *Server) Wake(ext string, c pbx.CallInfo) {
 	}
 }
 
+// WakeChat sends a chat notification to every app of the extensions, except the one who sent it. It is
+// a normal notification (not a VoIP call wake-up), collapsed per sender.
+func (s *Server) wakeChat(to []string, from, fromName, preview string) {
+	cfg := s.config()
+	sender := s.pushSender(cfg.System.Mobile)
+	if sender == nil {
+		return
+	}
+	title := fromName
+	if title == "" {
+		title = from
+	}
+	for _, ext := range to {
+		if ext == from {
+			continue
+		}
+		for _, d := range s.Store.Devices(ext) {
+			if d.PushToken == "" {
+				continue
+			}
+			m := push.Message{Platform: d.Platform, Token: d.PushToken, Kind: "chat", From: from,
+				Server: cfg.System.Mobile.ServerURL, Title: title, Body: preview, TTL: 24 * time.Hour}
+			go func(d store.Device) {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				err := sender.Send(ctx, m)
+				_, _ = s.Store.UpdateDevice(d.ID, func(x *store.Device) {
+					if errors.Is(err, push.ErrGone) {
+						x.PushToken, x.PushError = "", "the app was removed from the phone"
+					}
+				})
+			}(d)
+		}
+	}
+}
+
+// RunChatPush pushes a notification to a recipient's mobile apps for every staff chat message, so a
+// closed app lights up. It runs until the context is cancelled.
+func (s *Server) RunChatPush(ctx context.Context) {
+	sub := s.Bus.Subscribe()
+	defer s.Bus.Unsubscribe(sub)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case ev := <-sub.C:
+			if ev.Type != "chat.message" {
+				continue
+			}
+			ce, ok := ev.Data.(ChatEvent)
+			if !ok {
+				continue
+			}
+			preview := ce.Message.Text
+			if len([]rune(preview)) > 140 {
+				preview = string([]rune(preview)[:140]) + "…"
+			}
+			s.wakeChat(ce.To, ce.Message.From, s.extName(ce.Message.From), preview)
+		}
+	}
+}
+
+// extName is an extension's display name, or its number.
+func (s *Server) extName(ext string) string {
+	cfg := s.config()
+	if x := cfg.FindExtension(ext); x != nil && x.Name != "" {
+		return x.Name
+	}
+	return ext
+}
+
 type deviceView struct {
 	ID        string    `json:"id"`
 	Extension string    `json:"extension"`

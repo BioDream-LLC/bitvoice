@@ -1,10 +1,12 @@
 package llc.biodream.bitvoice
 
 import android.app.Application
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.telecom.PhoneAccount
@@ -31,6 +33,9 @@ class BitVoiceApp : Application() {
         nm.createNotificationChannel(NotificationChannel(ONGOING_CHANNEL, "Calls in progress", NotificationManager.IMPORTANCE_LOW).apply {
             description = "Shows the call you are on, with Hang up"
         })
+        nm.createNotificationChannel(NotificationChannel(CHAT_CHANNEL, "Chat messages", NotificationManager.IMPORTANCE_HIGH).apply {
+            description = "Messages from colleagues in the staff chat"
+        })
         val tm = getSystemService(TelecomManager::class.java)
         tm.registerPhoneAccount(PhoneAccount.builder(account(this), "BitVoice")
             .setCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED).build())
@@ -50,6 +55,7 @@ class BitVoiceApp : Application() {
     companion object {
         const val CHANNEL = "calls"
         const val ONGOING_CHANNEL = "ongoing"
+        const val CHAT_CHANNEL = "chat"
 
         fun account(ctx: Context) = PhoneAccountHandle(ComponentName(ctx, CallService::class.java), "bitvoice")
 
@@ -68,6 +74,17 @@ class BitVoiceApp : Application() {
                 })
             }
             runCatching { tm.addNewIncomingCall(account(ctx), extras) }
+        }
+
+        /** Shows a chat message as a notification; tapping it opens the app (its Chat tab). */
+        fun chatNotice(ctx: Context, from: String, title: String, body: String) {
+            val open = android.app.PendingIntent.getActivity(ctx, "chat$from".hashCode(),
+                Intent(ctx, MainActivity::class.java).putExtra("chat", from),
+                android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT)
+            val n = Notification.Builder(ctx, CHAT_CHANNEL)
+                .setSmallIcon(R.drawable.ic_phone).setContentTitle(title).setContentText(body)
+                .setCategory(Notification.CATEGORY_MESSAGE).setAutoCancel(true).setContentIntent(open).build()
+            ctx.getSystemService(NotificationManager::class.java).notify("chat:$from".hashCode(), n)
         }
     }
 }

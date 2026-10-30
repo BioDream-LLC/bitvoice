@@ -611,6 +611,31 @@ func (s *Server) browserPhoneRoutes() {
 		writeJSON(w, 200, map[string]any{"items": s.phonePresence(bp.ext)})
 	})
 	s.phoneChatRoutes()
+	// The video rooms this phone can join: the SFU conference rooms, with how many are in each now.
+	s.mux.HandleFunc("GET /api/phone/{id}/video-rooms", func(w http.ResponseWriter, r *http.Request) {
+		bp := phoneOf(w, r)
+		if bp == nil {
+			return
+		}
+		type room struct {
+			Number string `json:"number"`
+			Name   string `json:"name"`
+			HasPIN bool   `json:"hasPin"`
+			InRoom int    `json:"inRoom"`
+		}
+		out := []room{}
+		for _, c := range s.config().Conferences {
+			if c.Video != "sfu" {
+				continue
+			}
+			n := 0
+			if live, err := s.Engine.SFURoomOf(c.Number); err == nil {
+				n = len(live.Publishers)
+			}
+			out = append(out, room{Number: c.Number, Name: c.Name, HasPIN: c.PIN != "", InRoom: n})
+		}
+		writeJSON(w, 200, map[string]any{"items": out})
+	})
 	s.mux.HandleFunc("DELETE /api/phone/{id}", func(w http.ResponseWriter, r *http.Request) {
 		if v, ok := phones.LoadAndDelete(r.PathValue("id")); ok {
 			v.(*browserPhone).phone.Close()

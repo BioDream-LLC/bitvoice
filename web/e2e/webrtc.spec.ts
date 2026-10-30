@@ -1382,3 +1382,27 @@ test('the staff chat on the phone: a message reaches a colleague', async ({ page
   expect(got.chat!.message.text).toBe('Hello on the phone chat.')
   expect(got.lastText).toBe('Hello on the phone chat.') // and is readable back
 })
+
+// The phone lists the video rooms it can join: an SFU conference room shows up with its name.
+test('the phone lists SFU video rooms to join', async ({ page }) => {
+  await signIn(page)
+  const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
+  const rooms = await page.evaluate(async (H) => {
+    const send = async (method: string, url: string, body?: unknown) => {
+      const r = await fetch(url, { method, headers: H, body: body === undefined ? undefined : JSON.stringify(body) })
+      const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(url + ': ' + (j.message ?? r.status)); return j
+    }
+    const have = (await (await fetch('./api/conferences')).json()).items as { number: string; video?: string }[]
+    const sfu = have.find((c) => c.video === 'sfu')
+    const want = sfu ? sfu.number : '940'
+    if (!sfu) {
+      await send('POST', './api/conferences', { number: '940', name: 'Project standup', video: 'sfu', pin: '', maxMembers: 16 })
+    }
+    const exts = (await (await fetch('./api/extensions')).json()).items as { number: string }[]
+    const p = await send('POST', './api/phone', { extension: exts[0].number })
+    const items = (await send('GET', `./api/phone/${p.id}/video-rooms`)).items as { number: string; name: string }[]
+    return { items, want }
+  }, H)
+  expect(rooms.items.length).toBeGreaterThan(0)
+  expect(rooms.items.some((r) => r.number === rooms.want)).toBe(true)
+})

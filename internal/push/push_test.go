@@ -73,6 +73,17 @@ func TestAPNs(t *testing.T) {
 	if err := a.Send(context.Background(), Message{Token: "gone"}); !errors.Is(err, ErrGone) {
 		t.Fatalf("gone token: %v", err)
 	}
+	// A chat message is a normal alert (not a VoIP wake-up): the plain topic, the alert push type, and a title/body.
+	if err := a.Send(context.Background(), Message{Platform: "ios", Token: "abcd", Kind: "chat", From: "100", Title: "Dana", Body: "Hello", Server: "https://pbx.example"}); err != nil {
+		t.Fatal(err)
+	}
+	if got.topic != "llc.biodream.bitvoice" || got.kind != "alert" {
+		t.Fatalf("chat push topic %q kind %q", got.topic, got.kind)
+	}
+	alert := got.body["aps"].(map[string]any)["alert"].(map[string]any)
+	if alert["title"] != "Dana" || alert["body"] != "Hello" || got.body["kind"] != "chat" {
+		t.Fatalf("chat body %+v", got.body)
+	}
 }
 
 func TestFCM(t *testing.T) {
@@ -107,6 +118,15 @@ func TestFCM(t *testing.T) {
 	msg := sent["message"].(map[string]any)
 	if msg["token"] != "tok" || msg["data"].(map[string]any)["callId"] != "c2" || msg["android"].(map[string]any)["priority"] != "high" {
 		t.Fatalf("sent %v", sent)
+	}
+	// A chat message carries a notification (shown when the app is in the background) and kind=chat data.
+	if err := f.Send(context.Background(), Message{Platform: "android", Token: "tok", Kind: "chat", From: "101", Title: "Sam", Body: "Hi there"}); err != nil {
+		t.Fatal(err)
+	}
+	msg = sent["message"].(map[string]any)
+	note, _ := msg["notification"].(map[string]any)
+	if note == nil || note["title"] != "Sam" || note["body"] != "Hi there" || msg["data"].(map[string]any)["kind"] != "chat" {
+		t.Fatalf("chat sent %v", sent)
 	}
 }
 

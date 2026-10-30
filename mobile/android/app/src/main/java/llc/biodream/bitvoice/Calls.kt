@@ -27,6 +27,13 @@ class PushService : FirebaseMessagingService() {
 
     override fun onMessageReceived(m: RemoteMessage) {
         val d = m.data
+        if (d["kind"] == "chat") {
+            // A chat message. When the app is in the background the system shows the notification itself;
+            // in the foreground it does not, so post one. The title and body come with the message.
+            val n = m.notification
+            BitVoiceApp.chatNotice(this, d["from"] ?: "", n?.title ?: (d["from"] ?: "Message"), n?.body ?: "New message")
+            return
+        }
         if (d["kind"] != "call") return
         val id = d["callId"] ?: return
         Calls.pending.add(id)

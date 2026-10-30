@@ -33,10 +33,14 @@ import (
 type Message struct {
 	Platform string `json:"platform"` // ios or android
 	Token    string `json:"token"`
+	Kind     string `json:"kind"` // "" or "call" for an incoming call (a VoIP wake-up); "chat" for a chat message
 	CallID   string `json:"callId"`
 	From     string `json:"from"`
 	FromName string `json:"fromName"`
 	Server   string `json:"server"` // the address the app should connect to
+	// Title and Body are the notification shown for a chat message.
+	Title string `json:"title,omitempty"`
+	Body  string `json:"body,omitempty"`
 	// TTL is how long the push is worth delivering; a call nobody can answer any more is not.
 	TTL time.Duration `json:"-"`
 }
@@ -132,6 +136,21 @@ func (a *APNs) Send(ctx context.Context, m Message) error {
 	req.Header.Set("apns-topic", a.Topic+".voip")
 	req.Header.Set("apns-push-type", "voip")
 	req.Header.Set("apns-priority", "10")
+	if m.Kind == "chat" {
+		// A chat message is a normal alert notification, not a VoIP wake-up (which would show a call).
+		body, _ = json.Marshal(map[string]any{
+			"aps":  map[string]any{"alert": map[string]string{"title": m.Title, "body": m.Body}, "sound": "default", "thread-id": "chat:" + m.From},
+			"kind": "chat", "from": m.From, "server": m.Server,
+		})
+		req, err = http.NewRequestWithContext(ctx, http.MethodPost, base+"/3/device/"+url.PathEscape(m.Token), bytes.NewReader(body))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("authorization", "bearer "+tok)
+		req.Header.Set("apns-topic", a.Topic)
+		req.Header.Set("apns-push-type", "alert")
+		req.Header.Set("apns-priority", "10")
+	}
 	if m.TTL > 0 {
 		req.Header.Set("apns-expiration", strconv.FormatInt(time.Now().Add(m.TTL).Unix(), 10))
 	}
@@ -260,12 +279,20 @@ func (f *FCM) Send(ctx context.Context, m Message) error {
 	if ttl <= 0 {
 		ttl = 30 * time.Second
 	}
-	body, _ := json.Marshal(map[string]any{"message": map[string]any{
+	msg := map[string]any{
 		"token": m.Token,
 		"data":  map[string]string{"kind": "call", "callId": m.CallID, "from": m.From, "fromName": m.FromName, "server": m.Server},
 		"android": map[string]any{"priority": "high", "ttl": strconv.Itoa(int(ttl.Seconds())) + "s",
 			"collapse_key": m.CallID},
-	}})
+	}
+	if m.Kind == "chat" {
+		// A chat message carries a notification (shown when the app is in the background) and its data.
+		msg["data"] = map[string]string{"kind": "chat", "from": m.From, "server": m.Server}
+		msg["notification"] = map[string]string{"title": m.Title, "body": m.Body}
+		msg["android"] = map[string]any{"priority": "high", "collapse_key": "chat:" + m.From,
+			"notification": map[string]string{"channel_id": "chat", "tag": "chat:" + m.From}}
+	}
+	body, _ := json.Marshal(map[string]any{"message": msg})
 	base := f.Base
 	if base == "" {
 		base = "https://fcm.googleapis.com"
