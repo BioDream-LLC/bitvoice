@@ -280,6 +280,7 @@ export interface SystemSettings {
   costs: Costs
   ldap: LDAPSettings
   sso: { enabled: boolean; label: string; issuer: string; clientId: string; clientSecret: string; redirectUrl: string; groupsClaim: string; adminGroups: string[]; viewerGroups: string[]; passwordSignIn: boolean }
+  mcp: { enabled: boolean; act: boolean }
   compat: { ami: boolean; amiListen: string; ari: boolean; users: { username: string; secret: string; write: boolean }[]; apps?: { name: string; number?: string; fallback: Destination }[]; agi?: AGIScript[]; agiKeepDays?: number }
   archive: {
     target: '' | 's3' | 'azure'; recordings: boolean; voicemail: boolean
@@ -346,7 +347,9 @@ export interface User { username: string; name: string; role: Role; created: str
 export interface TraceEntry { at: string; dir: 'in' | 'out'; peer: string; callId: string; summary: string; message: string }
 export interface MobileDevice { id: string; extension: string; name: string; platform: 'ios' | 'android'; canWake: boolean; created: string; lastSeen?: string; lastPush?: string; pushError?: string }
 export interface Change { path: string; before: string; after: string }
-export interface ApiToken { id: string; name: string; role: 'admin' | 'viewer'; prefix: string; created: string; by: string; lastUsed?: string; expires?: string; onBehalf?: boolean }
+export interface MCPInfo { address: string; versions: string[]; tools: { name: string; title: string; description: string; act: boolean }[] }
+export interface OAuthRequest { client: string; returnsTo: string; role: 'admin' | 'viewer'; act: boolean; enabled: boolean }
+export interface ApiToken { id: string; name: string; role: 'admin' | 'viewer'; prefix: string; created: string; by: string; lastUsed?: string; expires?: string; onBehalf?: boolean; mcpOnly?: boolean; client?: string; refreshExpires?: string }
 export interface Hold { id: string; name: string; reason: string; numbers: string[]; since?: string; until?: string; created: string; by: string; released?: string; releasedBy?: string }
 export interface Callback { id: string; created: string; receptionist?: string; callId?: string; name: string; number: string; when: string; reason: string; status: 'open' | 'done' | 'cancelled'; by?: string; closed?: string; note?: string }
 export interface Budget { id: string; department: string; monthly: number; email: string }
@@ -802,6 +805,9 @@ export const api = createApi({
       audit: b.query<List<AuditEntry>, void>({ query: () => 'audit', providesTags: ['Audit'] }),
       trace: b.query<List<TraceEntry>, string>({ query: (q) => ({ url: 'sip-trace', params: { q } }), providesTags: ['Trace'] }),
       system: b.query<SystemInfo, void>({ query: () => 'system', providesTags: ['System'] }),
+      mcpInfo: b.query<MCPInfo, void>({ query: () => 'mcp' }),
+      oauthRequest: b.query<OAuthRequest, { client_id: string; redirect_uri: string }>({ query: (q) => `oauth/request?${new URLSearchParams(q)}` }),
+      approveAssistant: b.mutation<{ redirect: string }, { client_id: string; redirect_uri: string; state: string; code_challenge: string; allow: boolean; readOnly: boolean }>({ query: (body) => ({ url: 'oauth/approve', method: 'POST', body }), invalidatesTags: ['Tokens', 'Audit'] }),
       mobileDevices: b.query<List<MobileDevice>, string>({ query: (ext) => `extensions/${ext}/devices`, providesTags: ['Mobile'] }),
       pairMobile: b.mutation<{ code: string; server: string; link: string; expires: string; push: boolean; local: boolean }, string>({ query: (ext) => ({ url: `extensions/${ext}/pair`, method: 'POST' }) }),
       unpairMobile: b.mutation<void, string>({ query: (id) => ({ url: `mobile/devices/${id}`, method: 'DELETE' }), invalidatesTags: ['Mobile'] }),
@@ -971,6 +977,7 @@ export const {
   useOutboundRoutesQuery, useCreateOutboundMutation, useUpdateOutboundMutation, useDeleteOutboundMutation, useReorderOutboundMutation,
   useSettingsQuery, useSaveSettingsMutation, useUsersQuery, useSaveUserMutation, useDeleteUserMutation, useChangePasswordMutation,
   useCallsQuery, useHangupMutation, useRegistrationsQuery, useStatsQuery, useCdrQuery, useHealthQuery, useSpeechQuery, useHistoryQuery,
+  useMcpInfoQuery, useOauthRequestQuery, useApproveAssistantMutation,
   useRestoreMutation, useImportConfigMutation, useBansQuery, useUnbanMutation, useAuditQuery, useTraceQuery, useSystemQuery, useOpenDoorMutation, useEmergencyModeMutation, useReceptionistsQuery, useCallbacksQuery, useCallerQuery, useSimulateMutation, useMetricsTestMutation, useAwayQuery, useReputationQuery, useCertificateQuery, useInstallCertificateMutation, useDatabaseQuery, useServersQuery, useServersDnsQuery, useSetServerMutation, useForgetServerMutation, useTestDatabaseMutation, useMoveDatabaseMutation, useSetAwayMutation, useCheckCalendarMutation, useMakeInsightMutation, useAddCoachingMutation, useDeleteCoachingMutation, useInsightQuery, useTimelineQuery, useAddNoteMutation, useDeleteNoteMutation, useConversationsQuery, useThreadQuery, useSendTextMutation, useMarkReadMutation, usePutNoticeMutation, useDeleteNoticeMutation, useHotDesksQuery, useHotDeskSignInMutation, useHotDeskSignOutMutation, useDirectoryQuery, useAddContactMutation, useSaveContactMutation, useDeleteContactMutation, useCostsQuery, usePriceMutation, useQualityQuery, useCrmTestMutation, useTranscriptQuery, useMakeTranscriptMutation, useSearchTranscriptsQuery, useAddCallbackMutation, useSetCallbackMutation, useDeleteCallbackMutation, useRingBackMutation, useCreateReceptionistMutation, useUpdateReceptionistMutation, useDeleteReceptionistMutation, useAskMutation, useApplyAskMutation, usePlanCheckQuery, useRevisionCheckQuery, useRulebooksQuery, useFraudDecisionsQuery, useCheckVaultMutation, useSitesQuery, useCreateSiteMutation, useUpdateSiteMutation, useDeleteSiteMutation, useRemoteAddressQuery, useCompatibilityQuery, useSetAgentMutation, useSuperviseMutation, useSetSupervisionMutation, useTokensQuery, useAddTokenMutation, useRevokeTokenMutation, useGitOpsQuery, useSyncGitOpsMutation, useMobileDevicesQuery, usePairMobileMutation, useUnpairMobileMutation, useHoldsQuery, useAddHoldMutation, useUpdateHoldMutation, useReleaseHoldMutation, usePauseRecordingMutation, useLoadTestQuery, useStartLoadTestMutation, useStopLoadTestMutation, useUpgradeQuery, useUploadUpgradeMutation, useApplyUpgradeMutation, useRollbackUpgradeMutation, useCancelUpgradeMutation,
   useScriptsQuery, useCreateScriptMutation, useUpdateScriptMutation, useDeleteScriptMutation, useTestScriptMutation,
   useMenusQuery, useCreateMenuMutation, useUpdateMenuMutation, useDeleteMenuMutation, useSavePromptMutation, useResetPromptMutation,

@@ -78,6 +78,9 @@ type options struct {
 
 // run is main without the process exit, so it can be tested.
 func run(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "mcp" {
+		return mcpBridge(args[1:], os.Stdin, stdout, stderr)
+	}
 	fs := flag.NewFlagSet("bitvoice", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var o options

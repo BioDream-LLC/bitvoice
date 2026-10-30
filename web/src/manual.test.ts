@@ -10,7 +10,8 @@ import { paletteFilter } from './Shell'
 const main = readFileSync(resolve(__dirname, 'main.tsx'), 'utf8')
 const shell = readFileSync(resolve(__dirname, 'Shell.tsx'), 'utf8')
 const pages = [...main.matchAll(/<Route path="(\/[^"]*)"/g)].map((m) => m[1])
-  .filter((p) => !p.includes(':') && !['/phone', '/call', '/help'].includes(p))
+  // /connect-assistant is opened only by an assistant's sign-in (its chapter is AI assistants).
+  .filter((p) => !p.includes(':') && !['/phone', '/call', '/help', '/connect-assistant'].includes(p))
 const menu = new Map([...shell.matchAll(/\{ to: '([^']+)', label: '([^']+)'[^}]*keys: '([^']*)'/g)].map((m) => [m[1], { label: m[2], keys: m[3] }]))
 
 describe('manual and menu follow the pages', () => {

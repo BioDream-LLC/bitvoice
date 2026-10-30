@@ -110,29 +110,31 @@ type Server struct {
 	// so Settings cannot move it.
 	DatabaseFixed bool
 	// Certs holds the TLS certificate in use (nil in tests that need none).
-	Certs     *certs.Holder
-	rep       repCache
-	srv       srvCache
-	shared    sharedState
-	metricsMu sync.Mutex
-	otlpErr   string // the last push to the OpenTelemetry collector that failed
-	mux       *http.ServeMux
-	loginMu   sync.Mutex
-	logins    map[string][]time.Time // failed logins per address, for throttling
-	sso       ssoState
-	upWait    upgradeWait
-	load      loadState
-	mobile    mobileState
-	docs      apiDocs
-	git       gitState
-	vaults    vaultState
-	ask       askState
-	crm       crmState
-	arOnce    sync.Once
-	ar        *archiver
-	gwOnce    sync.Once
-	gw        *webphone.Gateway
-	gwErr     error
+	Certs         *certs.Holder
+	rep           repCache
+	srv           srvCache
+	shared        sharedState
+	metricsMu     sync.Mutex
+	otlpErr       string // the last push to the OpenTelemetry collector that failed
+	mux           *http.ServeMux
+	loginMu       sync.Mutex
+	logins        map[string][]time.Time // failed logins per address, for throttling
+	registrations map[string][]time.Time // OAuth client registrations per address (MCP sign-in)
+	oauth         oauthCodes             // OAuth codes waiting to be exchanged
+	sso           ssoState
+	upWait        upgradeWait
+	load          loadState
+	mobile        mobileState
+	docs          apiDocs
+	git           gitState
+	vaults        vaultState
+	ask           askState
+	crm           crmState
+	arOnce        sync.Once
+	ar            *archiver
+	gwOnce        sync.Once
+	gw            *webphone.Gateway
+	gwErr         error
 }
 
 type session struct {
@@ -195,6 +197,8 @@ func (s *Server) Handler() http.Handler {
 		m.Handle("/ari/", s.ARI)
 	}
 	s.wsRoutes(m)
+	s.mcpRoutes(m)
+	s.oauthRoutes(m)
 
 	// An unknown API path is a JSON 404, never the web page (which a script would fail to parse).
 	m.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
@@ -277,6 +281,9 @@ func (s *Server) user(r *http.Request) (store.User, bool) {
 		t, ok := s.Store.CheckToken(strings.TrimPrefix(h, "Bearer "))
 		if !ok {
 			return store.User{}, false
+		}
+		if t.MCPOnly && !viaMCP(r.Context()) {
+			return store.User{}, false // an assistant's sign-in reaches /mcp, never the rest of the API
 		}
 		u := store.User{Username: "token:" + t.Name, Name: t.Name, Role: t.Role}
 		if person := onBehalfOf(r.Header.Get(OnBehalfHeader)); person != "" && t.OnBehalf {

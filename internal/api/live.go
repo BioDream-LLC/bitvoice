@@ -49,6 +49,37 @@ func (s *Server) liveRoutes() {
 		}
 		writeJSON(w, 200, map[string]any{"items": out, "elsewhere": elsewhere})
 	})
+	// Click to call: rings the extension's phone and, when it is picked up, calls the number for it.
+	s.handle("POST /api/calls", true, func(w http.ResponseWriter, r *http.Request, u store.User) {
+		var in struct {
+			Extension string `json:"extension"`
+			Number    string `json:"number"`
+		}
+		if err := readJSON(r, &in); err != nil {
+			writeErr(w, err)
+			return
+		}
+		in.Extension, in.Number = strings.TrimSpace(in.Extension), strings.TrimSpace(in.Number)
+		var p config.Problems
+		if in.Extension == "" {
+			p = append(p, config.Problem{Field: "extension", Message: "name the extension whose phone rings first"})
+		}
+		if in.Number == "" {
+			p = append(p, config.Problem{Field: "number", Message: "say which number to call"})
+		}
+		if len(p) > 0 {
+			writeErr(w, p)
+			return
+		}
+		// The extension rings for up to 30 s; the answer comes when it picks up (or gives up).
+		id, err := s.Engine.Originate(in.Extension, in.Number, 30*time.Second)
+		if err != nil {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
+		s.audit(r, u.Username, "call.originate", in.Extension+" to "+in.Number)
+		writeJSON(w, 200, map[string]string{"id": id, "message": "extension " + in.Extension + " answered; calling " + in.Number})
+	})
 	s.handle("POST /api/calls/{id}/door", true, func(w http.ResponseWriter, r *http.Request, u store.User) {
 		if err := s.Engine.OpenDoor(r.PathValue("id"), u.Username); err != nil {
 			writeError(w, http.StatusConflict, err.Error())

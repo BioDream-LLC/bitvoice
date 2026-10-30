@@ -15,7 +15,7 @@ export const parts: { title: string; intro: string; ids: string[] }[] = [
   { title: 'Customers and insight', intro: 'Knowing who called and how it went: the live calls and history, the customer timeline, CRMs, recordings and consent, quality, costs and caller ID reputation.',
     ids: ['calls', 'history', 'timeline', 'crm', 'insight', 'recording', 'consent', 'quality', 'costs', 'reputation', 'spam'] },
   { title: 'Running BitVoice', intro: 'Keeping it safe and running: administrators and sign-in, security, changes and updates, several servers, hosted organisations, codecs, Teams, importing, automation and the tools for finding faults.',
-    ids: ['users', 'sso', 'ldap', 'security', 'changes', 'updates', 'servers', 'database', 'tenants', 'codecs', 'teams', 'import', 'automation', 'compat', 'archive', 'holds', 'metrics', 'loadtest', 'trace'] },
+    ids: ['users', 'sso', 'ldap', 'security', 'changes', 'updates', 'servers', 'database', 'tenants', 'codecs', 'teams', 'import', 'automation', 'compat', 'assistants', 'archive', 'holds', 'metrics', 'loadtest', 'trace'] },
   { title: 'Public safety: the lab track', intro: 'The 911 answering-point profile, the radio dispatch console and NG911 Core Services. They are a lab and design-partner track: built and tested against recorded captures, sample data and stand-ins, but not certified for live 911 or radio dispatch and not yet tried with a live ESInet, P25 system or CAD. They are off the menu until switched on in Settings. Emergency calls from your own phones (Getting started) are not part of this track: they are part of every phone system.',
     ids: ['psap', 'radio', 'core'] },
 ]
@@ -135,6 +135,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | Full ICE behind NAT (STUN and TURN client) | Checked against a reference | Chromium's ICE agent (host candidates and relay only), JsSIP softphones with BitVoice offering, coturn 4.18 and BitVoice's own TURN server as relays, mDNS host names of Chromium resolved. Not yet tried from a server behind a real NAT router |\n| ICE restart (a phone changing network mid-call) | Checked against a reference | Chromium restarting ICE on a browser phone call (BitVoice as ICE-lite and as a full agent) and SIP.js 0.21 restarting by re-INVITE over SIP over WebSocket: new credentials both ways, a new candidate pair, sound every half second through the restart. Not yet tried on a phone really moving from Wi-Fi to a mobile network |\n| SIP History-Info and Diversion (forwarded calls) | Checked against a reference | Asterisk 20's PJSIP both ways: its forwarded calls read by BitVoice, and BitVoice's forwards read by Asterisk's REDIRECTING() from History-Info alone and from Diversion alone; RFC 7044 entries kept and extended on a forward on. Not yet tried with a carrier or Teams sending them |\n| Company directory (LDAP, Active Directory) | Checked against a reference | OpenLDAP 2.4 (StartTLS and LDAPS, 1,203 people read through paging past its 1,000 limit, groups, sign-in) and Samba 4's Active Directory (LDAPS, paging past 1,000, disabled accounts left out, nested groups for ring groups and roles). Not tried against Microsoft's own Windows Server domain controller |\n| ARI (Asterisk REST Interface) | Checked against a reference | every operation of Asterisk's published ARI called and its answer checked against the model's required fields; ari-client 2.2.0, Asterisk's JavaScript library, reading \`/ari/api-docs\` and running an application |
 | Everyone's-video rooms (SFU, simulcast) and screen sharing | Checked against a reference | Three Chromium browsers in one room, each sending three sizes (VP8 simulcast) and receiving the two others; sizes switched at keyframes as tiles grow and shrink. Cameras and a shared screen (Chromium's own screen capture) in an H.264 room. Not yet tried with Firefox or Safari, over the internet, or with more than three cameras; H.264 simulcast picks layers by the browser's order only. |
 | AGI and FastAGI (Asterisk Gateway Interface) | Checked against a reference | every command's answer compared with Asterisk 20.6's over FastAGI; a FastAGI server written with pyst2 running a call; EAGI audio to a program. Not tried with a production IVR |
+| AI assistants over MCP | Checked against a reference | the official MCP TypeScript SDK (1.32.2) as the client: tools listed and called with an API token over Streamable HTTP (protocol 2025-11-25), and its OAuth sign-in end to end (discovery, registration, PKCE, token, refresh); the consent page in Chromium; the stdio bridge against a test server. Not yet tried with Claude, ChatGPT or another assistant itself, which needs a server reachable from the internet with a trusted certificate. |
 | H.323 trunks | Checked against a reference | H323Plus 1.28 (its simph323 playing and recording WAV files) on EC2: calls both ways with Fast Connect and G.711, each end hearing the other's tone, MOS 4.39; call set-up also with Asterisk's chan_ooh323 (whose own sound is broken in Asterisk 22) |
 | SIP over WebSocket | Checked against a reference | JsSIP and SIP.js |
 | Codecs: GSM, G.726, iLBC, MP3 hold music | Checked against a reference | ffmpeg, the RFC 3951 reference program and minimp3, sample for sample |
@@ -1660,6 +1661,56 @@ With **People sign in here with their directory name and password** on, the sign
 - Two-step sign-in can be added to these accounts as to any other.`,
   },
   {
+    id: 'assistants', title: 'AI assistants (MCP)', keys: 'mcp model context protocol ai assistant claude chatgpt gemini cursor copilot agent llm connector tools oauth click to call',
+    body: `An AI assistant such as Claude, ChatGPT, Gemini or Cursor can use BitVoice through the Model Context Protocol (MCP), the standard way assistants reach other programs. Ask it in plain words: who called this morning and did anyone call them back, what did the caller from the dentist's say, why did the 9 o'clock call go to voicemail, is the provider line down. With your leave, it can also place a call, send a text or hang up a call.
+
+BitVoice is the MCP server, at \`https://YOUR-SERVER/mcp\` (Streamable HTTP; the address shows in Settings). Nothing goes to any AI service unless an assistant you connected asks for it, and then only what it asked for.
+
+## Switching it on
+In [Settings](#/settings), **AI assistants (MCP)**:
+- **Let AI assistants connect**: off by default. Off, \`/mcp\` answers nothing but that it is off.
+- **Let assistants act**: off by default. Off, assistants only read, whatever their token. On, an assistant whose token may change things also gets the tools that act.
+
+The card shows the address and ready-to-copy settings for the common assistants, and lists every tool.
+
+## What an assistant can do
+Reading (any token):
+- **calls_now**: the calls going on now.
+- **call_history**: past calls, searched by number or name, by direction and from a time, with why each went where it went.
+- **extensions**: names, numbers, departments, email; never a phone's password.
+- **phones_connected**: which phones are registered, where from.
+- **voicemail**, **search_transcripts**: messages and what was said on recorded calls.
+- **queues**, **trunks**, **health**: queues now, the provider lines, BitVoice's own checks.
+- **directory**, **text_messages**: the company phone book and text conversations.
+
+Acting (with **Let assistants act**, and a token that may change things):
+- **place_call**: click to call. The extension's phone rings first; when someone there picks up, BitVoice calls the number for them as if they had dialled it, so their routes, caller ID and limits apply.
+- **send_text**: a text message from one of the organisation's texting numbers.
+- **hang_up_call**: ends a call in progress.
+
+Every tool is one of the API's own routes, run as the assistant: it sees and changes exactly what its token may, the same checks apply, and its changes are in the audit log under its name. An answer is kept to about 60,000 characters; the assistant is told to narrow its search when one is cut.
+
+## Connecting an assistant
+**Assistants that sign in** (Claude.ai and ChatGPT custom connectors, and others): add a connector with BitVoice's address. The assistant opens BitVoice's sign-in in your browser; sign in as usual (password, two-step, single sign-on), and the page says which assistant asks and where it returns to. An administrator may let it act or **Only let it read**; a viewer's assistant only reads. **Do not allow** sends it away with nothing. Its access is then on [Administrators](#/users), API tokens, as **AI assistant, signed in**: it works at \`/mcp\` only, never for the rest of the API, lasts an hour at a time and renews itself for up to 30 days of not being used. **Revoke** ends it at once. These assistants reach BitVoice from their own servers, so it needs an address reachable from the internet and a certificate they trust (Let's Encrypt, in [Certificate](#/settings)).
+
+**Assistants given a token** (Claude Code, Cursor, VS Code and other tools that take an address and a header): make an API token on [Administrators](#/users), **only read** unless it should act, and give it as \`Authorization: Bearer bv_...\`:
+\`\`\`
+claude mcp add --transport http bitvoice https://pbx.example.com:8443/mcp --header "Authorization: Bearer bv_..."
+\`\`\`
+
+**Assistants that start a program** (Claude Desktop, and others that take a command): the BitVoice program carries a bridge, \`bitvoice mcp\`, that passes each message to the server over HTTPS. Give it the server's address and the token:
+\`\`\`
+{ "mcpServers": { "bitvoice": { "command": "bitvoice", "args": ["mcp", "-url", "https://pbx.example.com:8443"], "env": { "BITVOICE_TOKEN": "bv_..." } } } }
+\`\`\`
+With BitVoice's own certificate (not one from an authority), the bridge refuses it and prints its SHA-256: check it is your server's, then add \`"-pin", "THAT-SHA256"\` to the arguments. Only that certificate is then accepted.
+
+## Safe to leave on
+- Only tokens: a browser's sign-in to BitVoice never reaches \`/mcp\`, and a page on another site is refused (Origin), so a web page cannot use an assistant connection.
+- Assistants can be wrong. Give them a read-only token unless they need to act; anything they did is in the audit log, and placing a call always rings a person's phone first.
+- Signing in by OAuth 2.1 as MCP specifies: the assistant registers itself (public clients only, with PKCE), returns only to the addresses it registered (https, or http to its own computer), and a code is good once, for a minute.
+- An organisation hosted on another's BitVoice gives its assistants tokens; signing in by OAuth there is not yet tried.`,
+  },
+  {
     id: 'compat', title: 'Asterisk compatibility (AMI, ARI and AGI)', keys: 'ami ari agi eagi fastagi hagi asterisk gateway interface manager rest crm wallboard click to dial originate stasis application playback record bridge confbridge queuepause parkedcalls mailboxcount filter userevent astdb database phpagi pyst ivr',
     body: `Tools written for Asterisk can control BitVoice: CRMs, wallboards, click-to-dial buttons, call recorders' controllers. Switch it on in [Settings](#/settings), **Asterisk compatibility**. Tools see calls as channels named like \`PJSIP/100-...\`, as on Asterisk.
 
@@ -2402,6 +2453,7 @@ Programs (Terraform, scripts) use API tokens instead of a password: made on this
 | AI | the AI service, models, and which AI features are on ([AI](#ai)) |
 | Single sign-on | the identity provider ([Single sign-on](#sso)) |
 | Asterisk compatibility | AMI and ARI for programs written for Asterisk ([Asterisk compatibility](#compat)) |
+| AI assistants (MCP) | whether AI assistants such as Claude or ChatGPT may connect, and whether they may act ([AI assistants](#assistants)) |
 | Mobile apps | the push service that wakes the apps |
 | Email | the mail server voicemail, faxes and alerts go through |
 | Key vaults | secrets kept in AWS Secrets Manager or Azure Key Vault |

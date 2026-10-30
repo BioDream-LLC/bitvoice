@@ -1315,3 +1315,75 @@ test('the menu on a phone-sized screen', async ({ page }) => {
   await expect(nav).toBeInViewport()
   await expect(menu).toBeHidden()
 })
+
+// AI assistants over MCP: switched on in Settings; an assistant that signs in (OAuth) sends the
+// person to BitVoice's page, they allow it read-only, and the assistant's token lists the tools,
+// reads, cannot act, shows on Administrators and stops when revoked.
+test('AI assistants (MCP): switch on, sign an assistant in, revoke it', async ({ page }) => {
+  const { createServer } = await import('node:http')
+  const { createHash, randomBytes } = await import('node:crypto')
+  let gotCode: (u: URL) => void = () => {}
+  const returned = new Promise<URL>((ok) => { gotCode = ok })
+  const cb = createServer((req, res) => { gotCode(new URL(req.url!, 'http://127.0.0.1:18397')); res.end('You can close this window.') })
+  await new Promise<void>((r) => cb.listen(18397, '127.0.0.1', r))
+  try {
+    await signIn(page)
+    await page.goto('/#/settings')
+    const card = page.locator('section', { has: page.getByRole('heading', { name: 'AI assistants (MCP)' }) })
+    await card.getByRole('switch', { name: 'Let AI assistants connect' }).click()
+    await expect(card.getByText('/mcp', { exact: false }).first()).toBeVisible()
+    await expect(card.getByText('claude mcp add --transport http bitvoice')).toBeVisible()
+    await page.getByRole('button', { name: 'Save' }).first().click()
+    await expect(page.getByText('Settings saved').first()).toBeVisible()
+    await card.getByText(/What assistants can do/).click()
+    await expect(card.getByText('place_call')).toBeVisible()
+    await expect(card.getByText('acts: off').first()).toBeVisible()
+
+    // The assistant: registers, then opens the sign-in in the person's browser.
+    const base = new URL(page.url()).origin
+    const reg = await (await page.request.post(`${base}/oauth/register`, { data: { client_name: 'Test assistant', redirect_uris: ['http://127.0.0.1:18397/cb'] } })).json()
+    const verifier = randomBytes(32).toString('base64url')
+    const challenge = createHash('sha256').update(verifier).digest('base64url')
+    const q = new URLSearchParams({ response_type: 'code', client_id: reg.client_id, redirect_uri: 'http://127.0.0.1:18397/cb', state: 'xyz',
+      code_challenge: challenge, code_challenge_method: 'S256', resource: `${base}/mcp`, scope: 'mcp' })
+    await page.goto(`${base}/oauth/authorize?${q}`)
+    await expect(page.getByRole('heading', { name: 'Connect an AI assistant' })).toBeVisible()
+    await expect(page.getByText('Test assistant')).toBeVisible()
+    await expect(page.getByText('127.0.0.1:18397')).toBeVisible()
+    await expect(page.getByText('Acting is off in Settings')).toBeVisible()
+    await page.getByRole('button', { name: 'Allow', exact: true }).click()
+    const back = await returned
+    expect(back.searchParams.get('state')).toBe('xyz')
+    const tok = await (await page.request.post(`${base}/oauth/token`, { form: { grant_type: 'authorization_code', code: back.searchParams.get('code')!,
+      client_id: reg.client_id, redirect_uri: 'http://127.0.0.1:18397/cb', code_verifier: verifier } })).json()
+    expect(tok.token_type).toBe('Bearer')
+    const rpc = async (method: string, params?: unknown) => (await (await page.request.post(`${base}/mcp`, {
+      headers: { Authorization: `Bearer ${tok.access_token}`, Accept: 'application/json, text/event-stream' },
+      data: { jsonrpc: '2.0', id: 1, method, params } })).json())
+    expect((await rpc('initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'e2e', version: '1' } })).result.serverInfo.name).toBe('bitvoice')
+    const names = (await rpc('tools/list')).result.tools.map((t: { name: string }) => t.name)
+    expect(names).toContain('call_history')
+    expect(names).not.toContain('place_call')
+    const hist = (await rpc('tools/call', { name: 'extensions', arguments: {} })).result
+    expect(hist.isError).toBeFalsy()
+    expect(hist.structuredContent.items.length).toBeGreaterThan(0)
+
+    // It shows on Administrators as an assistant, and revoking it ends it.
+    await page.goto(`${base}/#/users`)
+    const row = page.getByRole('listitem').filter({ hasText: 'Test assistant (signed in by admin)' })
+    await expect(row.getByText('AI assistant, signed in')).toBeVisible()
+    await expect(row.getByText('Read only')).toBeVisible()
+    page.once('dialog', (d) => d.accept())
+    await row.getByRole('button', { name: /^Revoke/ }).click()
+    await expect(page.getByText('Token revoked')).toBeVisible()
+    const after = await page.request.post(`${base}/mcp`, { headers: { Authorization: `Bearer ${tok.access_token}` }, data: { jsonrpc: '2.0', id: 1, method: 'ping' } })
+    expect(after.status()).toBe(401)
+  } finally {
+    cb.close()
+    await page.evaluate(async () => {
+      const st = await (await fetch('./api/settings')).json()
+      st.system.mcp = { enabled: false, act: false }
+      await fetch('./api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-BitVoice': '1' }, body: JSON.stringify(st) })
+    }).catch(() => {})
+  }
+})

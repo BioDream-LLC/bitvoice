@@ -159,6 +159,9 @@ type System struct {
 	AI AI `json:"ai"`
 	// Compat speaks Asterisk's AMI and ARI, for tools written for Asterisk.
 	Compat Compat `json:"compat"`
+	// MCP lets AI assistants (Claude, ChatGPT, Gemini, Cursor ...) use BitVoice through the Model
+	// Context Protocol, with an API token.
+	MCP MCP `json:"mcp"`
 	// SSO signs people in to the web interface through an OpenID Connect identity provider.
 	SSO SSO `json:"sso"`
 	// LDAP reads the company directory (LDAP, Active Directory): extensions, ring groups, sign-in.
@@ -3465,6 +3468,15 @@ func checkCodecs(p *Problems, field string, list []string, emptyOK bool) {
 }
 
 // Compat is Asterisk compatibility: AMI (the manager protocol) and ARI (the REST interface).
+// MCP is BitVoice's Model Context Protocol server at /mcp: AI assistants read calls, call history,
+// voicemail, transcripts and status with an API token, and act only when Act is on.
+type MCP struct {
+	Enabled bool `json:"enabled"`
+	// Act lets assistants place calls, send texts and hang up calls (with a token that may change
+	// things). Off: they only read.
+	Act bool `json:"act"`
+}
+
 type Compat struct {
 	AMI bool `json:"ami"`
 	// AMIListen is where AMI listens; by default only this computer (127.0.0.1:5038).

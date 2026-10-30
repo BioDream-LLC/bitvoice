@@ -65,8 +65,9 @@ export function Tokens() {
                 <span className="font-mono text-xs text-slate-500">{t.prefix}…</span>
                 <Badge status={t.role === 'admin' ? 'warn' : 'idle'}>{t.role === 'admin' ? 'Changes everything' : 'Read only'}</Badge>
                 {t.onBehalf && <Badge status="ok">Names its people</Badge>}
+                {t.mcpOnly && <Badge status="info">AI assistant, signed in</Badge>}
                 <span className={`text-xs ${expired ? 'text-rose-300' : 'text-slate-500'}`}>
-                  {t.lastUsed ? `used ${relTime(t.lastUsed)}` : 'never used'} · {t.expires ? (expired ? 'expired' : `expires ${new Date(t.expires).toLocaleDateString()}`) : 'no expiry'}
+                  {t.lastUsed ? `used ${relTime(t.lastUsed)}` : 'never used'} · {t.mcpOnly && t.refreshExpires ? `renews itself until ${new Date(t.refreshExpires).toLocaleDateString()} if used` : t.expires ? (expired ? 'expired' : `expires ${new Date(t.expires).toLocaleDateString()}`) : 'no expiry'}
                 </span>
                 <button className="btn ml-auto px-2 py-1 text-rose-300" aria-label={`Revoke ${t.name}`} onClick={() => { if (confirm(`Revoke ${t.name}? Programs using it stop working at once.`)) revoke(t.id).unwrap().then(() => toast.success('Token revoked')).catch((e) => toast.error(errorOf(e).message)) }}><Trash2 size={13} aria-hidden /></button>
               </li>

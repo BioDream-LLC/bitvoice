@@ -17,6 +17,7 @@ import { Help } from './Help'
 import { Sites } from './Sites'
 import { createRoot } from 'react-dom/client'
 import { Provider } from 'react-redux'
+import { ConnectAssistant } from './Assistants'
 import { HashRouter, Route, Routes as R } from 'react-router-dom'
 import { Changes, Security, Settings, Users } from './Admin'
 import { useMeQuery } from './api'
@@ -128,6 +129,7 @@ function Admin() {
         <Route path="/paging" element={<Paging />} />
         <Route path="/conferences" element={<Conferences />} />
         <Route path="/video-room/:number" element={<VideoRoom />} />
+        <Route path="/connect-assistant" element={<ConnectAssistant />} />
         <Route path="/codes" element={<FeatureCodesPage />} />
         <Route path="/faxes" element={<Faxes />} />
         <Route path="/psap" element={<PSAP />} />
