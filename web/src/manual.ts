@@ -7,7 +7,7 @@ export interface Article { id: string; title: string; route?: string; keys: stri
  * its chapters through them. Every article is in exactly one part. */
 export const parts: { title: string; intro: string; ids: string[] }[] = [
   { title: 'Getting started', intro: 'From a new install to a working phone system: extensions, phones, a phone company, where calls go, emergency calling from your offices, and how to tell everything is ready.',
-    ids: ['start', 'maturity', 'extensions', 'phones', 'deskphones', 'cards', 'trunks', 'routes', 'pinsets', 'lookups', 'emergency', 'sites', 'health', 'settings'] },
+    ids: ['start', 'maturity', 'extensions', 'phones', 'deskphones', 'cards', 'trunks', 'routes', 'pinsets', 'lookups', 'emergency', 'sites', 'health', 'settings', 'languages'] },
   { title: 'Where calls go', intro: 'The building blocks callers move through: groups and queues, menus and schedules, scripts and the AI receptionist, voicemail, and the diagram that shows it all.',
     ids: ['flow', 'ringgroups', 'queues', 'dialer', 'sounds', 'menus', 'directory', 'dialin', 'voicebots', 'toggles', 'schedules', 'scripts', 'ai', 'voicemail', 'callbacks', 'calllinks'] },
   { title: 'Everyday calling', intro: 'What people do on their phones every day, and what they set for themselves: forwarding, follow-me, pickup, conference rooms, paging, hot desks, faxes and texts.',
@@ -137,6 +137,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | AGI and FastAGI (Asterisk Gateway Interface) | Checked against a reference | every command's answer compared with Asterisk 20.6's over FastAGI; a FastAGI server written with pyst2 running a call; EAGI audio to a program. Not tried with a production IVR |
 | AI assistants over MCP | Checked against a reference | the official MCP TypeScript SDK (1.32.2) as the client: tools listed and called with an API token over Streamable HTTP (protocol 2025-11-25), and its OAuth sign-in end to end (discovery, registration, PKCE, token, refresh); the consent page in Chromium; the stdio bridge against a test server. Not yet tried with Claude, ChatGPT or another assistant itself, which needs a server reachable from the internet with a trusted certificate. |
 | Microsoft 365 and Google Workspace (contacts and calendars) | Software-tested | against stand-ins of Microsoft Graph (users, organisation contacts, calendar getSchedule, the client-credentials token) and of Google's People API, Calendar freeBusy and JWT-bearer token, written from their published references; the stand-ins check what BitVoice sends (the JWT's signature and claims, paging, request bodies). Not yet tried with a real Microsoft 365 tenant or Google Workspace domain. |
+| The screens in 14 languages | Software-tested | every piece of text the screens show (about 5,000, from the code: JSX text, strings, and the server's messages) machine-translated by Llama 3.3 70B into 13 languages, 99% kept by the checks (the same placeholders, addresses and codes untouched); German drawn through the browser tests (sign-in, menu, search, a form, back to English). Not reviewed by a person in any language. |
 | H.323 trunks | Checked against a reference | H323Plus 1.28 (its simph323 playing and recording WAV files) on EC2: calls both ways with Fast Connect and G.711, each end hearing the other's tone, MOS 4.39; call set-up also with Asterisk's chan_ooh323 (whose own sound is broken in Asterisk 22) |
 | SIP over WebSocket | Checked against a reference | JsSIP and SIP.js |
 | Codecs: GSM, G.726, iLBC, MP3 hold music | Checked against a reference | ffmpeg, the RFC 3951 reference program and minimp3, sample for sample |
@@ -2463,6 +2464,23 @@ With single sign-on (Settings), people sign in with the organisation's account (
 ## API tokens
 Programs (Terraform, scripts) use API tokens instead of a password: made on this page, shown once, and revoked at any time. Each token is an administrator or a viewer. A token made with **Names the person it acts for** (for a CAD) may send \`X-BitVoice-On-Behalf-Of\` with the person's name, and records then name that person beside the token ([911 calls](#psap)).`,
   },
+  {
+    id: 'languages', title: 'The screens in your language', keys: 'language languages translation translate german french spanish italian portuguese dutch polish swedish danish norwegian finnish japanese chinese deutsch français español i18n locale',
+    body: `BitVoice's screens come in English and in thirteen other languages: Deutsch, Français, Español, Italiano, Português, Nederlands, Polski, Svenska, Dansk, Norsk bokmål, Suomi, 日本語 and 简体中文.
+
+## Choosing one
+Each browser has its own language: choose it under the menu (the language list beside the themes), on the sign-in page, or on the setup wizard's first page. Until you choose, BitVoice uses the browser's own language when it is one of these, else English. The choice is kept in this browser only: two people at one server may each work in their own.
+
+Everything on the screens is translated: the menu, headings, buttons, hints, messages from the server and the names screen readers announce. Search (⌘K) finds a page by its name in your language or in English. Left as they are: what people type (names, numbers, notes), addresses, codes, scripts in the editors, and names of products and protocols. Dates and numbers follow the browser's own settings.
+
+## How it is translated, and how well
+The translations are made by a machine (a large language model), for every piece of text the screens show, about 5,000 of them; none has been checked by a person. Some sentences the screens build from pieces (a number and a word) may read awkwardly, and a term may be translated two ways in two places. Anything without a translation, such as a screen newer than the translations, stays English.
+
+**Help** keeps this manual in English, as written, with a link at the top of each chapter to the same chapter translated whole (also by machine) on bitvoice.org.
+
+The phone side is separate: what callers hear (prompts, the voicemail menu) is in the default prompt language ([Sounds](#/sounds)), unless an extension or a queue has a language of its own.`,
+  },
+
   {
     id: 'settings', title: 'Settings', route: '/settings', keys: 'settings system codecs sso ai recording retention mobile push vault gitops sound',
     body: `Settings holds everything about the system as a whole. Each section saves on its own, and every save is a revision on [Changes](#/changes).

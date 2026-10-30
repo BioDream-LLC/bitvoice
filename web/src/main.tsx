@@ -18,6 +18,7 @@ import { Sites } from './Sites'
 import { createRoot } from 'react-dom/client'
 import { Provider } from 'react-redux'
 import { ConnectAssistant } from './Assistants'
+import { startTranslation } from './i18n'
 import { HashRouter, Route, Routes as R } from 'react-router-dom'
 import { Changes, Security, Settings, Users } from './Admin'
 import { useMeQuery } from './api'
@@ -162,10 +163,11 @@ function Admin() {
   )
 }
 
-createRoot(document.getElementById('root')!).render(
+// The chosen language's translations are loaded first, so the first screen is drawn in it.
+startTranslation().finally(() => createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <Provider store={store}>
       <HashRouter><App /></HashRouter>
     </Provider>
   </StrictMode>,
-)
+))

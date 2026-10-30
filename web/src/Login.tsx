@@ -1,3 +1,4 @@
+import { LanguagePicker } from './LanguagePicker'
 import { Building2, KeyRound, LogIn } from 'lucide-react'
 import { useState } from 'react'
 import { errorOf, useAuthOptionsQuery, useLoginMutation } from './api'
@@ -27,6 +28,7 @@ export function Login() {
           <h1 className="bg-gradient-to-r from-sky-300 to-violet-300 bg-clip-text text-2xl font-bold text-transparent">BitVoice</h1>
           <p className="text-sm text-slate-400">Sign in to manage your phone system</p>
         </div>
+        <LanguagePicker className="justify-center" />
         {ssoError && <ErrorBox message={ssoError} />}
         {error && <ErrorBox message={errorOf(error).message} />}
         {opts?.sso.enabled && (

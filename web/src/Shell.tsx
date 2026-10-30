@@ -1,3 +1,5 @@
+import { LanguagePicker } from './LanguagePicker'
+import { tr } from './i18n'
 import { Command } from 'cmdk'
 import { clsx } from 'clsx'
 import {
@@ -178,7 +180,7 @@ function Palette({ open, setOpen, me }: { open: boolean; setOpen: (v: boolean) =
           <Command.Empty className="p-4 text-sm text-slate-500">Nothing matches.</Command.Empty>
           <Command.Group heading="Screens" className="text-xs text-slate-500">
             {nav.filter(visible).map((n) => (
-              <Command.Item key={n.to} value={`${n.label} ${n.keys}`} onSelect={() => go(n.to)}
+              <Command.Item key={n.to} value={`${n.label} ${tr(n.label)} ${n.keys}`} onSelect={() => go(n.to)}
                 className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-200 data-[selected=true]:bg-slate-800">
                 <n.icon size={16} className={n.color} aria-hidden /> {n.label}
               </Command.Item>
@@ -203,7 +205,7 @@ function Palette({ open, setOpen, me }: { open: boolean; setOpen: (v: boolean) =
               ].map(([label, to, Icon, c]) => {
                 const I = Icon as typeof Phone
                 return (
-                  <Command.Item key={to as string} value={label as string} onSelect={() => go(to as string)}
+                  <Command.Item key={to as string} value={`${label as string} ${tr(label as string)}`} onSelect={() => go(to as string)}
                     className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-200 data-[selected=true]:bg-slate-800">
                     <I size={16} className={c as string} aria-hidden /> {label as string}
                   </Command.Item>
@@ -321,6 +323,7 @@ export function Shell({ me, children }: { me: Me; children: ReactNode }) {
           ))}
         </nav>
         <div className="border-t border-slate-800 p-3">
+          <LanguagePicker className="mb-2" />
           <div className="mb-2 flex rounded-lg border border-slate-800 p-0.5" role="radiogroup" aria-label="Theme">
             {themes.map((t, i) => (
               <button key={t.id} role="radio" aria-checked={theme === t.id} title={t.label} aria-label={t.label}

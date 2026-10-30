@@ -1418,6 +1418,8 @@ test('Microsoft 365: people into Contacts, calendars say who is away', async ({ 
     const ext = await page.evaluate(async (H) => {
       const x = (await (await fetch('./api/extensions')).json()).items[0]
       await fetch(`./api/extensions/${x.id}`, { method: 'PUT', headers: H, body: JSON.stringify({ ...x, email: 'adele@contoso.example', calendar: { ...x.calendar, secret: '' } }) })
+      // Do not disturb set by hand (an earlier test) wins over any calendar: off for this one.
+      await fetch(`./api/away/${x.number}`, { method: 'PUT', headers: H, body: JSON.stringify({ on: false }) })
       return x.number as string
     }, H)
     await page.goto('/#/settings')
@@ -1455,5 +1457,55 @@ test('Microsoft 365: people into Contacts, calendars say who is away', async ({ 
       st.system.workspace = { ...st.system.workspace, provider: '' }
       await fetch('./api/settings', { method: 'PUT', headers: H, body: JSON.stringify(st) })
     }, H).catch(() => {})
+  }
+})
+
+// The screens in another language: chosen on the sign-in page, kept on this browser, drawn in it
+// from the first screen on (labels, buttons, hints, messages from the server), with code, names
+// and numbers left as they are; back to English from the menu.
+test('the screens in German, and back to English', async ({ browser, page: first }) => {
+  await signIn(first) // a fresh server is set up first; this test signs in afresh
+  const ctx = await browser.newContext({ ignoreHTTPSErrors: true, locale: 'en-US' })
+  const page = await ctx.newPage()
+  try {
+    await page.goto('/')
+    const language = page.getByRole('combobox', { name: /Language|Sprache/ })
+    await expect(language).toHaveValue('en')
+    await language.selectOption('de')
+    await expect(page.getByRole('button', { name: 'Anmelden' })).toBeVisible()
+    await expect(page.getByLabel('Benutzername')).toBeVisible()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'de')
+    // The language's own name is never translated.
+    await expect(language.locator('option[value="ja"]')).toHaveText('日本語')
+    await page.getByLabel('Benutzername').fill('admin')
+    await page.getByLabel('Passwort').fill('a very good password')
+    await page.getByRole('button', { name: 'Anmelden' }).click()
+    // Even the names screen readers hear are translated (the menu is "Main" in English).
+    await expect(page.getByRole('navigation', { name: "Haupt-" })).toBeVisible({ timeout: 15_000 })
+    await page.goto('/#/conferences')
+    await expect(page.getByRole('button', { name: 'Konferenzraum hinzufügen' })).toBeVisible()
+    // A message from the server, in a form: translated as it arrives.
+    await page.goto('/#/extensions')
+    await expect(page.getByRole('heading', { name: 'Nebenstellen' })).toBeVisible()
+    // The search finds a page by its name in German.
+    await page.keyboard.press('ControlOrMeta+k')
+    await page.keyboard.type('Konferenzr')
+    await page.keyboard.press('Enter')
+    await expect(page).toHaveURL(/#\/conferences/)
+    // The manual stays whole, with its translated chapter a link away.
+    await page.goto('/#/help?a=contacts')
+    await expect(page.getByRole('link', { name: /Deutsch on bitvoice\.org|Deutsch auf bitvoice\.org|bitvoice\.org/ })).toHaveAttribute('href', 'https://bitvoice.org/manual/de/#contacts')
+    await expect(page.locator('#help-title')).toHaveText('Contacts on every phone')
+    // Code stays code: a script editor's text is never touched.
+    await page.goto('/#/scripts')
+    await expect(page.getByRole('heading', { level: 1 })).not.toHaveText('Scripts')
+    // A reload keeps the language; the menu brings English back.
+    await page.reload()
+    await expect(page.getByRole('navigation', { name: "Haupt-" })).toBeVisible()
+    await page.getByRole('combobox', { name: /Language|Sprache/ }).selectOption('en')
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Scripts')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+  } finally {
+    await ctx.close()
   }
 })

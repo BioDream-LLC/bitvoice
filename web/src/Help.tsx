@@ -1,3 +1,4 @@
+import { LANGUAGES, currentLanguage } from './i18n'
 import { BookOpenText, Search } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -127,7 +128,13 @@ export function Help() {
             </ul>
           )}
         </nav>
-        <article id="help-article" tabIndex={-1} className="card p-6 outline-none" aria-labelledby="help-title">
+        {/* The manual is translated whole, chapter by chapter, on bitvoice.org: here it stays as written rather than
+            mixing the sentences the screens' translations happen to know into English paragraphs. */}
+        <article id="help-article" tabIndex={-1} className="card p-6 outline-none" aria-labelledby="help-title" translate="no">
+          {currentLanguage() !== 'en' && (
+            <p className="mb-4 text-sm"><a className="text-sky-300 underline" href={`https://bitvoice.org/manual/${currentLanguage()}/#${current.id}`} target="_blank" rel="noreferrer" translate="yes">
+              Read this chapter in {LANGUAGES[currentLanguage()]} on bitvoice.org</a> <span className="text-slate-500" translate="yes">(machine-translated)</span></p>
+          )}
           <h2 id="help-title" className="mb-4 text-lg font-semibold text-slate-100">{current.title}</h2>
           <Markdown text={current.body} />
           {current.route && <p className="mt-6 text-sm"><Link to={current.route} className="text-sky-300 underline">Go to {current.title}</Link></p>}

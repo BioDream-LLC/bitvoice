@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import { errorOf, setSetupCode, useCompleteSetupMutation, useSetupStatusQuery, type ApiErrorBody } from './api'
+import { LanguagePicker } from './LanguagePicker'
 import { Logo, useTheme } from './Shell'
 import { ErrorBox, Field, Spinner, Toggle, problemFor } from './ui'
 
@@ -256,6 +257,7 @@ function Frame({ children, wide }: { children: React.ReactNode; wide?: boolean }
       <div className="mx-auto mb-6 flex max-w-3xl items-center gap-2">
         <Logo />
         <span className="bg-gradient-to-r from-sky-300 to-violet-300 bg-clip-text text-lg font-bold text-transparent">BitVoice setup</span>
+        <LanguagePicker className="ml-auto" />
       </div>
       <div className={clsx('card rise mx-auto p-8', wide ? 'max-w-3xl' : 'max-w-md')}>{children}</div>
     </div>

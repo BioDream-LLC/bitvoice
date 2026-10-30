@@ -10,7 +10,8 @@ RELEASE_KEY ?=
 BIODREAM_KEY := M6UaGaLM1T0SekufRzAlUSeSTjfxpVL18YHE5eKkKxY=
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.releaseKey=$(RELEASE_KEY)
 
-.PHONY: manual-units manuals all build test vet fmt check clean web e2e manual release site
+
+.PHONY: ui-strings manual-units manuals all build test vet fmt check clean web e2e manual release site
 
 all: check build
 
@@ -85,6 +86,12 @@ release:
 # The bitvoice.org website, built from README.md, docs/manual and docs/assets (site/ holds its pages).
 # Needs cwebp for the screenshots (brew install webp; without it they stay PNG). Publish with
 # deploy/site.sh.
+# ui-strings lists every piece of text the screens show (web/i18n/strings.json); then
+#   OPENROUTER_API_KEY=... node web/scripts/i18n-ui.mjs translate
+# translates what is new into web/i18n/<lang>.json, and `node web/scripts/i18n-ui.mjs check` says how much is done.
+ui-strings:
+	node web/scripts/i18n-ui.mjs extract
+
 # manual-units lists every piece of the manual a translation needs (docs/manual/i18n/units.json); then
 # OPENROUTER_API_KEY=... node web/scripts/i18n-manual.mjs de fr ... fills docs/manual/i18n/LANG.json, where only
 # new or changed units are translated. manuals builds the manual in each of those languages, as HTML for the
