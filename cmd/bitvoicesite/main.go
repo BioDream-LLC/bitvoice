@@ -37,7 +37,7 @@ var pages = []page{
 	{"features.html", "/features/", "features", "Everything BitVoice does",
 		"Every BitVoice feature: extensions, queues, menus, voicemail, recording, conferences, trunks, desk phones, WebRTC, AI receptionists, a dialer and an inbox.", "0.9"},
 	{"mobile.html", "/mobile/", "mobile", "BitVoice for Android and iPhone: your extension in your pocket",
-		"The free BitVoice app: calls ring on the phone's call screen even when it is closed, with voicemail transcripts, live transcripts, chat and video rooms.", "0.9"},
+		"The free BitVoice app: calls ring on the phone's own call screen, with voicemail transcripts, live transcripts, chat and video rooms.", "0.9"},
 	{"freepbx.html", "/freepbx-alternative/", "freepbx", "A FreePBX and Asterisk alternative you run from the browser",
 		"How BitVoice compares with FreePBX and Asterisk, what moves over with the import, and what BitVoice does not do yet.", "0.9"},
 	{"proof.html", "/proof/", "proof", "How BitVoice is tested, and what has not been tested",

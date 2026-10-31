@@ -83,8 +83,9 @@ with the caller's building, floor and room.
 <img src="docs/assets/mobile/hero.png" alt="BitVoice mobile: three phones showing a live call transcript, an incoming call with Answer and Decline, and a video room with three people." width="100%">
 
 **Your extension, in your pocket.** The free BitVoice app makes a mobile phone one of an extension's phones.
-Calls ring on the phone's own call screen, even when the app is closed, and ring groups and queues ring it
-with the extension's other phones. Pairing is one scan: the administrator opens the extension, presses
+Calls ring on the phone's own call screen, and ring groups and queues ring it with the extension's other
+phones. Today the Android app rings while it is running, in the background too; ringing a closed app needs
+push, which the released app does not have yet. Pairing is one scan: the administrator opens the extension, presses
 **Add a phone**, and the person scans the code. No password to type, no account to make, no tracking.
 
 <table>
@@ -490,7 +491,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | FreePBX migration (Import) | Field-tested | a real FreePBX 17.0.33 backup (70 MB) imported whole; others from FreePBX's own formats |
 | AI transcripts, summaries, receptionist | Field-tested | a real model through OpenRouter |
 | Facts and summaries without a language model | Software-tested | invented 911 calls only: 23 of 43 facts (53%) on the sealed set, 3 facts no one expected; 41/41 training, hold-out 27/40 cold. Never measured on real calls. |
-| Speech to text on this server (whisper) | Field-tested on macOS | whisper-server 1.9.5 run by BitVoice; downloads for every platform built and tried in CI |
+| Speech to text on this server (whisper) | Field-tested on macOS and Linux | whisper-server 1.9.5 run by BitVoice: on a Mac, and on Ubuntu on EC2 (x86-64), where it wrote the live call and voicemail transcripts in the phone app's field test; downloads for every platform built and tried in CI |
 | Archive to S3, secrets from AWS Secrets Manager | Field-tested | real AWS, our own SigV4 |
 | SNMP monitoring and traps | Field-tested | net-snmp's snmpwalk and snmptrapd |
 | Let's Encrypt | Field-tested | issues and renews the public demo's certificate |

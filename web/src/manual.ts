@@ -126,7 +126,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | FreePBX migration (Import) | Field-tested | a real FreePBX 17.0.33 backup (70 MB) imported whole; others from FreePBX's own formats |
 | AI transcripts, summaries, receptionist | Field-tested | a real model through OpenRouter |
 | Facts and summaries without a language model | Software-tested | invented 911 calls only: 23 of 43 facts (53%) on the sealed set, 3 facts no one expected; 41/41 training, hold-out 27/40 cold. Never measured on real calls. |
-| Speech to text on this server (whisper) | Field-tested on macOS | whisper-server 1.9.5 run by BitVoice; downloads for every platform built and tried in CI |
+| Speech to text on this server (whisper) | Field-tested on macOS and Linux | whisper-server 1.9.5 run by BitVoice: on a Mac, and on Ubuntu on EC2 (x86-64), where it wrote the live call and voicemail transcripts in the phone app's field test; downloads for every platform built and tried in CI |
 | Archive to S3, secrets from AWS Secrets Manager | Field-tested | real AWS, our own SigV4 |
 | SNMP monitoring and traps | Field-tested | net-snmp's snmpwalk and snmptrapd |
 | Let's Encrypt | Field-tested | issues and renews the public demo's certificate |
@@ -399,7 +399,7 @@ The TURN server above helps browsers on strict networks reach a BitVoice that ha
 Open \`#/phone\` on any computer or mobile browser: people sign in with their extension and SIP password, without an administrator account. It is a full phone: dial, answer, hold, transfer and the keypad. For their own forwarding and voicemail they use the staff portal at \`#/me\` (see [The staff portal](#portal)).
 
 ## The mobile apps
-The BitVoice apps for iPhone and Android are paired from the extension's page with a QR code. Calls wake the app through Apple's and Google's push services, so it rings even when it is closed.`,
+The BitVoice apps for iPhone and Android are paired from the extension's page with a QR code. Calls wake the app through Apple's and Google's push services, so it rings even when it is closed (once push is set up; see below).`,
   },
   {
     id: 'mobile', title: 'Mobile apps', keys: 'iphone android app push pair qr ios callkit',
@@ -416,7 +416,9 @@ A closed app is woken for calls by a push message. In [Settings](#/settings), **
 
 Set **Address the apps use** to this server's https address as it is reached from anywhere, not only the office.
 
-> With push off, the app rings only while it is open.
+> With push off, the app rings only while it is running (in the background too).
+
+> The Android app on the [releases](https://github.com/BioDream-LLC/bitvoice/releases) is built without Google's push settings for now, so it cannot be woken: it rings while it is running. The iPhone app has not yet run on an iPhone.
 
 ## Pairing a phone
 1. Open the extension and press **Add a phone**.

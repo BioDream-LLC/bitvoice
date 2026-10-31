@@ -29,7 +29,7 @@ Raise `versionCode` in `app/build.gradle.kts` (and `versionName`) for every uplo
 ```
 BitVoice puts your extension on the BitVoice phone system on your Android phone.
 
-Calls to your extension ring on your phone with Answer and Decline, the way phone calls do, even when the app is closed. Answer, and the call keeps going when the screen turns off or you switch to another app. Call other extensions and outside numbers from the keypad, with your office number as the caller ID.
+Calls to your extension ring on your phone with Answer and Decline, the way phone calls do, while the app is running (in the background too). Answer, and the call keeps going when the screen turns off or you switch to another app. Call other extensions and outside numbers from the keypad, with your office number as the caller ID.
 
 Everything a desk phone does, and more:
 - Transfer, hold and a second call.
@@ -43,7 +43,7 @@ Everything a desk phone does, and more:
 Getting started takes one scan: your administrator opens your extension in BitVoice and presses Add a phone, and you scan the code it shows. There is no password to type. Unpair at any time from the app.
 
 - Calls are encrypted between your phone and your BitVoice (SRTP over DTLS).
-- The app talks only to your organisation's BitVoice, and to Google to be woken for calls.
+- The app talks only to your organisation's BitVoice.
 - No advertising, no analytics, no tracking.
 
 This app needs a BitVoice phone system. BitVoice is a free, open-source phone system from BioDream LLC that organisations run themselves or have hosted: https://bitvoice.org
@@ -71,7 +71,7 @@ This app needs a BitVoice phone system. BitVoice is a free, open-source phone sy
   - Encrypted in transit: **yes**. Users can ask for deletion: **yes** (Unpair, or uninstall).
   - *Audio: voice or sound recordings*: collected, not shared, processed ephemerally (calls), required,
     for **App functionality**. (Recording, where the organisation turns it on, happens on its server.)
-  - *Device or other IDs*: collected (the push token and the device secret), not shared, required, for
+  - *Device or other IDs*: collected (the device secret, and the push token once push is set up), not shared, required, for
     **App functionality**.
   - *Personal info: name*: collected (the extension's name, from the server), for **App functionality**.
   - *Messages: other in-app messages*: collected (staff chat, sent to and kept on the organisation's own
