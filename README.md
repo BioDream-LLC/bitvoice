@@ -15,15 +15,15 @@ paid modules. No licence meter.
 **One 37 MB file. 47 MB of memory carrying four live calls and eight phones.** Double-click it and a
 browser opens on a setup wizard; a few minutes later a phone rings.
 
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go](https://img.shields.io/badge/Go-1.26%2B-00ADD8.svg?logo=go&logoColor=white)](https://go.dev) [![Release](https://img.shields.io/badge/release-v0.1.14-success.svg)](#download) [![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)](#download) [![CI](https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml/badge.svg)](https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go](https://img.shields.io/badge/Go-1.26%2B-00ADD8.svg?logo=go&logoColor=white)](https://go.dev) [![Release](https://img.shields.io/badge/release-v0.1.15-success.svg)](#download) [![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)](#download) [![CI](https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml/badge.svg)](https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml)
 
 <a href="https://demo.bitvoice.org"><img src="docs/assets/buttons/try.svg" alt="Try BitVoice now: the live demonstration, no install" width="300"></a>
 
 <sub><b>Sign in as</b> <code>demo</code> <b>with password</b> <code>try-bitvoice-demo</code> · then open the browser phone as extension <code>150</code>, password <code>try-the-demo-phone</code>, and dial <code>810</code> or <code>*43</code> · an invented business, reset every night · look at everything, change nothing · or <a href="docs/assets/tour.mp4">watch the tour</a> (2½ minutes)</sub>
 
-### Download v0.1.14
+### Download v0.1.15
 
-<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.14/bitvoice-v0.1.14-linux-amd64.tar.gz"><img src="docs/assets/buttons/download-linux.svg" alt="Download BitVoice for Linux, x86-64" width="240"></a>&nbsp;<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.14/bitvoice-v0.1.14-darwin-arm64.tar.gz"><img src="docs/assets/buttons/download-macos.svg" alt="Download BitVoice for macOS, Apple Silicon" width="240"></a>&nbsp;<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.14/bitvoice-v0.1.14-windows-amd64.zip"><img src="docs/assets/buttons/download-windows.svg" alt="Download BitVoice for Windows, x64" width="240"></a>
+<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.15/bitvoice-v0.1.15-linux-amd64.tar.gz"><img src="docs/assets/buttons/download-linux.svg" alt="Download BitVoice for Linux, x86-64" width="240"></a>&nbsp;<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.15/bitvoice-v0.1.15-darwin-arm64.tar.gz"><img src="docs/assets/buttons/download-macos.svg" alt="Download BitVoice for macOS, Apple Silicon" width="240"></a>&nbsp;<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.15/bitvoice-v0.1.15-windows-amd64.zip"><img src="docs/assets/buttons/download-windows.svg" alt="Download BitVoice for Windows, x64" width="240"></a>
 
 <a href="https://biodream-llc.github.io/bitvoice/manual/"><img src="docs/assets/buttons/manual.svg" alt="Read the BitVoice manual" width="240"></a>
 
@@ -352,17 +352,18 @@ irm https://raw.githubusercontent.com/BioDream-LLC/bitvoice/main/deploy/install.
 Run it again to upgrade; `--uninstall` removes it. The manual's Getting started chapter says what each puts
 where. CI runs both installers on Linux, macOS and Windows on every change.
 
-**Or download it: version 0.1.6**, one binary, nothing to install. Each archive holds the program, the licence, the notice
+**Or download it: version 0.1.15**, one binary, nothing to install. Each archive holds the program, the licence, the notice
 and the manual as a PDF.
 
 | Platform | Architecture | Download |
 |---|---|---|
-| **Windows** | x64 (Intel/AMD) | [`bitvoice-v0.1.14-windows-amd64.zip`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.14/bitvoice-v0.1.14-windows-amd64.zip) |
-| **Windows** | ARM64 | [`bitvoice-v0.1.14-windows-arm64.zip`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.14/bitvoice-v0.1.14-windows-arm64.zip) |
-| **macOS** | Apple Silicon | [`bitvoice-v0.1.14-darwin-arm64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.14/bitvoice-v0.1.14-darwin-arm64.tar.gz) |
-| **macOS** | Intel | [`bitvoice-v0.1.14-darwin-amd64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.14/bitvoice-v0.1.14-darwin-amd64.tar.gz) |
-| **Linux** | x86-64 | [`bitvoice-v0.1.14-linux-amd64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.14/bitvoice-v0.1.14-linux-amd64.tar.gz) |
-| **Linux** | ARM64 / aarch64 | [`bitvoice-v0.1.14-linux-arm64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.14/bitvoice-v0.1.14-linux-arm64.tar.gz) |
+| **Windows** | x64 (Intel/AMD) | [`bitvoice-v0.1.15-windows-amd64.zip`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.15/bitvoice-v0.1.15-windows-amd64.zip) |
+| **Windows** | ARM64 | [`bitvoice-v0.1.15-windows-arm64.zip`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.15/bitvoice-v0.1.15-windows-arm64.zip) |
+| **macOS** | Apple Silicon | [`bitvoice-v0.1.15-darwin-arm64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.15/bitvoice-v0.1.15-darwin-arm64.tar.gz) |
+| **macOS** | Intel | [`bitvoice-v0.1.15-darwin-amd64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.15/bitvoice-v0.1.15-darwin-amd64.tar.gz) |
+| **Linux** | x86-64 | [`bitvoice-v0.1.15-linux-amd64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.15/bitvoice-v0.1.15-linux-amd64.tar.gz) |
+| **Linux** | ARM64 / aarch64 | [`bitvoice-v0.1.15-linux-arm64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.15/bitvoice-v0.1.15-linux-arm64.tar.gz) |
+| **Android** | the phone app (10 and later) | [`bitvoice-android-v0.1.15.apk`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.15/bitvoice-android-v0.1.15.apk) ([how it works](#phone-apps-for-android-and-iphone)) |
 
 **On Windows, unzip and double-click `bitvoice.exe`.** A window opens and your browser opens on the setup
 wizard. Keep the window open while you use BitVoice: closing it stops it. Windows asks once whether BitVoice
@@ -372,7 +373,7 @@ the same way but has not been run on an ARM Windows machine. BitVoice does not i
 service yet.
 
 **Verify what you downloaded** against
-[`SHA256SUMS`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.14/SHA256SUMS):
+[`SHA256SUMS`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.15/SHA256SUMS):
 
 ```sh
 shasum -a 256 -c SHA256SUMS --ignore-missing
