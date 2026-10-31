@@ -98,6 +98,27 @@ func (s *Store) CDRsFor(number string, limit int) ([]CDR, error) {
 	return out, err
 }
 
+// CDRsWith lists calls from or to any of the numbers given (the forms one number may be written in)
+// since a time, newest first, at most limit.
+func (s *Store) CDRsWith(numbers []string, since time.Time, limit int) ([]CDR, error) {
+	if len(numbers) == 0 {
+		return nil, nil
+	}
+	in := "?" + strings.Repeat(", ?", len(numbers)-1)
+	args := []any{}
+	for _, n := range numbers {
+		args = append(args, n)
+	}
+	for _, n := range numbers {
+		args = append(args, n)
+	}
+	args = append(args, since.UnixMilli(), max(limit, 1))
+	var out []CDR
+	err := s.cdrRows(`SELECT body FROM cdrs WHERE (num_from IN (`+in+`) OR num_to IN (`+in+`)) AND start_ms >= ? ORDER BY start_ms DESC LIMIT ?`,
+		args, func(r CDR) bool { out = append(out, r); return true })
+	return out, err
+}
+
 // eachCDR visits every call record.
 func (s *Store) eachCDR(f func(CDR)) {
 	_ = s.cdrRows(`SELECT body FROM cdrs ORDER BY start_ms`, nil, func(r CDR) bool { f(r); return true })

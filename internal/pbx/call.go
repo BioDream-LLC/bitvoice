@@ -97,7 +97,12 @@ type Call struct {
 	noticeLeg                                *Leg
 	vip                                      bool // on the VIP list: to the front of queues
 	screen                                   *screen.Verdict
-	screened                                 string     // labelled, when screening marked it
+	screened                                 string // labelled, passed, failed or sent, when screening acted
+	allowed                                  bool   // on the always-allowed list
+	unknownAct                               string // test or send: what screening does with an unknown caller
+	screenNext                               config.Destination
+	screenFail                               *config.Destination
+	screenDigit                              byte       // the key the robot test asks for
 	why                                      []string   // how it was routed, in plain words (guarded by mu)
 	presented                                string     // the caller ID sent out on a trunk
 	endCode                                  int        // the SIP failure an unanswered call ended with
@@ -383,7 +388,11 @@ func (c *Call) startFork(t target, stageNo int) bool {
 		localSeq: 1, stage: stageNo, confirm: t.confirm}
 	c.mu.Lock()
 	fromNum, fromName := c.from, c.fromName
+	outside := c.inTrunkID != "" && c.linkID == "" && c.direction == "inbound"
 	c.mu.Unlock()
+	if outside && t.ext != "" && t.trunk == nil && !anonymous(fromNum) {
+		e.noteLastCaller(t.ext, fromNum, fromName) // for the block-last-caller code
+	}
 	var rcd *config.Brand
 	signCID := ""
 	if t.trunk != nil {
@@ -1101,6 +1110,14 @@ func (c *Call) answerLocal(p plan) {
 		if c.answerHere(p.toName) {
 			go c.runAGI(p.box)
 		}
+	case "screentest":
+		if c.answerHere(p.toName) {
+			go c.runScreenTest()
+		}
+	case "blocklast":
+		if c.answerHere(p.toName) {
+			go c.blockLastCode()
+		}
 	case "receptionist":
 		if c.answerHere(p.toName) {
 			go c.runReceptionist(p.box)
@@ -1390,8 +1407,9 @@ func (c *Call) writeRecord(info CallInfo, recording string) {
 		r.TakenBy, r.TakenName = c.takenBy, c.takenName
 	}
 	if c.screen != nil {
-		r.Attest, r.Verified, r.Screened = c.screen.Attest, c.screen.Verified, c.screened
+		r.Attest, r.Verified = c.screen.Attest, c.screen.Verified
 	}
+	r.Screened = c.screened
 	r.Why = append([]string(nil), c.why...) // c.mu is held here
 	if c.callee != nil {
 		r.AnsweredExt = c.callee.Ext

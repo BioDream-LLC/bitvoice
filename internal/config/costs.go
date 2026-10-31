@@ -273,6 +273,35 @@ func SameNumber(a, b string) bool {
 	return len(da) >= 10 && len(db) >= 10 && da[len(da)-10:] == db[len(db)-10:]
 }
 
+// NumberForms are the ways one number may be written in call records: as given, digits only, with +,
+// with 00 or 011 before it, and its last ten digits alone or with 1, +1 or 0 before them. Call records
+// keep numbers as phones dialled them and providers sent them; SameNumber confirms a match.
+func NumberForms(n string) []string {
+	d := digitsOnly(n)
+	if d == "" {
+		return nil
+	}
+	forms := []string{n, d, "+" + d, "00" + d, "011" + d}
+	if len(d) > 10 {
+		t := d[len(d)-10:]
+		forms = append(forms, t, "1"+t, "+1"+t, "0"+t)
+	} else if len(d) == 10 {
+		forms = append(forms, "1"+d, "+1"+d)
+		if d[0] == '0' {
+			forms = append(forms, d[1:])
+		}
+	}
+	seen := map[string]bool{}
+	out := forms[:0]
+	for _, f := range forms {
+		if !seen[f] {
+			seen[f] = true
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
 func (c *Config) validateScreening(p *Problems) {
 	s := &c.System.Screening
 	choose := func(f string, v *string, def string, ok ...string) {
@@ -289,11 +318,19 @@ func (c *Config) validateScreening(p *Problems) {
 	choose("system.screening.failed", &s.Failed, "label", "allow", "label", "block")
 	choose("system.screening.unverified", &s.Unverified, "allow", "allow", "label")
 	choose("system.screening.anonymous", &s.Anonymous, "allow", "allow", "label", "block")
+	choose("system.screening.unknown", &s.Unknown, "ring", "ring", "test", "send")
+	if s.UnknownTo != nil && s.UnknownTo.Type == "" {
+		s.UnknownTo = nil
+	}
+	if s.Unknown == "send" && s.UnknownTo == nil {
+		p.add("system.screening.unknownTo", "choose where callers BitVoice does not know go (a voicemail box, say)")
+	}
+	c.validateReputation(p)
 	s.Label = strings.TrimSpace(s.Label)
 	if len(s.Label) > 20 || strings.ContainsAny(s.Label, "\"<>\r\n") {
 		p.add("system.screening.label", "use up to 20 characters, without quotes or angle brackets")
 	}
-	for name, list := range map[string][]ScreenNumber{"blocked": s.Blocked, "allowed": s.Allowed} {
+	for name, list := range map[string][]ScreenNumber{"blocked": s.Blocked, "allowed": s.Allowed, "dismissed": s.Dismissed} {
 		for i := range list {
 			n := &list[i]
 			n.Number = strings.NewReplacer(" ", "", "-", "", "(", "", ")", "", ".", "").Replace(strings.TrimSpace(n.Number))
@@ -308,6 +345,45 @@ func (c *Config) validateScreening(p *Problems) {
 		if !pool.AppendCertsFromPEM([]byte(r)) {
 			p.add("system.screening.stiRoots", "paste the certificates in PEM form (-----BEGIN CERTIFICATE-----)")
 		}
+	}
+}
+
+func (c *Config) validateReputation(p *Problems) {
+	r := &c.System.Screening.Reputation
+	r.URL, r.Field, r.SpamText = strings.TrimSpace(r.URL), strings.TrimSpace(r.Field), strings.TrimSpace(r.SpamText)
+	if r.Action == "" {
+		r.Action = "label"
+	}
+	if r.Action != "label" && r.Action != "test" && r.Action != "block" {
+		p.add("system.screening.reputation.action", "choose label, test or block")
+	}
+	if r.URL == "" {
+		return
+	}
+	const f = "system.screening.reputation."
+	u, err := url.Parse(strings.NewReplacer("{number}", "0", "{e164}", "0").Replace(r.URL))
+	switch {
+	case err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http"):
+		p.add(f+"url", "enter an https:// address, with {number} or {e164} where the caller's number goes")
+	case u.Scheme == "http" && !loopbackHost(u.Hostname()):
+		p.add(f+"url", "use https: callers' numbers would cross the network unencrypted (http only to this computer)")
+	case !strings.Contains(r.URL, "{number}") && !strings.Contains(r.URL, "{e164}"):
+		p.add(f+"url", "put {number} or {e164} in the address where the caller's number goes")
+	}
+	if r.Field == "" || !jsonPathRe.MatchString(r.Field) {
+		p.add(f+"field", "enter where the verdict is in the answer, a dotted path such as result.score")
+	}
+	if r.SpamAt == 0 {
+		r.SpamAt = 1
+	}
+	if r.TimeoutMS == 0 {
+		r.TimeoutMS = 1500
+	}
+	if r.TimeoutMS < 100 || r.TimeoutMS > 3000 {
+		p.add(f+"timeoutMs", "between 100 and 3000 milliseconds: a call waits this long at most")
+	}
+	if r.CacheHours < -1 || r.CacheHours > 24*30 {
+		p.add(f+"cacheHours", "between 0 and 720 hours, or -1 to never keep an answer")
 	}
 }
 

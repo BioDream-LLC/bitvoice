@@ -1015,6 +1015,7 @@ type FeatureCodes struct {
 	WakeUp             string `json:"wakeUp"`             // *62 books, hears or cancels a wake-up call
 	RoomStatus         string `json:"roomStatus"`         // *68 then a digit: housekeeping reports a room's status
 	Toggle             string `json:"toggle"`             // *28 then a toggle's code switches it over and back
+	BlockLast          string `json:"blockLast"`          // *32 puts the last outside caller to ring this extension on the block list
 }
 
 // Door opens a door from a call with a door station: the person answering presses Code, or the button on
@@ -1293,6 +1294,42 @@ type Screening struct {
 	// STIRoots are the STI certificate authorities (PEM) a caller's certificate must chain to when the
 	// call carries a signed Identity header; empty checks the signature only.
 	STIRoots string `json:"stiRoots"`
+	// Unknown is what happens to a caller BitVoice does not know (not always allowed, not in the
+	// contacts, not called from here in the last year, not past the robot test in the last 90 days):
+	// ring (default); test, the robot test (press the key it names) before anything rings; or send,
+	// straight to UnknownTo.
+	Unknown string `json:"unknown"`
+	// UnknownTo is where unknown callers go with Unknown "send" (voicemail, say); with "test", where a
+	// caller who fails the test goes (none: they hear goodbye).
+	UnknownTo *Destination `json:"unknownTo,omitempty"`
+	// Reputation asks a spam database about callers BitVoice does not know (off without a URL).
+	Reputation Reputation `json:"reputation"`
+	// Dismissed are numbers someone said are not spam: they are never suggested for blocking again.
+	Dismissed []ScreenNumber `json:"dismissed"`
+}
+
+// Reputation is a spam database asked about each unknown caller (Nomorobo through Twilio Lookup, or any
+// service that answers in JSON). Such services charge per lookup; known callers are never looked up.
+type Reputation struct {
+	// URL is the https address to ask, with {number} (as the provider sent it) or {e164} where the
+	// caller's number goes.
+	URL      string `json:"url"`
+	Username string `json:"username"` // basic authentication (for Twilio, the account SID and auth token)
+	Password string `json:"password"`
+	// Field is where the verdict is in the JSON answer, a dotted path such as
+	// add_ons.results.nomorobo_spamscore.result.score.
+	Field string `json:"field"`
+	// SpamAt: a number at or above it means spam (default 1). true always means spam; text means spam
+	// when it equals SpamText (BLOCK, say), case aside.
+	SpamAt   float64 `json:"spamAt"`
+	SpamText string  `json:"spamText"`
+	// Action is what happens to a caller it calls spam: label (default), test (the robot test) or block.
+	Action string `json:"action"`
+	// TimeoutMS is the longest a call waits for the answer (default 1500, at most 3000); a slow or broken
+	// service never holds a call up longer, and the call goes on as if the answer were "not spam".
+	TimeoutMS int `json:"timeoutMs"`
+	// CacheHours keeps each answer (default 24; -1 never keeps one).
+	CacheHours int `json:"cacheHours"`
 }
 
 // ScreenNumber is a number (or a prefix ending in *) on a block or allow list.
@@ -2026,6 +2063,7 @@ func (c *Config) Validate() error {
 		{"system.codes.wakeUp", &codes.WakeUp, "*62", "the wake-up call code", false},
 		{"system.codes.roomStatus", &codes.RoomStatus, "*68", "the room status code", true},
 		{"system.codes.toggle", &codes.Toggle, "*28", "the toggle code", true},
+		{"system.codes.blockLast", &codes.BlockLast, "*32", "the block-the-last-caller code", false},
 	} {
 		*fc.v = strings.TrimSpace(*fc.v)
 		if *fc.v == "" {
@@ -3004,6 +3042,9 @@ func (c *Config) Validate() error {
 	}
 	if em := &c.System.EmergencyMode; em.On || em.Destination.Type != "" {
 		checkDest("system.emergencyMode.destination", &em.Destination)
+	}
+	if d := c.System.Screening.UnknownTo; d != nil {
+		checkDest("system.screening.unknownTo", d)
 	}
 	for i, n := range c.System.EmergencyMode.Allowed {
 		if !extNumbers[n] {

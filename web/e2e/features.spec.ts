@@ -1509,3 +1509,53 @@ test('the screens in German, and back to English', async ({ browser, page: first
     await ctx.close()
   }
 })
+
+// Spam protection: unknown callers sent elsewhere or given the robot test, a spam database set up from
+// its preset, suggestions from the call history, and the block-last-caller code.
+test('spam protection: unknown callers, spam database, block the last caller', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/#/settings')
+  const settings = async () => page.evaluate(async () => (await (await fetch('./api/settings')).json()).system.screening)
+  await page.getByLabel('Unknown callers', { exact: true }).selectOption('send')
+  await page.getByRole('button', { name: 'Save' }).first().click()
+  await expect(page.getByText('choose where callers BitVoice does not know go').first()).toBeVisible()
+  await page.getByLabel('Unknown callers go to').selectOption({ index: 1 })
+  await page.getByRole('button', { name: 'Save' }).first().click()
+  await expect(page.getByText('Settings saved').first()).toBeVisible()
+  let sc = await settings()
+  expect(sc.unknown).toBe('send')
+  expect(sc.unknownTo.type).toBeTruthy()
+
+  // The robot test with no words recorded: Health says the calls ring as usual.
+  await page.getByLabel('Unknown callers', { exact: true }).selectOption('test')
+  await expect(page.getByText('The test needs its words recorded')).toBeVisible()
+  await page.getByRole('button', { name: 'Save' }).first().click()
+  await expect(page.getByText('Settings saved').first()).toBeVisible()
+  const health = await page.evaluate(async () => (await (await fetch('./api/health')).json()).items)
+  expect(health.some((c: { id: string }) => c.id === 'screening-prompts')).toBe(true)
+
+  // The spam database from its preset.
+  await page.getByRole('button', { name: 'Use Nomorobo through Twilio' }).click()
+  await expect(page.getByLabel('Verdict field')).toHaveValue('add_ons.results.nomorobo_spamscore.result.score')
+  await page.getByRole('region', { name: 'Spam protection' }).getByLabel('Username', { exact: true }).fill('AC-test-account')
+  await page.getByLabel('When it says spam').selectOption('test')
+  await page.getByRole('button', { name: 'Save' }).first().click()
+  await expect(page.getByText('Settings saved').first()).toBeVisible()
+  sc = await settings()
+  expect(sc.reputation.url).toContain('lookups.twilio.com')
+  expect(sc.reputation.action).toBe('test')
+  await expect(page.getByRole('heading', { name: 'Suggested from your calls' })).toBeVisible()
+
+  // Back as it was.
+  await page.getByRole('button', { name: 'Switch off' }).click()
+  await page.getByLabel('Unknown callers', { exact: true }).selectOption('ring')
+  await page.getByRole('button', { name: 'Save' }).first().click()
+  await expect(page.getByText('Settings saved').first()).toBeVisible()
+  sc = await settings()
+  expect(sc.unknown).toBe('ring')
+  expect(sc.reputation.url).toBe('')
+
+  await page.goto('/#/codes')
+  await expect(page.getByText('Block the last caller')).toBeVisible()
+  await expect(page.getByLabel('Block the last caller')).toHaveValue('*32')
+})

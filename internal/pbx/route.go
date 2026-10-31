@@ -692,7 +692,11 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 			}
 			c.facts = readPolicyFacts(m, offer)
 		}
-		if refuse := e.screenCall(cfg, c, m, trunk, did); refuse != "" {
+		if refuse := e.screenCall(cfg, c, m, trunk, did, emergencyTrunk); refuse != "" {
+			tx.Respond(sip.NewResponse(m, 603, refuse))
+			return
+		}
+		if refuse := e.screenUnknown(cfg, c, trunk, did, emergencyTrunk); refuse != "" {
 			tx.Respond(sip.NewResponse(m, 603, refuse))
 			return
 		}
@@ -720,7 +724,11 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 		if c.screened == "labelled" {
 			c.note("The caller was labelled as possible spam (Screening).")
 		}
-		p = e.resolveFor(cfg, route.Destination, 0, scriptCall{from: c.from, fromName: c.fromName, to: did, direction: "inbound", trunk: trunk.Name, real: true})
+		sc := scriptCall{from: c.from, fromName: c.fromName, to: did, direction: "inbound", trunk: trunk.Name, real: true}
+		p = e.resolveFor(cfg, route.Destination, 0, sc)
+		if up, ok := e.unknownPlan(cfg, c, route.Destination, sc); ok {
+			p = up
+		}
 		c.testCall = trunk.ESInet && IsTestCall(m.RequestURI)
 		if p.local == "esrp" {
 			p = e.esrpPlan(cfg, c, did)

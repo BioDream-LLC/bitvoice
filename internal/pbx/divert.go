@@ -362,6 +362,8 @@ func (e *Engine) featureCode(cfg *config.Config, caller *config.Extension, diall
 		return local("grouppickup", "", "Call pickup")
 	case is(fc.WakeUp):
 		return local("wakeup", "", "Wake-up call")
+	case is(fc.BlockLast):
+		return local("blocklast", "", "Block the last caller")
 	}
 	for _, code := range []string{fc.ForwardAll, fc.ForwardBusy, fc.ForwardNoAnswer} {
 		if n, ok := prefixed(code); ok && len(n) >= 2 {

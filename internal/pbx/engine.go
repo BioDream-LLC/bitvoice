@@ -50,11 +50,17 @@ type Engine struct {
 	Speech *whisper.Manager
 	// SetEmergencyMode, set by the API server, switches emergency mode from a phone (the feature code).
 	SetEmergencyMode func(on bool, by string) error
-	late             lateRings
-	presence         presences
-	Log              *slog.Logger
-	Bus              *events.Bus
-	Recorder         Recorder
+	// KnownCaller, set by the API server, says why a caller's number is known (in the contacts, called
+	// from here, past the robot test), or "" when it is not: unknown callers may be screened.
+	KnownCaller func(number string) string
+	// BlockNumber, set by the API server, puts a number on the block list (the block-last-caller code);
+	// ErrAlwaysAllowed when it is always allowed.
+	BlockNumber func(number, by, note string) error
+	late        lateRings
+	presence    presences
+	Log         *slog.Logger
+	Bus         *events.Bus
+	Recorder    Recorder
 	// TLS, when set, also serves SIP over TLS on the port after the SIP port (5061 next to 5060).
 	TLS *tls.Config
 	// TLSClient is used when connecting out over TLS: it carries the certificate to present.
@@ -137,6 +143,9 @@ type Engine struct {
 	checkerRoots  string
 	away          aways
 	lastEmergency atomic.Int64 // unix seconds of the last emergency call, so a call back is never blocked
+	reps          reputations  // the spam database's answers
+	lastMu        sync.Mutex
+	lastCallers   map[string]lastCaller // extension -> the last outside caller to ring it (for *32)
 
 	hot      hotDesks
 	div      diverts

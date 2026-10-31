@@ -144,6 +144,7 @@ func (s *Server) liveRoutes() {
 	s.srvRoutes()
 	s.mobileRoutes()
 	s.emergencyModeRoutes()
+	s.screeningRoutes()
 	s.automationRoutes()
 	s.contactRoutes()
 	s.compatibilityRoutes()
@@ -492,6 +493,9 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request, u store.User) {
 	}
 	if ps := cfg.System.PSAP; ps.AgencyID == "" && (ps.EIDOURL != "" || ps.ALIAddress != "") {
 		add("agency-id", "warn", "This PSAP has no agency ID", "EIDOs and the i3 log go to CAD without naming the agency that took the call. Set Agency ID in the 911 settings (a domain, like psap.county.example.gov).", "/psap")
+	}
+	if miss := s.Engine.ScreeningPromptsMissing(&cfg); len(miss) > 0 {
+		add("screening-prompts", "warn", "The robot test cannot be given yet", "Spam protection asks callers to press a key, but "+strings.Join(miss, ", ")+" is not recorded in the callers' language, so those calls ring as usual. Record them, or make them with a speech service, in Sounds (prompts: screening and numbers).", "/sounds")
 	}
 	for _, w := range emergencyRouteWarnings(cfg) {
 		add("emergency-route", "warn", w[0], w[1], "/routes")

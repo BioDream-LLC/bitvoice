@@ -64,6 +64,8 @@ func (s *Server) WireEngine() {
 	eng.SaveGuests = func(g []pbx.Guest) error { return st.SaveState("guests", g) }
 	eng.Mobile = s
 	eng.SetEmergencyMode = s.SetEmergencyMode
+	eng.KnownCaller = s.KnownCaller
+	eng.BlockNumber = s.BlockNumber
 	eng.OnFax = s.FaxReceived
 	eng.OnEmergencyAnswer = s.EmergencyAnswered
 	eng.OnVideoRecord = s.recordCallVideo

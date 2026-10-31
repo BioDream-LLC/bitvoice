@@ -154,6 +154,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | Hotel (FIAS) | Checked against a reference | every record BitVoice sends checked against Oracle's published FIAS 2.20.23 specification (link start, link records, postings, wake-up answers); own tests. Not yet against Opera itself |
 | Texting, WhatsApp, Messenger, web chat | Checked against a reference (Twilio, Telnyx, Bandwidth, Vonage, TextMagic, WhatsApp) | Texts through Twilio, Telnyx, Bandwidth, Vonage and TextMagic, and WhatsApp texts, templates and template lists, against mocks built from the providers' own published OpenAPI specifications (Stoplight Prism, refusing anything the specification does not allow; TextMagic's is the one its own client is generated from). Vonage's showed the key belongs in HTTP Basic, no longer in the form. SignalWire speaks Twilio's API; Plivo, Flowroute, VoIP.ms and Messenger publish no specification and are checked against stand-ins written from their documentation. No live account tried |
 | CRM caller cards, Azure Blob, Azure Key Vault | Checked against a reference | EspoCRM (a real open-source CRM, in Docker) for caller cards; Microsoft's Azurite emulator for Blob uploads (container SAS, refusals); Lowkey Vault for Key Vault with a managed identity. Not yet against Azure itself or a hosted CRM |
+| Spam screening: robot test, unknown callers, spam database, *32, suggestions | Software-tested | BitVoice's own tests: a provider calling in over SIP and pressing keys (RFC 4733) at the robot test, passing and failing it; known, always-allowed and emergency call-back callers ringing at once; the spam database against a stand-in that answers the way Twilio documents its Lookup with the Nomorobo add-on (no Twilio account tried); *32 from a desk phone; suggestions from call records; the settings through the browser tests. Not yet tried against real robocalls or a paid database |
 | iPhone and Android apps | Field-tested (Android) | Android: a Google Pixel 8 (Android 16, Wi-Fi) with the signed release build against BitVoice on EC2 with a Let's Encrypt certificate: paired by link, rang with Android's call notification, answered from it, audio both ways, kept connected with the screen off and in the background (its ongoing-call notification, Hang up); without push it does not ring in the background. A Google Pixel 11 (Android 17) in AWS Device Farm: paired, rang, answered, called out; Opus, MOS 4.1. iPhone: the app (SwiftUI, CallKit, PushKit VoIP) builds against the current SDK (Xcode 27) and the server signs Apple VoIP pushes (APNs, ES256); the same real-device fixes as Android and an App Store listing (ios/AppStore) are in. Both apps are a full extension: transfer (blind, over REFER), hold and a second call, keypad and mute, with Recents, visual Voicemail (with transcripts), a Team busy-lamp, Contacts, the staff Chat (colleagues with presence, direct messages and rooms, with a notification in the background and a push when the app is closed), a video-room picker (lists the SFU rooms with who is in each, joins as the extension, shown as a video call on the phone call screen) and a live AI transcript on the call (AI.LiveCallTranscripts); transfer, hold, the live transcript, the chat reaching a colleague, the room list, a room joined by a phone and the chat push shape are each covered by an engine-level, API or browser test. On the Pixel 8 (2026-10-30, debug build, EC2 with Let's Encrypt): rang and answered from the notification, held and resumed (the Android call state follows), called out on the Android call system, Opus both ways with MOS 4.38 and no loss; joined a video room with its camera (asked for at first use) and saw a desktop camera, both live; a chat message in the background notified and opened Chat. Hold and transfer reach the native call screen (CallKit, Telecom). Not yet run on an iPhone or submitted: push, the system call screen and signing need our own Apple Developer account |
 | 911 profile, radio console, NG911 Core Services, caller video | Lab | NENA's schemas and sample data, Wireshark, spandsp, OpenSSL, ExifTool, ffmpeg, a NIST P25 capture (its IMBE voice frames unpacked as mbelib unpacks them: same pitch, harmonics, voicing and amplitudes); never on a live ESInet, P25 system or PSAP CAD, and not certified |
 | P25 Phase 2 half-rate voice (AMBE+2) | Not offered | patented until 2028 |
@@ -1190,14 +1191,38 @@ It works the same when the AI receptionist hands a caller to a person: the brief
 It needs the AI service and a speech-to-text model (Settings, AI), and the call's audio so far (up to five minutes) is sent to that service to be written out. A summary takes a few seconds, so it may appear just after the phone starts ringing.`,
   },
   {
-    id: 'spam', title: 'Spam protection and STIR/SHAKEN', route: '/settings', keys: 'spam robocall block number blocklist stir shaken attestation verstat spoof spoofed caller id withheld anonymous label sign signing sti certificate identity header passport x5u',
+    id: 'spam', title: 'Spam protection and STIR/SHAKEN', route: '/settings', keys: 'spam robocall robot test captcha unknown callers press 1 block number blocklist block last caller *32 nomorobo twilio lookup reputation database suggestions stir shaken attestation verstat spoof spoofed caller id withheld anonymous label sign signing sti certificate identity header passport x5u',
     body: `In the US and Canada, the provider a call starts with signs its caller ID (**STIR/SHAKEN**): **A** when it knows the caller may use the number, **B** when it knows the caller but not the number, **C** when it only passed the call on. Your provider either tells BitVoice its verdict (verstat) or passes the signed Identity header on, which BitVoice then checks itself: the signature, that it is under a minute old, and that it names the numbers of this call. The verdict shows as **Verified**, **Partly verified**, **Unverified** or **Not verified** on Live calls and in Call history.
 
 ::figure spam
 
 In Settings, **Spam protection**, choose what happens when a caller ID fails verification (ring, ring labelled, or refuse), when it is not verified at all, and when the number is withheld. A labelled call rings with **Spam?** (or your own label) before the caller's name. **Blocked numbers** are refused; an entry ending in * blocks a range (+1900* is every US premium-rate number). **Always allowed** numbers are never refused or labelled. In Call history, the block button beside a caller adds them to the list; refused calls are listed as **Blocked**.
 
-Within an hour of an emergency call from any extension, no call is refused (blocked ones ring labelled instead), in case it is the emergency service calling back.
+Within an hour of an emergency call from any extension, no call is refused (blocked ones ring labelled instead), in case it is the emergency service calling back. A 911 call (from the ESInet or a CAMA trunk) is never refused or held up by screening.
+
+## Callers BitVoice does not know
+A caller is **known** when the number is **always allowed**, in the [contacts](#contacts), was called from here in the last year, or passed the robot test in the last 90 days. Numbers are matched however they are written (with or without the country code, 1, 0 or +). Under **Callers BitVoice does not know**, choose what happens to everyone else:
+
+| Choice | What the caller gets |
+|---|---|
+| **Ring as usual** | the call rings like any other (the default) |
+| **Robot test first** | BitVoice answers and says "To be connected, please press" and a digit, which changes each call. The right key puts them through to where the call was going; anything else, or nothing (twice), and they go to **Callers who fail the test go to**, or hear goodbye. Robocallers do not press it |
+| **Send somewhere else** | nothing rings: they go straight to the place chosen, a voicemail box say |
+
+The robot test needs its words: in [Sounds](#/sounds), record or make (with a speech service) the **screening** prompts and the numbers 1 to 9 in the callers' language. Until they are recorded those calls ring as usual (a caller cannot pass a test they cannot hear), and Health says so. A caller who passes counts as known for 90 days. The test answers the call, so the caller's provider starts charging them from that moment, as for any answered call. Call history shows each call's result (**passed**, **failed**, **sent**) and the why trail says what happened.
+
+## A spam database
+BitVoice can ask a reputation service about each unknown caller before the call rings. **Use Nomorobo through Twilio** fills in Twilio Lookup with the Nomorobo spam score (install the Nomorobo add-on in your Twilio account, then enter its account SID and auth token); any other service that answers in JSON works too: give its address with \`{e164}\` (+12125550142) or \`{number}\` (as the provider sent it), where its verdict is (**Verdict field**, a dotted path), and when it means spam (a score at or above **Spam at score**, true, or the text in **Or spam when the text is**, such as BLOCK). Choose what happens to a caller it calls spam: ring labelled, the robot test, or refused.
+
+- These services **charge per lookup**. Known callers are never looked up, and each answer is kept for a day (**Keep answers**).
+- A slow or broken service never holds a call up: after **Wait at most** (1.5 seconds unless you change it) the call rings as if the answer were "not spam".
+- **Test** asks it about a number now (and is charged like any lookup).
+
+## Block the last caller
+Right after an unwanted call, dial **\*32** ([Feature codes](#codes)) from the phone it rang: the last outside number that rang that extension in the last day goes on the block list, and the phone reads the number back. An always-allowed number is not blocked, and the phone says so. Each one is in the Audit log, with who blocked it.
+
+## Suggested from your calls
+BitVoice reads the last 30 days of calls from outside for numbers that call again and again and are got rid of at once: three calls or more, nearly all of them over within 10 seconds, or two robot tests failed, and never a real conversation (someone talking 30 seconds or more). Known numbers are left out. Each comes with why; **Block** puts it on the block list and **Not spam** means it is never suggested again. Nothing is blocked until a person says so.
 
 To check certificates against the STI authorities, paste their certificates under **STI certificate authorities**; without them, BitVoice checks that the call was signed with the certificate it names but not who issued that certificate.
 
@@ -1447,6 +1472,7 @@ Choose **Everyone's video** and the room gets its own page (Conference rooms, **
 | \`*62\` | wake-up call: hear it, book one (four digits, such as 0630) or cancel it (star) |
 | \`*68\` and a digit | room status, for housekeeping in hotels |
 | \`*28\` and a toggle's code | switch a [day/night toggle](#toggles) over, or back |
+| \`*32\` | block the last caller: the last outside number that rang this phone goes on the block list ([Spam protection](#spam)) |
 | \`*43\` | the echo test |
 | \`*97\` | your voicemail |
 | \`70\` | park a call (transfer it here); 71 to 79 pick it up |
