@@ -1181,7 +1181,7 @@ test("a video room with everyone's video (SFU, simulcast)", async ({ page, brows
   await expect.poll(async () => { const [big, small] = await sizes(page); return big > small && small > 0 }, { timeout: 30_000 }).toBe(true)
   const before = await sizes(page)
   // Making the small one big swaps the sizes, switched at the next full picture.
-  await page.getByRole('button', { name: 'Make big' }).click()
+  await page.getByRole('button', { name: /^Make .+ big$/ }).click()
   await expect.poll(async () => { const [a, b] = await sizes(page); return a < b && a > 0 }, { timeout: 30_000 }).toBe(true)
   expect(before[0]).toBeGreaterThan(before[1])
   // The API lists three cameras, with their layers and viewers.

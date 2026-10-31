@@ -1,0 +1,104 @@
+<section class="hero hero-split mobile-hero">
+  <div class="wrap">
+    <div class="hero-copy">
+    <p class="eyebrow">The phone apps · Android, and iPhone soon</p>
+    <h1>Your office extension, in your pocket</h1>
+    <p class="lede">The BitVoice app makes a mobile phone one of an extension's phones. Calls ring on the phone's own call
+      screen, even when the app is closed, and everything a desk phone does is there: transfer, hold, a second call,
+      voicemail you can read, the team at a glance, staff chat and video rooms.</p>
+    <div class="actions">
+      <a class="btn btn-primary" href="#get-it">ICON:phone Get the app</a>
+      <a class="btn btn-ghost" href="/manual/#mobile">How pairing works</a>
+    </div>
+    <p class="hero-note">Free, like BitVoice. No account to make, no password to type: your administrator shows a code and you
+      scan it. No advertising, analytics or tracking (<a href="/privacy/">privacy</a>).</p>
+    </div>
+    <img class="hero-art" src="/assets/mobile/fan.png" width="1300" height="1240"
+      alt="Three phones running BitVoice: a live transcript of a call, an incoming call from Sam Okafor with Answer and Decline, and a video room with three people.">
+  </div>
+</section>
+
+<div class="strip"><div class="wrap">
+  <div><b>Rings</b><span>On the phone's call screen, even with the app closed</span></div>
+  <div><b>Encrypted</b><span>Calls between the phone and BitVoice (SRTP over DTLS)</span></div>
+  <div><b>MOS 4.4</b><span>Measured on a Pixel 8 over Wi-Fi, no packets lost</span></div>
+  <div><b>$0</b><span>No per-user fee, no app subscription</span></div>
+</div></div>
+
+<section class="band"><div class="wrap">
+  <div class="intro">
+    <p class="eyebrow">Every screen, from a real phone</p>
+    <h2>A desk phone, and more</h2>
+    <p>These are screenshots from a Google Pixel 8 running the release build of the Android app, connected to BitVoice on a cloud server.
+      The business, people, calls and messages are invented.</p>
+  </div>
+  <div class="phone-grid">
+    <figure><img src="/assets/mobile/phone-incoming.png" width="640" height="1300" loading="lazy" alt="An incoming call from Sam Okafor, extension 101, with Answer and Decline on Android's call notification, and the caller's history: four calls in 90 days."><figcaption><b>Rings like a phone call</b>Android's own call screen, with who is calling and how often they have.</figcaption></figure>
+    <figure><img src="/assets/mobile/phone-transcript.png" width="640" height="1300" loading="lazy" alt="A call in progress with a live transcript: Sam Okafor says the client approved the new lobby design and asks to send the final drawings on Friday."><figcaption><b>A live transcript</b>What the caller says, written down as they speak, by speech to text on your own BitVoice.</figcaption></figure>
+    <figure><img src="/assets/mobile/phone-voicemail.png" width="640" height="1300" loading="lazy" alt="Two voicemails, from Priya Nair and Lee Chen, each with its transcript, a call-back button, a delete button and a player."><figcaption><b>Voicemail you can read</b>Every message transcribed. Play it, call back or delete it in one tap.</figcaption></figure>
+    <figure><img src="/assets/mobile/phone-team.png" width="640" height="1300" loading="lazy" alt="The Team tab: Sam Okafor and Marco Ruiz on a call, Lee Chen and Priya Nair free, the Front desk not connected, each with a call button."><figcaption><b>The team at a glance</b>Who is free, ringing, on a call or away, before you ring them.</figcaption></figure>
+    <figure><img src="/assets/mobile/phone-chat.png" width="640" height="1300" loading="lazy" alt="The Studio chat room: messages from Priya Nair, Marco Ruiz, Sam Okafor and Lee Chen about lobby samples and a courier, and Dana's own reply."><figcaption><b>Staff chat</b>Direct messages and team rooms, with a notification when a message arrives.</figcaption></figure>
+    <figure><img src="/assets/mobile/phone-room.png" width="640" height="1300" loading="lazy" alt="The Weekly standup video room with three cameras: Lee Chen large, Priya Nair and Marco Ruiz small."><figcaption><b>Video rooms</b>Everyone's camera, one tap from the phone, shown as a video call on the call screen.</figcaption></figure>
+    <figure><img src="/assets/mobile/phone-rooms.png" width="640" height="1300" loading="lazy" alt="The video room picker: Weekly standup with three people in it, Client review with a PIN, and Design crit."><figcaption><b>Pick a room</b>The rooms you can join, with how many are in each now.</figcaption></figure>
+    <figure><img src="/assets/mobile/phone-recents.png" width="640" height="1300" loading="lazy" alt="Recent calls: missed calls from Priya Nair and Lee Chen in red, answered calls from Sam Okafor in green."><figcaption><b>Recents</b>Calls in, out and missed. Tap one to call back.</figcaption></figure>
+    <figure><img src="/assets/mobile/phone-keypad.png" width="640" height="1300" loading="lazy" alt="The keypad for extension 100, Dana Reyes, with Call, Contacts and Join a video room."><figcaption><b>Your office number, anywhere</b>Call extensions and outside numbers with your office caller ID.</figcaption></figure>
+  </div>
+</div></section>
+
+<section class="band soft"><div class="wrap">
+  <div class="split">
+    <div>
+      <p class="eyebrow">How it rings</p>
+      <h2>Woken for calls, then straight to BitVoice</h2>
+      <p>When a call comes in, BitVoice sends a push (Firebase on Android, Apple's VoIP push on iPhone) that carries only the
+        call's ID, who is calling and your BitVoice's address. The phone shows the call on its own call screen and connects to your BitVoice for the
+        sound. Ring groups and queues ring the app together with the extension's other phones.</p>
+      <ul class="ticks">
+        <li>Answer from the lock screen or a Bluetooth headset</li>
+        <li>Calls you make go on the phone's call system too (Telecom, CallKit), so Bluetooth and the phone know of them</li>
+        <li>Hold shows on the phone's call system, and on iPhone it works from the call screen too</li>
+        <li>Calls keep going with the screen off or another app open</li>
+        <li>Moving from Wi-Fi to mobile data keeps the call (ICE restart)</li>
+      </ul>
+    </div>
+    <div class="frame bare"><img src="/assets/mobile/pair-calls.png" width="1100" height="1200" loading="lazy"
+      alt="Two phones: an incoming call from Sam Okafor with Answer and Decline, and the Team tab showing who is free and who is on a call."></div>
+  </div>
+</div></section>
+
+<section class="band" id="get-it"><div class="wrap">
+  <div class="door-grid">
+    <div class="door">
+      <p class="eyebrow">Android</p>
+      <h2>Google Play</h2>
+      <p>The app is going through Google's review now. Until it is listed, the signed app is attached to each
+        <a href="https://github.com/BioDream-LLC/bitvoice/releases">BitVoice release</a>.</p>
+      <ul class="ticks"><li>Android 10 and later</li><li>Tested on a Pixel 8 (Android 16) and a Pixel 11 (Android 17)</li></ul>
+    </div>
+    <div class="door">
+      <p class="eyebrow">iPhone</p>
+      <h2>App Store, soon</h2>
+      <p>The iPhone app (CallKit, Apple's VoIP push) is built and ready for the App Store. It has not been run on an
+        iPhone yet: that, and the App Store listing, come next.</p>
+      <ul class="ticks"><li>iOS 16 and later</li><li>The same screens as Android</li></ul>
+    </div>
+    <div class="door">
+      <p class="eyebrow">Your administrator</p>
+      <h2>Pair a phone</h2>
+      <p>Open the extension in BitVoice, press <b>Add a phone</b>, and the person scans the code with the app. Unpair a lost
+        phone from the same page and it stops ringing at once.</p>
+      <div class="actions"><a class="btn btn-line" href="/manual/#mobile">ICON:book The manual's chapter</a></div>
+    </div>
+  </div>
+</div></section>
+
+<section class="calltoaction">
+  <div class="wrap">
+    <h2>Run BitVoice, then pair your phone</h2>
+    <p>The apps talk only to your organisation's BitVoice. Download it, follow the wizard, and add a phone to an extension.</p>
+    <div class="actions">
+      <a class="btn btn-primary" href="/download/">ICON:download Download {{VERSION}}</a>
+      <a class="btn btn-ghost" href="https://demo.bitvoice.org">ICON:phone Try the demo</a>
+    </div>
+  </div>
+</section>

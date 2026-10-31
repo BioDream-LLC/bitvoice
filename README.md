@@ -29,7 +29,7 @@ browser opens on a setup wizard; a few minutes later a phone rings.
 
 <sub>One file, nothing to install. [ARM64 Linux and Windows, Intel Macs and checksums](#download)</sub>
 
-[**Website**](https://bitvoice.org) · [**Quick start**](#quick-start) · [**Everything it does**](#everything-it-does) · [**Public safety (lab)**](#public-safety-lab-and-design-partner-track) ·
+[**Website**](https://bitvoice.org) · [**Quick start**](#quick-start) · [**Phone apps**](#phone-apps-for-android-and-iphone) · [**Everything it does**](#everything-it-does) · [**Public safety (lab)**](#public-safety-lab-and-design-partner-track) ·
 [**What it looks like**](#what-it-looks-like) · [**Manual**](https://biodream-llc.github.io/bitvoice/manual/) ·
 [**Manual (PDF)**](docs/manual/bitvoice-manual.pdf) · [**FAQ**](#faq)
 
@@ -77,6 +77,33 @@ with the caller's building, floor and room.
    [Public safety: lab and design-partner track](#public-safety-lab-and-design-partner-track).
 
 <img src="docs/assets/architecture.svg" alt="BitVoice sits between phone carriers, the ESInet, radio systems and phones on one side, and the people answering, CAD, records and Teams or CRMs on the other. In the middle it routes, queues, records, logs and converts codecs." width="100%">
+
+## Phone apps for Android and iPhone
+
+<img src="docs/assets/mobile/hero.png" alt="BitVoice mobile: three phones showing a live call transcript, an incoming call with Answer and Decline, and a video room with three people." width="100%">
+
+**Your extension, in your pocket.** The free BitVoice app makes a mobile phone one of an extension's phones.
+Calls ring on the phone's own call screen, even when the app is closed, and ring groups and queues ring it
+with the extension's other phones. Pairing is one scan: the administrator opens the extension, presses
+**Add a phone**, and the person scans the code. No password to type, no account to make, no tracking.
+
+<table>
+<tr><td align="center" width="33%"><img src="docs/assets/mobile/phone-incoming.png" alt="An incoming call from Sam Okafor, extension 101, with Answer and Decline on Android's call notification." width="230"><br><b>Rings like a phone call</b></td><td align="center" width="33%"><img src="docs/assets/mobile/phone-transcript.png" alt="A call in progress with a live transcript of what the caller says." width="230"><br><b>A live transcript</b></td><td align="center" width="33%"><img src="docs/assets/mobile/phone-voicemail.png" alt="Two voicemails, each with its transcript, a call-back button, a delete button and a player." width="230"><br><b>Voicemail you can read</b></td></tr>
+<tr><td align="center" width="33%"><img src="docs/assets/mobile/phone-team.png" alt="The Team tab: who is on a call, who is free, who is not connected." width="230"><br><b>The team at a glance</b></td><td align="center" width="33%"><img src="docs/assets/mobile/phone-chat.png" alt="The Studio chat room with messages from four colleagues and a reply." width="230"><br><b>Staff chat</b></td><td align="center" width="33%"><img src="docs/assets/mobile/phone-room.png" alt="The Weekly standup video room with three cameras." width="230"><br><b>Video rooms</b></td></tr>
+</table>
+
+Also in the app: transfer, hold and a second call, recents with missed calls, a video-room picker that shows
+who is in each room, and staff-chat notifications. Calls are encrypted between the phone and BitVoice, and the
+live transcript and voicemail transcripts are written by speech to text on your own BitVoice server. These are
+screenshots from a Google Pixel 8 running the release build against BitVoice on a cloud server; the business,
+people and messages are invented. More on [bitvoice.org/mobile](https://bitvoice.org/mobile/).
+
+| | Status |
+|---|---|
+| **Android** (10 and later) | Going through Google Play's review. Until it is listed, the signed app (`bitvoice-android-*.apk`) is attached to each [release](https://github.com/BioDream-LLC/bitvoice/releases); uninstall it before installing from Google Play. Tested on a Pixel 8 (Android 16) and a Pixel 11 (Android 17). |
+| **iPhone** (iOS 16 and later) | Built, with CallKit and Apple's VoIP push; not yet run on an iPhone or on the App Store. |
+
+[How pairing and push work (manual)](https://biodream-llc.github.io/bitvoice/manual/#mobile) · [Privacy](https://bitvoice.org/privacy/) · [Source](mobile/)
 
 ## Everything it does
 

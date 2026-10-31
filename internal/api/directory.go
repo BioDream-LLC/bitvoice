@@ -109,27 +109,20 @@ func (s *Server) NameFor(number string) string {
 // phonePresence lists the other extensions a phone can watch and pick up for: their name, number and
 // whether they are free, on a call or ringing now (plus away). The phone's own extension is left out.
 func (s *Server) phonePresence(self string) []map[string]any {
+	// The engine's presence (as the staff chat shows it): ringing, on a call, away, or offline when no
+	// phone of the extension is connected.
 	cfg := s.config()
-	busy, ringing := s.Engine.BusyRinging()
-	away := map[string]bool{}
-	for _, a := range s.Engine.Aways() {
-		away[a.Ext] = true
-	}
+	names := map[string]string{"available": "free", "on-call": "busy", "ringing": "ringing", "away": "away", "offline": "offline"}
 	out := []map[string]any{}
-	for _, x := range cfg.Extensions {
-		if !x.Enabled || x.Kind == "door" || x.Number == self {
+	for _, c := range s.Engine.Colleagues(&cfg) {
+		if c.Extension == self {
 			continue
 		}
-		state := "free"
-		switch {
-		case ringing[x.Number]:
-			state = "ringing"
-		case busy[x.Number]:
-			state = "busy"
-		case away[x.Number]:
-			state = "away"
+		state := names[c.State]
+		if state == "" {
+			state = "free"
 		}
-		out = append(out, map[string]any{"name": x.Name, "number": x.Number, "state": state})
+		out = append(out, map[string]any{"name": c.Name, "number": c.Extension, "state": state})
 	}
 	return out
 }

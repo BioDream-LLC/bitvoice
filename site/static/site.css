@@ -50,7 +50,7 @@ pre code { background: none; border: 0; padding: 0; color: #b8f5df; font-size: 1
 /* ---- Top menu */
 .top { position: sticky; top: 0; z-index: 50; background: rgba(11,12,16,.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
 .top .wrap { display: flex; align-items: center; gap: 18px; height: 66px; }
-.brand { display: inline-flex; align-items: center; gap: 10px; color: var(--head); text-decoration: none; font: 700 1.2rem var(--display); letter-spacing: .01em; }
+.brand { display: inline-flex; flex-shrink: 0; margin-right: 10px; align-items: center; gap: 10px; color: var(--head); text-decoration: none; font: 700 1.2rem var(--display); letter-spacing: .01em; }
 .brand img { width: 30px; height: 30px; }
 .brand span b { color: var(--signal); }
 .menu { display: flex; gap: 2px; list-style: none; margin: 0; padding: 0; flex: 1; }
@@ -231,3 +231,16 @@ footer .maker { display: flex; gap: 22px; align-items: center; margin-top: 40px;
 footer .maker img { background: #fff; border-radius: 4px; padding: 6px; height: auto; }
 footer .maker p { color: var(--dim); margin: 0; }
 footer .legal { margin-top: 22px; color: #5d626d; font-size: .82rem; }
+
+/* The mobile apps: framed phone screenshots (transparent PNGs with their own frame and shadow). */
+.hero-art { width: 100%; height: auto; display: block; }
+.mobile-hero .wrap { grid-template-columns: 1fr 1.15fr; }
+@media (max-width: 960px) { .mobile-hero .wrap { grid-template-columns: 1fr; } }
+.phone-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 34px 26px; margin-top: 36px; }
+@media (max-width: 960px) { .phone-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .phone-grid { grid-template-columns: 1fr; } }
+.phone-grid figure { margin: 0; text-align: center; }
+.phone-grid img { width: 100%; max-width: 270px; height: auto; display: block; margin: 0 auto; }
+.phone-grid figcaption { color: var(--dim); font-size: .95rem; line-height: 1.5; max-width: 330px; margin: 6px auto 0; }
+.phone-grid figcaption b { display: block; color: var(--head); font-family: var(--display); font-size: 1.08rem; margin-bottom: 4px; }
+.frame.bare img { border: 0; box-shadow: none; border-radius: 0; max-width: 520px; width: 100%; margin: 0 auto; }

@@ -84,14 +84,14 @@ function Tile({ room, pin, pub, big, onPick }: { room: string; pin: string; pub:
     }
   }, [big, room, pin, layered])
   return (
-    <figure className={clsx('relative overflow-hidden rounded-lg border bg-black', big ? (screen ? 'border-sky-500' : 'border-fuchsia-500') + ' md:col-span-3 md:row-span-2' : 'border-slate-800')}>
+    <figure className={clsx('relative overflow-hidden rounded-lg border bg-black', big ? (screen ? 'border-sky-500' : 'border-fuchsia-500') + ' col-span-2 md:col-span-3 md:row-span-2' : 'border-slate-800')}>
       <video ref={video} autoPlay playsInline muted className="aspect-video w-full object-contain" aria-label={screen ? `${pub.name}'s screen` : `Video of ${pub.name}`} data-publisher={pub.id} data-kind={pub.kind} />
       <figcaption className="absolute bottom-0 left-0 right-0 flex items-center gap-2 bg-black/60 px-2 py-1 text-xs">
         {screen && <ScreenShare size={13} className="text-sky-300" aria-hidden />}
         <span className="font-medium text-slate-100">{screen ? `${pub.name}'s screen` : pub.name}</span>
         {(pub.layers?.length ?? 0) > 1 && <span className="text-fuchsia-300">{big ? 'full size' : 'small'}</span>}
         <span className={state === 'connected' ? 'text-emerald-300' : 'text-amber-300'}>{state === 'connected' ? '' : state}</span>
-        {!big && <button type="button" className="ml-auto rounded bg-slate-800 px-2 py-0.5 text-slate-200" onClick={onPick}>Make big</button>}
+        {!big && <button type="button" className="ml-auto rounded bg-slate-800 px-2 py-0.5 text-slate-200" onClick={onPick} aria-label={`Make ${pub.name} big`}>Big</button>}
       </figcaption>
     </figure>
   )
@@ -102,6 +102,15 @@ export function VideoRoom() {
   const { number = '' } = useParams()
   const { data: confs } = useConferencesQuery(undefined, { skip: !!roomPhone() })
   const conf = confs?.items.find((c) => c.number === number)
+  // Opened from a phone (no administrator session): the room's name comes from the phone's room list.
+  const [phoneRoomName, setPhoneRoomName] = useState('')
+  useEffect(() => {
+    const p = roomPhone()
+    if (!p) return
+    fetch(`./api/phone/${encodeURIComponent(p)}/video-rooms`, { headers: H() }).then((r) => (r.ok ? r.json() : { items: [] }))
+      .then((j: { items: { number: string; name: string }[] }) => setPhoneRoomName(j.items.find((x) => x.number === number)?.name ?? '')).catch(() => {})
+  }, [number])
+  const roomName = conf?.name || phoneRoomName
   const [pin, setPin] = useState('')
   const [state, setState] = useState<RoomState | null>(null)
   const [error, setError] = useState('')
@@ -205,8 +214,8 @@ export function VideoRoom() {
   // A shared screen is big unless someone made another picture big.
   const bigId = others.some((p) => p.id === big) ? big : (others.find((p) => p.kind === 'screen') ?? others[0])?.id ?? ''
   return (
-    <Page icon={Video} title={conf ? `Video room ${number} ${conf.name}` : `Video room ${number}`} accent="from-fuchsia-400 to-sky-400"
-      intro="Everyone's camera, each in its own picture, and one shared screen at a time. The room's sound is its conference: joining calls it on the browser phone, and phones dialling the room are heard too.">
+    <Page icon={Video} title={roomName ? `Video room ${number} ${roomName}` : `Video room ${number}`} accent="from-fuchsia-400 to-sky-400"
+      intro={roomPhone() ? undefined : "Everyone's camera, each in its own picture, and one shared screen at a time. The room's sound is its conference: joining calls it on the browser phone, and phones dialling the room are heard too."}>
       {conf && conf.video !== 'sfu' && <p className="mb-4 text-sm text-amber-300">This room is not set to everyone's video (Conference rooms, Video).</p>}
       {conf?.pin && !state && (
         <div className="mb-4 max-w-xs"><Field label="Room PIN" htmlFor="vrpin"><input id="vrpin" className="input font-mono" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} /></Field></div>
@@ -230,9 +239,9 @@ export function VideoRoom() {
             <span className="text-sm text-slate-400">{cameras} camera{cameras === 1 ? '' : 's'} in the room</span>
             {sharer && <span className="text-sm text-sky-300">{shared ? 'You are sharing your screen' : `${sharer.name} is sharing their screen`}</span>}
           </div>
-          <div className="grid gap-3 md:grid-cols-4" aria-label="Cameras in the room">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4" aria-label="Cameras in the room">
             {mine && (
-              <figure className="relative overflow-hidden rounded-lg border border-emerald-700 bg-black">
+              <figure className="relative col-span-1 overflow-hidden rounded-lg border border-emerald-700 bg-black">
                 <video ref={self} autoPlay playsInline muted className="aspect-video w-full object-contain" aria-label="Your camera" />
                 <figcaption className="absolute bottom-0 left-0 bg-black/60 px-2 py-1 text-xs text-emerald-300">You</figcaption>
               </figure>

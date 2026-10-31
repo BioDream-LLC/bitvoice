@@ -70,9 +70,9 @@ export function Softphone({ phoneApi, extensions }: {
 
       <div className="flex gap-1 rounded-lg bg-slate-900 p-1 text-sm" role="tablist" aria-label="Phone">
         {([['keypad', 'Keypad', Phone], ['recents', 'Recents', Clock], ['voicemail', 'Voicemail', Voicemail], ['team', 'Team', Users], ['chat', 'Chat', MessageSquareText]] as const).map(([k, title, Icon]) => (
-          <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
-            className={clsx('flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5', tab === k ? 'bg-slate-700 text-slate-100' : 'text-slate-400 hover:text-slate-200')}>
-            <Icon size={14} aria-hidden /> <span className="hidden sm:inline">{title}</span>
+          <button key={k} role="tab" aria-selected={tab === k} aria-label={title} title={title} onClick={() => setTab(k)}
+            className={clsx('flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1.5 sm:flex-row sm:gap-1 sm:px-2', tab === k ? 'bg-slate-700 text-slate-100' : 'text-slate-400 hover:text-slate-200')}>
+            <Icon size={14} aria-hidden /> <span className="truncate text-[10px] leading-tight sm:text-sm">{title}</span>
           </button>
         ))}
       </div>
@@ -211,9 +211,12 @@ interface Recent { number: string; name?: string; direction: 'in' | 'out'; when:
 /** Recents: the extension's recent calls, tap to call back. */
 function Recents({ phoneId, onCall }: { phoneId: string; onCall: (number: string) => void }) {
   const [items, setItems] = useState<Recent[] | null>(null)
+  const [failed, setFailed] = useState(false)
   useEffect(() => {
-    fetch(`./api/phone/${phoneId}/recents`, { headers: { 'X-BitVoice': '1' } }).then((r) => (r.ok ? r.json() : { items: [] })).then((j) => setItems(j.items)).catch(() => setItems([]))
+    setFailed(false)
+    fetch(`./api/phone/${phoneId}/recents`, { headers: { 'X-BitVoice': '1' } }).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status))))).then((j) => setItems(j.items)).catch(() => setFailed(true))
   }, [phoneId])
+  if (failed) return <p className="py-6 text-center text-sm text-amber-300">The recent calls could not be loaded. Open this tab again in a moment.</p>
   if (items === null) return <p className="py-6 text-center text-sm text-slate-500">Loading…</p>
   if (!items.length) return <p className="py-6 text-center text-sm text-slate-500">No calls yet.</p>
   return (
@@ -270,7 +273,7 @@ function Voicemails({ phoneId, onCall }: { phoneId: string; onCall: (number: str
   )
 }
 
-interface Mate { name: string; number: string; state: 'free' | 'busy' | 'ringing' | 'away' }
+interface Mate { name: string; number: string; state: 'free' | 'busy' | 'ringing' | 'away' | 'offline' }
 
 /** Team: colleagues' presence (busy lamp). Call them, or transfer the current call to them. */
 function Team({ phoneId, onCall, onTransfer }: { phoneId: string; onCall: (number: string) => void; onTransfer?: (number: string) => void }) {
@@ -282,8 +285,8 @@ function Team({ phoneId, onCall, onTransfer }: { phoneId: string; onCall: (numbe
     const t = setInterval(load, 4000) // the busy lamp keeps up
     return () => { live = false; clearInterval(t) }
   }, [phoneId])
-  const dot = { free: 'bg-emerald-400', busy: 'bg-rose-400', ringing: 'bg-amber-400 animate-pulse', away: 'bg-slate-500' }
-  const word = { free: 'Free', busy: 'On a call', ringing: 'Ringing', away: 'Away' }
+  const dot = { free: 'bg-emerald-400', busy: 'bg-rose-400', ringing: 'bg-amber-400 animate-pulse', away: 'bg-slate-500', offline: 'bg-slate-700' }
+  const word = { free: 'Free', busy: 'On a call', ringing: 'Ringing', away: 'Away', offline: 'Not connected' }
   if (items === null) return <p className="py-6 text-center text-sm text-slate-500">Loading…</p>
   if (!items.length) return <p className="py-6 text-center text-sm text-slate-500">No colleagues.</p>
   return (
@@ -322,9 +325,10 @@ function ChatTab({ phoneId, onCall }: { phoneId: string; onCall: (number: string
     return () => clearInterval(t)
   }, [phoneId, open]) // eslint-disable-line react-hooks/exhaustive-deps
   if (error) return <p className="py-6 text-center text-sm text-amber-300">{error}</p>
-  if (open) return <ChatConversation phoneId={phoneId} conv={open} me={overview?.me ?? ''} onCall={onCall} onBack={() => setOpen(null)} />
+  if (open) return <ChatConversation phoneId={phoneId} conv={open} me={overview?.me ?? ''} names={Object.fromEntries((overview?.people ?? []).map((p) => [p.extension, p.name || p.extension]))} onCall={onCall} onBack={() => setOpen(null)} />
   if (overview === null) return <p className="py-6 text-center text-sm text-slate-500">Loading…</p>
-  const dot: Record<string, string> = { free: 'bg-emerald-400', busy: 'bg-rose-400', ringing: 'bg-amber-400', away: 'bg-slate-500', offline: 'bg-slate-700' }
+  // The engine's presence states (pbx Colleagues): available, on-call, ringing, away, offline.
+  const dot: Record<string, string> = { available: 'bg-emerald-400', free: 'bg-emerald-400', 'on-call': 'bg-rose-400', busy: 'bg-rose-400', ringing: 'bg-amber-400', away: 'bg-slate-500', offline: 'bg-slate-700' }
   return (
     <div className="max-h-80 space-y-1 overflow-y-auto" aria-label="Chat">
       {overview.rooms.map((rm) => (
@@ -349,7 +353,7 @@ function ChatTab({ phoneId, onCall }: { phoneId: string; onCall: (number: string
 }
 
 /** One chat conversation inside the phone: its messages, with a box to send. */
-function ChatConversation({ phoneId, conv, me, onCall, onBack }: { phoneId: string; conv: { key: string; name: string }; me: string; onCall: (number: string) => void; onBack: () => void }) {
+function ChatConversation({ phoneId, conv, me, names, onCall, onBack }: { phoneId: string; conv: { key: string; name: string }; me: string; names: Record<string, string>; onCall: (number: string) => void; onBack: () => void }) {
   const [msgs, setMsgs] = useState<ChatMsg[]>([])
   const [text, setText] = useState('')
   const end = useRef<HTMLDivElement>(null)
@@ -367,7 +371,7 @@ function ChatConversation({ phoneId, conv, me, onCall, onBack }: { phoneId: stri
     load()
   }
   return (
-    <div className="flex h-80 flex-col">
+    <div className="flex h-[min(60vh,30rem)] flex-col">
       <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
         <button className="btn px-2 py-1" aria-label="Back to chats" onClick={onBack}>Back</button>
         <span className="flex-1 truncate text-sm font-semibold text-slate-200">{conv.name}</span>
@@ -376,7 +380,7 @@ function ChatConversation({ phoneId, conv, me, onCall, onBack }: { phoneId: stri
       <ol className="flex-1 space-y-1.5 overflow-y-auto py-2 text-sm" aria-label="Messages">
         {msgs.map((m, i) => (
           <li key={m.id ?? i} className={clsx('max-w-[85%] rounded-lg px-2.5 py-1.5', m.from === me ? 'ml-auto bg-sky-600 text-white' : 'bg-slate-800 text-slate-200')}>
-            {!direct && m.from !== me && <span className="block text-xs font-semibold text-sky-300">{m.from}</span>}
+            {!direct && m.from !== me && <span className="block text-xs font-semibold text-sky-300">{names[m.from] ?? m.from}</span>}
             {m.text}
           </li>
         ))}

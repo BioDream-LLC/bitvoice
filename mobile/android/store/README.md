@@ -1,7 +1,7 @@
 # Publishing the Android app on Google Play
 
 Everything Play Console asks for, in the order it asks. The files beside this one are the graphics:
-`icon-512.png`, `feature-1024x500.png` and `screenshots/` (Pixel 8, Android 16).
+`icon-512.png`, `feature-1024x500.png` and `screenshots/` (from a Pixel 8, Android 16, showing an invented business).
 
 ## 1. Build the bundle
 
@@ -29,7 +29,16 @@ Raise `versionCode` in `app/build.gradle.kts` (and `versionName`) for every uplo
 ```
 BitVoice puts your extension on the BitVoice phone system on your Android phone.
 
-Calls to your extension ring on your phone with Answer and Decline, the way phone calls do. Answer, and the call keeps going when the screen turns off or you switch to another app. Call other extensions and outside numbers from the keypad, with your office number as the caller ID.
+Calls to your extension ring on your phone with Answer and Decline, the way phone calls do, even when the app is closed. Answer, and the call keeps going when the screen turns off or you switch to another app. Call other extensions and outside numbers from the keypad, with your office number as the caller ID.
+
+Everything a desk phone does, and more:
+- Transfer, hold and a second call.
+- Voicemail you can read: every message transcribed, with call back and delete.
+- A live transcript of the call as it is spoken, written by your own BitVoice server.
+- Team: who is free, ringing, on a call or away, with a call button.
+- Recents, with missed calls.
+- Staff chat: direct messages and team rooms, with a notification when one arrives.
+- Video rooms: everyone's camera, one tap from the phone.
 
 Getting started takes one scan: your administrator opens your extension in BitVoice and presses Add a phone, and you scan the code it shows. There is no password to type. Unpair at any time from the app.
 
@@ -45,7 +54,7 @@ This app needs a BitVoice phone system. BitVoice is a free, open-source phone sy
   (none is published yet; see "Still open" below). Website: `https://bitvoice.org`.
 - **Privacy policy**: `https://bitvoice.org/privacy/`
 - **Graphics**: app icon `icon-512.png`; feature graphic `feature-1024x500.png`; phone screenshots
-  `screenshots/1-pair.png` to `5-ongoing.png`, in that order.
+  `screenshots/1-incoming.png` to `8-keypad.png` (1080 x 1920), in that order.
 
 ## 3. App content (Policy, App content)
 
@@ -65,16 +74,21 @@ This app needs a BitVoice phone system. BitVoice is a free, open-source phone sy
   - *Device or other IDs*: collected (the push token and the device secret), not shared, required, for
     **App functionality**.
   - *Personal info: name*: collected (the extension's name, from the server), for **App functionality**.
-  - Nothing else: no location, contacts, photos, messages, browsing, app activity or diagnostics.
+  - *Messages: other in-app messages*: collected (staff chat, sent to and kept on the organisation's own
+    BitVoice), not shared, for **App functionality**.
+  - *Photos and videos: videos*: collected only in a video room the user joins with their camera, processed
+    ephemerally (live, not stored by the app), not shared, optional, for **App functionality**.
+  - Nothing else: no location, contacts, photos, browsing, app activity or diagnostics.
 - **Permissions declarations** Play will ask for:
   - **Full-screen intent** (`USE_FULL_SCREEN_INTENT`): "Calling or video call app: shows incoming calls
     over the lock screen." Play grants it to calling apps on install.
   - **Foreground service types** `phoneCall` and `microphone`: "Keeps a call that the user answered
     connected, with its sound, while the phone is used for other things or the screen is off. Runs only
     while a call is connected; its notification shows the call with Hang up." Play asks for a short
-    video: answer a call, press Home, pull down the notification shade. The screenshots `4-call.png` and
-    `5-ongoing.png` show the same.
-  - **Camera**: scanning the pairing code (and video, when chosen).
+    video: answer a call, press Home, pull down the notification shade (record it with the phone's screen
+    recorder; a video room shows the same notification, "Video room 900").
+  - **Camera**: scanning the pairing code, and the user's camera in a video room they join with it (asked
+    for the first time a room wants it).
 
 ## 4. Release
 

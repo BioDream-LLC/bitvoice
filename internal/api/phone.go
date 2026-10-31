@@ -608,7 +608,8 @@ func (s *Server) browserPhoneRoutes() {
 				rec.Direction, rec.Number, rec.Name = "out", c.To, c.ToName
 			} else {
 				rec.Direction, rec.Number, rec.Name = "in", c.From, c.FromName
-				rec.Missed = c.Answer.IsZero()
+				// Missed: nobody answered, or voicemail did (no person took it), as a phone's own list says.
+				rec.Missed = c.Answer.IsZero() || c.AnsweredExt == ""
 			}
 			out = append(out, rec)
 		}
