@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -50,6 +51,8 @@ object Calls {
     val connections = mutableMapOf<String, BitVoiceConnection>()
     /** The phone page's calls that are connected, outgoing ones too: while any is, the call service runs. */
     val active = mutableSetOf<String>()
+    /** Outgoing calls already handed to Android's call system. */
+    val placed = mutableSetOf<String>()
     var run: ((String) -> Unit)? = null
     val main = Handler(Looper.getMainLooper())
 
@@ -66,10 +69,22 @@ object Calls {
             else if (active.remove("video:$room") && active.isEmpty()) CallForeground.stop(ctx)
             return
         }
+        if (m.optString("type") == "chat") {
+            // A colleague's chat message while the app is in the background (the page saw it on its stream).
+            BitVoiceApp.chatNotice(ctx, m.optString("from"), m.optString("name").ifEmpty { m.optString("from") }, m.optString("text"))
+            return
+        }
+        if (m.optString("type") == "dial") {
+            // A video room asks the phone to call its sound: the phone page (Calls.run) places the call.
+            run?.invoke("window.bitvoice && window.bitvoice.dial(${js(m.optString("number"))})")
+            return
+        }
         if (m.optString("type") != "call") return
         val id = m.optString("id")
         val pbx = m.optString("pbxCall")
         when (m.optString("state")) {
+            // "calling" can pass too quickly for the page to report it: "ringing" starts the call too.
+            "calling", "ringing" -> if (m.optString("direction") == "out") place(ctx, id, m)
             "incoming" -> {
                 val c = connections.remove(pbx)
                 if (c != null) {
@@ -82,12 +97,15 @@ object Calls {
                 }
             }
             "connected" -> {
+                // A call answered at once (a conference room, voicemail) never rang: place it now, as active.
+                if (m.optString("direction") == "out") place(ctx, id, m) // active by the time Android asks (below)
                 // Answered (on the page or the notification): the ringing notification goes, and the call
                 // service keeps the microphone and the app running while the phone is used for other things.
-                connections[id]?.setActive()
+                // Held or resumed on the page: Android's call state follows (a car or a watch shows it).
+                val c = connections[id]
+                if (m.optBoolean("held")) c?.setOnHold() else c?.setActive()
                 ctx.getSystemService(NotificationManager::class.java).cancel(NOTIFY)
-                active.add(id)
-                CallForeground.start(ctx, m.optString("name").ifEmpty { m.optString("number") }, id)
+                if (active.add(id)) CallForeground.start(ctx, m.optString("name").ifEmpty { m.optString("number") }, id)
             }
             "ended" -> {
                 connections.remove(id)?.let {
@@ -95,15 +113,32 @@ object Calls {
                     it.destroy()
                 }
                 ctx.getSystemService(NotificationManager::class.java).cancel(NOTIFY)
+                placed.remove(id)
                 if (active.remove(id) && active.isEmpty()) CallForeground.stop(ctx)
             }
         }
     }
 
+    /** Puts a call made on the page on Android's call system too, as the iPhone's goes on CallKit:
+     * Bluetooth, a car, a watch and a mobile call arriving meanwhile all know of it. */
+    private fun place(ctx: Context, id: String, m: org.json.JSONObject) {
+        if (connections[id] != null || !placed.add(id)) return
+        val tm = ctx.getSystemService(android.telecom.TelecomManager::class.java)
+        val extras = Bundle().apply {
+            putParcelable(android.telecom.TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, BitVoiceApp.account(ctx))
+            putBundle(android.telecom.TelecomManager.EXTRA_OUTGOING_CALL_EXTRAS, Bundle().apply {
+                putString("callId", id); putString("name", m.optString("name"))
+            })
+        }
+        runCatching { tm.placeCall(android.net.Uri.fromParts("tel", m.optString("number"), null), extras) }
+    }
+
     /** Answer from the notification's button, which opens the app (Android 12 and later let a notification
      * open an activity, not start one from a broadcast). */
     fun answer(callId: String) {
-        connections.values.firstOrNull { it.callId == callId }?.onAnswer()
+        // Only a call still ringing: Android hands an activity its starting intent again when it is
+        // recreated, and a second answer for a call already answered fails on the page.
+        connections.values.firstOrNull { it.callId == callId && it.state == android.telecom.Connection.STATE_RINGING }?.onAnswer()
     }
 
     /** Ends a call from the ongoing call's Hang up button. */
@@ -201,6 +236,21 @@ class CallService : ConnectionService() {
         }, 35_000)
         return c
     }
+
+    /** A call made on the phone page (Calls.fromPage placed it): BitVoice is already dialling it. */
+    override fun onCreateOutgoingConnection(account: PhoneAccountHandle?, request: ConnectionRequest): Connection {
+        val ex = request.extras.getBundle(android.telecom.TelecomManager.EXTRA_OUTGOING_CALL_EXTRAS) ?: request.extras
+        val id = ex.getString("callId") ?: ""
+        val c = BitVoiceConnection(this, id, request.address?.schemeSpecificPart ?: "", ex.getString("name") ?: "")
+        c.pageId = id
+        Calls.connections[id] = c
+        // Answered already, before Android got round to asking (placeCall is not immediate)?
+        if (id in Calls.active) c.setActive() else c.setDialing()
+        return c
+    }
+
+    /** Android refused the call (another app's call it cannot hold, say): the page's call goes on without it. */
+    override fun onCreateOutgoingConnectionFailed(account: PhoneAccountHandle?, request: ConnectionRequest) {}
 }
 
 /** The Decline button on the ringing notification, and Hang up on the ongoing call's. */

@@ -502,17 +502,21 @@ func TestCallBetweenServersTLS(t *testing.T) {
 	if d == nil {
 		t.Fatal("not answered")
 	}
+	// The caller has its answer a moment before server a has the leg to b in place: wait for it.
 	var legs []LegInfo
-	for _, c := range a.Calls() {
-		legs = append(legs, c.Legs...)
-	}
 	found := false
-	for _, c := range a.allCalls() {
-		c.mu.Lock()
-		l := c.callee
-		c.mu.Unlock()
-		if l != nil && l.peer.Transport == "TLS" && l.ep.Secure() {
-			found = true
+	for deadline := time.Now().Add(15 * time.Second); !found && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		legs = legs[:0]
+		for _, c := range a.Calls() {
+			legs = append(legs, c.Legs...)
+		}
+		for _, c := range a.allCalls() {
+			c.mu.Lock()
+			l := c.callee
+			c.mu.Unlock()
+			if l != nil && l.peer.Transport == "TLS" && l.ep != nil && l.ep.Secure() {
+				found = true
+			}
 		}
 	}
 	if !found {

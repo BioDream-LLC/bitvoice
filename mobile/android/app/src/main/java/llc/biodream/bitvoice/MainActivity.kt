@@ -45,11 +45,19 @@ class MainActivity : AppCompatActivity() {
         intent?.data?.toString()?.let { if (Vault.load(this) == null) pair(it) }
         answerFrom(intent)
         askFullScreen()
+        onBackPressedDispatcher.addCallback(this, roomBack)
     }
 
     /** Answer on the ringing notification opens the app with the call to answer. */
     private fun answerFrom(i: Intent?) {
-        i?.getStringExtra("answer")?.let { Calls.answer(it) }
+        // A chat notification opens the Chat tab (once the page is there to hear it).
+        i?.getStringExtra("chat")?.let { from ->
+            i.removeExtra("chat")
+            web?.postDelayed({ Calls.run?.invoke("window.dispatchEvent(new CustomEvent('bitvoice:chat', { detail: ${Calls.js(from)} }))") }, 800)
+        }
+        val id = i?.getStringExtra("answer") ?: return
+        i.removeExtra("answer") // used once: a recreated activity gets the same intent again
+        Calls.answer(id)
     }
 
     /**
@@ -67,6 +75,15 @@ class MainActivity : AppCompatActivity() {
                 runCatching { startActivity(Intent(android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, android.net.Uri.parse("package:$packageName"))) }
             }
             .setNegativeButton("Not now", null).show()
+    }
+
+    /** Back in a video room leaves it (the page hangs up its streams, then closes the window). */
+    private val roomBack = object : androidx.activity.OnBackPressedCallback(true) {
+        override fun handleOnBackPressed() {
+            val t = room?.second
+            if (t == null) { isEnabled = false; onBackPressedDispatcher.onBackPressed(); isEnabled = true; return }
+            t.evaluateJavascript("window.bitvoiceLeaveRoom ? (window.bitvoiceLeaveRoom(), 'leaving') : null") { v -> if (v == "null") closeRoom() }
+        }
     }
 
     override fun onNewIntent(i: Intent) {
@@ -179,18 +196,20 @@ class MainActivity : AppCompatActivity() {
             webChromeClient = object : WebChromeClient() {
                 // The page asks for the microphone (and the camera, for video rooms); only BitVoice's page gets it.
                 override fun onPermissionRequest(r: PermissionRequest) {
-                    if (r.origin.host == home.host) {
-                        r.grant(r.resources.filter { it == PermissionRequest.RESOURCE_AUDIO_CAPTURE || it == PermissionRequest.RESOURCE_VIDEO_CAPTURE }.toTypedArray())
-                    } else r.deny()
+                    if (r.origin.host != home.host) return r.deny()
+                    // The camera is asked for when a video room first wants it, not at install.
+                    if (PermissionRequest.RESOURCE_VIDEO_CAPTURE in r.resources &&
+                        checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                        cameraWait = r
+                        requestPermissions(arrayOf(Manifest.permission.CAMERA), 2)
+                        return
+                    }
+                    grantMedia(r)
                 }
 
-                // window.open (a video room) loads in this same web view.
+                // window.open (a video room) opens over the phone, which keeps running underneath.
                 override fun onCreateWindow(view: WebView, dialog: Boolean, gesture: Boolean, msg: android.os.Message): Boolean {
-                    val t = WebView(view.context)
-                    t.webViewClient = object : WebViewClient() {
-                        override fun shouldOverrideUrlLoading(v: WebView, r: WebResourceRequest): Boolean { view.loadUrl(r.url.toString()); return true }
-                    }
-                    (msg.obj as WebView.WebViewTransport).webView = t
+                    (msg.obj as WebView.WebViewTransport).webView = roomWindow(p, this)
                     msg.sendToTarget()
                     return true
                 }
@@ -214,6 +233,69 @@ class MainActivity : AppCompatActivity() {
         w.loadUrl("${p.server}/#/phone")
         box.addView(w, LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
         return box
+    }
+
+    /** The video room's window: a web view like the phone's (camera, microphone, the app's bridge) over the
+     * whole screen, clear of the system bars, closed by the room's Leave (window.close) or Back. */
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun roomWindow(p: Pairing, chrome: WebChromeClient): WebView {
+        closeRoom()
+        val frame = android.widget.FrameLayout(this).apply { setBackgroundColor(Color.parseColor("#050816")) }
+        val t = WebView(this).apply {
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            settings.mediaPlaybackRequiresUserGesture = false
+            setBackgroundColor(Color.parseColor("#050816"))
+            addJavascriptInterface(Bridge(), "bitvoiceAndroid")
+            webChromeClient = object : WebChromeClient() {
+                override fun onPermissionRequest(r: PermissionRequest) = chrome.onPermissionRequest(r)
+                override fun onCloseWindow(w: WebView) = closeRoom()
+            }
+            webViewClient = object : WebViewClient() {
+                override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+                    view.evaluateJavascript("window.bitvoiceNative = { platform: 'android', post: function (m) { bitvoiceAndroid.post(m) } };", null)
+                }
+                override fun shouldOverrideUrlLoading(view: WebView, r: WebResourceRequest): Boolean {
+                    if (r.url.host == android.net.Uri.parse(p.server).host) return false
+                    startActivity(Intent(Intent.ACTION_VIEW, r.url))
+                    return true
+                }
+            }
+        }
+        frame.addView(t, android.widget.FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(frame) { view, insets ->
+            val b = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars() or androidx.core.view.WindowInsetsCompat.Type.displayCutout())
+            view.setPadding(b.left, b.top, b.right, b.bottom)
+            insets
+        }
+        addContentView(frame, android.view.ViewGroup.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        room = frame to t
+        return t
+    }
+
+    private var room: Pair<android.widget.FrameLayout, WebView>? = null
+
+    /** A web page's camera request waiting for Android's camera permission. */
+    private var cameraWait: PermissionRequest? = null
+
+    private fun grantMedia(r: PermissionRequest) {
+        val ok = r.resources.filter {
+            it == PermissionRequest.RESOURCE_AUDIO_CAPTURE ||
+                it == PermissionRequest.RESOURCE_VIDEO_CAPTURE && checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        }
+        if (ok.isEmpty()) r.deny() else r.grant(ok.toTypedArray())
+    }
+
+    override fun onRequestPermissionsResult(code: Int, perms: Array<out String>, results: IntArray) {
+        super.onRequestPermissionsResult(code, perms, results)
+        if (code == 2) cameraWait?.let { cameraWait = null; grantMedia(it) } // without the camera: sound only
+    }
+
+    private fun closeRoom() {
+        val (frame, t) = room ?: return
+        room = null
+        (frame.parent as? android.view.ViewGroup)?.removeView(frame)
+        t.destroy()
     }
 
     inner class Bridge {

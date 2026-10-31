@@ -12,7 +12,23 @@ import { Empty, Field, Page } from './ui'
 interface Publisher { id: string; name: string; kind: 'camera' | 'screen'; codec: string; layers?: string[]; live: boolean; since: string; views: number }
 interface RoomState { number: string; publishers: Publisher[] }
 
-const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
+/** The browser phone that opened this room (#/video-room/N?phone=ID): the room is joined as its
+ * extension, so the mobile app needs no administrator sign-in. */
+/** Calls the room's sound: on the docked browser phone, or on the phone that opened the room (the
+ * mobile app's phone, through the app; a browser's phone window, through a channel). */
+function dialRoom(number: string) {
+  if (!roomPhone()) { window.dispatchEvent(new CustomEvent('bitvoice:dial', { detail: number })); return }
+  const app = (window as { bitvoiceNative?: { post?: (m: string) => void } }).bitvoiceNative
+  if (app?.post) app.post(JSON.stringify({ type: 'dial', number }))
+  else new BroadcastChannel('bitvoice-phone').postMessage({ phone: roomPhone(), dial: number })
+}
+export const roomPhone = () => new URLSearchParams(location.hash.split('?')[1] ?? '').get('phone') ?? ''
+const H = (): Record<string, string> => {
+  const h: Record<string, string> = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
+  const p = roomPhone()
+  if (p) h['X-BitVoice-Phone'] = p
+  return h
+}
 
 /** Waits until a peer connection has gathered its candidates (or a moment has passed). */
 function gathered(pc: RTCPeerConnection) {
@@ -37,13 +53,13 @@ function Tile({ room, pin, pub, big, onPick }: { room: string; pin: string; pub:
       pc.onconnectionstatechange = () => setState(pc.connectionState)
       await pc.setLocalDescription(await pc.createOffer())
       await gathered(pc)
-      const r = await fetch(`./api/video-rooms/${room}/subscribe`, { method: 'POST', headers: { ...H, 'X-Room-PIN': pin },
+      const r = await fetch(`./api/video-rooms/${room}/subscribe`, { method: 'POST', headers: { ...H(), 'X-Room-PIN': pin },
         body: JSON.stringify({ publisher: pub.id, sdp: pc.localDescription!.sdp, layer: big ? 'high' : 'low' }) })
       const j = await r.json()
       if (r.ok && gone) {
         // The tile went while BitVoice was answering: end the subscription it made, or it keeps a viewer
         // nobody is and sends video to nowhere.
-        fetch(`./api/video-rooms/${room}/${j.id}`, { method: 'DELETE', headers: { ...H, 'X-Room-PIN': pin } }).catch(() => {})
+        fetch(`./api/video-rooms/${room}/${j.id}`, { method: 'DELETE', headers: { ...H(), 'X-Room-PIN': pin } }).catch(() => {})
       }
       if (!r.ok || gone) { pc.close(); if (!gone) setState(j.message ?? 'failed'); return }
       sub.current = { pc, id: j.id }
@@ -52,7 +68,7 @@ function Tile({ room, pin, pub, big, onPick }: { room: string; pin: string; pub:
     return () => {
       gone = true
       const s = sub.current
-      if (s) { s.pc.close(); fetch(`./api/video-rooms/${room}/${s.id}`, { method: 'DELETE', headers: { ...H, 'X-Room-PIN': pin } }).catch(() => {}) }
+      if (s) { s.pc.close(); fetch(`./api/video-rooms/${room}/${s.id}`, { method: 'DELETE', headers: { ...H(), 'X-Room-PIN': pin } }).catch(() => {}) }
       sub.current = null
     }
   }, [room, pin, pub.id]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -64,7 +80,7 @@ function Tile({ room, pin, pub, big, onPick }: { room: string; pin: string; pub:
     if (first.current) { first.current = false; return } // the subscription already asked for this size
     const s = sub.current
     if (s && layered) {
-      fetch(`./api/video-rooms/${room}/subscribe/${s.id}`, { method: 'PATCH', headers: { ...H, 'X-Room-PIN': pin }, body: JSON.stringify({ layer: big ? 'high' : 'low' }) }).catch(() => {})
+      fetch(`./api/video-rooms/${room}/subscribe/${s.id}`, { method: 'PATCH', headers: { ...H(), 'X-Room-PIN': pin }, body: JSON.stringify({ layer: big ? 'high' : 'low' }) }).catch(() => {})
     }
   }, [big, room, pin, layered])
   return (
@@ -84,7 +100,7 @@ function Tile({ room, pin, pub, big, onPick }: { room: string; pin: string; pub:
 /** A video room: everyone's camera, each in its own picture (an SFU conference room). */
 export function VideoRoom() {
   const { number = '' } = useParams()
-  const { data: confs } = useConferencesQuery()
+  const { data: confs } = useConferencesQuery(undefined, { skip: !!roomPhone() })
   const conf = confs?.items.find((c) => c.number === number)
   const [pin, setPin] = useState('')
   const [state, setState] = useState<RoomState | null>(null)
@@ -96,7 +112,7 @@ export function VideoRoom() {
   const ownScreen = useRef<HTMLVideoElement>(null)
   const canShare = typeof navigator.mediaDevices?.getDisplayMedia === 'function'
   const load = useCallback(async () => {
-    const r = await fetch(`./api/video-rooms/${number}`, { headers: { ...H, 'X-Room-PIN': pin } })
+    const r = await fetch(`./api/video-rooms/${number}`, { headers: { ...H(), 'X-Room-PIN': pin } })
     const j = await r.json()
     if (!r.ok) { setError(j.message); setState(null); return }
     setError('')
@@ -107,6 +123,8 @@ export function VideoRoom() {
   useEffect(() => () => { mine?.pc.close(); mine?.stream.getTracks().forEach((t) => t.stop()); if (mine) nativeVideoRoom(false, number) }, [mine, number])
   useEffect(() => () => { shared?.pc.close(); shared?.stream.getTracks().forEach((t) => t.stop()) }, [shared])
   useEffect(() => { if (ownScreen.current && shared) ownScreen.current.srcObject = shared.stream }, [shared])
+  // The own picture's element appears only once joined: give it the camera then.
+  useEffect(() => { if (self.current && mine) self.current.srcObject = mine.stream }, [mine])
 
   const join = async () => {
     try {
@@ -117,14 +135,13 @@ export function VideoRoom() {
         sendEncodings: [{ rid: 'h', maxBitrate: 1_200_000 }, { rid: 'm', scaleResolutionDownBy: 2, maxBitrate: 400_000 }, { rid: 'l', scaleResolutionDownBy: 4, maxBitrate: 150_000 }] })
       await pc.setLocalDescription(await pc.createOffer())
       await gathered(pc)
-      const r = await fetch(`./api/video-rooms/${number}/publish`, { method: 'POST', headers: { ...H, 'X-Room-PIN': pin }, body: JSON.stringify({ sdp: pc.localDescription!.sdp }) })
+      const r = await fetch(`./api/video-rooms/${number}/publish`, { method: 'POST', headers: { ...H(), 'X-Room-PIN': pin }, body: JSON.stringify({ sdp: pc.localDescription!.sdp }) })
       const j = await r.json()
       if (!r.ok) { pc.close(); stream.getTracks().forEach((t) => t.stop()); toast.error(j.message); return }
       await pc.setRemoteDescription({ type: 'answer', sdp: j.sdp })
-      if (self.current) self.current.srcObject = stream
       setMine({ pc, id: j.id, stream })
       // The room's sound is its conference: the browser phone calls it.
-      window.dispatchEvent(new CustomEvent('bitvoice:dial', { detail: number }))
+      dialRoom(number)
       nativeVideoRoom(true, number) // in a mobile app, show it as a video call on the call screen
     } catch (e) {
       toast.error(`The camera could not be used: ${(e as Error).message}`)
@@ -134,7 +151,7 @@ export function VideoRoom() {
     s.pc.close()
     s.stream.getTracks().forEach((t) => t.stop())
     setShared((cur) => (cur?.id === s.id ? null : cur))
-    await fetch(`./api/video-rooms/${number}/${s.id}`, { method: 'DELETE', headers: { ...H, 'X-Room-PIN': pin } }).catch(() => {})
+    await fetch(`./api/video-rooms/${number}/${s.id}`, { method: 'DELETE', headers: { ...H(), 'X-Room-PIN': pin } }).catch(() => {})
   }, [number, pin])
   const share = async () => {
     let stream: MediaStream
@@ -152,7 +169,7 @@ export function VideoRoom() {
       pc.addTransceiver(track, { direction: 'sendonly', streams: [stream], sendEncodings: [{ maxBitrate: 2_500_000 }] })
       await pc.setLocalDescription(await pc.createOffer())
       await gathered(pc)
-      const r = await fetch(`./api/video-rooms/${number}/publish`, { method: 'POST', headers: { ...H, 'X-Room-PIN': pin }, body: JSON.stringify({ sdp: pc.localDescription!.sdp, kind: 'screen' }) })
+      const r = await fetch(`./api/video-rooms/${number}/publish`, { method: 'POST', headers: { ...H(), 'X-Room-PIN': pin }, body: JSON.stringify({ sdp: pc.localDescription!.sdp, kind: 'screen' }) })
       const j = await r.json()
       if (!r.ok) { pc.close(); stream.getTracks().forEach((t) => t.stop()); toast.error(j.message); return }
       await pc.setRemoteDescription({ type: 'answer', sdp: j.sdp })
@@ -167,13 +184,21 @@ export function VideoRoom() {
   }
   const leave = async () => {
     if (shared) await stopSharing(shared)
-    if (!mine) return
-    mine.pc.close()
-    mine.stream.getTracks().forEach((t) => t.stop())
-    await fetch(`./api/video-rooms/${number}/${mine.id}`, { method: 'DELETE', headers: { ...H, 'X-Room-PIN': pin } }).catch(() => {})
-    setMine(null)
-    nativeVideoRoom(false, number)
+    if (mine) {
+      mine.pc.close()
+      mine.stream.getTracks().forEach((t) => t.stop())
+      await fetch(`./api/video-rooms/${number}/${mine.id}`, { method: 'DELETE', headers: { ...H(), 'X-Room-PIN': pin } }).catch(() => {})
+      setMine(null)
+      nativeVideoRoom(false, number)
+    }
+    // Opened from a phone, the room is its own window: leaving closes it, back to the phone.
+    if (roomPhone()) window.close()
   }
+  useEffect(() => {
+    const w = window as { bitvoiceLeaveRoom?: () => void }
+    w.bitvoiceLeaveRoom = () => { void leave() }
+    return () => { w.bitvoiceLeaveRoom = undefined }
+  })
   const others = (state?.publishers ?? []).filter((p) => p.id !== mine?.id && p.id !== shared?.id)
   const sharer = (state?.publishers ?? []).find((p) => p.kind === 'screen')
   const cameras = (state?.publishers ?? []).filter((p) => p.kind !== 'screen').length
@@ -201,7 +226,7 @@ export function VideoRoom() {
                 <MonitorUp size={15} aria-hidden /> Share my screen
               </button>
             )}
-            <button type="button" className="btn" onClick={() => window.dispatchEvent(new CustomEvent('bitvoice:dial', { detail: number }))}><Phone size={15} aria-hidden /> Call the room&apos;s sound</button>
+            <button type="button" className="btn" onClick={() => dialRoom(number)}><Phone size={15} aria-hidden /> Call the room&apos;s sound</button>
             <span className="text-sm text-slate-400">{cameras} camera{cameras === 1 ? '' : 's'} in the room</span>
             {sharer && <span className="text-sm text-sky-300">{shared ? 'You are sharing your screen' : `${sharer.name} is sharing their screen`}</span>}
           </div>

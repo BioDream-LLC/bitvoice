@@ -213,7 +213,12 @@ func (s *Server) reapPhone(id string, bp *browserPhone) {
 }
 
 func phoneOf(w http.ResponseWriter, r *http.Request) *browserPhone {
-	v, ok := phones.Load(r.PathValue("id"))
+	return phoneByID(w, r.PathValue("id"))
+}
+
+// phoneByID is the signed-in browser phone with this ID, or nil after answering 404.
+func phoneByID(w http.ResponseWriter, id string) *browserPhone {
+	v, ok := phones.Load(id)
 	if !ok {
 		writeError(w, http.StatusNotFound, "this browser phone is no longer signed in")
 		return nil
@@ -266,7 +271,11 @@ func (s *Server) phoneEvents(w http.ResponseWriter, r *http.Request) {
 			// A chat message for this extension (the staff chat), so the app's Chat tab lights up.
 			if ev.Type == "chat.message" && s.forPortal(ev, bp.ext) {
 				if ce, ok := ev.Data.(ChatEvent); ok {
-					j, _ := json.Marshal(ce)
+					// With the sender's name, for the notification the app shows while in the background.
+					j, _ := json.Marshal(struct {
+						ChatEvent
+						FromName string `json:"fromName"`
+					}{ce, s.extName(ce.Message.From)})
 					fmt.Fprintf(w, "event: chat\ndata: %s\n\n", j)
 					fl.Flush()
 				}
@@ -591,6 +600,9 @@ func (s *Server) browserPhoneRoutes() {
 		}
 		out := []recent{}
 		for _, c := range rows {
+			if c.Direction == "conference" {
+				continue // a conference room's record of a member: the call's own record is listed already
+			}
 			rec := recent{When: c.Start, Seconds: c.Billsec}
 			if c.From == bp.ext { // this extension placed the call
 				rec.Direction, rec.Number, rec.Name = "out", c.To, c.ToName

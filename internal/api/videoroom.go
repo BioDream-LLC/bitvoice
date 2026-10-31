@@ -12,6 +12,32 @@ import (
 
 // videoRoomRoutes serve SFU video rooms (a conference room with Video set to everyone's video):
 // browsers send their camera, and get every other camera, one stream each.
+// PhoneHeader names the browser phone asking (its ID, which only its own page holds): a video room
+// opened from a phone (the mobile app, the staff portal) joins as that phone's extension.
+const PhoneHeader = "X-BitVoice-Phone"
+
+// roomRoute is handle for the video rooms, which a browser phone may also use as its extension.
+func (s *Server) roomRoute(pattern string, f func(w http.ResponseWriter, r *http.Request, u store.User)) {
+	s.noteRoute(pattern, false, false)
+	signed := s.signedIn(pattern, false, f)
+	s.mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+		id := r.Header.Get(PhoneHeader)
+		if id == "" {
+			signed(w, r)
+			return
+		}
+		bp := phoneByID(w, id)
+		if bp == nil {
+			return
+		}
+		if s.Tenant != nil && s.Tenant.Suspended {
+			writeError(w, http.StatusForbidden, "this organisation's account is suspended; ask your provider")
+			return
+		}
+		f(w, r, store.User{Username: "ext:" + bp.ext, Name: s.extName(bp.ext), Role: "phone"})
+	})
+}
+
 func (s *Server) videoRoomRoutes() {
 	// room checks the room exists and, for a room with a PIN, that the PIN came (X-Room-PIN).
 	room := func(w http.ResponseWriter, r *http.Request) (string, bool) {
@@ -43,7 +69,7 @@ func (s *Server) videoRoomRoutes() {
 			writeError(w, http.StatusUnprocessableEntity, err.Error())
 		}
 	}
-	s.handle("GET /api/video-rooms/{number}", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
+	s.roomRoute("GET /api/video-rooms/{number}", func(w http.ResponseWriter, r *http.Request, u store.User) {
 		n, ok := room(w, r)
 		if !ok {
 			return
@@ -56,7 +82,7 @@ func (s *Server) videoRoomRoutes() {
 		writeJSON(w, 200, st)
 	})
 	// publish takes the camera, or a shared screen: {sdp, name, kind} -> {id, sdp}.
-	s.handle("POST /api/video-rooms/{number}/publish", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
+	s.roomRoute("POST /api/video-rooms/{number}/publish", func(w http.ResponseWriter, r *http.Request, u store.User) {
 		n, ok := room(w, r)
 		if !ok {
 			return
@@ -90,7 +116,7 @@ func (s *Server) videoRoomRoutes() {
 		writeJSON(w, 200, map[string]string{"id": id, "sdp": string(ans)})
 	})
 	// subscribe gets one camera: {publisher, sdp, layer} -> {id, sdp}.
-	s.handle("POST /api/video-rooms/{number}/subscribe", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
+	s.roomRoute("POST /api/video-rooms/{number}/subscribe", func(w http.ResponseWriter, r *http.Request, u store.User) {
 		n, ok := room(w, r)
 		if !ok {
 			return
@@ -115,7 +141,7 @@ func (s *Server) videoRoomRoutes() {
 		}
 		writeJSON(w, 200, map[string]string{"id": id, "sdp": string(ans)})
 	})
-	s.handle("PATCH /api/video-rooms/{number}/subscribe/{id}", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
+	s.roomRoute("PATCH /api/video-rooms/{number}/subscribe/{id}", func(w http.ResponseWriter, r *http.Request, u store.User) {
 		n, ok := room(w, r)
 		if !ok {
 			return
@@ -137,7 +163,7 @@ func (s *Server) videoRoomRoutes() {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
-	s.handle("DELETE /api/video-rooms/{number}/{id}", false, func(w http.ResponseWriter, r *http.Request, u store.User) {
+	s.roomRoute("DELETE /api/video-rooms/{number}/{id}", func(w http.ResponseWriter, r *http.Request, u store.User) {
 		n, ok := room(w, r)
 		if !ok {
 			return

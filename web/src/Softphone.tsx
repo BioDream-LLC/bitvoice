@@ -15,10 +15,23 @@ export function Softphone({ phoneApi, extensions }: {
   extensions?: { number: string; name: string }[] // an administrator picks one; others type it with a password
 }) {
   const { phone, calls, error, open, close, dial, answer, hangup, dtmf, mute, transfer, hold } = phoneApi
+  // A video room this phone opened, in its own window, asks it to call the room's sound (VideoRoom's dialRoom).
+  useEffect(() => {
+    if (!phone) return
+    const ch = new BroadcastChannel('bitvoice-phone')
+    ch.onmessage = (e) => { const m = e.data as { phone?: string; dial?: string }; if (m.dial && m.phone === phone.id) void dial(m.dial) }
+    return () => ch.close()
+  }, [phone, dial])
   const [number, setNumber] = useState('')
   const [ext, setExt] = useState(extensions?.[0]?.number ?? '')
   const [pw, setPw] = useState('')
   const [tab, setTab] = useState<'keypad' | 'recents' | 'voicemail' | 'team' | 'chat'>('keypad')
+  // A chat notification tapped in the mobile app opens the Chat tab.
+  useEffect(() => {
+    const on = () => setTab('chat')
+    window.addEventListener('bitvoice:chat', on)
+    return () => window.removeEventListener('bitvoice:chat', on)
+  }, [])
   // A second call can be placed while the first is on hold.
   const live = calls.filter((c) => c.state !== 'ended')
   const active = live.find((c) => (c.state === 'connected' && !c.held) || c.state === 'calling' || c.state === 'ringing' || c.state === 'incoming')
@@ -391,7 +404,7 @@ function VideoRoomButton({ phoneId }: { phoneId: string }) {
     const t = setInterval(load, 5000)
     return () => { live = false; clearInterval(t) }
   }, [open, phoneId])
-  const join = (n: string) => { window.open(`#/video-room/${encodeURIComponent(n)}`, '_blank', 'noopener'); setOpen(false) }
+  const join = (n: string) => { window.open(`#/video-room/${encodeURIComponent(n)}?phone=${encodeURIComponent(phoneId)}`, '_blank', 'noopener'); setOpen(false) }
   if (!open) return <button className="btn w-full justify-center" onClick={() => setOpen(true)}><Video size={15} className="text-fuchsia-300" aria-hidden /> Join a video room</button>
   return (
     <div className="space-y-2" role="region" aria-label="Video rooms">

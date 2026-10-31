@@ -66,11 +66,30 @@ struct PhoneView: UIViewRepresentable {
             decisionHandler(origin.host == home?.host && (type == .microphone || type == .camera) ? .grant : .deny)
         }
 
-        // window.open (a video room) loads in this same web view instead of a new window the app has none for.
+        /// The video room's window, over the phone page while it is open.
+        private weak var room: WKWebView?
+
+        // window.open (a video room) opens over the phone, which keeps running underneath (its calls, the
+        // room's sound); the room's Leave closes it (window.close).
         func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for action: WKNavigationAction,
                      windowFeatures: WKWindowFeatures) -> WKWebView? {
-            if let url = action.request.url, url.host == home?.host { webView.load(URLRequest(url: url)) }
-            return nil
+            guard let url = action.request.url, url.host == home?.host else { return nil }
+            room?.removeFromSuperview()
+            let r = WKWebView(frame: webView.bounds, configuration: configuration)
+            r.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            r.uiDelegate = self
+            r.navigationDelegate = self
+            r.isOpaque = false
+            r.backgroundColor = UIColor(red: 0.02, green: 0.03, blue: 0.09, alpha: 1)
+            webView.addSubview(r)
+            room = r
+            return r
+        }
+
+        func webViewDidClose(_ webView: WKWebView) {
+            guard webView === room else { return }
+            webView.removeFromSuperview()
+            room = nil
         }
 
         // Only BitVoice's own pages load here; links elsewhere open in Safari.

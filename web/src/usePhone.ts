@@ -179,6 +179,15 @@ export function usePhone() {
         setTimeout(() => { early.current.delete(ev.callId); setCalls((cs) => cs.filter((c) => c.id !== ev.callId)) }, 2500)
       }
     })
+    es.addEventListener('chat', (e) => {
+      // A colleague's message while the phone is out of sight: a notification (the mobile app shows its
+      // own, which opens its Chat tab; a browser shows one when allowed).
+      const c = JSON.parse((e as MessageEvent).data) as { key: string; fromName?: string; message: { from: string; text: string } }
+      if (c.message.from === phone.extension || !document.hidden) return
+      const title = c.fromName || c.message.from
+      if (window.bitvoiceNative?.post) window.bitvoiceNative.post(JSON.stringify({ type: 'chat', from: c.message.from, name: title, text: c.message.text.slice(0, 140) }))
+      else if ('Notification' in window && Notification.permission === 'granted') new Notification(title, { body: c.message.text.slice(0, 140), tag: 'chat:' + c.key })
+    })
     es.addEventListener('briefing', (e) => {
       const b = JSON.parse((e as MessageEvent).data) as { callId: string; summary: string }
       setCalls((cs) => cs.map((c) => (c.pbxCall === b.callId ? { ...c, briefing: b.summary } : c)))

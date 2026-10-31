@@ -15,7 +15,7 @@ export interface NativeHost { device: string; secret: string; platform: 'ios' | 
 declare global {
   interface Window {
     bitvoiceNative?: NativeHost
-    bitvoice?: { answer: (id: string) => void; hangup: (id: string) => void; mute: (on: boolean) => void; dtmf: (k: string) => void; hold: (on: boolean) => void; transfer: (to: string) => void }
+    bitvoice?: { answer: (id: string) => void; hangup: (id: string) => void; mute: (on: boolean) => void; dtmf: (k: string) => void; hold: (on: boolean) => void; transfer: (to: string) => void; dial: (n: string) => void }
     webkit?: { messageHandlers?: Record<string, { postMessage: (m: unknown) => void }> }
   }
 }
@@ -46,9 +46,10 @@ export function useNativeBridge(api: ReturnType<typeof usePhone>) {
   useEffect(() => {
     if (!host) return
     for (const c of api.calls) {
-      if (told.current.get(c.id) === c.state) continue
-      told.current.set(c.id, c.state)
-      host.post(JSON.stringify({ type: 'call', id: c.id, pbxCall: c.pbxCall ?? '', state: c.state, direction: c.direction, number: c.number, name: c.name ?? '', reason: c.reason ?? '' }))
+      const seen = c.state + (c.held ? ':held' : '')
+      if (told.current.get(c.id) === seen) continue
+      told.current.set(c.id, seen)
+      host.post(JSON.stringify({ type: 'call', id: c.id, pbxCall: c.pbxCall ?? '', state: c.state, held: !!c.held, direction: c.direction, number: c.number, name: c.name ?? '', reason: c.reason ?? '' }))
     }
   }, [host, api.calls])
 
@@ -67,6 +68,7 @@ export function useNativeBridge(api: ReturnType<typeof usePhone>) {
       dtmf: (k) => { const c = api.calls.find((x) => x.state === 'connected'); if (c) api.dtmf(c.id, k) },
       hold: (on) => { const c = api.calls.find((x) => x.state === 'connected'); if (c) api.hold(c.id, on) },
       transfer: (to) => { const c = api.calls.find((x) => x.state === 'connected'); if (c) api.transfer(c.id, to) },
+      dial: (n) => { void api.dial(n) },
     }
     return () => { window.bitvoice = undefined }
   }, [host, api])

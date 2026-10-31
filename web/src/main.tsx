@@ -81,6 +81,8 @@ function App() {
   const slug = callSlug(hash)
   if (slug) return <CallPage slug={slug} />
   if (/^#\/me(?:[/?]|$)/.test(hash)) return <Portal />
+  // A video room opened from a browser phone (the mobile app) joins as that phone's extension.
+  if (/^#\/video-room\/[0-9]+\?(?:.*&)?phone=/.test(hash)) return <R><Route path="/video-room/:number" element={<VideoRoom />} /></R>
   return isPhoneApp(hash) ? <PhoneApp /> : <Admin />
 }
 

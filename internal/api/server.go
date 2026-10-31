@@ -248,7 +248,12 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 // handle registers a route that needs a signed-in user; admin routes also need the admin role.
 func (s *Server) handle(pattern string, admin bool, f func(w http.ResponseWriter, r *http.Request, u store.User)) {
 	s.noteRoute(pattern, admin, false)
-	s.mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+	s.mux.HandleFunc(pattern, s.signedIn(pattern, admin, f))
+}
+
+// signedIn is handle's check of who is asking, for a route registered another way.
+func (s *Server) signedIn(pattern string, admin bool, f func(w http.ResponseWriter, r *http.Request, u store.User)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		u, ok := s.user(r)
 		if !ok {
 			writeError(w, http.StatusUnauthorized, "sign in first")
@@ -273,7 +278,7 @@ func (s *Server) handle(pattern string, admin bool, f func(w http.ResponseWriter
 			return
 		}
 		f(w, r, u)
-	})
+	}
 }
 
 func (s *Server) user(r *http.Request) (store.User, bool) {

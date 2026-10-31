@@ -105,6 +105,11 @@ final class Calls: NSObject, ObservableObject {
             status = (m["error"] as? String) ?? ""
             return
         }
+        if type == "dial" {
+            // A video room asks the phone to call its sound: the phone page places the call.
+            run?("window.bitvoice && window.bitvoice.dial(\(js(m["number"] as? String ?? "")))")
+            return
+        }
         if type == "videoroom" {
             // A video room was joined or left in the app's web view: show it as a video call.
             let room = m["room"] as? String ?? "video"
@@ -114,6 +119,12 @@ final class Calls: NSObject, ObservableObject {
         guard type == "call", let id = m["id"] as? String, let state = m["state"] as? String else { return }
         let number = m["number"] as? String ?? "", name = m["name"] as? String ?? ""
         let direction = m["direction"] as? String ?? "in"
+        // "calling" can pass too quickly for the page to report it: the first state seen of a call made
+        // here (ringing, or connected for a room answered at once) puts it on the call screen.
+        if direction == "out", state != "ended", uuids[id] == nil, Calls.hasCallScreen {
+            let action = CXStartCallAction(call: uuid(for: id), handle: CXHandle(type: .phoneNumber, value: number))
+            controller.request(CXTransaction(action: action)) { _ in }
+        }
         switch state {
         case "incoming":
             // The push that woke the app named BitVoice's call ID; the page knows the call by its own ID.
@@ -125,10 +136,7 @@ final class Calls: NSObject, ObservableObject {
             }
             if let u = uuids[id], answeredEarly.remove(u) != nil { run?("window.bitvoice && window.bitvoice.answer(\(js(id)))") }
         case "calling":
-            guard Calls.hasCallScreen else { break }
-            let u = uuid(for: id)
-            let action = CXStartCallAction(call: u, handle: CXHandle(type: .phoneNumber, value: number))
-            controller.request(CXTransaction(action: action)) { _ in }
+            break // put on the call screen above
         case "ringing":
             if direction == "out", let u = uuids[id] { provider.reportOutgoingCall(with: u, startedConnectingAt: Date()) }
         case "connected":

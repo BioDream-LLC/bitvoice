@@ -1406,3 +1406,41 @@ test('the phone lists SFU video rooms to join', async ({ page }) => {
   expect(rooms.items.length).toBeGreaterThan(0)
   expect(rooms.items.some((r) => r.number === rooms.want)).toBe(true)
 })
+
+// A video room opened from a phone (the mobile apps): the room window has no administrator sign-in, so
+// it names its browser phone and joins as that extension; its own picture shows, and the room sees it live.
+test('a video room opened from a phone joins as its extension', async ({ page, browser }) => {
+  test.setTimeout(90_000)
+  await signIn(page)
+  const H = { 'X-BitVoice': '1', 'Content-Type': 'application/json' }
+  const { number, phoneId, ext } = await page.evaluate(async (H) => {
+    const send = async (method: string, url: string, body?: unknown) => {
+      const r = await fetch(url, { method, headers: H, body: body === undefined ? undefined : JSON.stringify(body) })
+      const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(url + ': ' + (j.message ?? r.status)); return j
+    }
+    const have = (await (await fetch('./api/conferences')).json()).items as { number: string; video?: string; pin?: string }[]
+    let room = have.find((c) => c.video === 'sfu' && !c.pin)?.number
+    if (!room) { room = '947'; await send('POST', './api/conferences', { number: room, name: 'Phone room', video: 'sfu', pin: '', maxMembers: 16 }) }
+    const exts = (await (await fetch('./api/extensions')).json()).items as { number: string }[]
+    const p = await send('POST', './api/phone', { extension: exts[0].number })
+    return { number: room, phoneId: p.id as string, ext: exts[0].number }
+  }, H)
+  // A fresh browser with no session, as the app's room window.
+  const ctx = await browser.newContext({ ignoreHTTPSErrors: true, permissions: ['camera', 'microphone'] })
+  const room = await ctx.newPage()
+  await room.goto(`/#/video-room/${number}?phone=${encodeURIComponent(phoneId)}`)
+  await expect(room.getByRole('heading', { name: new RegExp(`Video room ${number}`) })).toBeVisible()
+  await expect(room.getByLabel('Password')).toHaveCount(0)
+  await room.getByRole('button', { name: 'Join with my camera' }).click()
+  await expect(room.getByRole('button', { name: 'Leave' })).toBeVisible()
+  await expect.poll(() => room.evaluate(() => document.querySelector<HTMLVideoElement>('video[aria-label="Your camera"]')?.videoWidth ?? 0), { timeout: 15_000 }).toBeGreaterThan(0)
+  await expect.poll(async () => {
+    const st = await page.evaluate(async (n) => (await (await fetch(`./api/video-rooms/${n}`)).json()), number)
+    return (st.publishers as { live: boolean }[]).some((p) => p.live)
+  }, { timeout: 20_000 }).toBe(true)
+  // Named as the phone's extension, not an administrator.
+  const names = await page.evaluate(async (n) => ((await (await fetch(`./api/video-rooms/${n}`)).json()).publishers as { name: string }[]).map((p) => p.name), number)
+  const extName = await page.evaluate(async (e) => ((await (await fetch('./api/extensions')).json()).items as { number: string; name: string }[]).find((x) => x.number === e)?.name ?? e, ext)
+  expect(names).toContain(extName)
+  await ctx.close()
+})

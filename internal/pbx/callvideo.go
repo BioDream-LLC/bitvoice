@@ -556,12 +556,32 @@ func (e *Engine) sipVideoSource(v *callVideo) {
 func (e *Engine) browserEndpoint(host string) (*media.Endpoint, error) {
 	// On Windows a browser on this computer may send from any of its addresses (see webrtc's
 	// liteCandidates): the endpoint takes them all.
-	if ip := net.ParseIP(host); ip != nil && (runtime.GOOS != "windows" || !ip.IsLoopback()) {
+	// Only an address of this computer's: on Linux a socket may be bound to any address (IP_FREEBIND, for
+	// a cluster's shared address), and one bound to the public address of a cloud's one-to-one NAT never
+	// sees the packets, which arrive on the private address.
+	if ip := net.ParseIP(host); ip != nil && (runtime.GOOS != "windows" || !ip.IsLoopback()) && ownAddress(ip) {
 		if ep, err := e.pool.AllocateOn(host); err == nil {
 			return ep, nil
 		}
 	}
 	return e.pool.Allocate()
+}
+
+// ownAddress says whether ip is on one of this computer's network interfaces now.
+func ownAddress(ip net.IP) bool {
+	if ip.IsLoopback() {
+		return true
+	}
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return false
+	}
+	for _, a := range addrs {
+		if n, ok := a.(*net.IPNet); ok && n.IP.Equal(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // videoSilence ends a caller's live video once no picture has come for this long (a phone that lost
