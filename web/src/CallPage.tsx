@@ -21,6 +21,7 @@ export function CallPage({ slug }: { slug: string }) {
   const [since, setSince] = useState(0)
   const [now, setNow] = useState(Date.now())
   const [muted, setMuted] = useState(false)
+  const [reconnecting, setReconnecting] = useState(false)
   const pc = useRef<RTCPeerConnection | null>(null)
   const ids = useRef<{ phone: string; call: string } | null>(null)
   const es = useRef<EventSource | null>(null)
@@ -36,6 +37,43 @@ export function CallPage({ slug }: { slug: string }) {
     return () => clearInterval(t)
   }, [state])
   useEffect(() => () => { hangup() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // A new network (Wi-Fi to mobile, a new address): restart ICE at once instead of waiting for the path to fail.
+  useEffect(() => {
+    const moved = () => { restartRef.current() }
+    const conn = (navigator as Navigator & { connection?: EventTarget }).connection
+    window.addEventListener('online', moved)
+    conn?.addEventListener('change', moved)
+    return () => { window.removeEventListener('online', moved); conn?.removeEventListener('change', moved) }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // An ICE restart: new ICE credentials for the same call, so it moves to the new path without
+  // being dialled again (as the phone page does).
+  const restarting = useRef(false)
+  const restart = async () => {
+    const p = pc.current, i = ids.current
+    if (!p || !i || restarting.current || p.signalingState !== 'stable' || !p.remoteDescription) return
+    restarting.current = true
+    setReconnecting(true)
+    try {
+      await p.setLocalDescription(await p.createOffer({ iceRestart: true }))
+      await new Promise<void>((ok) => {
+        if (p.iceGatheringState === 'complete') return ok()
+        p.addEventListener('icegatheringstatechange', () => p.iceGatheringState === 'complete' && ok())
+        setTimeout(ok, 1500)
+      })
+      const r = await fetch(`./api/phone/${i.phone}/calls/${i.call}/ice`, { method: 'POST', headers: H, body: JSON.stringify({ sdp: p.localDescription!.sdp }) })
+      if (!r.ok) throw new Error('restart refused')
+      await p.setRemoteDescription({ type: 'answer', sdp: (await r.json()).sdp })
+      if (p.iceConnectionState === 'connected' || p.iceConnectionState === 'completed') setReconnecting(false)
+    } catch {
+      if ((p.signalingState as RTCSignalingState) === 'have-local-offer') await p.setLocalDescription({ type: 'rollback' }).catch(() => {})
+      setReconnecting(false)
+    } finally {
+      restarting.current = false
+    }
+  }
+  const restartRef = useRef(restart)
+  restartRef.current = restart
 
   const stop = () => {
     es.current?.close()
@@ -58,6 +96,14 @@ export function CallPage({ slug }: { slug: string }) {
     try {
       const p = await newPeer()
       pc.current = p
+      let timer: ReturnType<typeof setTimeout> | undefined
+      p.addEventListener('iceconnectionstatechange', () => {
+        const s = p.iceConnectionState
+        clearTimeout(timer)
+        if (s === 'connected' || s === 'completed') setReconnecting(false)
+        else if (s === 'failed') restartRef.current()
+        else if (s === 'disconnected') timer = setTimeout(() => p.iceConnectionState === 'disconnected' && restartRef.current(), 2000)
+      })
       const mic = await openMicrophone({ echoCancellation: true, noiseSuppression: true })
       mic.getTracks().forEach((t) => p.addTrack(t, mic))
       p.ontrack = (e) => {
@@ -117,7 +163,7 @@ export function CallPage({ slug }: { slug: string }) {
           ) : (
             <>
               <p role="status" className={clsx('text-lg', state === 'connected' ? 'font-mono tabular-nums text-emerald-300' : 'text-slate-300')}>
-                {state === 'connected' ? formatDuration(Math.round((now - since) / 1000)) : 'Calling…'}
+                {state === 'connected' ? (reconnecting ? 'Reconnecting…' : formatDuration(Math.round((now - since) / 1000))) : 'Calling…'}
               </p>
               <div className="grid grid-cols-3 gap-2" role="group" aria-label="Keypad">
                 {keys.map((k) => <button key={k} className="h-11 rounded-lg bg-slate-800 font-mono text-lg text-slate-100 hover:bg-slate-700" onClick={() => dtmf(k)}>{k}</button>)}

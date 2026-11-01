@@ -426,7 +426,7 @@ test('a greeting recorded in the browser is saved and plays back', async ({ page
 })
 
 // A call link: someone who is not signed in opens the link's page, gives a name and calls; BitVoice
-// answers it (voicemail here) and the call shows who it is from.
+// answers it (voicemail here), the call shows who it is from, and it survives a network change.
 test('a call link places a browser call without signing in', async ({ page, browser }) => {
   await signIn(page)
   const slug = await page.evaluate(async () => {
@@ -442,6 +442,7 @@ test('a call link places a browser call without signing in', async ({ page, brow
   expect(slug).toMatch(/^[a-z0-9-]{8,}$/)
   const guest = await browser.newContext({ permissions: ['microphone'] })
   const p = await guest.newPage()
+  await p.addInitScript(() => { const O = window.RTCPeerConnection; (window as any).__all = []; (window as any).RTCPeerConnection = function (c: any) { const x = new O(c); (window as any).__all.push(x); return x } as any; (window as any).RTCPeerConnection.prototype = O.prototype })
   await p.goto(`/call/${slug}`)
   await expect(p.getByRole('heading', { name: 'Call support' })).toBeVisible()
   await expect(p.getByRole('button', { name: 'Call now' })).toBeDisabled()
@@ -450,6 +451,18 @@ test('a call link places a browser call without signing in', async ({ page, brow
   await expect(p.getByRole('status')).toHaveText(/^0:0[1-9]$/, { timeout: 10000 })
   const from = await page.evaluate(async () => (await (await fetch('./api/calls')).json()).items.map((c: { fromName: string }) => c.fromName))
   expect(from).toContain('Web: Jo Web')
+  await p.waitForTimeout(3000)
+  console.log('PRE', JSON.stringify(await p.evaluate(async () => Promise.all((window as any).__all.map(async (x: RTCPeerConnection) => { let rx = 0; const c: string[] = []; (await x.getStats()).forEach((r: any) => { if (r.type === 'inbound-rtp') rx += r.bytesReceived; if (r.type === 'candidate-pair') c.push(r.state); if (r.type === 'local-candidate' || r.type === 'remote-candidate') c.push(r.type[0] + ':' + r.address + ':' + r.port + ':' + r.protocol) }); return [x.iceConnectionState, rx, c, x.remoteDescription?.sdp.split('\r\n').filter((l) => l.startsWith('a=candidate') || l.startsWith('c='))] })))))
+  // The caller's network changes: the page restarts ICE, BitVoice accepts it for the same call, and the
+  // call carries on. (Here the guest's own ICE path may never connect: on Linux the browser offers only
+  // its network address and the test server listens on 127.0.0.1, so this checks the restart itself;
+  // the sound moving to the new path is checked on the docked phone above.)
+  const restarted = p.waitForResponse((r) => /\/api\/phone\/[^/]+\/calls\/[^/]+\/ice$/.test(r.url()))
+  await p.evaluate(() => window.dispatchEvent(new Event('online')))
+  expect((await restarted).status()).toBe(200)
+  await p.waitForTimeout(1500)
+  await expect(p.getByRole('button', { name: 'Hang up' })).toBeVisible()
+  await expect(p.getByText('Call ended. Thank you.')).toHaveCount(0)
   await p.getByRole('button', { name: 'Hang up' }).click()
   await expect(p.getByText('Call ended. Thank you.')).toBeVisible()
   await guest.close()

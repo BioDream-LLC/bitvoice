@@ -87,8 +87,9 @@ func (s *Server) callLinkRoutes() {
 			writeError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
-		c.SetCleanup(func() { sess.Close(); ep.Close() })
 		bp := &browserPhone{phone: p, ext: "", lastSeen: time.Now()}
+		forget := bp.keep(c.ID, sess) // so the page can restart ICE when its network changes
+		c.SetCleanup(func() { forget(); sess.Close(); ep.Close() })
 		phones.Store(id, bp)
 		go s.reapPhone(id, bp)
 		s.Store.Audit(store.AuditEntry{Actor: "web caller", Action: "calllink.call", Detail: l.Name + ": " + in.Name, From: ip})
