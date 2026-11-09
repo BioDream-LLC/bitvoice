@@ -201,6 +201,13 @@ func build(root, out, base string) error {
 			return err
 		}
 	}
+	// Each manual names itself as canonical and its other languages as alternates; without that, search
+	// engines take the translations (whose untranslated parts are English) for duplicates of each other.
+	for _, code := range append([]string{""}, manualCodes()...) {
+		if err := manualLinks(filepath.Join(out, "manual", code, "index.html"), base, code); err != nil {
+			return err
+		}
+	}
 	fmt.Fprintf(&sitemap, "<url><loc>%s/manual/</loc><priority>0.8</priority></url>\n</urlset>\n", base)
 	if err := os.WriteFile(filepath.Join(out, "sitemap.xml"), []byte(sitemap.String()), 0o644); err != nil {
 		return err
@@ -341,6 +348,45 @@ func copyAssets(root, out string) error {
 
 // pngFallback is set when the screenshots were copied as PNGs; the layout then rewrites the pages' .webp references.
 var pngFallback bool
+
+// manualCodes lists the translated manuals' language codes.
+func manualCodes() []string {
+	codes := make([]string, 0, len(manualLangs))
+	for _, l := range manualLangs {
+		codes = append(codes, l[0])
+	}
+	return codes
+}
+
+// manualLinks puts a canonical link and hreflang alternates into the head of the manual at file,
+// the English one when code is empty.
+func manualLinks(file, base, code string) error {
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		return err
+	}
+	page := string(raw)
+	if !strings.Contains(page, "</head>") {
+		return fmt.Errorf("%s has no </head>", file)
+	}
+	url := func(c string) string {
+		if c == "" {
+			return base + "/manual/"
+		}
+		return base + "/manual/" + c + "/"
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "<link rel=\"canonical\" href=\"%s\">\n", url(code))
+	if len(manualLangs) > 0 {
+		fmt.Fprintf(&b, "<link rel=\"alternate\" hreflang=\"en\" href=\"%s\">\n", url(""))
+		for _, c := range manualCodes() {
+			fmt.Fprintf(&b, "<link rel=\"alternate\" hreflang=\"%s\" href=\"%s\">\n", c, url(c))
+		}
+		fmt.Fprintf(&b, "<link rel=\"alternate\" hreflang=\"x-default\" href=\"%s\">\n", url(""))
+	}
+	page = strings.Replace(page, "</head>", b.String()+"</head>", 1)
+	return os.WriteFile(file, []byte(page), 0o644)
+}
 
 func copyFile(src, dst string) error {
 	in, err := os.Open(src)
