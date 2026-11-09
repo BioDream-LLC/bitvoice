@@ -252,7 +252,10 @@ test('radio console: a P25 talkgroup over the ISSI', async ({ page }) => {
     await setup.getByRole('button', { name: 'Save' }).click()
     await expect(page.getByText('Radio console saved').last()).toBeVisible()
 
-    // A radio talks: its name and unit ID show while it does, and go when it stops.
+    // A radio talks: its name and unit ID show while it does, and go when it stops. The toast above
+    // may be an earlier save's, so wait until the server has the name before the radio talks.
+    await expect.poll(() => page.evaluate(async () => (await (await fetch('./api/settings')).json()).system.radio.aliases), { timeout: 10_000 })
+      .toEqual([{ unit: 197, name: 'Engine 5' }])
     const replay = rfss.replay()
     await expect(tile.getByText('Engine 5')).toBeVisible({ timeout: 5_000 })
     await expect(tile.getByText('(bee07.ad5.0000c5)')).toBeVisible()
