@@ -32,7 +32,7 @@ class PushService : FirebaseMessagingService() {
             // A chat message. When the app is in the background the system shows the notification itself;
             // in the foreground it does not, so post one. The title and body come with the message.
             val n = m.notification
-            BitVoiceApp.chatNotice(this, d["from"] ?: "", n?.title ?: (d["from"] ?: "Message"), n?.body ?: "New message")
+            BitVoiceApp.chatNotice(this, d["caller"] ?: "", n?.title ?: (d["caller"] ?: "Message"), n?.body ?: "New message")
             return
         }
         if (d["kind"] != "call") return
@@ -41,7 +41,8 @@ class PushService : FirebaseMessagingService() {
         // Android shows the call (CallService, then the ringing notification, whose full-screen intent
         // opens the app over the lock screen). An app in the background may not start its own screen, so
         // the phone page connects when the app opens: on the full-screen intent, or on Answer.
-        BitVoiceApp.incoming(this, id, d["from"] ?: "", d["fromName"] ?: "")
+        // "caller", not "from": FCM reserves "from" (servers before 0.1.16 could not send any call push).
+        BitVoiceApp.incoming(this, id, d["caller"] ?: "", d["callerName"] ?: "")
     }
 }
 

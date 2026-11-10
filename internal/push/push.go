@@ -281,13 +281,15 @@ func (f *FCM) Send(ctx context.Context, m Message) error {
 	}
 	msg := map[string]any{
 		"token": m.Token,
-		"data":  map[string]string{"kind": "call", "callId": m.CallID, "from": m.From, "fromName": m.FromName, "server": m.Server},
+		// Google refuses the whole message for a data key it reserves ("from", "notification",
+		// "message_type", anything starting "google" or "gcm"), so the caller travels as "caller".
+		"data": map[string]string{"kind": "call", "callId": m.CallID, "caller": m.From, "callerName": m.FromName, "server": m.Server},
 		"android": map[string]any{"priority": "high", "ttl": strconv.Itoa(int(ttl.Seconds())) + "s",
 			"collapse_key": m.CallID},
 	}
 	if m.Kind == "chat" {
 		// A chat message carries a notification (shown when the app is in the background) and its data.
-		msg["data"] = map[string]string{"kind": "chat", "from": m.From, "server": m.Server}
+		msg["data"] = map[string]string{"kind": "chat", "caller": m.From, "server": m.Server}
 		msg["notification"] = map[string]string{"title": m.Title, "body": m.Body}
 		msg["android"] = map[string]any{"priority": "high", "collapse_key": "chat:" + m.From,
 			"notification": map[string]string{"channel_id": "chat", "tag": "chat:" + m.From}}
@@ -312,10 +314,18 @@ func (f *FCM) Send(ctx context.Context, m Message) error {
 	if resp.StatusCode == 404 || bytes.Contains(b, []byte("UNREGISTERED")) {
 		return ErrGone
 	}
+	var e struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
 	if resp.StatusCode == 401 {
 		f.mu.Lock()
 		f.access = ""
 		f.mu.Unlock()
+	}
+	if json.Unmarshal(b, &e) == nil && e.Error.Message != "" {
+		return fmt.Errorf("push: Google answered %d: %s", resp.StatusCode, e.Error.Message)
 	}
 	return fmt.Errorf("push: Google answered %d", resp.StatusCode)
 }

@@ -119,6 +119,18 @@ func TestFCM(t *testing.T) {
 	if msg["token"] != "tok" || msg["data"].(map[string]any)["callId"] != "c2" || msg["android"].(map[string]any)["priority"] != "high" {
 		t.Fatalf("sent %v", sent)
 	}
+	// Google refuses a message with a data key it reserves (it answered 400 "Invalid data payload key: from").
+	reserved := func() {
+		for k := range msg["data"].(map[string]any) {
+			if k == "from" || k == "notification" || k == "message_type" || strings.HasPrefix(k, "google") || strings.HasPrefix(k, "gcm") {
+				t.Fatalf("data key %q is reserved by FCM: %v", k, sent)
+			}
+		}
+	}
+	reserved()
+	if msg["data"].(map[string]any)["caller"] != "101" {
+		t.Fatalf("caller not sent: %v", sent)
+	}
 	// A chat message carries a notification (shown when the app is in the background) and kind=chat data.
 	if err := f.Send(context.Background(), Message{Platform: "android", Token: "tok", Kind: "chat", From: "101", Title: "Sam", Body: "Hi there"}); err != nil {
 		t.Fatal(err)
@@ -128,6 +140,7 @@ func TestFCM(t *testing.T) {
 	if note == nil || note["title"] != "Sam" || note["body"] != "Hi there" || msg["data"].(map[string]any)["kind"] != "chat" {
 		t.Fatalf("chat sent %v", sent)
 	}
+	reserved()
 }
 
 func TestRelaySignatures(t *testing.T) {
