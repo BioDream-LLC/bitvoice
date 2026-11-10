@@ -24,6 +24,8 @@ umask 077
 [ -s /etc/bitvoice-demo/radio-token ] || printf 'bv_%s' "$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')" > /etc/bitvoice-demo/radio-token
 # The CAD's addresses and the secrets BitVoice sends it (EIDO_URL, EIDO_TOKEN, RADIO_URL, RADIO_SECRET).
 [ -f "$here/cad.env" ] && install -m 0600 "$here/cad.env" /etc/bitvoice-demo/cad.env
+# Google's push key for the Android app (a Firebase service account), if provision.sh brought one.
+[ -f "$here/fcm.json" ] && install -m 0600 "$here/fcm.json" /etc/bitvoice-demo/fcm.json
 umask 022
 
 # The invented 911 calls (an ESInet stand-in, the call-taker's phone and the speech stand-in).
@@ -66,7 +68,8 @@ chown -R bitvoice:bitvoice /var/lib/bitvoice
 systemctl start bitvoice
 /usr/local/bin/bitvoice-demo-seed -url https://127.0.0.1 -admin-password-file /root/bitvoice-demo-admin \
   -domain "$DOMAIN" -email "$EMAIL" -public-address "$(curl -fsS https://checkip.amazonaws.com)" \
-  -psap -bot-secret-file /etc/bitvoice-demo/bot-secret -cad-env /etc/bitvoice-demo/cad.env
+  -psap -bot-secret-file /etc/bitvoice-demo/bot-secret -cad-env /etc/bitvoice-demo/cad.env \
+  $( [ -s /etc/bitvoice-demo/fcm.json ] && echo -fcm-file /etc/bitvoice-demo/fcm.json )
 RESET
 chmod 0755 /usr/local/sbin/bitvoice-demo-reset
 

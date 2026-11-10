@@ -15,15 +15,15 @@ paid modules. No licence meter.
 **One 37 MB file. 47 MB of memory carrying four live calls and eight phones.** Double-click it and a
 browser opens on a setup wizard; a few minutes later a phone rings.
 
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go](https://img.shields.io/badge/Go-1.26%2B-00ADD8.svg?logo=go&logoColor=white)](https://go.dev) [![Release](https://img.shields.io/badge/release-v0.1.15-success.svg)](#download) [![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)](#download) [![CI](https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml/badge.svg)](https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Go](https://img.shields.io/badge/Go-1.26%2B-00ADD8.svg?logo=go&logoColor=white)](https://go.dev) [![Release](https://img.shields.io/badge/release-v0.1.16-success.svg)](#download) [![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)](#download) [![CI](https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml/badge.svg)](https://github.com/BioDream-LLC/bitvoice/actions/workflows/ci.yml)
 
 <a href="https://demo.bitvoice.org"><img src="docs/assets/buttons/try.svg" alt="Try BitVoice now: the live demonstration, no install" width="300"></a>
 
 <sub><b>Sign in as</b> <code>demo</code> <b>with password</b> <code>try-bitvoice-demo</code> · then open the browser phone as extension <code>150</code>, password <code>try-the-demo-phone</code>, and dial <code>810</code> or <code>*43</code> · an invented business, reset every night · look at everything, change nothing · or <a href="docs/assets/tour.mp4">watch the tour</a> (2½ minutes)</sub>
 
-### Download v0.1.15
+### Download v0.1.16
 
-<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.15/bitvoice-v0.1.15-linux-amd64.tar.gz"><img src="docs/assets/buttons/download-linux.svg" alt="Download BitVoice for Linux, x86-64" width="240"></a>&nbsp;<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.15/bitvoice-v0.1.15-darwin-arm64.tar.gz"><img src="docs/assets/buttons/download-macos.svg" alt="Download BitVoice for macOS, Apple Silicon" width="240"></a>&nbsp;<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.15/bitvoice-v0.1.15-windows-amd64.zip"><img src="docs/assets/buttons/download-windows.svg" alt="Download BitVoice for Windows, x64" width="240"></a>
+<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.16/bitvoice-v0.1.16-linux-amd64.tar.gz"><img src="docs/assets/buttons/download-linux.svg" alt="Download BitVoice for Linux, x86-64" width="240"></a>&nbsp;<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.16/bitvoice-v0.1.16-darwin-arm64.tar.gz"><img src="docs/assets/buttons/download-macos.svg" alt="Download BitVoice for macOS, Apple Silicon" width="240"></a>&nbsp;<a href="https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.16/bitvoice-v0.1.16-windows-amd64.zip"><img src="docs/assets/buttons/download-windows.svg" alt="Download BitVoice for Windows, x64" width="240"></a>
 
 <a href="https://biodream-llc.github.io/bitvoice/manual/"><img src="docs/assets/buttons/manual.svg" alt="Read the BitVoice manual" width="240"></a>
 
@@ -83,9 +83,10 @@ with the caller's building, floor and room.
 <img src="docs/assets/mobile/hero.png" alt="BitVoice mobile: three phones showing a live call transcript, an incoming call with Answer and Decline, and a video room with three people." width="100%">
 
 **Your extension, in your pocket.** The free BitVoice app makes a mobile phone one of an extension's phones.
-Calls ring on the phone's own call screen, and ring groups and queues ring it with the extension's other
-phones. Today the Android app rings while it is running, in the background too; ringing a closed app needs
-push, which the released app does not have yet. Pairing is one scan: the administrator opens the extension, presses
+Calls ring on the phone's own call screen, even when the app is closed, and ring groups and queues ring it
+with the extension's other phones. The released Android app is woken through BioDream's Firebase project:
+[demo.bitvoice.org](https://demo.bitvoice.org) wakes it today; your own server will through BioDream's push
+relay (not running yet) or your own build of the app, and until then it rings while the app is running. Pairing is one scan: the administrator opens the extension, presses
 **Add a phone**, and the person scans the code. No password to type, no account to make, no tracking.
 
 <table>
@@ -353,18 +354,18 @@ irm https://raw.githubusercontent.com/BioDream-LLC/bitvoice/main/deploy/install.
 Run it again to upgrade; `--uninstall` removes it. The manual's Getting started chapter says what each puts
 where. CI runs both installers on Linux, macOS and Windows on every change.
 
-**Or download it: version 0.1.15**, one binary, nothing to install. Each archive holds the program, the licence, the notice
+**Or download it: version 0.1.16**, one binary, nothing to install. Each archive holds the program, the licence, the notice
 and the manual as a PDF.
 
 | Platform | Architecture | Download |
 |---|---|---|
-| **Windows** | x64 (Intel/AMD) | [`bitvoice-v0.1.15-windows-amd64.zip`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.15/bitvoice-v0.1.15-windows-amd64.zip) |
-| **Windows** | ARM64 | [`bitvoice-v0.1.15-windows-arm64.zip`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.15/bitvoice-v0.1.15-windows-arm64.zip) |
-| **macOS** | Apple Silicon | [`bitvoice-v0.1.15-darwin-arm64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.15/bitvoice-v0.1.15-darwin-arm64.tar.gz) |
-| **macOS** | Intel | [`bitvoice-v0.1.15-darwin-amd64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.15/bitvoice-v0.1.15-darwin-amd64.tar.gz) |
-| **Linux** | x86-64 | [`bitvoice-v0.1.15-linux-amd64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.15/bitvoice-v0.1.15-linux-amd64.tar.gz) |
-| **Linux** | ARM64 / aarch64 | [`bitvoice-v0.1.15-linux-arm64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.15/bitvoice-v0.1.15-linux-arm64.tar.gz) |
-| **Android** | the phone app (10 and later) | [`bitvoice-android-v0.1.15.apk`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.15/bitvoice-android-v0.1.15.apk) ([how it works](#phone-apps-for-android-and-iphone)) |
+| **Windows** | x64 (Intel/AMD) | [`bitvoice-v0.1.16-windows-amd64.zip`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.16/bitvoice-v0.1.16-windows-amd64.zip) |
+| **Windows** | ARM64 | [`bitvoice-v0.1.16-windows-arm64.zip`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.16/bitvoice-v0.1.16-windows-arm64.zip) |
+| **macOS** | Apple Silicon | [`bitvoice-v0.1.16-darwin-arm64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.16/bitvoice-v0.1.16-darwin-arm64.tar.gz) |
+| **macOS** | Intel | [`bitvoice-v0.1.16-darwin-amd64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.16/bitvoice-v0.1.16-darwin-amd64.tar.gz) |
+| **Linux** | x86-64 | [`bitvoice-v0.1.16-linux-amd64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.16/bitvoice-v0.1.16-linux-amd64.tar.gz) |
+| **Linux** | ARM64 / aarch64 | [`bitvoice-v0.1.16-linux-arm64.tar.gz`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.16/bitvoice-v0.1.16-linux-arm64.tar.gz) |
+| **Android** | the phone app (10 and later) | [`bitvoice-android-v0.1.16.apk`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.16/bitvoice-android-v0.1.16.apk) ([how it works](#phone-apps-for-android-and-iphone)) |
 
 **On Windows, unzip and double-click `bitvoice.exe`.** A window opens and your browser opens on the setup
 wizard. Keep the window open while you use BitVoice: closing it stops it. Windows asks once whether BitVoice
@@ -374,7 +375,7 @@ the same way but has not been run on an ARM Windows machine. BitVoice does not i
 service yet.
 
 **Verify what you downloaded** against
-[`SHA256SUMS`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.15/SHA256SUMS):
+[`SHA256SUMS`](https://github.com/BioDream-LLC/bitvoice/releases/download/v0.1.16/SHA256SUMS):
 
 ```sh
 shasum -a 256 -c SHA256SUMS --ignore-missing
@@ -524,7 +525,7 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | Texting, WhatsApp, Messenger, web chat | Checked against a reference (Twilio, Telnyx, Bandwidth, Vonage, TextMagic, WhatsApp) | Texts through Twilio, Telnyx, Bandwidth, Vonage and TextMagic, and WhatsApp texts, templates and template lists, against mocks built from the providers' own published OpenAPI specifications (Stoplight Prism, refusing anything the specification does not allow; TextMagic's is the one its own client is generated from). Vonage's showed the key belongs in HTTP Basic, no longer in the form. SignalWire speaks Twilio's API; Plivo, Flowroute, VoIP.ms and Messenger publish no specification and are checked against stand-ins written from their documentation. No live account tried |
 | CRM caller cards, Azure Blob, Azure Key Vault | Checked against a reference | EspoCRM (a real open-source CRM, in Docker) for caller cards; Microsoft's Azurite emulator for Blob uploads (container SAS, refusals); Lowkey Vault for Key Vault with a managed identity. Not yet against Azure itself or a hosted CRM |
 | Spam screening: robot test, unknown callers, spam database, *32, suggestions | Software-tested | BitVoice's own tests: a provider calling in over SIP and pressing keys (RFC 4733) at the robot test, passing and failing it; known, always-allowed and emergency call-back callers ringing at once; the spam database against a stand-in that answers the way Twilio documents its Lookup with the Nomorobo add-on (no Twilio account tried); *32 from a desk phone; suggestions from call records; the settings through the browser tests. Not yet tried against real robocalls or a paid database |
-| iPhone and Android apps | Field-tested (Android) | Android: a Google Pixel 8 (Android 16, Wi-Fi) with the signed release build against BitVoice on EC2 with a Let's Encrypt certificate: paired by link, rang with Android's call notification, answered from it, audio both ways, kept connected with the screen off and in the background (its ongoing-call notification, Hang up); without push it does not ring in the background. A Google Pixel 11 (Android 17) in AWS Device Farm: paired, rang, answered, called out; Opus, MOS 4.1. iPhone: the app (SwiftUI, CallKit, PushKit VoIP) builds against the current SDK (Xcode 27) and the server signs Apple VoIP pushes (APNs, ES256); the same real-device fixes as Android and an App Store listing (ios/AppStore) are in. Both apps are a full extension: transfer (blind, over REFER), hold and a second call, keypad and mute, with Recents, visual Voicemail (with transcripts), a Team busy-lamp, Contacts, the staff Chat (colleagues with presence, direct messages and rooms, with a notification in the background and a push when the app is closed), a video-room picker (lists the SFU rooms with who is in each, joins as the extension, shown as a video call on the phone call screen) and a live AI transcript on the call (AI.LiveCallTranscripts); transfer, hold, the live transcript, the chat reaching a colleague, the room list, a room joined by a phone and the chat push shape are each covered by an engine-level, API or browser test. On the Pixel 8 (2026-10-30, debug build, EC2 with Let's Encrypt): rang and answered from the notification, held and resumed (the Android call state follows), called out on the Android call system, Opus both ways with MOS 4.38 and no loss; joined a video room with its camera (asked for at first use) and saw a desktop camera, both live; a chat message in the background notified and opened Chat. Hold and transfer reach the native call screen (CallKit, Telecom). Not yet run on an iPhone or submitted: push, the system call screen and signing need our own Apple Developer account |
+| iPhone and Android apps | Field-tested (Android) | Android: a Google Pixel 8 (Android 16, Wi-Fi) with the signed release build against BitVoice on EC2 with a Let's Encrypt certificate: paired by link, rang with Android's call notification, answered from it, audio both ways, kept connected with the screen off and in the background (its ongoing-call notification, Hang up); without push it does not ring in the background. With push (BioDream's Firebase project, against demo.bitvoice.org): the app's process stopped, a call rang it over the lock screen and was answered (Opus, MOS 4.39); this test found that Google refuses a data key named "from", which had stopped every Android push (fixed in v0.1.16). A Google Pixel 11 (Android 17) in AWS Device Farm: paired, rang, answered, called out; Opus, MOS 4.1. iPhone: the app (SwiftUI, CallKit, PushKit VoIP) builds against the current SDK (Xcode 27) and the server signs Apple VoIP pushes (APNs, ES256); the same real-device fixes as Android and an App Store listing (ios/AppStore) are in. Both apps are a full extension: transfer (blind, over REFER), hold and a second call, keypad and mute, with Recents, visual Voicemail (with transcripts), a Team busy-lamp, Contacts, the staff Chat (colleagues with presence, direct messages and rooms, with a notification in the background and a push when the app is closed), a video-room picker (lists the SFU rooms with who is in each, joins as the extension, shown as a video call on the phone call screen) and a live AI transcript on the call (AI.LiveCallTranscripts); transfer, hold, the live transcript, the chat reaching a colleague, the room list, a room joined by a phone and the chat push shape are each covered by an engine-level, API or browser test. On the Pixel 8 (2026-10-30, debug build, EC2 with Let's Encrypt): rang and answered from the notification, held and resumed (the Android call state follows), called out on the Android call system, Opus both ways with MOS 4.38 and no loss; joined a video room with its camera (asked for at first use) and saw a desktop camera, both live; a chat message in the background notified and opened Chat. Hold and transfer reach the native call screen (CallKit, Telecom). Not yet run on an iPhone or submitted: push, the system call screen and signing need our own Apple Developer account |
 | 911 profile, radio console, NG911 Core Services, caller video | Lab | NENA's schemas and sample data, Wireshark, spandsp, OpenSSL, ExifTool, ffmpeg, a NIST P25 capture (its IMBE voice frames unpacked as mbelib unpacks them: same pitch, harmonics, voicing and amplitudes); never on a live ESInet, P25 system or PSAP CAD, and not certified |
 | P25 Phase 2 half-rate voice (AMBE+2) | Not offered | patented until 2028 |
 | Ed448 signatures (NENA) | Not offered | not in Go's standard library, and BitVoice writes no cryptography of its own; Ed25519 is used |

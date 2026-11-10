@@ -400,7 +400,7 @@ The TURN server above helps browsers on strict networks reach a BitVoice that ha
 Open \`#/phone\` on any computer or mobile browser: people sign in with their extension and SIP password, without an administrator account. It is a full phone: dial, answer, hold, transfer and the keypad. For their own forwarding and voicemail they use the staff portal at \`#/me\` (see [The staff portal](#portal)).
 
 ## The mobile apps
-The BitVoice apps for iPhone and Android are paired from the extension's page with a QR code. Calls wake the app through Apple's and Google's push services, so it rings even when it is closed (once push is set up; see below).`,
+The BitVoice apps for iPhone and Android are paired from the extension's page with a QR code. Calls wake the app through Apple's and Google's push services, so it rings even when it is closed.`,
   },
   {
     id: 'mobile', title: 'Mobile apps', keys: 'iphone android app push pair qr ios callkit',
@@ -419,7 +419,7 @@ Set **Address the apps use** to this server's https address as it is reached fro
 
 > With push off, the app rings only while it is running (in the background too).
 
-> The Android app on the [releases](https://github.com/BioDream-LLC/bitvoice/releases) is built without Google's push settings for now, so it cannot be woken: it rings while it is running. The iPhone app has not yet run on an iPhone.
+> The Android app on the [releases](https://github.com/BioDream-LLC/bitvoice/releases) is woken through BioDream's Firebase project, so a server needs BioDream's push relay (not running yet) to wake it; with your own build of the app, use **Own apps** with your own Firebase key. The iPhone app has not yet run on an iPhone.
 
 ## Pairing a phone
 1. Open the extension and press **Add a phone**.

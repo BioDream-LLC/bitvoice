@@ -2,7 +2,7 @@
 # provision.sh - makes (or updates) the public BitVoice demo from this machine. DO NOT run it without the
 # owner's go-ahead: it creates a paid cloud server.
 #
-#   DOMAIN=demo.bitvoice.org VERSION=v0.1.15 [EMAIL=you@example.com] sh deploy/demo/provision.sh
+#   DOMAIN=demo.bitvoice.org VERSION=v0.1.16 [EMAIL=you@example.com] sh deploy/demo/provision.sh
 #
 # It creates an Amazon Lightsail instance of its own (Ubuntu, the smallest plan; BitVoice needs about
 # 100 MB at 200 calls), a static IP, and opens only what a visitor's browser needs: 443 (the web
@@ -15,7 +15,7 @@
 # this prints, then run it again so Let's Encrypt can check the name.
 # Needs the AWS CLI signed in, Go, and the SSH key in KEYS (default ~/keys), mode 600, never printed.
 set -eu
-: "${DOMAIN:?set DOMAIN, like demo.bitvoice.org}" "${VERSION:?set VERSION, a released version like v0.1.15}"
+: "${DOMAIN:?set DOMAIN, like demo.bitvoice.org}" "${VERSION:?set VERSION, a released version like v0.1.16}"
 EMAIL=${EMAIL:-} # optional: where the certificate authority writes about the certificate
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
@@ -58,6 +58,9 @@ cp "$root/deploy/install.sh" "$here/setup.sh" "$build/"
 # RADIO_SECRET (https addresses), kept outside the repository.
 cad=${CAD_ENV:-$keys/bitdispatcher-demo-push}
 [ -f "$cad" ] && cp "$cad" "$build/cad.env"
+# Google's push key for the Android app (a Firebase service account JSON), kept outside the repository.
+fcm=${FCM_KEY:-$keys/bitvoice-fcm-service-account.json}
+[ -f "$fcm" ] && cp "$fcm" "$build/fcm.json"
 
 ssh_opts="-i $key -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$keys/known_hosts -o ConnectTimeout=10"
 until ssh $ssh_opts ubuntu@"$ip" true 2>/dev/null; do sleep 5; done

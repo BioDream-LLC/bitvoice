@@ -70,6 +70,7 @@ func main() {
 	prepare := flag.String("prepare-data", "", "only put -cad-token-file's token into this new data folder, before the server starts")
 	tokenFile := flag.String("cad-token-file", "", "with -prepare-data: the CAD's token (bv_ and 64 hex digits)")
 	radioTokenFile := flag.String("radio-token-file", "", "with -prepare-data: the demo radio system's token, for its units' positions")
+	fcmFile := flag.String("fcm-file", "", "a Firebase service account JSON key, so the Android app is woken for calls (optional)")
 	flag.Parse()
 	if *prepare != "" {
 		if err := prepareToken(*prepare, *tokenFile, *radioTokenFile); err != nil {
@@ -92,7 +93,16 @@ func main() {
 		}
 		ps = &psapSeed{secret: strings.TrimSpace(string(b)), stt: *sttURL, cad: cad}
 	}
-	if err := run(*url, *pwFile, *domain, *email, *public, *calls, ps); err != nil {
+	fcm := ""
+	if *fcmFile != "" {
+		b, err := os.ReadFile(*fcmFile)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "seed: -fcm-file:", err)
+			os.Exit(2)
+		}
+		fcm = string(b)
+	}
+	if err := run(*url, *pwFile, *domain, *email, *public, *calls, ps, fcm); err != nil {
 		fmt.Fprintln(os.Stderr, "seed:", err)
 		os.Exit(1)
 	}
@@ -103,7 +113,7 @@ type psapSeed struct {
 	cad         cadSettings
 }
 
-func run(url, pwFile, domain, email, public string, calls int, ps *psapSeed) error {
+func run(url, pwFile, domain, email, public string, calls int, ps *psapSeed, fcm string) error {
 	jar, _ := cookiejar.New(nil)
 	c := &client{base: strings.TrimRight(url, "/"), http: &http.Client{Jar: jar, Timeout: 30 * time.Second,
 		// The server's own certificate, on this computer: until Let's Encrypt gives it one.
@@ -215,13 +225,24 @@ func run(url, pwFile, domain, email, public string, calls int, ps *psapSeed) err
 			"destination": map[string]any{"type": "schedule", "target": sched.Item["id"]}}, nil)
 		_ = c.do("POST", "/api/outbound-routes", map[string]any{"name": "Local and national", "patterns": []string{"NXXNXXXXXX", "1NXXNXXXXXX"}, "trunks": []string{tid}}, nil)
 	}
-	if domain != "" {
+	if domain != "" || fcm != "" {
 		var s map[string]any
 		if err := c.do("GET", "/api/settings", nil, &s); err != nil {
 			return err
 		}
 		sys := s["system"].(map[string]any)
-		sys["acme"] = map[string]any{"enabled": true, "domains": []string{domain}, "email": email}
+		if domain != "" {
+			sys["acme"] = map[string]any{"enabled": true, "domains": []string{domain}, "email": email}
+		}
+		if fcm != "" {
+			// Google push for the Android app (BioDream's Firebase key), so a paired app rings while closed.
+			mobile, _ := sys["mobile"].(map[string]any)
+			if mobile == nil {
+				mobile = map[string]any{}
+			}
+			mobile["push"], mobile["fcm"] = "direct", fcm
+			sys["mobile"] = mobile
+		}
 		if err := c.do("PUT", "/api/settings", s, nil); err != nil {
 			return err
 		}
