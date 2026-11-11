@@ -1,0 +1,32 @@
+[Unit]
+Description=BitVoice push relay (https://push.bitvoice.org)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=bvpush
+Group=bvpush
+# Plain HTTP on loopback: Caddy (or another proxy) in front ends TLS.
+ExecStart=/usr/local/bin/bvpush -listen 127.0.0.1:8095 -servers /etc/bvpush/servers.json -fcm /etc/bvpush/fcm.json
+# Rereads servers.json: servers are added or revoked without a restart.
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=2
+MemoryMax=96M
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

@@ -53,8 +53,8 @@
       <p>When a call comes in, BitVoice sends a push (Firebase on Android, Apple's VoIP push on iPhone) that carries only the
         call's ID, who is calling and your BitVoice's address. The phone shows the call on its own call screen and connects to your BitVoice for the
         sound. Ring groups and queues ring the app together with the extension's other phones.
-        The released Android app is woken through BioDream's Firebase project: the demo wakes it today, your own BitVoice will
-        through BioDream's push relay (not running yet) or your own build of the app; until then it rings while the app is running.</p>
+        The released Android app is woken through BioDream's Firebase project: the demo wakes it directly, your own BitVoice
+        through BioDream's push relay (push.bitvoice.org, with a key from BioDream) or your own build of the app; without either it rings while the app is running.</p>
       <ul class="ticks">
         <li>Answer from the lock screen or a Bluetooth headset</li>
         <li>Calls you make go on the phone's call system too (Telecom, CallKit), so Bluetooth and the phone know of them</li>
