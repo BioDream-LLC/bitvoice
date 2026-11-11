@@ -243,3 +243,44 @@ func TestCallsTakenOver(t *testing.T) {
 		t.Fatal("a did not take the handed-over call")
 	}
 }
+
+// A server cut off from the database comes back to find that its call was taken over and has ended
+// since on the other server: it lets go of it too, rather than keep a call nobody is on.
+func TestTakenCallEndedWhileCutOff(t *testing.T) {
+	ctx := context.Background()
+	d := open(t)
+	a, _ := New(d, t.TempDir(), "1", "10.0.0.1:5060")
+	b, _ := New(d, t.TempDir(), "1", "10.0.0.2:5060")
+	took := make(chan struct{}, 1)
+	b.TakeOver = func(calls [][]byte) int { took <- struct{}{}; return len(calls) }
+	var letGo []string
+	a.LetGo = func(ids []string) { letGo = append(letGo, ids...) }
+	calls := map[string][]byte{"c1": []byte(`{"id":"c1"}`), "c2": []byte(`{"id":"c2"}`)}
+	a.beat(ctx, State{Calls: calls})
+	b.beat(ctx, State{})
+	_, _ = d.Exec(ctx, `UPDATE nodes SET seen_ms = ? WHERE id = ?`, time.Now().Add(-Gone-time.Second).UnixMilli(), a.Self().ID)
+	b.beat(ctx, State{})
+	select {
+	case <-took:
+	case <-time.After(2 * time.Second):
+		t.Fatal("b did not take a's calls")
+	}
+	b.beat(ctx, State{Calls: map[string][]byte{"c1": []byte(`{"id":"c1","by":"b"}`)}}) // c2 ended at once on b
+	b.beat(ctx, State{})                                                               // and now c1 too
+	a.beat(ctx, State{Calls: calls})
+	if len(letGo) != 2 {
+		t.Fatalf("a let go of %v, want both calls", letGo)
+	}
+	var n int
+	_ = d.QueryRow(ctx, `SELECT COUNT(*) FROM live_calls`).Scan(&n)
+	if n != 0 {
+		t.Fatalf("a saved its ended calls again: %d left", n)
+	}
+	// A call a starts now is its own, and is kept.
+	letGo = nil
+	a.beat(ctx, State{Calls: map[string][]byte{"c3": []byte(`{"id":"c3"}`)}})
+	a.beat(ctx, State{Calls: map[string][]byte{"c3": []byte(`{"id":"c3","x":1}`)}})
+	if len(letGo) != 0 {
+		t.Fatalf("a let go of its own new call: %v", letGo)
+	}
+}

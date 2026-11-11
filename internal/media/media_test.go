@@ -169,3 +169,70 @@ func TestLossWithReordering(t *testing.T) {
 		t.Fatalf("lost %d, want %d", got, lost)
 	}
 }
+
+// A party latched at one address moves to another by a new offer (another server took the call over):
+// media goes to the new address at once, before anything comes from there, and is accepted from it.
+func TestEndpointMoveTo(t *testing.T) {
+	pool := &Pool{Host: "127.0.0.1", Min: 31200, Max: 31300}
+	a, err := pool.Allocate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := pool.Allocate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	defer b.Close()
+	phoneA, _ := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	oldB, _ := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	newB, _ := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	defer phoneA.Close()
+	defer oldB.Close()
+	defer newB.Close()
+	b.SetRemote("127.0.0.1", oldB.LocalAddr().(*net.UDPAddr).Port)
+	Connect(a, b)
+	a.Start()
+	b.Start()
+	toA := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: a.Port()}
+	toB := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: b.Port()}
+	read := func(c *net.UDPConn) bool {
+		_ = c.SetReadDeadline(time.Now().Add(time.Second))
+		buf := make([]byte, 2048)
+		_, _, err := c.ReadFromUDP(buf)
+		return err == nil
+	}
+	// B speaks from its old address and is latched there; A's sound reaches it.
+	_, _ = oldB.WriteToUDP(rtpPacket(1, 160), toB)
+	_, _ = phoneA.WriteToUDP(rtpPacket(1, 160), toA)
+	if !read(oldB) {
+		t.Fatal("A's sound did not reach B")
+	}
+	// The new offer: A's sound goes to the new address before B sends anything from there.
+	b.MoveTo("127.0.0.1", newB.LocalAddr().(*net.UDPAddr).Port)
+	_, _ = phoneA.WriteToUDP(rtpPacket(2, 320), toA)
+	if !read(newB) {
+		t.Fatal("A's sound did not follow B to its new address")
+	}
+	// The old address (a server cut off from its cluster, still sending) cannot pull the call back.
+	_, _ = oldB.WriteToUDP(rtpPacket(2, 320), toB)
+	_, _ = phoneA.WriteToUDP(rtpPacket(3, 480), toA)
+	if !read(newB) {
+		t.Fatal("the old address took the call back")
+	}
+	// B's sound from the new address reaches A; the old address is no longer taken.
+	_, _ = newB.WriteToUDP(rtpPacket(3, 480), toB)
+	if !read(phoneA) {
+		t.Fatal("B's sound from its new address did not reach A")
+	}
+	for { // anything still on its way to A
+		_ = phoneA.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+		if _, _, err := phoneA.ReadFromUDP(make([]byte, 2048)); err != nil {
+			break
+		}
+	}
+	_, _ = oldB.WriteToUDP(rtpPacket(4, 640), toB)
+	if read(phoneA) {
+		t.Fatal("sound from B's old address was still passed on")
+	}
+}

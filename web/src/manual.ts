@@ -15,7 +15,7 @@ export const parts: { title: string; intro: string; ids: string[] }[] = [
   { title: 'Customers and insight', intro: 'Knowing who called and how it went: the live calls and history, the customer timeline, CRMs, recordings and consent, quality, costs and caller ID reputation.',
     ids: ['calls', 'history', 'timeline', 'crm', 'insight', 'recording', 'consent', 'quality', 'costs', 'reputation', 'spam'] },
   { title: 'Running BitVoice', intro: 'Keeping it safe and running: administrators and sign-in, security, changes and updates, several servers, hosted organisations, codecs, Teams, importing, automation and the tools for finding faults.',
-    ids: ['users', 'sso', 'ldap', 'security', 'changes', 'updates', 'servers', 'database', 'tenants', 'codecs', 'teams', 'import', 'automation', 'compat', 'assistants', 'archive', 'holds', 'metrics', 'loadtest', 'trace'] },
+    ids: ['users', 'sso', 'ldap', 'security', 'changes', 'updates', 'servers', 'sitenetwork', 'database', 'tenants', 'codecs', 'teams', 'import', 'automation', 'compat', 'assistants', 'archive', 'holds', 'metrics', 'loadtest', 'trace'] },
   { title: 'Public safety: the lab track', intro: 'The 911 answering-point profile, the radio dispatch console and NG911 Core Services. They are a lab and design-partner track: built and tested against recorded captures, sample data and stand-ins, but not certified for live 911 or radio dispatch and not yet tried with a live ESInet, P25 system or CAD. They are off the menu until switched on in Settings. Emergency calls from your own phones (Getting started) are not part of this track: they are part of every phone system.',
     ids: ['psap', 'radio', 'core'] },
 ]
@@ -121,6 +121,8 @@ tests only, not yet with real equipment or accounts. **Lab**: public-safety part
 | Desk phones over SIP | Field-tested | Asterisk as a desk phone across the internet. Real Yealink, Poly or Grandstream handsets not tried yet |
 | Browser phone (WebRTC) | Field-tested | from outside to EC2; Chromium browser tests with sound both ways |
 | Two servers, one PostgreSQL, failover | Field-tested | kill -9 and planned stop on EC2: the call carries on, the provider line moves |
+| Private network between sites (peer trunks) | Field-tested | three BitVoice servers in three AWS regions (Virginia, Ohio, Oregon), joined over the internet by TLS trunks with required SRTP and Let's Encrypt certificates: extension calls between every pair of sites, 50 at once, no loss (0.004%), MOS 4.41, the caller's number and name carried across; a hub (calls passed on through a third site, two hops); a deliberate routing loop ended by the hop count (483); a site switched off: calls to it fail in under a second, the others carry on |
+| Servers far apart, one PostgreSQL | Field-tested | one cluster across three AWS regions, the database in Virginia over TLS: calls between phones on servers in Virginia, Ohio and Oregon (MOS 4.41); a line for each site ("Used by"), each server sending its calls out on its own; an emergency call from a server with no line of its own went out through another server's; the server carrying a call killed: another region carried it on after 4 s, with 3.6 s without sound; a server cut off from the database for 30 s: its call was carried on elsewhere with no gap and nothing left behind. Real carriers per site not tried |
 | One-command install | Field-tested | Ubuntu 24.04 (x86, Arm), Debian 12, Amazon Linux 2023, Windows Server 2022, Windows 11 (as administrator and not, in PowerShell 5.1 and 7), Ubuntu 20.04 and Fedora 42 in containers, macOS 26 on Apple silicon (for one person, and with sudo for the whole Mac in CI); back after a reboot |
 | Capacity | Field-tested | 2,000 calls at once, no loss, MOS 4.41, on a 16-vCPU c7i.4xlarge (about 10 vCPUs busy); 200 at once on c7g.large, c7i.large, t4g.small, an M4 and the Lightsail nano. At 2,000: jitter 4.0 ms for 95% of calls, longest gap between packets 74 ms, longest garbage-collection pause 4.2 ms |
 | FreePBX migration (Import) | Field-tested | a real FreePBX 17.0.33 backup (70 MB) imported whole; others from FreePBX's own formats |
@@ -1010,6 +1012,10 @@ Set **Call log address** and **Signing secret**, and every call is sent there as
 - **Each server uses it**: every server registers and places its own calls. For providers that allow several registrations on one account, or none.
 - **One server at a time**: one server registers and carries the line; the others show it as **Standby, held by** that server and send their calls out through it. If it stops, the next server registers within seconds. For providers that allow one registration per account.
 
+**A line for each site.** With servers in several places (one per state, say), **Used by** in a trunk names the servers that use it: only they register it and send calls out on it, so each site has its own outside line and its own 911 line, and a route can list every site's line (Texas line, Ohio line, ...): each server uses its own and passes over the others (the call's why trail says so). An emergency call from a server with no line of its own left still goes out, through a server that has one. With **One server at a time** as well, only the servers named take the line.
+
+**Servers far apart.** The servers check on each other every second and take over a server's calls after 4 seconds without word from it, and every server needs the database. A server cut off from the database counts as stopped: within seconds another server carries its calls on and the parties' sound moves there (the cut-off server's late sound is not taken); when it reaches the database again it lets those calls go. Across states that suits two or three sites on good links; for many sites, or sites that must work on their own when the links fail, give each site its own BitVoice and join them by trunks instead: [A private network between sites](#sitenetwork).
+
 **When a server stops**
 - **Calls carry on.** Each server keeps a note of its calls in the database; when one stops, a running server picks up each call within seconds, moves the sound to itself and tells both ends (a re-INVITE). There is a gap of a few seconds in the sound. A planned stop (an upgrade, a restart) hands calls over at once, with no gap.
 - A call whose phone is registered with the server that takes over is carried on there without disturbing that phone: only the other party is moved.
@@ -1020,6 +1026,23 @@ Set **Call log address** and **Signing secret**, and every call is sent there as
 **Between servers.** The servers reach each other at their SIP port over TCP, or TLS when they have a certificate (each accepts only the certificate the other published, and the sound between them is then encrypted with SRTP), and send sound to each other's media ports (UDP, the range in Settings). Calls between servers are signed with a secret they share in the database, and only accepted from a running member at its own address. A firewall between them must let those ports through.
 
 **Try it first: the lab.** BitVoice comes with a lab that runs two servers, their database and test phones on one computer with Docker, each on an address of its own: \`deploy/lab/run.sh up\` builds and starts it and sets the shared address; \`run.sh call\` calls between phones on different servers; \`run.sh failover\` kills the server carrying a call through the shared address and checks the call carries on (the sound comes back in about five seconds); \`run.sh impaired\` calls from a phone on a bad link (delay, jitter and 5% loss) and checks the call quality BitVoice reports; \`run.sh down\` removes it. The servers' pages are at https://127.0.0.1:18501 and :18502 (user admin).`,
+  },
+  {
+    id: 'sitenetwork', title: 'A private network between sites', route: '/trunks', keys: 'private network sites states branches offices peer trunk tie line tie trunk hub mesh federation inter-site site to site no phone company extension dialling four digit dialling max-forwards loop',
+    body: `Separate BitVoice servers (one in each state, say) can be joined into one private phone network with no phone company in between: staff dial each other's extensions with a few digits, and the calls cross between the servers encrypted.
+
+**How it is built.** Each site's BitVoice has a trunk to each other site's BitVoice (a "tie line"), with **Connects to** set to **Another of your phone systems**:
+- The trunk's server is the other site's address and SIP port; it needs no registration (leave Register off): each side knows the other by its address. Use **TLS** with **Encrypt media** and **Require encryption**, so calls between sites are refused unless they are encrypted.
+- Calls in on such a trunk may dial this server's own numbers (extensions, ring groups, queues, conferences, menus) without an incoming route each, and they are not screened as spam. Feature codes and voicemail access are not reachable from another site. An incoming route for an exact number still wins.
+- Give each site its own range of numbers (Texas 2xxx, Ohio 3xxx) and, on each server, an **outbound route** for each other site's range (3XXX to the Ohio trunk) with no Prepend. Leave the trunk's **Default caller ID** empty: the caller's extension number and name then go across, so Ohio sees "2101 Jane Smith".
+
+**A hub.** With many sites, a trunk to every other site becomes a lot of trunks. Instead, every site has one trunk to a hub (one BitVoice, or a pair sharing a database), whose trunks to the sites are set to **Another of your phone systems, through this hub**: calls in on them may also go out again through the hub's outbound routes, to another site or out to the phone company. A call passed between sites carries a hop count (Max-Forwards): routes that send a number round in a loop end it after 10 hops, with "Too Many Hops", instead of tying up lines.
+
+**When another site moves a call.** If the other site is itself several servers sharing a database and one of them stops, the one that carries its calls on sends this server a re-INVITE from its own address: sound and, over UDP, the call's later requests (the hang-up) go to it from then on. Over TCP or TLS the later requests still go to the address the call started on.
+
+**What each site keeps.** Each server keeps its own users, phones, voicemail, recordings and settings, and the phone apps pair with their own site's server. Busy lamps, staff chat and the company directory do not cross between separately run servers (with servers sharing one database they do: [Several servers as one phone system](#servers)). When the link to one site is down, every other site carries on; only calls to that site fail.
+
+**911 and calls outside.** A private network still needs a way to the emergency services: each site needs at least one line from a provider for 911 (with its address set in [Sites and office 911](#sites)), or its 911 route must lead to a hub that has one. On a hub, an emergency call from a site is always passed on, never refused, even with no hops left. Calls to customers and suppliers need a provider line somewhere too: one central line on the hub can carry every site's outside calls.`,
   },
   {
     id: 'database', title: 'Where the data is kept (SQLite or PostgreSQL)', route: '/settings', keys: 'database sqlite postgresql postgres backup data storage failover several servers reporting power bi grafana move',
@@ -1991,7 +2014,7 @@ Every release from v0.1.3 carries BioDream's release key. Such a build installs 
 ## Running a test
 | Setting | What it is |
 |---|---|
-| Number to call | a number inside BitVoice: an extension, a group, a queue, a menu |
+| Number to call | a number inside BitVoice: an extension, a group, a queue, a menu; or another site's number in a [private network](#sitenetwork), when its outbound route's trunks all go to your own phone systems (never a provider's line, so a test costs nothing) |
 | Calls come from | the caller number the calls show |
 | Answer as | an extension the generator answers for itself; or nobody, when the number answers by itself (a menu, the echo test) |
 | Calls | how many in all |

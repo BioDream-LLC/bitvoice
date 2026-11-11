@@ -197,7 +197,7 @@ export interface Trunk {
   id: string; name: string; enabled: boolean; host: string; port: number; transport: 'udp' | 'tcp' | 'tls'; protocol?: '' | 'iax2' | 'h323' | 'dahdi'
   username: string; authUser: string; password: string; register: boolean; fromDomain: string
   callerId: string; maxChannels: number; allowFrom: string[]; secureMedia: boolean; requireSecureMedia?: boolean; redirecting?: '' | 'both' | 'diversion' | 'history-info' | 'none'; richCallData?: boolean; teams?: boolean; sbcName?: string; codecs: string[]
-  shared?: '' | 'one'; esinet?: boolean
+  shared?: '' | 'one'; servers?: string[] | null; peer?: '' | 'internal' | 'onward'; esinet?: boolean
   rates?: Rate[] | null; inboundPerMinute?: number
   shaken?: Shaken
 }

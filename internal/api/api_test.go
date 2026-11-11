@@ -278,6 +278,23 @@ func TestOwnerName(t *testing.T) {
 	}
 }
 
+func TestCallGeneratorOtherSites(t *testing.T) {
+	cfg := config.Default()
+	cfg.Trunks = []config.Trunk{{ID: "oh", Name: "Ohio", Enabled: true, Host: "oh.example.com", Port: 5061, Peer: "internal"},
+		{ID: "pstn", Name: "Carrier", Enabled: true, Host: "sip.example.com", Port: 5060}}
+	cfg.OutboundRoutes = []config.OutboundRoute{{Name: "Ohio", Patterns: []string{"3XXX"}, Trunks: []string{"oh"}},
+		{Name: "Mixed", Patterns: []string{"4XXX"}, Trunks: []string{"oh", "pstn"}},
+		{Name: "Out", Patterns: []string{"NXXNXXXXXX"}, Trunks: []string{"pstn"}}}
+	if got, err := localTarget(&cfg, "3101"); err != nil || got != "another site, through Ohio" {
+		t.Fatalf("another site's number: %q %v", got, err)
+	}
+	for _, n := range []string{"4101", "2125551212"} {
+		if _, err := localTarget(&cfg, n); err == nil {
+			t.Fatalf("%s goes to a provider's line too, yet the generator would call it", n)
+		}
+	}
+}
+
 func TestCallGeneratorChecks(t *testing.T) {
 	_, ts := newServer(t)
 	c := newClient(t, ts.URL)

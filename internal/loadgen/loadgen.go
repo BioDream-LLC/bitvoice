@@ -193,6 +193,7 @@ type Run struct {
 	recv       atomic.Int64
 	gc0        *metrics.Float64Histogram
 	ended      map[string]chan struct{} // calls ended by BitVoice, by Call-ID
+	legs       map[string]*leg          // the calls in progress, by Call-ID, for a re-INVITE to move
 	stopStacks context.CancelFunc
 	emu        sync.Mutex
 }
@@ -206,7 +207,7 @@ func Start(p Plan) (*Run, error) {
 	// hear the answers to the hang-ups.
 	ctx, cancel := context.WithCancel(context.Background())
 	sctx, scancel := context.WithCancel(context.Background())
-	r := &Run{plan: p, cancel: cancel, done: make(chan struct{}), ended: map[string]chan struct{}{}, stopStacks: scancel, gc0: gcPauses()}
+	r := &Run{plan: p, cancel: cancel, done: make(chan struct{}), ended: map[string]chan struct{}{}, legs: map[string]*leg{}, stopStacks: scancel, gc0: gcPauses()}
 	r.res = Result{Running: true, Started: time.Now(), Failures: map[string]int{},
 		Plan: PlanInfo{p.From, p.To, p.AnswerAs, p.Calls, p.Rate, p.Concurrent, int(p.Hold.Seconds())}}
 	r.stack = sip.NewStack(r.handle)
@@ -237,6 +238,49 @@ func Start(p Plan) (*Run, error) {
 	}
 	go r.loop(ctx)
 	return r, nil
+}
+
+// leg is one call's media as the generator's end of it: where its sound goes, and the SDP and Contact it
+// answered with. A re-INVITE (another server of a cluster taking the call over, say) moves the sound
+// and is answered with the same SDP.
+type leg struct {
+	to      atomic.Pointer[netip.AddrPort]
+	sdp     []byte
+	contact string
+}
+
+func (r *Run) addLeg(callID string, l *leg) {
+	r.emu.Lock()
+	r.legs[callID] = l
+	r.emu.Unlock()
+}
+
+func (r *Run) dropLeg(callID string) {
+	r.emu.Lock()
+	delete(r.legs, callID)
+	r.emu.Unlock()
+}
+
+// reinvite answers a re-INVITE for a call in progress: its offer says where the sound goes now.
+func (r *Run) reinvite(tx *sip.ServerTx, m *sip.Message) {
+	r.emu.Lock()
+	l := r.legs[m.CallID()]
+	r.emu.Unlock()
+	if l == nil {
+		tx.Respond(sip.NewResponse(m, 481, ""))
+		return
+	}
+	if s, err := sdp.Parse(m.Body); err == nil && s.Audio() != nil {
+		if ip, err := netip.ParseAddr(s.Connection(s.Audio())); err == nil && s.Audio().Port > 0 {
+			to := netip.AddrPortFrom(ip, uint16(s.Audio().Port))
+			l.to.Store(&to)
+		}
+	}
+	resp := sip.NewResponse(m, 200, "")
+	resp.Set("Contact", l.contact)
+	resp.Set("Content-Type", "application/sdp")
+	resp.Body = l.sdp
+	tx.Respond(resp)
 }
 
 // Stop ends the run early; calls in progress are hung up.
@@ -450,13 +494,16 @@ func (r *Run) call(ctx context.Context) {
 	ack.Set("CSeq", strconv.FormatUint(uint64(n), 10)+" ACK")
 	_ = r.stack.Stateless(ack, sip.Peer{Transport: "UDP", Addr: p.PBX})
 
-	var to netip.AddrPort
+	l := &leg{sdp: inv.Body, contact: inv.Get("Contact")}
 	if s, err := sdp.Parse(resp.Body); err == nil && s.Audio() != nil {
 		if ip, err := netip.ParseAddr(s.Connection(s.Audio())); err == nil {
-			to = netip.AddrPortFrom(ip, uint16(s.Audio().Port))
+			to := netip.AddrPortFrom(ip, uint16(s.Audio().Port))
+			l.to.Store(&to)
 		}
 	}
-	r.media(ctx, rtp, to, ended)
+	r.addLeg(callID, l)
+	r.media(ctx, rtp, l, ended)
+	r.dropLeg(callID)
 
 	select {
 	case <-ended:
@@ -472,8 +519,8 @@ func (r *Run) call(ctx context.Context) {
 }
 
 // media sends a 1 kHz tone at the real rate for the hold time and counts what comes back.
-func (r *Run) media(ctx context.Context, conn *net.UDPConn, to netip.AddrPort, ended chan struct{}) {
-	if !to.IsValid() || r.plan.Hold == 0 {
+func (r *Run) media(ctx context.Context, conn *net.UDPConn, l *leg, ended chan struct{}) {
+	if l.to.Load() == nil || !l.to.Load().IsValid() || r.plan.Hold == 0 {
 		return
 	}
 	read := make(chan struct{})
@@ -541,7 +588,7 @@ func (r *Run) media(ctx context.Context, conn *net.UDPConn, to netip.AddrPort, e
 		binary.BigEndian.PutUint16(pkt[2:], seq)
 		binary.BigEndian.PutUint32(pkt[4:], uint32(seq)*160)
 		binary.BigEndian.PutUint32(pkt[8:], ssrc)
-		if _, err := conn.WriteToUDPAddrPort(append(pkt, payload...), to); err == nil {
+		if _, err := conn.WriteToUDPAddrPort(append(pkt, payload...), *l.to.Load()); err == nil {
 			r.sent.Add(1)
 		}
 	}
@@ -553,6 +600,10 @@ func (r *Run) handle(tx *sip.ServerTx, in *sip.Incoming) {
 		return
 	}
 	m := in.Msg
+	if m.Method == sip.INVITE {
+		r.reinvite(tx, m)
+		return
+	}
 	tx.Respond(sip.NewResponse(m, 200, ""))
 	if m.Method == sip.BYE {
 		r.emu.Lock()
@@ -573,8 +624,8 @@ func (r *Run) handleAnswer(tx *sip.ServerTx, in *sip.Incoming) {
 	switch m.Method {
 	case sip.INVITE:
 		to, _ := sip.ParseAddress(m.Get("To"))
-		if to != nil && to.Tag() != "" { // re-INVITE: keep going
-			tx.Respond(sip.NewResponse(m, 200, ""))
+		if to != nil && to.Tag() != "" { // re-INVITE: the sound comes back to wherever it comes from
+			r.reinvite(tx, m)
 			return
 		}
 		offer, err := sdp.Parse(m.Body)
@@ -598,19 +649,21 @@ func (r *Run) handleAnswer(tx *sip.ServerTx, in *sip.Incoming) {
 		resp.Body = sdp.New(r.plan.host(), conn.LocalAddr().(*net.UDPAddr).Port, 2,
 			[]sdp.Codec{{PT: pt, Name: map[int]string{0: "PCMU", 8: "PCMA", 9: "G722"}[pt], ClockRate: 8000}}, 101).Bytes()
 		tx.Respond(resp)
-		go echo(conn, r.plan.Hold+30*time.Second)
+		r.addLeg(m.CallID(), &leg{sdp: resp.Body, contact: resp.Get("Contact")})
+		go func() { echo(conn, r.plan.Hold+30*time.Second); r.dropLeg(m.CallID()) }()
 	default:
 		tx.Respond(sip.NewResponse(m, 200, ""))
 	}
 }
 
-// echo sends every packet back until the line is quiet for five seconds or the limit passes.
+// echo sends every packet back until the line is quiet for fifteen seconds (longer than a server of a
+// cluster takes to carry on a stopped server's call) or the limit passes.
 func echo(conn *net.UDPConn, limit time.Duration) {
 	defer conn.Close()
 	end := time.Now().Add(limit)
 	buf := make([]byte, 2048)
 	for time.Now().Before(end) {
-		_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+		_ = conn.SetReadDeadline(time.Now().Add(15 * time.Second))
 		n, from, err := conn.ReadFromUDPAddrPort(buf)
 		if err != nil {
 			return

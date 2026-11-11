@@ -18,6 +18,7 @@ import (
 // somewhere to go if nobody answers.
 type plan struct {
 	callerExt string // for a call out passed on by another server: whose caller ID it carries
+	hops      int    // a call passed on from a peer trunk: the Max-Forwards its calls out carry (0: the usual)
 	intercom  bool   // a page passed on by another server: ring with auto-answer
 	stages    []stage
 	noAnswer  *config.Destination
@@ -455,6 +456,8 @@ func (e *Engine) outbound(cfg *config.Config, caller *config.Extension, dialled 
 			return plan{reject: 403, reason: "Premium Number Blocked", why: []string{number + " is a premium-rate or high-fraud number, and those are blocked (Security)."}}
 		}
 		var p plan
+		var late []stage // another site's lines, for an emergency call: after this server's own
+		var names, lateNames []string
 		ids, reordered := e.orderTrunks(cfg, r.Trunks)
 		p.why = append(p.why, reordered...)
 		for _, id := range ids {
@@ -471,13 +474,14 @@ func (e *Engine) outbound(cfg *config.Config, caller *config.Extension, dialled 
 				p.why = append(p.why, "Teams finds its users only by numbers with + and the country code, and "+number+
 					" has none: Teams will not know it. Put + and the country code in the outbound route's Prepend ("+r.Name+").")
 			}
-			p.trunk = t.Name
 			if node := e.heldElsewhere(t); node != "" {
 				if t.MaxChannels > 0 && e.trunkChannels(t.ID) >= t.MaxChannels {
 					continue // every channel is in use, on one server or another: the next trunk
 				}
 				via := stage{targets: []target{trunkTarget(node, t, number)}, timeout: 3 * time.Minute, failover: true}
-				if slices.Contains(cfg.System.EmergencyNumbers, dialled) {
+				p.trunk = t.Name
+				names = append(names, t.Name)
+				if slices.Contains(cfg.System.EmergencyNumbers, dialled) && e.trunkHere(t) {
 					// An emergency call tries this server's own way out first: one fewer thing to fail.
 					tc := *t
 					p.stages = append(p.stages, stage{targets: []target{{trunk: &tc, number: number, name: number}}, timeout: 3 * time.Minute, failover: true})
@@ -485,6 +489,22 @@ func (e *Engine) outbound(cfg *config.Config, caller *config.Extension, dialled 
 				p.stages = append(p.stages, via)
 				continue
 			}
+			if !e.trunkHere(t) {
+				if slices.Contains(cfg.System.EmergencyNumbers, dialled) {
+					// An emergency call goes out through another site's line rather than not at all
+					// (after this server's own, which come in the route's order).
+					if node := e.trunkServer(t); node != "" {
+						lateNames = append(lateNames, t.Name)
+						late = append(late, stage{targets: []target{trunkTarget(node, t, number)}, timeout: 3 * time.Minute, failover: true})
+						p.why = append(p.why, t.Name+" is "+e.serverNames(t)+"'s line: tried last for this emergency call, through that server.")
+						continue
+					}
+				}
+				p.why = append(p.why, t.Name+" is used by "+e.serverNames(t)+" only, so this server passed it over.")
+				continue
+			}
+			p.trunk = t.Name
+			names = append(names, t.Name)
 			for _, h := range hosts {
 				tc := *t
 				tc.Host = h
@@ -492,18 +512,17 @@ func (e *Engine) outbound(cfg *config.Config, caller *config.Extension, dialled 
 					timeout: 3 * time.Minute, failover: true})
 			}
 		}
+		if len(p.stages) == 0 && len(lateNames) > 0 {
+			p.trunk = lateNames[0]
+		}
+		p.stages = append(p.stages, late...)
+		names = append(names, lateNames...)
 		if len(p.stages) == 0 {
-			return plan{reject: 503, reason: "No Trunk Available"}
+			return plan{reject: 503, reason: "No Trunk Available", why: p.why}
 		}
 		p.toName = dialled
 		if !slices.Contains(cfg.System.EmergencyNumbers, dialled) {
 			p.pinSet = r.PINSet
-		}
-		var names []string
-		for _, id := range ids {
-			if t := cfg.FindTrunk(id); t != nil && t.Enabled {
-				names = append(names, t.Name)
-			}
 		}
 		p.why = append(p.why, "The outbound route "+r.Name+" took "+dialled+", out through "+strings.Join(names, ", then ")+".")
 		return p
@@ -638,6 +657,13 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 			did = cleanNumber(r)
 		}
 		route := inboundRoute(cfg, trunk.ID, did)
+		var peer *plan // a call another of the organization's phone systems sent for a number here
+		if trunk.Peer != "" && (route == nil || route.DID == "") && !trunk.ESInet {
+			if pp, ok := e.peerPlan(cfg, trunk, m, did); ok {
+				peer = &pp
+				route = &config.InboundRoute{Name: "(dialled as a number here)", Destination: config.Destination{Type: "none"}}
+			}
+		}
 		if trunk.Teams && route == nil {
 			// A Teams user dialling an extension: Teams sends it as dialled (with a dial plan rule
 			// that leaves short numbers alone), with or without a +.
@@ -648,6 +674,7 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 		if em := cfg.System.EmergencyMode; em.On {
 			// Emergency mode: every incoming call goes to one place, whatever the routes say.
 			route = &config.InboundRoute{Name: "Emergency mode", Destination: em.Destination}
+			peer = nil
 		}
 		emergencyTrunk := trunk.ESInet || (m.Get("X-BitVoice-CAMA") != "" && trunk.Protocol == "dahdi")
 		if route == nil && emergencyTrunk {
@@ -692,11 +719,12 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 			}
 			c.facts = readPolicyFacts(m, offer)
 		}
-		if refuse := e.screenCall(cfg, c, m, trunk, did, emergencyTrunk); refuse != "" {
+		if trunk.Peer != "" {
+			// Another of the organization's own phone systems: it screened its callers itself.
+		} else if refuse := e.screenCall(cfg, c, m, trunk, did, emergencyTrunk); refuse != "" {
 			tx.Respond(sip.NewResponse(m, 603, refuse))
 			return
-		}
-		if refuse := e.screenUnknown(cfg, c, trunk, did, emergencyTrunk); refuse != "" {
+		} else if refuse := e.screenUnknown(cfg, c, trunk, did, emergencyTrunk); refuse != "" {
 			tx.Respond(sip.NewResponse(m, 603, refuse))
 			return
 		}
@@ -720,14 +748,21 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 		if route.DID == "" {
 			match = "takes every number (" + did + " here)"
 		}
-		c.note("The incoming route " + route.Name + " on " + trunk.Name + " " + match + ".")
+		if peer == nil {
+			c.note("The incoming route " + route.Name + " on " + trunk.Name + " " + match + ".")
+		}
 		if c.screened == "labelled" {
 			c.note("The caller was labelled as possible spam (Screening).")
 		}
 		sc := scriptCall{from: c.from, fromName: c.fromName, to: did, direction: "inbound", trunk: trunk.Name, real: true}
-		p = e.resolveFor(cfg, route.Destination, 0, sc)
-		if up, ok := e.unknownPlan(cfg, c, route.Destination, sc); ok {
-			p = up
+		if peer != nil {
+			p = *peer
+			c.hops = p.hops
+		} else {
+			p = e.resolveFor(cfg, route.Destination, 0, sc)
+			if up, ok := e.unknownPlan(cfg, c, route.Destination, sc); ok {
+				p = up
+			}
 		}
 		c.testCall = trunk.ESInet && IsTestCall(m.RequestURI)
 		if p.local == "esrp" {
@@ -752,7 +787,9 @@ func (e *Engine) newCall(tx *sip.ServerTx, in *sip.Incoming) {
 			c.note(refusedWhy(route.Name, p) + " An emergency call is never refused, so every call-taker was rung instead.")
 			p = e.everyTaker(cfg)
 		}
-		p.direction = "inbound"
+		if peer == nil || p.direction != "emergency" {
+			p.direction = "inbound"
+		}
 		p.trunk = trunk.Name
 		inTrunk = trunk.ID
 		c.esinet = trunk.ESInet || c.cama != ""
@@ -1030,6 +1067,26 @@ func (e *Engine) trunkFor(cfg *config.Config, from sip.Peer) *config.Trunk {
 			}
 		}
 	}
+	// Sites sharing a database may each have a line from the same provider (one account each, one
+	// provider address): a call from it is on this server's own line, not another site's.
+	self := ""
+	if e.Cluster != nil {
+		self = e.Cluster.Self().ID
+	}
+	here := func(t *config.Trunk) bool {
+		return self == "" || len(t.Servers) == 0 || slices.Contains(t.Servers, self)
+	}
+	var elsewhere *config.Trunk // a match that is another site's line, if nothing better
+	found := func(t config.Trunk) *config.Trunk {
+		tc := t
+		if !here(&tc) {
+			if elsewhere == nil {
+				elsewhere = &tc
+			}
+			return nil
+		}
+		return &tc
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	// First a trunk whose own address and port sent this; only then one that merely allows the
@@ -1046,11 +1103,16 @@ func (e *Engine) trunkFor(cfg *config.Config, from sip.Peer) *config.Trunk {
 			anyPort := stream && strings.EqualFold(t.Transport, from.Transport)
 			for _, a := range st.addrs {
 				if a == ip && (int(src.Port()) == port || anyPort) {
-					tc := t
-					return &tc
+					if tc := found(t); tc != nil {
+						return tc
+					}
+					break
 				}
 			}
 		}
+	}
+	if elsewhere != nil {
+		return elsewhere
 	}
 	for _, t := range cfg.Trunks {
 		if !t.Enabled {
@@ -1061,17 +1123,17 @@ func (e *Engine) trunkFor(cfg *config.Config, from sip.Peer) *config.Trunk {
 			allowFrom = append(slices.Clone(TeamsRanges), allowFrom...)
 		}
 		for _, allow := range allowFrom {
-			if p, err := netip.ParsePrefix(allow); err == nil && p.Contains(ip) {
-				tc := t
-				return &tc
-			}
-			if a, err := netip.ParseAddr(allow); err == nil && a == ip {
-				tc := t
-				return &tc
+			p, err := netip.ParsePrefix(allow)
+			a, err2 := netip.ParseAddr(allow)
+			if err == nil && p.Contains(ip) || err2 == nil && a == ip {
+				if tc := found(t); tc != nil {
+					return tc
+				}
+				break
 			}
 		}
 	}
-	return nil
+	return elsewhere
 }
 
 // waking is an extension whose apps a stage wakes.

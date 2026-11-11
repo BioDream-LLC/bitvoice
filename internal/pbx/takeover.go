@@ -68,11 +68,12 @@ type callSnap struct {
 const seqMargin = 1000
 
 func snapLeg(l *Leg) legSnap {
+	peer := l.dialogPeer() // where the party is now, if it moved
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	s := legSnap{Inbound: l.inbound, Number: l.Number, Name: l.Name, Ext: l.Ext, TrunkID: l.TrunkID, CallID: l.callID,
 		LocalTag: l.localTag, RemoteTag: l.remoteTag, LocalURI: l.localURI, RemoteURI: l.remoteURI, RemoteTarget: l.remoteTarget,
-		RouteSet: l.routeSet, Transport: l.peer.Transport, Addr: l.peer.Addr.String(), Host: l.peer.Host, Via: viaOf(l.peer), LocalSeq: l.localSeq,
+		RouteSet: l.routeSet, Transport: peer.Transport, Addr: peer.Addr.String(), Host: peer.Host, Via: viaOf(peer), LocalSeq: l.localSeq,
 		OnHold: l.onHold, WantSRTP: l.wantSRTP || l.remoteKey != nil}
 	if l.remoteSDP != nil {
 		s.RemoteSDP = string(l.remoteSDP.Bytes())
@@ -406,7 +407,7 @@ func (l *Leg) reinvite(offer *sdp.Session) (*sdp.Session, error) {
 	m := l.newRequest(sip.INVITE)
 	m.Set("Content-Type", "application/sdp")
 	m.Body = offer.Bytes()
-	tx := l.e.stack.Request(m, l.peer)
+	tx := l.e.stack.Request(m, l.dialogPeer())
 	var final *sip.Message
 	for r := range tx.Responses {
 		if r.StatusCode >= 200 {
@@ -431,7 +432,7 @@ func (l *Leg) reinvite(offer *sdp.Session) (*sdp.Session, error) {
 	ack.Set("Call-ID", l.callID)
 	n, _ := final.CSeq()
 	ack.Set("CSeq", strconv.FormatUint(uint64(n), 10)+" ACK")
-	_ = l.e.stack.Stateless(ack, l.peer)
+	_ = l.e.stack.Stateless(ack, l.dialogPeer())
 	tx.SetAck(ack)
 	if ct, err := sip.ParseAddress(final.Get("Contact")); err == nil && ct.URI != nil {
 		l.mu.Lock()

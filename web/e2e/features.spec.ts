@@ -1038,6 +1038,33 @@ test('a trunk can require encryption', async ({ page }) => {
   await page.evaluate(async (id) => { await fetch('./api/trunks/' + id, { method: 'DELETE', headers: { 'X-BitVoice': '1' } }) }, t.id)
 })
 
+// A trunk to another site of a private network: saved as such, and a call arriving on it for an
+// extension's number goes straight to that extension, with no incoming route for it (Try a call shows it).
+test('a trunk to another of your phone systems dials extensions', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/#/trunks')
+  await page.getByRole('button', { name: 'Add trunk' }).click()
+  await page.getByLabel('Name', { exact: true }).fill('Ohio site')
+  await page.getByLabel('Provider server').fill('127.0.0.2')
+  await page.getByRole('switch', { name: 'Register' }).click() // each side knows the other by its address
+  await expect(page.getByText(/incoming routes decide where its calls go/)).toBeVisible()
+  await page.getByLabel('Connects to').selectOption('internal')
+  await expect(page.getByText(/without an incoming route each/)).toBeVisible()
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('Ohio site').first()).toBeVisible()
+  const t = await page.evaluate(async () => (await (await fetch('./api/trunks')).json()).items.find((x: { name: string }) => x.name === 'Ohio site'))
+  expect(t.peer).toBe('internal')
+  const ext = await page.evaluate(async () => (await (await fetch('./api/extensions')).json()).items[0].number as string)
+  await page.goto('/#/flow')
+  await page.getByLabel('Caller').fill('3101')
+  await page.getByLabel('Dials').fill(ext)
+  await page.getByLabel('Arrives on').selectOption({ label: 'Ohio site' })
+  await page.getByRole('button', { name: 'Try it' }).click()
+  await expect(page.getByText('Dialled on Ohio site')).toBeVisible()
+  await expect(page.getByText('Ohio site is another of your phone systems, and ' + ext + ' is a number here.')).toBeVisible()
+  await page.evaluate(async (id) => { await fetch('./api/trunks/' + id, { method: 'DELETE', headers: { 'X-BitVoice': '1' } }) }, t.id)
+})
+
 // Call history and Call quality show a call whose provider sent no sound, and whether sound was
 // encrypted. The records are the server's own shape, served to the page (no provider to call here).
 test('call history marks silent and unencrypted calls', async ({ page }) => {

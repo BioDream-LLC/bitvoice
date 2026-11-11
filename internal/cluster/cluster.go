@@ -207,8 +207,32 @@ func (c *Cluster) syncCalls(ctx context.Context, self string, calls map[string][
 				}
 			}
 			rows.Close()
+			// A call saved here whose row is no longer this server's and is not another's either:
+			// another server took it over while this one was cut off, and it has ended there since.
+			if rows, err := c.d.Query(ctx, `SELECT id FROM live_calls WHERE node = ? AND id IN (?`+strings.Repeat(", ?", len(ids)-1)+`)`,
+				append([]any{self}, ids...)...); err == nil {
+				mine := map[string]bool{}
+				for rows.Next() {
+					var id string
+					if rows.Scan(&id) == nil {
+						mine[id] = true
+					}
+				}
+				if rows.Err() == nil {
+					for id := range calls {
+						if _, saved := c.saved[id]; saved && !mine[id] {
+							gone = append(gone, id)
+							delete(calls, id)
+						}
+					}
+				}
+				rows.Close()
+			}
 			if len(gone) > 0 && c.LetGo != nil {
 				c.LetGo(gone)
+			}
+			for _, id := range gone {
+				delete(c.saved, id)
 			}
 		}
 	}

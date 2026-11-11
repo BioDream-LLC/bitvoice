@@ -206,6 +206,17 @@ func (e *Engine) checkTrunk(ctx context.Context, st *trunkState) {
 		e.setTrunk(st, "unreachable", err.Error(), 30*time.Second)
 		return
 	}
+	if !e.trunkHere(st.conf()) {
+		// Another site's line: this server neither registers it nor sends calls out on it.
+		e.mu.Lock()
+		was := st.state == "registered"
+		e.mu.Unlock()
+		if was && st.conf().Register {
+			e.unregisterTrunk(st, peer)
+		}
+		e.setTrunk(st, "standby", "used by "+e.serverNames(st.conf())+" only", 10*time.Second)
+		return
+	}
 	if e.Cluster != nil && st.conf().Shared == "one" {
 		node, mine := e.Cluster.TrunkOwner(st.conf().ID)
 		if !mine {

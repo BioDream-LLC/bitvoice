@@ -26,6 +26,7 @@ type Call struct {
 	ID string
 
 	mu        sync.Mutex
+	hops      int          // a call passed on from a peer trunk: the Max-Forwards of its calls out (0: the usual)
 	account   string       // the PIN an outbound route asked for, when its set records it
 	charged   *isdn.Charge // the phone company's advice of charge, the last it gave
 	caller    *Leg
@@ -500,6 +501,9 @@ func (c *Call) startFork(t target, stageNo int) bool {
 	inv.Set("Contact", e.localContact(peer, fromNum))
 	inv.Set("Allow", allowed)
 	inv.Set("User-Agent", "BitVoice")
+	if c.hops > 0 {
+		inv.Set("Max-Forwards", strconv.Itoa(c.hops)) // a call passed on between sites: a loop ends
+	}
 	if rcd != nil {
 		richCallData(inv, rcd)
 	}

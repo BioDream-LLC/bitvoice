@@ -1099,6 +1099,17 @@ type Trunk struct {
 	// server's calls on it; another takes over if it stops). Use "one" for providers that allow a
 	// single registration or a single address.
 	Shared string `json:"shared"`
+	// Servers limits the trunk to some of the servers sharing one database (their IDs; empty: every
+	// server): only they register it and send calls out on it, so each site of a spread-out cluster
+	// can have its own outside line and 911 line. A route's trunks for other servers are passed over,
+	// except that an emergency call with no way out here goes out through a server that has one.
+	Servers []string `json:"servers,omitempty"`
+	// Peer marks a trunk to another phone system of the same organization (another BitVoice, say),
+	// which makes a private network without a phone company: "" is a provider; "internal" lets calls
+	// in dial this server's own numbers (extensions, ring groups, queues, conferences ...) without an
+	// incoming route each, and skips spam screening; "onward" also lets them go out again through this
+	// server's outbound routes, for a hub between sites (Max-Forwards stops a loop).
+	Peer string `json:"peer,omitempty"`
 	// RichCallData sends the caller ID's brand (logo and call reason, RFC 9796 Call-Info) on calls out,
 	// for carriers that pass it to the called phone.
 	RichCallData bool `json:"richCallData"`
@@ -2821,6 +2832,19 @@ func (c *Config) Validate() error {
 		if t.Shared != "" && t.Shared != "one" {
 			p.add(f+".shared", "choose each server, or one server at a time")
 		}
+		if t.Peer != "" && t.Peer != "internal" && t.Peer != "onward" {
+			p.add(f+".peer", "choose a provider, another of your phone systems, or a hub")
+		}
+		if t.Peer != "" && t.ESInet {
+			p.add(f+".peer", "a trunk from the ESInet is not one of your own phone systems")
+		}
+		var servers []string
+		for _, s := range t.Servers {
+			if s = strings.TrimSpace(s); s != "" && !slices.Contains(servers, s) {
+				servers = append(servers, s)
+			}
+		}
+		t.Servers = servers
 		if t.Transport != "udp" && t.Transport != "tcp" && t.Transport != "tls" {
 			p.add(f+".transport", "choose udp, tcp or tls")
 		}

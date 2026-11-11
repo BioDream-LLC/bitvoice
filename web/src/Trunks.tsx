@@ -165,6 +165,30 @@ function Editor({ t: initial, status, onClose }: { t: Trunk; status?: TrunkStatu
         <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={t.register} onChange={(v) => set('register', v)} label="Register" /> Register with the provider</label>
         </>)}
         <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={t.enabled} onChange={(v) => set('enabled', v)} label="Enabled" /> Enabled</label>
+        {!t.teams && !t.esinet && t.protocol !== 'dahdi' && (
+          <Field label="Connects to" htmlFor="tpeer" error={p('peer')}
+            hint={t.peer === 'onward' ? 'Another of your phone systems, and this server is a hub between sites: calls from it may dial numbers here, and also go out again through this server’s outbound routes (to another site or the phone company). A loop of routes ends after 10 hops.'
+              : t.peer === 'internal' ? 'Another of your phone systems (another BitVoice at another site, say), making a private network with no phone company: calls from it may dial this server’s extensions, ring groups, queues and conferences without an incoming route each, and are not screened as spam. Send its numbers there with an outbound route (3XXX, say).'
+              : 'A phone company or other provider: incoming routes decide where its calls go.'}>
+            <select id="tpeer" className="input" value={t.peer ?? ''} onChange={(e) => set('peer', e.target.value as Trunk['peer'])}>
+              <option value="">A provider</option><option value="internal">Another of your phone systems</option><option value="onward">Another of your phone systems, through this hub</option>
+            </select>
+          </Field>
+        )}
+        {servers?.shared && (servers.nodes ?? []).length > 1 && (
+          <fieldset className="space-y-2" aria-describedby="tsrvhint">
+            <legend className="text-sm font-medium text-slate-300">Used by</legend>
+            <label className="flex items-center gap-3 text-sm text-slate-300"><Toggle checked={!(t.servers ?? []).length} label="Every server" onChange={(v) => set('servers', v ? [] : [servers.self?.id ?? ''].filter(Boolean))} /> Every server</label>
+            {(t.servers ?? []).length > 0 && (servers.nodes ?? []).map((n) => (
+              <label key={n.id} className="ml-12 flex items-center gap-3 text-sm text-slate-300">
+                <input type="checkbox" checked={(t.servers ?? []).includes(n.id)} onChange={(e) => set('servers', e.target.checked ? [...(t.servers ?? []), n.id] : (t.servers ?? []).filter((x) => x !== n.id))} />
+                <span className="text-teal-300">{n.name || n.id}</span>{n.self && <span className="text-xs text-slate-500">(this server)</span>}{!n.alive && <span className="text-xs text-amber-300">stopped</span>}
+              </label>
+            ))}
+            <p id="tsrvhint" className="text-xs text-slate-500">A site’s own line: only these servers register it and send calls out on it; the others pass it over in outbound routes. An emergency call with no line of its own still goes out through one of them.</p>
+            {p('servers') && <p className="field-error text-sm text-rose-300">{p('servers')}</p>}
+          </fieldset>
+        )}
         {servers?.shared && (
           <Field label="Shared between servers" htmlFor="tsh" error={p('shared')}
             hint={t.shared === 'one' ? 'One server registers and carries the line; the others send their calls out through it, and the next one takes the line within seconds if it stops. For providers that allow one registration per account.' : 'Every server registers and places calls on its own. For providers that allow several registrations, or none.'}>

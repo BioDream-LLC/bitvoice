@@ -2,6 +2,7 @@ package pbx
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -92,6 +93,11 @@ func (s *sim) inbound(from, did string) *SimStep {
 		return st
 	}
 	r := inboundRoute(cfg, s.in.Trunk, did)
+	if t := cfg.FindTrunk(s.in.Trunk); t != nil && t.Peer != "" && (r == nil || r.DID == "") {
+		if st := s.peer(t, from, did); st != nil {
+			return st
+		}
+	}
 	on := ""
 	if s.in.Trunk == "" && (r == nil || r.DID == "") {
 		for _, tr := range cfg.Trunks {
@@ -114,6 +120,38 @@ func (s *sim) inbound(from, did string) *SimStep {
 	}
 	st := &SimStep{Kind: "route", Target: r.ID, Name: r.Name, Status: "ok", Says: "The incoming route " + r.Name + " " + match + "."}
 	st.Branches = []SimBranch{{When: "Then", Taken: true, Step: s.walk(r.Destination, 0, nil, "inbound", from, did)}}
+	return st
+}
+
+// peer shows a call another of the organization's phone systems sent on a peer trunk, for a number
+// dialled there; nil when the incoming routes decide (as peerPlan).
+func (s *sim) peer(t *config.Trunk, from, did string) *SimStep {
+	cfg := s.cfg
+	did = cleanNumber(did)
+	var d *config.Destination
+	switch {
+	case cfg.FindExtension(did) != nil:
+		d = &config.Destination{Type: "extension", Target: did}
+	case cfg.FindRingGroup(did) != nil:
+		d = &config.Destination{Type: "ringgroup", Target: did}
+	case cfg.FindQueue(did) != nil:
+		d = &config.Destination{Type: "queue", Target: did}
+	case cfg.FindMenuNumber(did) != nil:
+		d = &config.Destination{Type: "menu", Target: cfg.FindMenuNumber(did).ID}
+	}
+	st := &SimStep{Kind: "route", Name: "Dialled on " + t.Name, Status: "ok"}
+	switch {
+	case d != nil:
+		st.Says = t.Name + " is another of your phone systems, and " + did + " is a number here."
+		st.Branches = []SimBranch{{When: "Then", Taken: true, Step: s.walk(*d, 0, nil, "inbound", from, did)}}
+	case slices.Contains(cfg.System.EmergencyNumbers, did):
+		st.Status = "warn"
+		st.Says = t.Name + " passed on an emergency call: it goes out through this server's outbound routes, never refused."
+	case t.Peer == "onward" && s.e.outbound(cfg, nil, did).reject == 0:
+		st.Says = t.Name + " is a hub trunk: " + did + " goes on through this server's outbound routes."
+	default:
+		return nil
+	}
 	return st
 }
 

@@ -342,6 +342,27 @@ func (e *Endpoint) SetRemote(addr string, port int) {
 	}
 }
 
+// MoveTo sends media to a new address the party gave in a new offer within its dialog (a re-INVITE):
+// another server taking over the call, or a phone that moved. Media goes there at once and is taken
+// only from there: a server cut off from its cluster may still be sending from the old address, and
+// must not pull the call back. If nothing comes from the new address for two seconds, the first
+// source heard is latched (a phone behind NAT, whose offer names its private address).
+func (e *Endpoint) MoveTo(addr string, port int) {
+	ip, err := netip.ParseAddr(addr)
+	if err != nil || port == 0 || ip.IsUnspecified() {
+		return
+	}
+	to := netip.AddrPortFrom(ip.Unmap(), uint16(port))
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if to == e.remote {
+		return
+	}
+	e.remote, e.remoteRC = to, netip.AddrPortFrom(to.Addr(), to.Port()+1)
+	e.latched, e.expect, e.haveSeq = true, netip.AddrPort{}, false
+	e.stats.LastSeen = time.Now().UnixMilli()
+}
+
 // SetPayloadType records the payload type this party expects (0 PCMU, 8 PCMA, 9 G.722, -1 unknown).
 // SetFmtp gives the format parameters this party agreed for its codec (AMR's mode-set), used by the
 // encoder BitVoice converts to it with.

@@ -36,6 +36,9 @@ type Leg struct {
 	remoteTarget string
 	routeSet     []string
 	peer         sip.Peer
+	// movedTo is where in-dialog requests go since the party's re-INVITE came from another address
+	// over UDP (another server of its cluster took the call over); nil: peer.
+	movedTo atomic.Pointer[sip.Peer]
 
 	mu        sync.Mutex
 	localSeq  uint32
@@ -94,12 +97,40 @@ func (l *Leg) party() string {
 	return l.Number
 }
 
+// dialogPeer is where this party's in-dialog requests go.
+func (l *Leg) dialogPeer() sip.Peer {
+	if p := l.movedTo.Load(); p != nil {
+		return *p
+	}
+	return l.peer
+}
+
+// followParty takes a target refresh (a re-INVITE or UPDATE) from the party: its Contact is where
+// requests are addressed now, and, over UDP, a request from another address means another server now
+// speaks for the party (its cluster took the call over), so requests go there. A phone behind NAT keeps
+// its address, and is unchanged.
+func (l *Leg) followParty(in *sip.Incoming) {
+	m := in.Msg
+	if ct, err := sip.ParseAddress(m.Get("Contact")); err == nil && ct != nil && ct.URI != nil {
+		l.mu.Lock()
+		l.remoteTarget = ct.URI.String()
+		l.mu.Unlock()
+	}
+	cur := l.dialogPeer()
+	if in.From.Transport == "UDP" && cur.Transport == "UDP" && in.From.Addr.IsValid() && in.From.Addr != cur.Addr {
+		np := cur
+		np.Addr = in.From.Addr
+		l.movedTo.Store(&np)
+	}
+}
+
 func (l *Leg) newRequest(method string) *sip.Message {
 	l.mu.Lock()
 	l.localSeq++
 	seq := l.localSeq
+	target := l.remoteTarget
 	l.mu.Unlock()
-	m := &sip.Message{IsRequest: true, Method: method, RequestURI: l.remoteTarget}
+	m := &sip.Message{IsRequest: true, Method: method, RequestURI: target}
 	for _, r := range l.routeSet {
 		m.Add("Route", r)
 	}
@@ -114,7 +145,7 @@ func (l *Leg) newRequest(method string) *sip.Message {
 
 // request sends an in-dialog request and returns the final response (or nil on timeout).
 func (l *Leg) request(m *sip.Message) *sip.Message {
-	tx := l.e.stack.Request(m, l.peer)
+	tx := l.e.stack.Request(m, l.dialogPeer())
 	var final *sip.Message
 	for r := range tx.Responses {
 		if r.StatusCode >= 200 {
@@ -185,6 +216,7 @@ func (l *Leg) receive(tx *sip.ServerTx, in *sip.Incoming) {
 		l.mu.Unlock()
 		l.call.legEnded(l, "hung up")
 	case sip.INVITE, sip.UPDATE:
+		l.followParty(in)
 		l.reoffer(tx, m)
 	case sip.REFER:
 		l.mu.Lock()
@@ -291,7 +323,15 @@ func (l *Leg) reoffer(tx *sip.ServerTx, m *sip.Message) {
 		tx.Respond(sip.NewResponse(m, 488, "No Common Codec"))
 		return
 	}
+	l.mu.Lock()
+	old, ep := l.remoteSDP, l.ep
+	l.mu.Unlock()
 	l.setRemoteSDP(offer)
+	if ep != nil && old != nil && old.Audio() != nil && (old.Connection(old.Audio()) != offer.Connection(offer.Audio()) || old.Audio().Port != offer.Audio().Port) {
+		// The party's media moved (another server took the call over, say): send there now. An offer
+		// at the same address (hold, a refresh, a phone behind NAT) keeps the latched source.
+		ep.MoveTo(offer.Connection(offer.Audio()), offer.Audio().Port)
+	}
 	dir := offer.Direction(offer.Audio())
 	hold := dir == "sendonly" || dir == "inactive" || offer.Connection(offer.Audio()) == "0.0.0.0"
 	r := sip.NewResponse(m, 200, "")

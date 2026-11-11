@@ -99,7 +99,7 @@ func (e *Engine) ClusterState() cluster.State {
 		st.OneTrunks = append(st.OneTrunks, cluster.AddressLease)
 	}
 	for _, t := range e.Config().Trunks {
-		if t.Enabled && t.Shared == "one" {
+		if t.Enabled && t.Shared == "one" && e.trunkHere(&t) {
 			st.OneTrunks = append(st.OneTrunks, t.ID)
 		}
 	}
@@ -239,6 +239,43 @@ func (e *Engine) heldElsewhere(t *config.Trunk) string {
 		return ""
 	}
 	return node
+}
+
+// trunkHere says whether this server may use a trunk: every server may, unless the trunk names the
+// servers that use it (a site's own outside line) and this is not one of them.
+func (e *Engine) trunkHere(t *config.Trunk) bool {
+	if e.Cluster == nil || len(t.Servers) == 0 {
+		return true
+	}
+	return slices.Contains(t.Servers, e.Cluster.Self().ID)
+}
+
+// trunkServer is a running server that may use a trunk limited to some servers ("" for none).
+func (e *Engine) trunkServer(t *config.Trunk) string {
+	if e.Cluster == nil {
+		return ""
+	}
+	for _, id := range t.Servers {
+		if _, ok := e.Cluster.Peer(id); ok {
+			return id
+		}
+	}
+	return ""
+}
+
+// serverNames names a trunk's servers for the why trail and the trunk's status.
+func (e *Engine) serverNames(t *config.Trunk) string {
+	var names []string
+	for _, id := range t.Servers {
+		n := id
+		if e.Cluster != nil {
+			if s := e.Cluster.NodeName(id); s != "" {
+				n = s
+			}
+		}
+		names = append(names, n)
+	}
+	return strings.Join(names, ", ")
 }
 
 // clusterMessage delivers a text another server sent to this server's phones for an extension.

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -66,7 +67,28 @@ func localTarget(cfg *config.Config, n string) (string, error) {
 			return "menu " + m.Name, nil
 		}
 	}
-	return "", errors.New(n + " is not a number inside BitVoice; the generator only calls extensions, groups, queues, menus, voicemail and the echo test")
+	for _, r := range cfg.OutboundRoutes {
+		if !slices.ContainsFunc(r.Patterns, func(pat string) bool { return config.MatchPattern(pat, n) }) {
+			continue
+		}
+		// The first route that takes the number: another site of a private network, when every one of
+		// its trunks is a peer trunk (to another of the organization's phone systems, never a provider).
+		var names []string
+		for _, id := range r.Trunks {
+			if t := cfg.FindTrunk(id); t != nil && t.Enabled {
+				if t.Peer == "" {
+					names = nil
+					break
+				}
+				names = append(names, t.Name)
+			}
+		}
+		if len(names) > 0 {
+			return "another site, through " + strings.Join(names, ", then "), nil
+		}
+		break
+	}
+	return "", errors.New(n + " is not a number inside BitVoice; the generator only calls extensions, groups, queues, menus, voicemail, the echo test and other sites' numbers (outbound routes whose trunks are all to your own phone systems)")
 }
 
 func (s *Server) loadStatus() map[string]any {
