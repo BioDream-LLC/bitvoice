@@ -18,8 +18,9 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib" // registers "pgx"; pure Go
-	_ "modernc.org/sqlite"             // registers "sqlite"; pure Go, so BitVoice stays one static binary
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib" // registers "pgx"; pure Go
+	_ "modernc.org/sqlite"           // registers "sqlite"; pure Go, so BitVoice stays one static binary
 )
 
 // DB is an open database.
@@ -60,10 +61,12 @@ func openPostgres(spec string) (*DB, error) {
 	if err != nil || u.Host == "" {
 		return nil, errors.New("db: the PostgreSQL address should look like postgres://user:password@host:5432/bitvoice")
 	}
-	pool, err := sql.Open("pgx", spec)
+	cfg, err := pgx.ParseConfig(spec)
 	if err != nil {
 		return nil, err
 	}
+	Patient(cfg)
+	pool := stdlib.OpenDB(*cfg)
 	pool.SetMaxOpenConns(16)
 	pool.SetMaxIdleConns(4)
 	pool.SetConnMaxIdleTime(5 * time.Minute)

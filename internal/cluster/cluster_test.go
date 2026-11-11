@@ -2,8 +2,11 @@ package cluster
 
 import (
 	"context"
+	"net"
+	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -282,5 +285,183 @@ func TestTakenCallEndedWhileCutOff(t *testing.T) {
 	a.beat(ctx, State{Calls: map[string][]byte{"c3": []byte(`{"id":"c3","x":1}`)}})
 	if len(letGo) != 0 {
 		t.Fatalf("a let go of its own new call: %v", letGo)
+	}
+}
+
+// silentLink stands between a server and PostgreSQL. Cut, it goes quiet the way a firewall dropping
+// packets does: connections stay open, nothing gets through, and new ones never get an answer.
+type silentLink struct {
+	ln  net.Listener
+	cut atomic.Bool
+}
+
+func newSilentLink(t *testing.T, to string) *silentLink {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := &silentLink{ln: ln}
+	t.Cleanup(func() { ln.Close() })
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer c.Close()
+				for l.cut.Load() { // a new connection while cut: never answered
+					time.Sleep(20 * time.Millisecond)
+				}
+				up, err := net.Dial("tcp", to)
+				if err != nil {
+					return
+				}
+				defer up.Close()
+				done := make(chan struct{}, 2)
+				go func() { l.pipe(up, c); done <- struct{}{} }()
+				go func() { l.pipe(c, up); done <- struct{}{} }()
+				<-done
+			}()
+		}
+	}()
+	return l
+}
+
+// pipe copies from src to dst, holding what it read while the link is cut.
+func (l *silentLink) pipe(dst, src net.Conn) {
+	buf := make([]byte, 32<<10)
+	for {
+		n, err := src.Read(buf)
+		for l.cut.Load() {
+			time.Sleep(20 * time.Millisecond)
+		}
+		if n > 0 {
+			if _, werr := dst.Write(buf[:n]); werr != nil {
+				return
+			}
+		}
+		if err != nil {
+			if c, ok := dst.(*net.TCPConn); ok {
+				_ = c.CloseWrite()
+			}
+			return
+		}
+	}
+}
+
+// A server whose link to the database goes quiet notices within seconds (no beat waits on the
+// network for long), the others count it as stopped, and it joins again by itself when the link is
+// back. Before, a beat waited on the dead connection for about a minute.
+func TestDatabaseLinkGoesQuiet(t *testing.T) {
+	spec := dbtest.Spec(t)
+	if spec == "" {
+		t.Skip("set BITVOICE_TEST_POSTGRES: servers share a cluster only through PostgreSQL")
+	}
+	u, err := url.Parse(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	link := newSilentLink(t, u.Host)
+	u.Host = link.ln.Addr().String()
+	da, err := db.Open(u.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { da.Close() })
+	db2, err := db.Open(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db2.Close() })
+
+	a, _ := New(da, t.TempDir(), "1", "10.0.0.1:5060")
+	b, _ := New(db2, t.TempDir(), "1", "10.0.0.2:5060")
+	type news struct {
+		lost bool
+		at   time.Time
+	}
+	heard := make(chan news, 4)
+	a.OnDatabase = func(lost bool, down time.Duration, why string) {
+		t.Logf("a: lost=%v down=%s why=%q", lost, down.Round(time.Millisecond), why)
+		heard <- news{lost, time.Now()}
+	}
+	var slowest atomic.Int64
+	a.Slow = func(d time.Duration) {
+		if int64(d) > slowest.Load() {
+			slowest.Store(int64(d))
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	ran := make(chan struct{})
+	go func() { a.Run(ctx, func() State { return State{} }); close(ran) }()
+	t.Cleanup(func() { cancel(); <-ran })
+	bctx := context.Background()
+	alive := func() bool {
+		b.beat(bctx, State{})
+		for _, n := range b.Nodes() {
+			if n.ID == a.Self().ID {
+				return n.Alive
+			}
+		}
+		return false
+	}
+	deadline := time.Now().Add(15 * time.Second)
+	for !alive() {
+		if time.Now().After(deadline) {
+			t.Fatal("b never saw a")
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if d := a.Database(); !d.Reachable {
+		t.Fatalf("a reports the database out of reach before the cut: %+v", d)
+	}
+
+	cutAt := time.Now()
+	link.cut.Store(true)
+	var lost news
+	select {
+	case lost = <-heard:
+	case <-time.After(15 * time.Second):
+		t.Fatalf("a did not notice in 15 s that the database went quiet (Database %+v)", a.Database())
+	}
+	if !lost.lost {
+		t.Fatal("first news was not the loss")
+	}
+	// Gone without a beat reaching the database, plus at most one beat's limit and one tick.
+	if took := lost.at.Sub(cutAt); took > Gone+beatLimit+Beat+time.Second {
+		t.Fatalf("a noticed after %s", took)
+	}
+	if d := a.Database(); d.Reachable || d.Error == "" {
+		t.Fatalf("Database while cut: %+v", d)
+	}
+	for alive() {
+		if time.Since(cutAt) > Gone+3*time.Second {
+			t.Fatal("b still counts a as running")
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if s := time.Duration(slowest.Load()); s > beatLimit+time.Second {
+		t.Fatalf("a beat waited %s on the quiet link (limit %s)", s, beatLimit)
+	}
+
+	link.cut.Store(false)
+	backAt := time.Now()
+	select {
+	case n := <-heard:
+		if n.lost {
+			t.Fatal("lost twice")
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatalf("a did not reach the database again within 15 s of the link coming back (Database %+v)", a.Database())
+	}
+	if !a.Database().Reachable {
+		t.Fatal("back, but still reported out of reach")
+	}
+	for !alive() {
+		if time.Since(backAt) > 15*time.Second {
+			t.Fatal("b does not see a running again")
+		}
+		time.Sleep(200 * time.Millisecond)
 	}
 }

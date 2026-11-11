@@ -346,6 +346,13 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request, u store.User) {
 	} else {
 		add("sip", "fail", "Phone service is not running", "The SIP port could not be opened. Another phone system may be using it.", "/settings")
 	}
+	if s.Cluster != nil {
+		if d := s.Cluster.Database(); !d.Reachable {
+			add("database", "fail", "This server cannot reach the shared database",
+				fmt.Sprintf("Not since %s (%s). The other servers count it as stopped and carry on its calls. It joins again by itself when the database answers.",
+					d.Since.Local().Format("15:04:05"), d.Error), "/servers")
+		}
+	}
 	regs := s.Engine.Registrations()
 	online := map[string]bool{}
 	for _, b := range regs {

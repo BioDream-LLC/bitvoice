@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"net"
 	"net/netip"
@@ -39,7 +40,22 @@ const (
 	holdFresh = 3 * time.Second
 	// tokenLife is how long a signed call between servers stays valid.
 	tokenLife = time.Minute
+	// beatLimit bounds one beat's queries, so a database that stopped answering is noticed at the next
+	// beat instead of after the network gives up (a minute or more): under Gone, so a server that can
+	// still reach the database never looks stopped to the others because of one slow beat.
+	beatLimit = Gone - Beat
 )
+
+// Database says whether this server can reach the shared database.
+type Database struct {
+	// Reachable is false once the server has gone Gone without a beat reaching the database: the other
+	// servers then count it as stopped and carry on its calls.
+	Reachable bool `json:"reachable"`
+	// Since is when the database last answered a beat (while unreachable: since when it is cut off).
+	Since time.Time `json:"since"`
+	// Error is the last beat's failure, in words.
+	Error string `json:"error,omitempty"`
+}
 
 // Node is one server.
 type Node struct {
@@ -170,6 +186,14 @@ type Cluster struct {
 
 	saved      map[string]string // call -> the body last saved
 	handedOver bool              // stopping: the calls are the others' now, nothing more is saved
+
+	lastOK  time.Time // when a beat last reached the database
+	lastErr string    // why the last beat did not
+	cut     bool      // told OnDatabase it is cut off
+
+	// OnDatabase hears when this server is cut off from the shared database (lost) and when it
+	// reaches it again; down is how long it was out of reach.
+	OnDatabase func(lost bool, down time.Duration, why string)
 
 	// TakeOver carries on calls a stopped server had; LetGo drops calls another server took over.
 	// Slow, when set, hears of a check-in that took long (the database answering slowly).
@@ -403,7 +427,52 @@ func New(d *db.DB, dir, version, sipAddr string) (*Cluster, error) {
 	if err := c.loadSecret(context.Background()); err != nil {
 		return nil, err
 	}
+	c.lastOK = time.Now()
 	return c, nil
+}
+
+// Database says whether this server can reach the shared database now.
+func (c *Cluster) Database() Database {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return Database{Reachable: !c.cut, Since: c.lastOK.UTC(), Error: c.lastErr}
+}
+
+// reached notes how a beat went: err is the first failure of its check-in (nil: it reached the
+// database), and tells OnDatabase when this server is cut off and when it is back.
+func (c *Cluster) reached(err error) {
+	now := time.Now()
+	c.mu.Lock()
+	var tell func()
+	if err == nil {
+		down, was := now.Sub(c.lastOK), c.cut
+		c.lastOK, c.lastErr, c.cut = now, "", false
+		if was && c.OnDatabase != nil {
+			f := c.OnDatabase
+			tell = func() { f(false, down, "") }
+		}
+	} else {
+		c.lastErr = dbReason(err)
+		if !c.cut && now.Sub(c.lastOK) >= Gone {
+			c.cut = true
+			if c.OnDatabase != nil {
+				f, down, why := c.OnDatabase, now.Sub(c.lastOK), c.lastErr
+				tell = func() { f(true, down, why) }
+			}
+		}
+	}
+	c.mu.Unlock()
+	if tell != nil {
+		tell()
+	}
+}
+
+// dbReason puts a failed check-in in a few words.
+func dbReason(err error) string {
+	if errors.Is(err, context.DeadlineExceeded) || os.IsTimeout(err) {
+		return fmt.Sprintf("the database did not answer within %s", beatLimit)
+	}
+	return reason(err)
 }
 
 func (c *Cluster) saveIdentity(id identity) error {
@@ -603,7 +672,7 @@ func (c *Cluster) Run(ctx context.Context, state func() State) {
 		}
 	})
 	c.beat(ctx, state())
-	_ = c.d.Notify(ctx, channel, self) // the others see this server at once
+	c.notify(ctx, self) // the others see this server at once
 	go func() {
 		pt := time.NewTicker(10 * time.Second)
 		defer pt.Stop()
@@ -629,7 +698,7 @@ func (c *Cluster) Run(ctx context.Context, state func() State) {
 		case <-t.C:
 		case <-c.poke:
 			c.beat(ctx, state())
-			_ = c.d.Notify(ctx, channel, self)
+			c.notify(ctx, self)
 			continue
 		case <-heard:
 		}
@@ -637,50 +706,75 @@ func (c *Cluster) Run(ctx context.Context, state func() State) {
 	}
 }
 
-// Beat once: say what this server holds, and read what the others do.
+// notify wakes the others, giving up after a beat's time when the database does not answer.
+func (c *Cluster) notify(ctx context.Context, self string) {
+	ctx, cancel := context.WithTimeout(ctx, beatLimit)
+	defer cancel()
+	_ = c.d.Notify(ctx, channel, self)
+}
+
+// beat once: say what this server holds, and read what the others do, within beatLimit.
 func (c *Cluster) beat(ctx context.Context, st State) {
+	ctx, cancel := context.WithTimeout(ctx, beatLimit)
+	defer cancel()
 	self := c.Self()
 	now := time.Now()
 	defer func() {
-		if d := time.Since(now); d > holdFresh/2 && c.Slow != nil {
+		// Slow only while the database answers: once cut off, OnDatabase has said so already.
+		if d := time.Since(now); d > holdFresh/2 && c.Slow != nil && c.Database().Reachable {
 			c.Slow(d) // the database is slow to answer: leases may lapse
 		}
 	}()
 	st.Info.Unreachable = c.Unreachable()
 	info, _ := json.Marshal(st.Info)
-	_, _ = c.d.Exec(ctx, `INSERT INTO nodes (id, name, sip_addr, version, started_ms, seen_ms, info) VALUES (?, ?, ?, ?, ?, ?, ?)
+	_, err := c.d.Exec(ctx, `INSERT INTO nodes (id, name, sip_addr, version, started_ms, seen_ms, info) VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (id) DO UPDATE SET name = excluded.name, sip_addr = excluded.sip_addr, version = excluded.version,
 		started_ms = excluded.started_ms, seen_ms = excluded.seen_ms, info = excluded.info`,
 		self.ID, self.Name, self.SIPAddr, self.Version, self.Started.UnixMilli(), now.UnixMilli(), string(info))
+	if err != nil {
+		// Cut off (or the database is down): nothing else would get through either. What was last
+		// read stays as it was; leases this server held lapse by themselves (holdFresh).
+		c.reached(err)
+		return
+	}
 	c.writeRegs(ctx, self.ID, st.Regs)
 
 	var nodes []Node
 	alive := map[string]bool{}
-	if rows, err := c.d.Query(ctx, `SELECT id, name, sip_addr, version, started_ms, seen_ms, info FROM nodes`); err == nil {
-		for rows.Next() {
-			var n Node
-			var started, seen int64
-			var info string
-			if rows.Scan(&n.ID, &n.Name, &n.SIPAddr, &n.Version, &started, &seen, &info) != nil {
-				continue
-			}
-			n.Started, n.Seen = time.UnixMilli(started).UTC(), time.UnixMilli(seen).UTC()
-			_ = json.Unmarshal([]byte(info), &n.Info)
-			n.Self = n.ID == self.ID
-			n.Alive = n.Self || now.Sub(n.Seen) < Gone
-			if n.Self {
-				n.Info = st.Info
-			}
-			alive[n.ID] = n.Alive
-			// A server gone for a week is forgotten.
-			if !n.Alive && now.Sub(n.Seen) > 7*24*time.Hour {
-				_, _ = c.d.Exec(ctx, `DELETE FROM nodes WHERE id = ?`, n.ID)
-				continue
-			}
-			nodes = append(nodes, n)
-		}
-		rows.Close()
+	rows, err := c.d.Query(ctx, `SELECT id, name, sip_addr, version, started_ms, seen_ms, info FROM nodes`)
+	if err != nil {
+		c.reached(err)
+		return
 	}
+	for rows.Next() {
+		var n Node
+		var started, seen int64
+		var info string
+		if rows.Scan(&n.ID, &n.Name, &n.SIPAddr, &n.Version, &started, &seen, &info) != nil {
+			continue
+		}
+		n.Started, n.Seen = time.UnixMilli(started).UTC(), time.UnixMilli(seen).UTC()
+		_ = json.Unmarshal([]byte(info), &n.Info)
+		n.Self = n.ID == self.ID
+		n.Alive = n.Self || now.Sub(n.Seen) < Gone
+		if n.Self {
+			n.Info = st.Info
+		}
+		alive[n.ID] = n.Alive
+		// A server gone for a week is forgotten.
+		if !n.Alive && now.Sub(n.Seen) > 7*24*time.Hour {
+			_, _ = c.d.Exec(ctx, `DELETE FROM nodes WHERE id = ?`, n.ID)
+			continue
+		}
+		nodes = append(nodes, n)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		c.reached(err)
+		return
+	}
+	c.reached(nil)
 	slices.SortFunc(nodes, func(a, b Node) int {
 		if a.Self != b.Self {
 			if a.Self {

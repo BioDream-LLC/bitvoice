@@ -43,7 +43,7 @@ Both shapes are rated **Field-tested**. Three BitVoice servers in three Amazon r
 
 One cluster was then spread across the same three regions, with the database in Virginia over TLS. Each site's server sent its calls out on its own line; an emergency call from a server with no line of its own went out through another's. The server carrying a call was killed and another region carried the call on after 4 seconds, with 3.6 seconds without sound; a server cut off from the database for 30 seconds had its call carried on elsewhere with no gap.
 
-The field test found and fixed four real bugs, among them a far end that ignored a moved call's new sound address. Not yet tried: real carriers at each site, and following a moved call's later requests over TCP or TLS (UDP follows; TCP and TLS keep the first address). A server that loses its database link still takes about a minute to notice; a fix is next.
+The field test found and fixed four real bugs, among them a far end that ignored a moved call's new sound address. Not yet tried: real carriers at each site, and following a moved call's later requests over TCP or TLS (UDP follows; TCP and TLS keep the first address). A server whose database link goes quiet notices within about seven seconds and says so on Servers and Health (it used to take about a minute).
 
 ## Read more
 

@@ -254,6 +254,13 @@ func serve(ctx context.Context, o options, stdout, stderr io.Writer) error {
 		cl.Slow = func(d time.Duration) {
 			log.Warn("checking in with the other servers was slow", "took", d.Round(time.Millisecond))
 		}
+		cl.OnDatabase = func(lost bool, down time.Duration, why string) {
+			if lost {
+				log.Error("cut off from the shared database: the other servers carry on this server's calls", "for", down.Round(time.Second), "why", why)
+			} else {
+				log.Info("the shared database answers again", "after", down.Round(time.Second))
+			}
+		}
 		cl.TakeOver, cl.LetGo = eng.TakeOver, eng.LetGo
 		eng.HandOver = func() map[string][]byte { return cl.HandOver(eng.CallSnapshots()) }
 		go func() { cl.Run(ctx, eng.ClusterState); close(left) }()

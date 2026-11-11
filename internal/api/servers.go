@@ -16,7 +16,7 @@ func (s *Server) serverRoutes() {
 			return
 		}
 		writeJSON(w, 200, map[string]any{"shared": true, "postgres": true, "self": s.Cluster.Self(), "nodes": s.Cluster.Nodes(),
-			"address": s.sharedStatus()})
+			"address": s.sharedStatus(), "database": s.Cluster.Database()})
 	})
 	s.handle("PUT /api/servers/self", true, func(w http.ResponseWriter, r *http.Request, u store.User) {
 		if s.Cluster == nil {

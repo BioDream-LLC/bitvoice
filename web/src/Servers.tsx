@@ -1,4 +1,4 @@
-import { Database, Pencil, Server as ServerIcon, Trash2 } from 'lucide-react'
+import { Database, Pencil, Server as ServerIcon, Trash2, Unplug } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -19,6 +19,15 @@ export function Servers() {
         </Empty>
       ) : (
         <>
+          {data.database && !data.database.reachable && (
+            <div role="alert" className="card mb-4 flex items-start gap-3 border-rose-500/40 bg-rose-500/10 p-4 text-sm">
+              <Unplug size={18} className="mt-0.5 shrink-0 text-rose-300" aria-hidden />
+              <div>
+                <p className="font-semibold text-rose-200">This server cannot reach the shared database</p>
+                <p className="text-slate-300">Not since {new Date(data.database.since).toLocaleTimeString()}{data.database.error ? <> (<span className="text-amber-300">{data.database.error}</span>)</> : null}. The other servers count it as stopped and carry on its calls. What is shown here is from before; it joins again by itself when the database answers.</p>
+              </div>
+            </div>
+          )}
           <ul className="grid gap-3 lg:grid-cols-2" aria-label="Servers">
             {data.nodes!.map((n) => <NodeCard key={n.id} n={n} all={data.nodes!} />)}
           </ul>
@@ -30,6 +39,7 @@ export function Servers() {
               <li><span className="text-sky-300">Phones carry on</span> through their backup server, the DNS name, or the shared address (whichever server holds it answers at the same address).</li>
               <li><span className="text-violet-300">Provider lines</span> set to "one server at a time" move to a running server; lines every server registers carry on from the others.</li>
               <li>Busy lamps, parking, paging and texts work across servers all the time.</li>
+              <li><span className="text-rose-300">A server cut off from the database</span> notices within seconds and says so here and on Health; the others count it as stopped and carry on its calls, and it joins again by itself.</li>
             </ul>
           </section>
         </>
