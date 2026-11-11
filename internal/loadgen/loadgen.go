@@ -515,7 +515,18 @@ func (r *Run) call(ctx context.Context) {
 	bye.Set("To", resp.Get("To"))
 	bye.Set("Call-ID", callID)
 	bye.Set("CSeq", strconv.FormatUint(uint64(n+1), 10)+" BYE")
-	r.send(r.stack, bye, p.From, p.FromSecret)
+	if ctx.Err() == nil {
+		r.send(r.stack, bye, p.From, p.FromSecret)
+		return
+	}
+	// Stopped: hang up, but do not hold the stop for SIP's 32 s when the answer to the BYE is slow
+	// or lost. A call BitVoice still had would show in its live calls.
+	sent := make(chan struct{})
+	go func() { r.send(r.stack, bye, p.From, p.FromSecret); close(sent) }()
+	select {
+	case <-sent:
+	case <-time.After(2 * time.Second):
+	}
 }
 
 // media sends a 1 kHz tone at the real rate for the hold time and counts what comes back.
