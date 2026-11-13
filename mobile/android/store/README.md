@@ -98,6 +98,10 @@ before Production is allowed (Play's rule for personal accounts; organisation ac
 
 ## 5. Push wake-up (Firebase)
 
+Done (2026-11): Firebase project `bitvoice-c4778`, the release build carries `assets/firebase.json`, and BioDream's
+relay runs at https://push.bitvoice.org (deploy/push). Tried on the Pixel 8 with the app's process killed and the
+screen off: the call rang on the lock screen and was answered. The steps below are how it was set up.
+
 Without it the app rings only while it is on screen (tried on the Pixel 8: in the background, or with the
 screen off, a call goes to voicemail). With it, BitVoice wakes the app for every call, even after days
 closed. Publish to Production only with push working: the listing promises calls that ring. It needs a Firebase project in BioDream's name:
