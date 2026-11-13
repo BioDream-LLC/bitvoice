@@ -1,5 +1,5 @@
 ---
-title: Security
+title: Security: encryption, sign-in and toll fraud
 tile: TLS, SRTP, fail-to-ban, a toll-fraud guard, two-step sign-in, single sign-on and an audit log, locked down by default.
 icon: shield
 area: Operations

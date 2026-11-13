@@ -44,7 +44,7 @@ var pages = []page{
 		"The tests every change must pass, the real software BitVoice is checked against, and the equipment it has not been tried with yet.", "0.8"},
 	{"lab.html", "/public-safety/", "lab", "Public safety: the lab and design-partner track",
 		"NG911 call handling, a P25 radio console and NG911 Core Services on the same engine. Not certified or run on live systems yet; design partners wanted.", "0.6"},
-	{"download.html", "/download/", "download", "Download BitVoice",
+	{"download.html", "/download/", "download", "Download BitVoice for Linux, macOS and Windows",
 		"Download BitVoice for Linux, macOS and Windows, on Intel and Arm. One file, nothing to install, signed releases, free under Apache 2.0.", "0.9"},
 	{"privacy.html", "/privacy/", "privacy", "Privacy: the BitVoice apps",
 		"What the BitVoice phone apps for Android and iPhone collect, where it goes, and how to remove it. No advertising, analytics or tracking.", "0.3"},
@@ -69,7 +69,7 @@ var manualDir string
 var manualNames = map[string]string{"de": "Deutsch", "fr": "Français", "es": "Español", "it": "Italiano", "pt": "Português", "nl": "Nederlands",
 	"pl": "Polski", "sv": "Svenska", "da": "Dansk", "nb": "Norsk bokmål", "fi": "Suomi", "ja": "日本語", "zh": "简体中文"}
 
-var chapterRE = regexp.MustCompile(`<section class="chapter" id="([a-z0-9-]+)"><div class="chapno">[^<]*</div><h2>([^<]+)</h2>`)
+var chapterRE = regexp.MustCompile(`<section class="chapter" id="([a-z0-9-]+)"><div class="chapno">[^<]*</div><h[23]>([^<]+)</h[23]>`)
 
 // build writes the whole site.
 func build(root, out, base string) error {
@@ -358,6 +358,11 @@ func manualCodes() []string {
 	return codes
 }
 
+var (
+	titleRE = regexp.MustCompile(`<title>([^<]*)</title>`)
+	descRE  = regexp.MustCompile(`<meta name="description" content="([^"]*)"`)
+)
+
 // manualLinks puts a canonical link and hreflang alternates into the head of the manual at file,
 // the English one when code is empty.
 func manualLinks(file, base, code string) error {
@@ -384,6 +389,22 @@ func manualLinks(file, base, code string) error {
 		}
 		fmt.Fprintf(&b, "<link rel=\"alternate\" hreflang=\"x-default\" href=\"%s\">\n", url(""))
 	}
+	// A link to the manual shared in a chat or a post shows a card with its own title and description,
+	// in its own language, like the rest of the site.
+	title, desc := "BitVoice manual", ""
+	if m := titleRE.FindStringSubmatch(page); m != nil {
+		title = html.UnescapeString(m[1])
+	}
+	if m := descRE.FindStringSubmatch(page); m != nil {
+		desc = html.UnescapeString(m[1])
+	}
+	locale := "en"
+	if code != "" {
+		locale = code
+	}
+	fmt.Fprintf(&b, "<meta property=\"og:type\" content=\"article\">\n<meta property=\"og:title\" content=\"%s\">\n<meta property=\"og:description\" content=\"%s\">\n<meta property=\"og:url\" content=\"%s\">\n<meta property=\"og:locale\" content=\"%s\">\n",
+		html.EscapeString(title), html.EscapeString(desc), url(code), locale)
+	fmt.Fprintf(&b, "<meta property=\"og:image\" content=\"%s/assets/social-card.png\">\n<meta property=\"og:image:width\" content=\"1280\">\n<meta property=\"og:image:height\" content=\"640\">\n<meta name=\"twitter:card\" content=\"summary_large_image\">\n", base)
 	page = strings.Replace(page, "</head>", b.String()+"</head>", 1)
 	return os.WriteFile(file, []byte(page), 0o644)
 }

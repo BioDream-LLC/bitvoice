@@ -120,8 +120,8 @@ function md(text) {
       out.push(`<table><thead><tr>${head.map((c) => `<th>${inline(c)}</th>`).join('')}</tr></thead><tbody>${body.map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`)
       continue
     }
-    if (l.startsWith('### ')) { out.push(`<h4>${inline(l.slice(4))}</h4>`); i++; continue }
-    if (l.startsWith('## ')) { out.push(`<h3>${inline(l.slice(3))}</h3>`); i++; continue }
+    if (l.startsWith('### ')) { out.push(`<h5>${inline(l.slice(4))}</h5>`); i++; continue }
+    if (l.startsWith('## ')) { out.push(`<h4>${inline(l.slice(3))}</h4>`); i++; continue }
     const b = /^(- |\d+\. )/
     if (b.test(l)) { const ol = /^\d/.test(l), it = []; for (; i < lines.length && b.test(lines[i]); i++) it.push(lines[i].replace(b, '')); out.push(`<${ol ? 'ol' : 'ul'}>${it.map((x) => `<li>${inline(x)}</li>`).join('')}</${ol ? 'ol' : 'ul'}>`); continue }
     const p = []; for (; i < lines.length && lines[i].trim() && !b.test(lines[i]) && !special(lines[i]); i++) p.push(lines[i])
@@ -135,10 +135,10 @@ const logo = `<svg viewBox="0 0 32 32" width="34" height="34" aria-hidden="true"
 const bigLogo = logo.replace('width="34" height="34"', 'width="96" height="96"').replaceAll('id="g"', 'id="g2"').replaceAll('url(#g)', 'url(#g2)')
 
 const words = manual.reduce((n, a) => n + a.body.split(/\s+/).length, 0)
-const chapters = parts.map((p, pi) => `<section class="part" id="part-${pi + 1}"><div class="partno">${L.part} ${pi + 1}</div><h1 class="parttitle">${esc(p.title)}</h1><p class="lede">${inline(p.intro)}</p></section>\n` +
+const chapters = parts.map((p, pi) => `<section class="part" id="part-${pi + 1}"><div class="partno">${L.part} ${pi + 1}</div><h2 class="parttitle">${esc(p.title)}</h2><p class="lede">${inline(p.intro)}</p></section>\n` +
   p.ids.map((id) => {
     const a = byId[id]
-    return `<section class="chapter" id="${a.id}"><div class="chapno">${L.chapter} ${number[id]}</div><h2>${esc(a.title)}</h2>${a.route ? `<div class="where">${L.where} <code>${esc(a.route)}</code></div>` : ''}\n${md(a.body)}</section>`
+    return `<section class="chapter" id="${a.id}"><div class="chapno">${L.chapter} ${number[id]}</div><h3>${esc(a.title)}</h3>${a.route ? `<div class="where">${L.where} <code>${esc(a.route)}</code></div>` : ''}\n${md(a.body)}</section>`
   }).join('\n')).join('\n')
 
 const toc = parts.map((p, pi) => `<li class="tp"><a href="#part-${pi + 1}">${L.part} ${pi + 1}. ${esc(p.title)}</a><ol>${p.ids.map((id) => `<li><a href="#${id}"><span>${number[id]}.</span> ${esc(byId[id].title)}</a></li>`).join('')}</ol></li>`).join('')
@@ -146,8 +146,11 @@ const toc = parts.map((p, pi) => `<li class="tp"><a href="#part-${pi + 1}">${L.p
 const langNav = `<div class="np">${esc(L.languages)}</div><div class="langs">${Object.entries(LANGUAGES).filter(([k]) => k !== lang).map(([k, n]) =>
   `<a href="${k === 'en' ? '/manual/' : `/manual/${k}/`}" hreflang="${k}" lang="${k}">${esc(n)}</a>`).join('')}</div>`
 const notice = lang === 'en' ? '' : `<aside class="machine">${inline(L.machine)}</aside>`
+// The page's description, in its own language: the title and the subtitle's first clause (both translated),
+// short enough for a search result.
+const description = `${L.title}: ${L.sub.split(/[:：]/)[0].trim()}`
 const html = `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(L.title)}</title><meta name="description" content="The BitVoice manual: the phone system, conference rooms, feature codes, hosted organisations, the 911 profile, radio console and NG911 Core Services.">
+<title>${esc(L.title)}</title><meta name="description" content="${esc(description).replace(/"/g, '&quot;')}">
 <style>
 :root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;font:16px/1.65 system-ui,-apple-system,"Segoe UI",sans-serif;background:#060b16;color:#cbd5e1}
 a{color:#7dd3fc}code{font:0.88em ui-monospace,SFMono-Regular,Menlo,monospace;background:#111a2e;color:#fcd34d;padding:1px 5px;border-radius:5px}
@@ -167,7 +170,7 @@ main{margin-left:300px;max-width:960px;padding:32px 48px 80px}
 section.part{border-top:2px solid #6d28d9;margin-top:56px;padding-top:24px}.partno{color:#a78bfa;letter-spacing:.1em;text-transform:uppercase;font-size:13px}
 .parttitle{font-size:34px;margin:4px 0;color:#e2e8f0}
 section.chapter{border-top:1px solid #1e293b;padding-top:18px;margin-top:32px}.chapno{color:#64748b;font-size:12px;letter-spacing:.08em;text-transform:uppercase}
-h2{color:#e2e8f0;font-size:26px;margin:2px 0 6px}h3{color:#c4b5fd;font-size:18px;margin:22px 0 6px}h4{color:#7dd3fc;font-size:15px;margin:16px 0 4px}
+.contents h2,.chapter>h3{color:#e2e8f0;font-size:26px;margin:2px 0 6px}h4{color:#c4b5fd;font-size:18px;margin:22px 0 6px}h5{color:#7dd3fc;font-size:15px;margin:16px 0 4px}
 strong{color:#f1f5f9}.where{font-size:13px;color:#64748b}.ref{color:#64748b;font-size:.85em}
 figure{margin:20px 0}figure svg{width:100%;height:auto;display:block}figcaption{text-align:center;color:#94a3b8;font-size:13px;margin-top:6px}
 aside{border-left:4px solid #fbbf24;background:#1f1705;color:#fde68a;padding:10px 14px;border-radius:0 8px 8px 0;margin:14px 0}
@@ -177,9 +180,9 @@ footer{margin-top:60px;color:#64748b;font-size:13px}
 @media print{:root{color-scheme:light}body{background:#fff;color:#1e293b;font-size:10.5pt}nav{display:none}main{margin:0;padding:0;max-width:none}
 .title{min-height:9in;break-after:page}.title h1{color:#0c4a6e;-webkit-text-fill-color:#0c4a6e}.title .sub{color:#0f172a}
 .contents{break-after:page}.toc ol a,.toc>li>a{color:#0f172a}section.part{break-before:page;border-top-color:#6d28d9}.parttitle{color:#0f172a}
-h2{color:#0c4a6e}h3{color:#5b21b6}h4{color:#0369a1}strong{color:#0f172a}code{background:#f1f5f9;color:#9a3412}pre{background:#f8fafc;color:#14532d;border-color:#e2e8f0;white-space:pre-wrap}
+.contents h2,.chapter>h3{color:#0c4a6e}h4{color:#5b21b6}h5{color:#0369a1}strong{color:#0f172a}code{background:#f1f5f9;color:#9a3412}pre{background:#f8fafc;color:#14532d;border-color:#e2e8f0;white-space:pre-wrap}
 a{color:#0369a1;text-decoration:none}aside{background:#fffbeb;color:#78350f}th{color:#334155;border-color:#cbd5e1}td{border-color:#e2e8f0}figcaption{color:#475569}
-section.chapter{break-inside:auto}h2,h3,h4{break-after:avoid}figure,table,aside,pre{break-inside:avoid}}
+section.chapter{break-inside:auto}h2,h3,h4,h5{break-after:avoid}figure,table,aside,pre{break-inside:avoid}}
 </style></head><body>
 <nav aria-label="Contents"><div class="brand">${logo}<b>BitVoice</b></div><div class="where">${esc(L.manual)}</div>
 <input type="search" placeholder="${esc(L.find)}" aria-label="${esc(L.find)}" oninput="const q=this.value.toLowerCase();document.querySelectorAll('nav a[data-k]').forEach(a=>a.style.display=a.dataset.k.includes(q)?'':'none')">

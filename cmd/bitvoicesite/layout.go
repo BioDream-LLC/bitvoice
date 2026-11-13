@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"html"
 	"regexp"
@@ -87,7 +88,11 @@ func layout(base, path, section, title, description, body, version string) strin
 	b.WriteString("<meta property=\"og:image:width\" content=\"1280\">\n<meta property=\"og:image:height\" content=\"640\">\n")
 	b.WriteString("<meta property=\"og:image:alt\" content=\"BitVoice: the phone system that is one file and one web page\">\n")
 	b.WriteString("<meta name=\"twitter:card\" content=\"summary_large_image\">\n")
-	b.WriteString("<meta name=\"author\" content=\"BioDream Developer\">\n</head>\n<body>\n<a class=\"skip\" href=\"#main\">Skip to content</a>\n")
+	b.WriteString("<meta name=\"author\" content=\"BioDream Developer\">\n")
+	if ld := structured(base, path, title, description, version); ld != "" {
+		b.WriteString("<script type=\"application/ld+json\">" + ld + "</script>\n")
+	}
+	b.WriteString("</head>\n<body>\n<a class=\"skip\" href=\"#main\">Skip to content</a>\n")
 
 	b.WriteString("<header class=\"top\"><div class=\"wrap\">\n<a class=\"brand\" href=\"/\"><img src=\"/assets/bitvoice-logo.svg\" alt=\"BitVoice logo\"><span>Bit<b>Voice</b></span></a>\n<ul class=\"menu\">\n")
 	for _, m := range menu {
@@ -136,4 +141,47 @@ func footer() string {
 <div class="legal">© BioDream LLC. BitVoice is free software under the Apache License 2.0. FreePBX and Asterisk are trademarks of Sangoma Technologies; other names belong to their owners. BitVoice is not affiliated with them.</div>
 </div></footer>
 `
+}
+
+// structured is the schema.org description of a page for search engines (JSON-LD): the program on the
+// home and download pages, the maker on the home page, and each technology article as an article.
+// Other pages have none.
+func structured(base, path, title, description, version string) string {
+	maker := map[string]any{"@type": "Organization", "name": "BioDream LLC", "url": "https://biodream.io",
+		"logo": base + "/assets/biodream-wordmark.png"}
+	app := map[string]any{
+		"@type": "SoftwareApplication", "name": "BitVoice", "url": base + "/",
+		"description":         "An open-source phone system in one program, run entirely from its web interface: an alternative to FreePBX and Asterisk.",
+		"applicationCategory": "CommunicationApplication", "applicationSubCategory": "Phone system (PBX)",
+		"operatingSystem": "Linux, macOS, Windows", "license": "https://www.apache.org/licenses/LICENSE-2.0",
+		"downloadUrl": base + "/download/", "image": base + "/assets/social-card.png",
+		"screenshot": base + "/assets/screens/dashboard." + map[bool]string{false: "webp", true: "png"}[pngFallback],
+		"offers":      map[string]any{"@type": "Offer", "price": "0", "priceCurrency": "USD"},
+		"publisher":   maker, "codeRepository": "https://github.com/BioDream-LLC/bitvoice",
+	}
+	if version != "" {
+		app["softwareVersion"] = strings.TrimPrefix(version, "v")
+	}
+	var doc any
+	switch {
+	case path == "/":
+		doc = map[string]any{"@context": "https://schema.org", "@graph": []any{app, maker,
+			map[string]any{"@type": "WebSite", "name": "BitVoice", "url": base + "/"}}}
+	case path == "/download/":
+		app["@context"] = "https://schema.org"
+		doc = app
+	case strings.HasPrefix(path, "/technology/") && path != "/technology/":
+		doc = map[string]any{"@context": "https://schema.org", "@type": "TechArticle",
+			"headline": strings.TrimSuffix(title, " · BitVoice"), "description": description, "url": base + path,
+			"image": base + "/assets/social-card.png", "inLanguage": "en", "author": maker, "publisher": maker,
+			"about": map[string]any{"@type": "SoftwareApplication", "name": "BitVoice", "url": base + "/"}}
+	default:
+		return ""
+	}
+	j, err := json.Marshal(doc)
+	if err != nil {
+		return ""
+	}
+	// Inside <script>, "</" would end it early; JSON allows "<\/".
+	return strings.ReplaceAll(string(j), "</", `<\/`)
 }

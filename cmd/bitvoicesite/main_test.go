@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"html"
 	"os"
 	"os/user"
@@ -94,4 +95,50 @@ func TestSearchEngineLimits(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// The pages search engines read more from carry it, and it parses: the program on the home and download
+// pages, an article on each technology page, a share card on every manual, and one top heading on each
+// page (the manual's parts and chapters sit below its title).
+func TestStructuredData(t *testing.T) {
+	out := t.TempDir()
+	if err := build("../..", out, "https://bitvoice.org"); err != nil {
+		t.Fatal(err)
+	}
+	ld := regexp.MustCompile(`(?s)<script type="application/ld\+json">(.*?)</script>`)
+	read := func(rel string) string {
+		b, err := os.ReadFile(filepath.Join(out, rel))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	for rel, want := range map[string]string{"index.html": `"SoftwareApplication"`, "download/index.html": `"SoftwareApplication"`,
+		"technology/sip/index.html": `"TechArticle"`} {
+		m := ld.FindStringSubmatch(read(rel))
+		if m == nil {
+			t.Errorf("%s: no structured data", rel)
+			continue
+		}
+		var v any
+		if err := json.Unmarshal([]byte(m[1]), &v); err != nil || !strings.Contains(m[1], want) {
+			t.Errorf("%s: structured data %v, want %s: %.200s", rel, err, want, m[1])
+		}
+	}
+	if ld.MatchString(read("proof/index.html")) {
+		t.Error("proof page has structured data it does not need")
+	}
+	h1 := regexp.MustCompile(`<h1[\s>]`)
+	files, _ := filepath.Glob(filepath.Join(out, "manual", "*", "index.html"))
+	files = append(files, filepath.Join(out, "manual", "index.html"))
+	for _, f := range files {
+		b, _ := os.ReadFile(f)
+		rel, _ := filepath.Rel(out, f)
+		if !strings.Contains(string(b), `property="og:title"`) || !strings.Contains(string(b), `property="og:image"`) {
+			t.Errorf("%s: no share card", rel)
+		}
+		if n := len(h1.FindAllString(string(b), -1)); n != 1 {
+			t.Errorf("%s: %d top headings, want 1", rel, n)
+		}
+	}
 }
